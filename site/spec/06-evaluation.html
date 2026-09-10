@@ -29,6 +29,8 @@ try {
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to the text</a>
+
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -44,7 +46,7 @@ try {
 
 <nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <p class="c">&sect; 06 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/06-evaluation.md">edit the source</a></p><h1 id="burial-holes-and-replay"><a href="#burial-holes-and-replay">Burial, holes and replay</a></h1><h2 id="61-burial"><a href="#61-burial">6.1 Burial</a></h2><p><strong>Burial</strong> is the only form of evaluation Nether C has. It takes source and a set of granted capabilities, and produces a <strong>trace</strong>.</p><figure class="listing"><pre><code>bury : Source × Capabilities × Fuel → Trace</code></pre></figure><p>Burial evaluates every expression it can and stops at every expression it cannot. It can evaluate an expression when the expression&#x27;s depth is within the granted capabilities and every subexpression it depends on has a value. It cannot when the expression needs the world and the world has not been granted. Every such point becomes a <strong>hole</strong>.</p><p>A trace is complete and immutable. Burial MUST NOT modify a trace it was given; every burial produces a new trace with a new cairn.</p><h2 id="62-demand"><a href="#62-demand">6.2 Demand</a></h2><p>There is no <code>main</code>. A file&#x27;s top level is a sequence of declarations and <code>demand</code> statements, and nothing is evaluated except what a <code>demand</code> transitively requires.</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Bytes</span><span class="d3">@3</span> src = must(<span class="k">descend</span> disk { read(<span class="s">&quot;main.nc&quot;</span>) });
 <span class="t">Bytes</span>   obj = compile(src);      <span class="c">// pure, but starves: src is a hole</span>
 <span class="t">Bytes</span>   unused = compile(other); <span class="c">// never evaluated: nothing demands it</span>

@@ -29,6 +29,8 @@ try {
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to the text</a>
+
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -44,7 +46,7 @@ try {
 
 <nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <p class="c">&sect; 09 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/09-prelude.md">edit the source</a></p><h1 id="the-prelude"><a href="#the-prelude">The prelude</a></h1><p>Every function&#x27;s signature carries the stratum it costs. Reading this section is how a programmer finds out what a thing will do to their program&#x27;s depth, so nothing here may be deeper than it must.</p><p>The prelude is deliberately small. It should be readable in full in ten minutes.</p><h2 id="91-capabilities"><a href="#91-capabilities">9.1 Capabilities</a></h2><p>These are the names <code>descend</code> accepts. An implementation MUST NOT define others.</p><div class="scroll"><table><thead><tr><th align="left">Capability</th><th align="right">Stratum</th><th align="left">Grants</th></tr></thead><tbody><tr><td align="left"><code>store</code></td><td align="right">1</td><td align="left">reading the ledger by cairn</td></tr><tr><td align="left"><code>env</code></td><td align="right">2</td><td align="left">the frozen environment</td></tr><tr><td align="left"><code>disk</code></td><td align="right">3</td><td align="left">reading files</td></tr><tr><td align="left"><code>disk!</code></td><td align="right">4</td><td align="left">creating and modifying files</td></tr><tr><td align="left"><code>net</code></td><td align="right">5</td><td align="left">fetching</td></tr><tr><td align="left"><code>net!</code></td><td align="right">6</td><td align="left">sending</td></tr><tr><td align="left"><code>entropy</code></td><td align="right">7</td><td align="left">true randomness</td></tr><tr><td align="left"><code>unrecorded</code></td><td align="right">8</td><td align="left">foreign code</td></tr></tbody></table></div><p>The <code>!</code> suffix marks the writing half of a pair, and reads as it does in the rest of the language: this one does not take back.</p><h2 id="92-depth-0"><a href="#92-depth-0">9.2 Depth 0</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">I64</span>   min(<span class="t">I64</span> a, <span class="t">I64</span> b)                <span class="d0">@0</span>;
 <span class="t">I64</span>   max(<span class="t">I64</span> a, <span class="t">I64</span> b)                <span class="d0">@0</span>;
 <span class="t">I64</span>   abs(<span class="t">I64</span> x)                       <span class="d0">@0</span>;

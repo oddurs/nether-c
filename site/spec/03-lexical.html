@@ -29,6 +29,8 @@ try {
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to the text</a>
+
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -44,7 +46,7 @@ try {
 
 <nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <p class="c">&sect; 03 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/03-lexical.md">edit the source</a></p><h1 id="lexical-structure"><a href="#lexical-structure">Lexical structure</a></h1><h2 id="31-source-encoding"><a href="#31-source-encoding">3.1 Source encoding</a></h2><p>A Nether C source file is a sequence of Unicode scalar values encoded as UTF-8. An implementation MUST reject a file that is not well-formed UTF-8, rather than substituting replacement characters.</p><blockquote><p>HolyC used 8-bit ASCII throughout its toolchain, deliberately. This is one of the few places Nether C does not invert: a ledger that cannot record a name is not a ledger, and half the names in the world need more than 256 code points.</p></blockquote><p>Line terminators are <code>U+000A</code>. A <code>U+000D</code> immediately preceding <code>U+000A</code> is discarded; a <code>U+000D</code> anywhere else is an error. Source files SHOULD end with a line terminator.</p><h2 id="32-comments"><a href="#32-comments">3.2 Comments</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// to the end of the line</span>
 <span class="c">/* to the closing delimiter; these do not nest */</span></code></pre></figure><p>Comments are whitespace. They are not preserved in the AST and do not appear in the ledger.</p><h2 id="33-identifiers"><a href="#33-identifiers">3.3 Identifiers</a></h2><figure class="listing"><pre><code>identifier := XID_Start XID_Continue*</code></pre></figure><p>Identifiers are compared by exact code-point sequence after NFC normalisation. An implementation MUST normalise before comparison and MUST store the normalised form in the ledger, so that two spellings of the same name cannot produce two different cairns.</p><h2 id="34-keywords"><a href="#34-keywords">3.4 Keywords</a></h2><p>Reserved, and never usable as identifiers:</p><figure class="listing"><pre><code>descend   seal    shade   look    opaque   demand
 if        else    while   for     return   break    continue

@@ -29,6 +29,8 @@ try {
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to the text</a>
+
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -44,7 +46,7 @@ try {
 
 <nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <p class="c">&sect; 04 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/04-grammar.md">edit the source</a></p><h1 id="grammar"><a href="#grammar">Grammar</a></h1><p>EBNF. <code>{ x }</code> is zero or more, <code>[ x ]</code> is optional, <code>|</code> is alternation. Terminals are quoted. Lexical productions are in <a href="03-lexical.html">section 03</a>.</p><h2 id="41-compilation-unit"><a href="#41-compilation-unit">4.1 Compilation unit</a></h2><figure class="listing"><figcaption>grammar</figcaption><pre><code>unit          := { item } ;
 
 item          := struct_decl

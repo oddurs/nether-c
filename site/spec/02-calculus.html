@@ -29,6 +29,8 @@ try {
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to the text</a>
+
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -44,7 +46,7 @@ try {
 
 <nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <p class="c">&sect; 02 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/02-calculus.md">edit the source</a></p><h1 id="the-calculus-of-depth"><a href="#the-calculus-of-depth">The calculus of depth</a></h1><p>This section is the formal core. It fits on one page, and that is a constraint rather than an observation: a depth system that cannot be stated on one page cannot be taught, and a lattice nobody can hold in their head will be worked around rather than used.</p><h2 id="21-judgement-form"><a href="#21-judgement-form">2.1 Judgement form</a></h2><figure class="listing"><pre><code>Γ ; δ ⊢ e : τ @ d</code></pre></figure><p>Read: <em>in context Γ, holding capabilities down to depth δ, the expression e has type τ and depth d.</em></p><ul><li><strong>Γ</strong> maps identifiers to depth-annotated types, <code>x : τ@d</code>.</li><li><strong>δ</strong> is the <strong>ambient depth</strong>: the deepest stratum whose capability is currently held. It is 0 at the top level of a file and is raised only by <code>descend</code>.</li><li><strong>d</strong> is the <strong>value depth</strong>: how far into the world this value&#x27;s history reaches.</li></ul><p>The invariant <code>d ≤ δ</code> holds in every derivable judgement. An implementation MUST reject any program in which it does not.</p><p>Function types carry a <strong>latent depth</strong>, written <code>τ₁ --d--&gt; τ₂</code>: the deepest stratum the function reaches when applied. In source syntax this is written as a trailing annotation on the signature (<code>Bytes read(Str path) @3</code>).</p><h2 id="22-the-rules"><a href="#22-the-rules">2.2 The rules</a></h2><figure class="listing"><pre><code>                x : τ@d ∈ Γ
   [VAR]     ───────────────────
               Γ ; δ ⊢ x : τ@d
