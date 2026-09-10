@@ -25,6 +25,8 @@ case "${1:-}" in
     python3 tests/decay/run
     # The complemented VGA palette clears WCAG AA on both grounds, or it changes.
     python3 tests/contrast/run
+    # Nothing on the site may point at something that is not there.
+    python3 tests/links/run
     ;;
   build)
     cargo build --workspace
