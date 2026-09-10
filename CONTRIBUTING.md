@@ -2,9 +2,15 @@
 
 ## The one rule
 
-`main` only ever advances through a merged pull request. This is enforced by a
-repository ruleset on the server and by a local `pre-push` hook, not by
-discipline.
+`main` only ever advances through a merged pull request.
+
+Not for a one-line fix. Not for a typo. Not for setup. A repository ruleset on
+the server refuses it and a `pre-push` hook on your machine refuses it, and
+both have been tested by trying to violate them, which is the only test of a
+protection that means anything.
+
+Discipline is not a mechanism. If the wrong thing is possible, somebody tired
+will eventually do it.
 
 ## Setup
 

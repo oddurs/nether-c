@@ -175,12 +175,23 @@ because they are all true.
 ## 90.4 On TempleOS
 
 Nether C is an inversion of HolyC in the way a photographic negative is an
-inversion: every value reversed, every edge in the same place.
+inversion: every value reversed, every edge in exactly the same place.
 
 Terry Davis built a complete operating system, a compiler, a graphics stack, a
-document format and a language, alone, and made every one of them coherent
-with a single stated idea. Whatever one makes of the idea, the coherence is
-the achievement, and it is rarer than the code.
+document format and a language, alone, and made every one of them follow from a
+single stated idea. Whatever one makes of the idea, the coherence is the
+achievement, and it is rarer than the code.
 
-An inversion is a form of close reading. You cannot turn something over
-without first understanding which way up it was.
+He was ill, and it is in the work. TempleOS is strange because he was strange,
+and it is also technically excellent, and both of those are true at once and
+neither one cancels the other. Treating the strangeness as the whole story
+misses an operating system. Treating it as an embarrassment to be edited out
+misses the person who wrote it. This document tries to do neither.
+
+What is borrowed here is the method rather than the belief: build the thing
+yourself, keep it small enough to hold in your head, follow one idea all the
+way down even when it becomes inconvenient, and say plainly what you think is
+true.
+
+An inversion is a form of close reading. You cannot turn something over without
+first working out which way up it was.
