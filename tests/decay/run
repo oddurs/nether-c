@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""
+decay — a test for the rule that the trusted core may only ever shrink.
+
+The rule is only worth having if it actually fails, so this drives
+scripts/decay against a tree it does not control and checks all four
+behaviours: growth is refused, parity is accepted, shrinkage is reported with
+the new number, and a missing ceiling seals itself.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+DECAY = ROOT / "scripts" / "decay"
+
+BODY = """\
+// a comment, which does not count
+
+fn one() {}
+
+fn two() {}
+"""  # three counted lines: two fn lines and one blank-stripped... see below
+
+
+def run(source: Path, ceiling: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [str(DECAY), str(source), str(ceiling)],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+
+
+def main() -> int:
+    failures: list[str] = []
+    ran = [0]
+
+    def expect(name: str, cond: bool, detail: str = "") -> None:
+        ran[0] += 1
+        if cond:
+            print(f"  ok    {name}")
+        else:
+            print(f"  FAIL  {name}  {detail}")
+            failures.append(name)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        src = tmp / "core"
+        src.mkdir()
+        (src / "lib.rs").write_text(BODY, encoding="utf-8")
+
+        # Establish what the script counts, rather than asserting a number the
+        # comment-stripping rules might legitimately change.
+        seal = tmp / "sealed"
+        first = run(src, seal)
+        expect("a missing ceiling seals itself", first.returncode == 0 and seal.exists(),
+               first.stdout + first.stderr)
+        actual = int(seal.read_text().strip())
+        expect("the sealed count is a positive number", actual > 0, f"got {actual}")
+
+        at = tmp / "at"
+        at.write_text(f"{actual}\n")
+        r = run(src, at)
+        expect("a core at the ceiling passes", r.returncode == 0, r.stderr)
+        expect("and says so", "at the ceiling" in r.stdout, r.stdout)
+
+        low = tmp / "low"
+        low.write_text(f"{actual - 1}\n")
+        r = run(src, low)
+        expect("a core above the ceiling FAILS", r.returncode == 1, "it did not fail")
+        expect("and says how far over", "the trusted core grew" in r.stderr, r.stderr)
+        expect("and offers both remedies",
+               "take 1 lines back" in r.stderr and "raise the ceiling" in r.stderr, r.stderr)
+
+        high = tmp / "high"
+        high.write_text(f"{actual + 10}\n")
+        r = run(src, high)
+        expect("a core below the ceiling passes", r.returncode == 0, r.stderr)
+        expect("and prints the command to lower it",
+               f"echo {actual} >" in r.stdout, r.stdout)
+
+    print(f"decay: {ran[0] - len(failures)}/{ran[0]} checks passed")
+    if failures:
+        print(f"decay: {len(failures)} check(s) failed", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -4,8 +4,6 @@ title: 'The Decay Rule: CI fails if the trusted core grows'
 type: chore
 status: unmarked
 milestone: codex
-depends_on:
-- 46
 created: 2026-09-10
 updated: 2026-09-10
 priority: p1

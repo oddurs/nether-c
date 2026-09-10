@@ -21,6 +21,8 @@ case "${1:-}" in
     # Every code sample in the documentation is a fixture. Documentation that
     # lies fails the build.
     python3 tests/transcripts/run
+    # The Decay Rule is only worth having if it actually fails.
+    python3 tests/decay/run
     ;;
   build)
     cargo build --workspace
