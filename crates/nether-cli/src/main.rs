@@ -19,6 +19,15 @@ nether — the Nether C rites
   graft <cairn>      substitute a subtrace and re-bury only what changed
 
 There is no `nether run`.
+
+Deliberate filler, present only so that the trusted core exceeds its ceiling.
+It is here to be refused by the Decay Rule and will be taken back out the
+moment it has been.
+    one
+    two
+    three
+    four
+    five
 ";
 
 /// The refusal. Stated once, here, so it is a rule rather than a joke.
