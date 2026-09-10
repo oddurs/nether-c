@@ -12,7 +12,7 @@ Statuses are the language's own: work is `descending` while it is underway,
 
 ## codex — The Codex
 
-`#·········` 6% · 1 of 18 done · due 2026-10-15
+`###·······` 21% · 4 of 19 done · due 2026-10-15
 
 ### unmarked
 
@@ -21,15 +21,13 @@ Statuses are the language's own: work is `descending` while it is underway,
 ### marked
 
 - [ ] [`0027`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0027-extract-every-spec-code-sample-into-tests-transcripts.md) Extract every spec code sample into tests/transcripts <sup>chore · p0</sup>
+- [ ] [`0094`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0094-decide-what-a-prelude-function-does-when-it-cannot-answer.md) Decide: what a prelude function does when it cannot answer <sup>spec · p0</sup>
 
 ### descending
 
 - [ ] [`0011`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0011-spec-the-thesis-and-how-to-read-this.md) Spec: the thesis and how to read this <sup>spec · p0</sup>
 - [ ] [`0012`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0012-spec-the-nine-strata-and-their-laws.md) Spec: the nine strata and their laws <sup>spec · p0</sup>
 - [ ] [`0013`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0013-spec-the-typing-rules-for-depth.md) Spec: the typing rules for depth <sup>spec · p0</sup>
-- [ ] [`0014`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0014-decide-does-look-re-stain-the-scope-or-taint-the-binding.md) Decide: does look re-stain the scope, or taint the binding? <sup>spec · p0</sup>
-- [ ] [`0015`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0015-decide-the-fuel-budget-and-the-opaque-barrier.md) Decide: the fuel budget and the opaque barrier <sup>spec · p0</sup>
-- [ ] [`0016`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0016-decide-is-stratum-8-admissible-at-all.md) Decide: is stratum 8 admissible at all? <sup>spec · p1 · 8</sup>
 - [ ] [`0017`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0017-spec-lexical-structure.md) Spec: lexical structure <sup>spec · p1</sup>
 - [ ] [`0018`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0018-spec-the-grammar.md) Spec: the grammar <sup>spec · p1</sup>
 - [ ] [`0019`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0019-spec-the-type-system-and-data-model.md) Spec: the type system and data model <sup>spec · p1</sup>
@@ -42,6 +40,9 @@ Statuses are the language's own: work is `descending` while it is underway,
 
 ### buried
 
+- [x] [`0014`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0014-decide-does-look-re-stain-the-scope-or-taint-the-binding.md) Decide: does look re-stain the scope, or taint the binding? <sup>spec · p0</sup>
+- [x] [`0015`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0015-decide-the-fuel-budget-and-the-opaque-barrier.md) Decide: the fuel budget and the opaque barrier <sup>spec · p0</sup>
+- [x] [`0016`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0016-decide-is-stratum-8-admissible-at-all.md) Decide: is stratum 8 admissible at all? <sup>spec · p1 · 8</sup>
 - [x] [`0026`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0026-spec-style-guide-and-normative-language.md) Spec style guide and normative language <sup>chore · p1</sup>
 
 ## lamp — The Lamp

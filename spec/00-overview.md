@@ -105,6 +105,17 @@ Open design questions are tracked as items in the repository's roadmap
 document states a rule that a roadmap item is still arguing about, it says so
 in a block quote and names the item.
 
+Three such questions have been settled and no longer appear that way: the form
+of the Orpheus rule ([§1.6](01-strata.md#16-shade-and-the-orpheus-rule)), the
+fuel budget and the `opaque` barrier
+([§6.4](06-evaluation.md#64-starvation-and-fuel)), and whether stratum 8 is
+admissible at all ([§1.7](01-strata.md#17-stratum-8-the-unrecorded)). What each
+of them cost is in [section 90](90-rationale.md).
+
+One question remains genuinely open and is marked as such where it appears:
+what a prelude function does when it cannot answer
+([§9.9](09-prelude.md#99-failure)).
+
 ## 0.7 A first program
 
 ```c

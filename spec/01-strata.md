@@ -141,10 +141,9 @@ error: cannot look at a shade from stratum 5 at depth 0
    = the value is here, but you are not. Wrap the look in `descend net { … }`.
 ```
 
-> Two rejected alternatives — re-staining the entire enclosing scope, and
-> tainting only the binding — are recorded in [section 90](90-rationale.md).
-> The roadmap item is *Decide: does look re-stain the scope, or taint the
-> binding?*, which this rule proposes to close.
+This rule is **settled**. Two alternatives were considered and rejected —
+re-staining the entire enclosing scope, and tainting only the binding — and
+both are recorded in [§90.2](90-rationale.md#902-rejected-alternatives).
 
 ## 1.7 Stratum 8, the Unrecorded
 
@@ -170,9 +169,10 @@ sealing or shading out of stratum 8 that removes the mark — `seal` still
 yields a `Cairn@0`, but the *trace* remains marked, because what is unsound is
 not the name but the claim that the trace is complete.
 
-> The roadmap item *Decide: is stratum 8 admissible at all?* is open. This
-> section states the position that it is, quarantined loudly. The alternative
-> — refusing foreign code entirely — is purer and is recorded in section 90.
+This is **settled**: stratum 8 exists, and is quarantined loudly. The
+alternative — refusing foreign code entirely — is purer, and is recorded in
+[§90.2](90-rationale.md#902-rejected-alternatives) along with why a language
+that cannot call C proves nothing about whether its ideas were good.
 
 ## 1.8 Why write is deeper than read
 

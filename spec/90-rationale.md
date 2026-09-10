@@ -139,6 +139,22 @@ forbidden from claiming to be replayable.
 
 This remains the weakest part of the design.
 
+### Fuel and `opaque` as command-line concerns
+
+The obvious cheap answer: make the fuel budget a `--fuel` flag and the barrier a
+`--no-inline` list, and keep both out of the language.
+
+Rejected because a trace buried under a different budget is a different trace.
+If the artifact depends on it, it is part of the artifact, and a thing that is
+part of the artifact has to be visible in the source that produced it. A build
+that succeeds on one machine and exhausts on another because somebody's shell
+alias differed is precisely the class of failure this language exists to make
+impossible.
+
+The cost is a keyword. `opaque` is the only construct in Nether C that exists to
+make the compiler do *less*, which is an odd thing to have to teach, and it will
+be the first thing a newcomer mistakes for an optimisation hint.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
