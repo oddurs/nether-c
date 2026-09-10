@@ -2,7 +2,7 @@
 id: 11
 title: 'Spec: the thesis and how to read this'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -24,9 +24,9 @@ sense to somebody who already knows TempleOS, the design is a costume.
 
 ## Acceptance criteria
 
-- [ ] The thesis fits in one sentence
-- [ ] The reading order for the rest of the spec is given
-- [ ] Normative language conventions (MUST/SHOULD/MAY) are declared here
+- [x] The thesis fits in one sentence
+- [x] The reading order for the rest of the spec is given
+- [x] Normative language conventions (MUST/SHOULD/MAY) are declared here
 
 ## 2026-09-10
 

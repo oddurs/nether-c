@@ -2,7 +2,7 @@
 id: 16
 title: 'Decide: is stratum 8 admissible at all?'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -26,9 +26,13 @@ adoption. Admitting it means every downstream claim needs the qualifier
 
 ## Acceptance criteria
 
-- [ ] A decision, written down
-- [ ] If admitted: what a trace that touched 8 is permitted to claim
+- [x] A decision, written down
+- [x] If admitted: what a trace that touched 8 is permitted to claim
 
 ## 2026-09-10
 
 PROPOSED, in spec/01-strata.md 1.7: admit it, quarantine it loudly. A stratum 8 trace is marked permanently and transitively and may never claim replayability. spec/90-rationale.md 90.2 records that refusing foreign code entirely is purer and calls this the weakest part of the design.
+
+## 2026-09-10
+
+SETTLED. Stratum 8 exists and is quarantined: a trace that reaches it is marked permanently and transitively and may never claim replayability. Refusing foreign code entirely is purer and is recorded in 90.2 as rejected.

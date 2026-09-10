@@ -31,12 +31,16 @@ There is no `main`. A file's top level is a sequence of declarations and
 transitively requires.
 
 ```c
-Bytes@3 src = read("main.nc");
+Bytes@3 src = must(descend disk { read("main.nc") });
 Bytes   obj = compile(src);      // pure, but starves: src is a hole
 Bytes   unused = compile(other); // never evaluated: nothing demands it
 
 demand obj;
 ```
+
+`must` here says *this file is not allowed to be missing*. A program that wants
+to handle a missing file inspects the `Answer` instead
+([§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them)).
 
 Evaluation is demand-driven. The implementation MUST NOT evaluate any
 expression that no `demand` depends on, transitively — not as an optimisation
@@ -65,6 +69,11 @@ each hole:
 A hole's arguments are themselves fully buried. `read(concat(dir, name))` does
 not leave a hole containing `concat`; it leaves a hole containing the finished
 path string. A hole is always a question the world can answer immediately.
+
+A hole is answered by whatever the world says, **including a refusal**. A
+refusal is an ordinary witness: it is recorded, it is served back on replay, and
+a trace whose program handled it replays identically to one whose program did
+not. Refusal does not make a trace incomplete and does not mark it.
 
 Two holes with identical `call` fields in the same trace MUST be the same
 hole. This is what makes exhumation cheap: reading the same file twice is one
@@ -102,6 +111,10 @@ function whose specialised form would be larger than its general one.
 `opaque` has a typing rule ([OPAQUE], [section 02](02-calculus.md)) rather than
 being a compiler flag, because whether an expression is burned through changes
 the artifact, and anything that changes the artifact belongs in the language.
+
+This is **settled**. The rejected alternative — leaving both the budget and the
+barrier to the command line — is recorded in
+[§90.2](90-rationale.md#902-rejected-alternatives).
 
 ## 6.5 Residue
 

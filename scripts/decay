@@ -8,15 +8,22 @@
 # The trusted core is the Rust that every guarantee rests on. Lowering the
 # ceiling in .decay-ceiling is an ordinary commit. Raising it is a deliberate
 # act that must be argued for in the pull request.
+#
+#   scripts/decay [SOURCE_DIR] [CEILING_FILE]
+#
+# The arguments exist so the rule can be tested against a tree that is not the
+# repository's own. They default to what you would expect.
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
-ceiling_file=.decay-ceiling
 
-count=$(find crates -name '*.rs' -not -path '*/target/*' -print0 2>/dev/null \
+source_dir=${1:-crates}
+ceiling_file=${2:-.decay-ceiling}
+
+count=$(find "$source_dir" -name '*.rs' -not -path '*/target/*' -print0 2>/dev/null \
   | xargs -0 cat 2>/dev/null \
-  | grep -cvE '^\s*(//.*)?$' || true)
+  | grep -cvE '^[[:space:]]*(//.*)?$' || true)
 count=${count:-0}
 
 if [ ! -f "$ceiling_file" ]; then
@@ -29,7 +36,7 @@ ceiling=$(tr -dc '0-9' < "$ceiling_file")
 
 if [ "$count" -gt "$ceiling" ]; then
   echo "decay: the trusted core grew." >&2
-  echo "       ceiling  $ceiling lines  (.decay-ceiling)" >&2
+  echo "       ceiling  $ceiling lines  ($ceiling_file)" >&2
   echo "       now      $count lines" >&2
   echo "" >&2
   echo "  Below, things only decay. Either take $((count - ceiling)) lines back" >&2

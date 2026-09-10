@@ -6,6 +6,15 @@
 <title>Nether C &mdash; Nether C</title>
 <meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
 <meta name="color-scheme" content="dark light">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nether C">
+<meta property="og:title" content="Nether C &mdash; Nether C">
+<meta property="og:description" content="A C dialect in which nothing runs. Programs are buried, not executed; what ships is the trace and the holes the world still owes an answer to.">
+<meta property="og:image" content="https://oddurs.github.io/nether-c/gfx/card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Nether C. A C dialect in which nothing runs. The program has already run; you read what is left of it.">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="nether.css">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <script>
@@ -19,6 +28,8 @@ try {
 </script>
 </head>
 <body>
+
+<a class="skip" href="#main">Skip to the text</a>
 
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -35,7 +46,7 @@ try {
 
 <nav class="bar"><a href="index.html" aria-current="page">index</a><span class="sep">|</span><a href="spec/index.html">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <p class="center"><img class="banner" src="gfx/excavation.gif" width="396" height="44" alt="Under excavation. Nothing is implemented; the spec comes first."></p>
 
 <h1>Read this first</h1>
@@ -272,7 +283,7 @@ It is the most honest thing about this project.</p>
 <div style="background:#555555;color:#fff"><dt>ASH</dt><dd>was LTGRAY</dd></div>
 <div style="background:#AA00AA;color:#fff"><dt>PLUM</dt><dd>was LTGREEN</dd></div>
 <div style="background:#AA0000;color:#fff"><dt>BLOOD</dt><dd>was LTCYAN</dd></div>
-<div style="background:#00AA00;color:#fff"><dt>MOSS</dt><dd>was LTPURPLE</dd></div>
+<div style="background:#00AA00"><dt>MOSS</dt><dd>was LTPURPLE</dd></div>
 <div style="background:#00AAAA"><dt>TEAL</dt><dd>was LTRED</dd></div>
 <div style="background:#0000AA;color:#fff"><dt>DEEP</dt><dd>was YELLOW</dd></div>
 <div style="background:#000000;color:#fff"><dt>VOID</dt><dd>was WHITE</dd></div>
@@ -325,7 +336,9 @@ across nine descents, and one binary that refuses correctly:</p>
 
   A Nether C program is not executed. It is buried — evaluated as far as the
   world allows — and what remains is a trace and the holes the world still
-  owes an answer to.</code></pre>
+  owes an answer to.
+
+  [...]</code></pre>
 </figure>
 
 <p>That is the one behaviour the language will never change, so it was the

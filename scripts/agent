@@ -8,8 +8,16 @@ set -eu
 
 root=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "agent: not inside a git repository" >&2; exit 1; }
-repo=$(basename "$root")
-trees=$(cd "$root/.." && pwd)/.worktrees/$repo
+
+# Inside a worktree, --show-toplevel is the worktree, not the checkout the
+# worktrees hang off. Everything that manages worktrees has to use the primary
+# checkout instead, or `done` ends up cd-ing into the directory it removes.
+common=$(git rev-parse --git-common-dir)
+case "$common" in /*) ;; *) common="$(pwd)/$common" ;; esac
+primary=$(cd "$(dirname "$common")" && pwd)
+
+repo=$(basename "$primary")
+trees=$(cd "$primary/.." && pwd)/.worktrees/$repo
 
 default_branch() {
   git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' \
@@ -123,12 +131,20 @@ cmd_done() {
 
   dest=$(git rev-parse --show-toplevel)
   say "leaving $dest"
-  cd "$root"
+
+  # Retreat to the primary checkout BEFORE removing the worktree. Removing the
+  # directory the shell is standing in leaves it with no working directory, and
+  # every git command after it fails with "Unable to read current working
+  # directory" -- including the branch delete and the prune, silently.
+  cd "$primary"
   git worktree remove "$dest" --force
   git branch -D "$branch" >/dev/null 2>&1 || true
   git worktree prune
+  rmdir "$(dirname "$dest")" 2>/dev/null || true
   git fetch --prune --quiet origin
-  printf '\nsurfaced. %s is gone; you are in %s\n' "$branch" "$root"
+  git merge --ff-only --quiet "origin/$base" 2>/dev/null || true
+
+  printf '\nsurfaced. %s is gone.\n\n  cd %s\n\n' "$branch" "$primary"
 }
 
 cmd_list() {

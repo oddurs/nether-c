@@ -4,6 +4,8 @@ title: 'site/bake: render the specification to HTML'
 type: feature
 status: buried
 milestone: lamp
+depends_on:
+- 23
 created: 2026-09-10
 updated: 2026-09-10
 priority: p0

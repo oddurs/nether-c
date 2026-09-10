@@ -2,7 +2,7 @@
 id: 22
 title: 'Spec: the six rites'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -23,9 +23,9 @@ joke and becomes a rule.
 
 ## Acceptance criteria
 
-- [ ] Exit code table
-- [ ] Machine-readable output (--json) specified for every rite
-- [ ] The output of a burial is specified: depth, holes, node count
+- [x] Exit code table
+- [x] Machine-readable output (--json) specified for every rite
+- [x] The output of a burial is specified: depth, holes, node count
 
 ## 2026-09-10
 

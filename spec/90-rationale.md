@@ -139,6 +139,48 @@ forbidden from claiming to be replayable.
 
 This remains the weakest part of the design.
 
+### Failure: three rejected forms
+
+**Exceptions.** Rejected outright. Unwinding presumes a stack that exists at a
+single moment, and burial has no such moment — an expression may be evaluated
+now, residualised, and finished a week later by somebody else's exhumation.
+There is nothing to unwind to.
+
+**`rescue e else f`, catching starvation.** Superficially the most elegant
+option: a starved node is already a first-class thing in the trace, so expose
+it and let a program handle it. Rejected for two reasons. It makes bugs
+catchable, and a bug that can be caught is a bug that will be ignored. Worse, it
+makes evaluation order observable — whether `rescue` fires depends on how far
+burial got before it starved, which is exactly the kind of dependence
+[§6.2](06-evaluation.md#62-demand) exists to forbid.
+
+**Nothing, and say so.** Declare failure a burial-level diagnostic and put
+recovery outside the language. Honest, and fatal: a build system that cannot
+say *if this file is missing, generate it* is not a build system, and build
+systems are the case that motivates the whole design.
+
+What was chosen instead splits the question in two. A no from the world is an
+*answer* and gets a value; a mistake in the program is *starvation* and gets a
+stopped burial. The cost is a check at every world-touching call site, which is
+the bargain C has always offered and which this language is in no position to
+improve on.
+
+### Fuel and `opaque` as command-line concerns
+
+The obvious cheap answer: make the fuel budget a `--fuel` flag and the barrier a
+`--no-inline` list, and keep both out of the language.
+
+Rejected because a trace buried under a different budget is a different trace.
+If the artifact depends on it, it is part of the artifact, and a thing that is
+part of the artifact has to be visible in the source that produced it. A build
+that succeeds on one machine and exhausts on another because somebody's shell
+alias differed is precisely the class of failure this language exists to make
+impossible.
+
+The cost is a keyword. `opaque` is the only construct in Nether C that exists to
+make the compiler do *less*, which is an odd thing to have to teach, and it will
+be the first thing a newcomer mistakes for an optimisation hint.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
@@ -175,12 +217,23 @@ because they are all true.
 ## 90.4 On TempleOS
 
 Nether C is an inversion of HolyC in the way a photographic negative is an
-inversion: every value reversed, every edge in the same place.
+inversion: every value reversed, every edge in exactly the same place.
 
 Terry Davis built a complete operating system, a compiler, a graphics stack, a
-document format and a language, alone, and made every one of them coherent
-with a single stated idea. Whatever one makes of the idea, the coherence is
-the achievement, and it is rarer than the code.
+document format and a language, alone, and made every one of them follow from a
+single stated idea. Whatever one makes of the idea, the coherence is the
+achievement, and it is rarer than the code.
 
-An inversion is a form of close reading. You cannot turn something over
-without first understanding which way up it was.
+He was ill, and it is in the work. TempleOS is strange because he was strange,
+and it is also technically excellent, and both of those are true at once and
+neither one cancels the other. Treating the strangeness as the whole story
+misses an operating system. Treating it as an embarrassment to be edited out
+misses the person who wrote it. This document tries to do neither.
+
+What is borrowed here is the method rather than the belief: build the thing
+yourself, keep it small enough to hold in your head, follow one idea all the
+way down even when it becomes inconvenient, and say plainly what you think is
+true.
+
+An inversion is a form of close reading. You cannot turn something over without
+first working out which way up it was.
