@@ -116,6 +116,11 @@ The specification is canonical as Markdown in [`spec/`](spec/). The site in
 standard library Python, no dependencies, no framework — and the resulting HTML
 is committed. CI fails if the two disagree.
 
+Every graphic on the site is drawn by [`site/gfx.py`](site/gfx.py), which
+contains a GIF89a encoder, an LZW compressor and a 5×7 bitmap font, typed out
+rather than imported. There is no image library in this repository, and the
+Rust workspace has no third-party crates at all.
+
 ## Development
 
 ```sh
