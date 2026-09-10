@@ -165,6 +165,40 @@ stopped burial. The cost is a check at every world-touching call site, which is
 the bargain C has always offered and which this language is in no position to
 improve on.
 
+### Writing our own cryptography
+
+The repository has no third-party dependencies. Not in Rust, not in the site,
+not in the graphics: `site/gfx.py` contains a GIF89a encoder, an LZW
+compressor, a PNG encoder and a bitmap font rather than importing any of them,
+and the argument each time was that the part actually needed was smaller than
+the cost of the dependency.
+
+That argument does not survive contact with [§7.2](07-ledger.md#72-cairns),
+which specifies blake3.
+
+A hash function is not an encoder. An encoder that is subtly wrong produces a
+file somebody notices. A hash function that is subtly wrong produces cairns
+that look fine, verify fine, and collide — and the failure surfaces years later
+as two different values with the same name, in a store nobody can now audit,
+underneath every reproducibility claim in this document. Timing behaviour,
+buffer edge cases and the compression-function rounds are exactly the places
+where hand-written implementations go wrong quietly.
+
+So the rule is narrower than "no dependencies", and it is worth stating
+precisely, because the broad version is the kind of principle that feels good
+until it costs something:
+
+> Write your own encoders, parsers, renderers and formats. Do not write your
+> own cryptography.
+
+`blake3` is a permitted dependency. It is expected to be the only one for a
+long time, and every addition after it needs its own entry in this section.
+
+This is also consistent with the Decay Rule rather than in tension with it. The
+ceiling counts the lines this project is responsible for, and three hundred
+lines of hand-rolled hashing would be three hundred lines of exactly the code
+nobody should be reviewing here.
+
 ### Fuel and `opaque` as command-line concerns
 
 The obvious cheap answer: make the fuel budget a `--fuel` flag and the barrier a
