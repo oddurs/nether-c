@@ -139,6 +139,32 @@ forbidden from claiming to be replayable.
 
 This remains the weakest part of the design.
 
+### Failure: three rejected forms
+
+**Exceptions.** Rejected outright. Unwinding presumes a stack that exists at a
+single moment, and burial has no such moment — an expression may be evaluated
+now, residualised, and finished a week later by somebody else's exhumation.
+There is nothing to unwind to.
+
+**`rescue e else f`, catching starvation.** Superficially the most elegant
+option: a starved node is already a first-class thing in the trace, so expose
+it and let a program handle it. Rejected for two reasons. It makes bugs
+catchable, and a bug that can be caught is a bug that will be ignored. Worse, it
+makes evaluation order observable — whether `rescue` fires depends on how far
+burial got before it starved, which is exactly the kind of dependence
+[§6.2](06-evaluation.md#62-demand) exists to forbid.
+
+**Nothing, and say so.** Declare failure a burial-level diagnostic and put
+recovery outside the language. Honest, and fatal: a build system that cannot
+say *if this file is missing, generate it* is not a build system, and build
+systems are the case that motivates the whole design.
+
+What was chosen instead splits the question in two. A no from the world is an
+*answer* and gets a value; a mistake in the program is *starvation* and gets a
+stopped burial. The cost is a check at every world-touching call site, which is
+the bargain C has always offered and which this language is in no position to
+improve on.
+
 ### Fuel and `opaque` as command-line concerns
 
 The obvious cheap answer: make the fuel budget a `--fuel` flag and the barrier a

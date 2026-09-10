@@ -112,9 +112,13 @@ fuel budget and the `opaque` barrier
 admissible at all ([§1.7](01-strata.md#17-stratum-8-the-unrecorded)). What each
 of them cost is in [section 90](90-rationale.md).
 
-One question remains genuinely open and is marked as such where it appears:
-what a prelude function does when it cannot answer
-([§9.9](09-prelude.md#99-failure)).
+A fourth — what a prelude function does when it cannot answer — is settled in
+[§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them): a no
+from the world is an *answer* and gets a value; a mistake in the program is
+*starvation* and stops the burial.
+
+No design question in this draft is currently open. That is not a claim that
+none remain, only that none are known.
 
 ## 0.7 A first program
 
