@@ -14,13 +14,23 @@ instead. Being agreeable is not the same as being useful, and an agent that
 installs whatever it is asked for is a package manager with extra steps.
 
 **Write it yourself.** There is no image library in this repository. There is a
-GIF89a encoder, an LZW compressor and a 5x7 bitmap font in `site/gfx.py`,
-because that was 400 lines and a dependency is forever. There is no markdown
-library; `site/bake` is one file. There is no web framework; the site is HTML
-and one stylesheet. The Rust workspace has **zero** third-party crates.
+GIF89a encoder, an LZW compressor, a PNG encoder and a 5x7 bitmap font in
+`site/gfx.py`, because that was 400 lines and a dependency is forever. There is
+no markdown library; `site/bake` is one file. There is no web framework; the
+site is HTML and one stylesheet.
 
 Before you add a dependency, work out how many lines the part you actually need
 would be. It is usually fewer than you think, and then you understand it.
+
+The rule has exactly one stated exception, and it is narrower than "no
+dependencies" on purpose:
+
+> Write your own encoders, parsers, renderers and formats. Do not write your
+> own cryptography.
+
+`blake3` is permitted, because a hash function that is subtly wrong fails
+silently and years late. Anything else needs an entry in
+`spec/90-rationale.md` before the `Cargo.toml` line.
 
 **Do not admire complexity.** If the answer got clever, it got worse. The depth
 calculus is eleven rules on one page and that is a hard constraint, not an

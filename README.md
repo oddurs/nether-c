@@ -224,10 +224,20 @@ There is no markdown library.
 
 There is no web framework.
 
-The Rust workspace has **zero** third-party crates.
+The Rust workspace has no third-party crates in it today.
 
 A dependency is forever. The part you actually need is usually fewer lines than
 you think, and then you understand it.
+
+The rule has one stated exception, and it is deliberately narrow:
+
+> **Write your own encoders, parsers, renderers and formats. Do not write your
+> own cryptography.**
+
+`blake3` is permitted, when the ledger needs it. An encoder that is subtly
+wrong produces a file somebody notices. A hash function that is subtly wrong
+produces cairns that collide, and the failure surfaces years later underneath
+every reproducibility claim in the specification.
 
 ---
 
