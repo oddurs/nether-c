@@ -325,11 +325,18 @@ def navbar(current: str, depth: int) -> str:
     )
 
 
+SITE_NAME = "Nether C"
+
+
 def page(title: str, body: str, *, current: str, depth: int) -> str:
     tpl = (SITE / "template.html").read_text(encoding="utf-8")
     up = "../" if depth else ""
+    # The front page is already called Nether C; appending the site name to it
+    # gave every tab "Nether C — Nether C".
+    full = title if title == SITE_NAME else f"{title} &mdash; {SITE_NAME}"
     return (
         tpl.replace("{{TITLE}}", esc(title))
+        .replace("{{FULLTITLE}}", full)
         .replace("{{UP}}", up)
         .replace("{{NAV}}", navbar(current, depth))
         .replace("{{BODY}}", body)
