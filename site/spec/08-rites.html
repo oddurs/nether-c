@@ -29,6 +29,8 @@ try {
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to the text</a>
+
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -44,7 +46,7 @@ try {
 
 <nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <p class="c">&sect; 08 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/08-rites.md">edit the source</a></p><h1 id="the-rites"><a href="#the-rites">The rites</a></h1><p>Six verbs. The one that is missing is the point.</p><h2 id="80-there-is-no-run"><a href="#80-there-is-no-run">8.0 There is no <code>run</code></a></h2><p>An implementation MUST NOT provide a command that executes a Nether C program without producing a trace, under any name.</p><p><code>nether run</code> MUST exit with code 64 and explain what to use instead.</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">run</span> hello.nc
 nether: there is no `run`.
 

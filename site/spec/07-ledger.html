@@ -29,6 +29,8 @@ try {
 </head>
 <body>
 
+<a class="skip" href="#main">Skip to the text</a>
+
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -44,7 +46,7 @@ try {
 
 <nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <p class="c">&sect; 07 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/07-ledger.md">edit the source</a></p><h1 id="the-ledger"><a href="#the-ledger">The ledger</a></h1><p>The format is the contract. Everything else in this specification is negotiable; an ambiguity here is a reproducibility bug that will be found years from now by somebody who cannot fix it.</p><h2 id="71-canonical-encoding"><a href="#71-canonical-encoding">7.1 Canonical encoding</a></h2><p>Every value has exactly one encoding, on every platform, forever.</p><figure class="listing"><pre><code>value      := tag byte_content
 
 tag        := 0x00  U0

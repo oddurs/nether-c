@@ -40,11 +40,7 @@ Buried. Twelve specification sections, every design question settled and every r
 
 ## lamp — The Lamp
 
-`#########·` 90% · 9 of 10 done · due 2026-10-31
-
-### marked
-
-- [ ] [`0092`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0092-accessibility-and-no-javascript-pass.md) Accessibility and no-JavaScript pass <sup>chore · p2</sup>
+`##########` 100% · 10 of 10 done · due 2026-10-31
 
 ### buried
 
@@ -56,6 +52,7 @@ Buried. Twelve specification sections, every design question settled and every r
 - [x] [`0089`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0089-the-lamp-the-temple-s-colours-on-demand.md) The lamp: the temple's colours, on demand <sup>feature · p1</sup>
 - [x] [`0090`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0090-icon-metadata-and-social-preview.md) Icon, metadata and social preview <sup>chore · p2</sup>
 - [x] [`0091`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0091-publish-the-site.md) Publish the site <sup>chore · p1</sup>
+- [x] [`0092`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0092-accessibility-and-no-javascript-pass.md) Accessibility and no-JavaScript pass <sup>chore · p2</sup>
 - [x] [`0093`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0093-fail-the-build-when-the-committed-site-is-stale.md) Fail the build when the committed site is stale <sup>chore · p1</sup>
 
 ## ledger — The Ledger
