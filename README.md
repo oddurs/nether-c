@@ -188,6 +188,8 @@ nether: there is no `run`.
   A Nether C program is not executed. It is buried — evaluated as far as the
   world allows — and what remains is a trace and the holes the world still
   owes an answer to.
+
+  [...]
 ```
 
 That is the one behaviour the language will never change. It seemed like the

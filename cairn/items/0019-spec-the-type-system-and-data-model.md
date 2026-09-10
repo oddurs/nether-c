@@ -2,7 +2,7 @@
 id: 19
 title: 'Spec: the type system and data model'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -25,8 +25,8 @@ arithmetic unwritable.
 
 ## Acceptance criteria
 
-- [ ] The relationship between a type and its canonical encoding is total
-- [ ] Structural vs nominal equality is decided and stated
+- [x] The relationship between a type and its canonical encoding is total
+- [x] Structural vs nominal equality is decided and stated
 
 ## 2026-09-10
 

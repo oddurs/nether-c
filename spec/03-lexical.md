@@ -79,6 +79,9 @@ token sequence.
 ## 3.6 Literals
 
 ```
+digit          := "0".."9"
+hexdigit       := digit | "a".."f" | "A".."F"
+
 int_literal    := dec | hex | bin
 dec            := digit ( digit | "_" )*
 hex            := "0x" hexdigit ( hexdigit | "_" )*

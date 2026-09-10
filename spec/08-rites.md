@@ -13,9 +13,25 @@ Six verbs. The one that is missing is the point.
 An implementation MUST NOT provide a command that executes a Nether C program
 without producing a trace, under any name.
 
-`nether run` MUST exit with code 64 and explain what to use instead. It is
-spelled out here, in the specification, so that it is a rule rather than a
-joke, and so that anyone proposing to add it has something to argue against.
+`nether run` MUST exit with code 64 and explain what to use instead.
+
+```console
+$ nether run hello.nc
+nether: there is no `run`.
+
+  A Nether C program is not executed. It is buried — evaluated as far as the
+  world allows — and what remains is a trace and the holes the world still
+  owes an answer to.
+
+  You probably want:
+
+    nether bury <file.nc>     to evaluate it
+    nether exhume <cairn>     to answer its holes
+    nether lamp <cairn>       to see what it left behind
+```
+
+It is spelled out here, in the specification, so that it is a rule rather than
+a joke, and so that anyone proposing to add it has something to argue against.
 
 This is the only frozen requirement in this draft.
 
