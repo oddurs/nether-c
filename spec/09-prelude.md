@@ -149,5 +149,7 @@ that cannot answer — `read` on a missing file, `utf8` on invalid bytes —
 
 > This is under-specified and known to be. A language for build systems needs
 > a way to say *try this, and if it fails do that*, and starvation as
-> specified here has no recovery. The roadmap has no item for it yet; it needs
-> one before [The Surface](../ROADMAP.md) lands.
+> specified here has no recovery. It is the one genuinely open design question
+> left in the draft; the roadmap item is *Decide: what a prelude function does
+> when it cannot answer*, and it must close before
+> [The Surface](../ROADMAP.md) lands.

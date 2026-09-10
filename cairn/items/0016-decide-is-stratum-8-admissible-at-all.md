@@ -26,8 +26,8 @@ adoption. Admitting it means every downstream claim needs the qualifier
 
 ## Acceptance criteria
 
-- [ ] A decision, written down
-- [ ] If admitted: what a trace that touched 8 is permitted to claim
+- [x] A decision, written down
+- [x] If admitted: what a trace that touched 8 is permitted to claim
 
 ## 2026-09-10
 

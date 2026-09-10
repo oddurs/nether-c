@@ -31,9 +31,9 @@ Whichever we pick has to survive section 02 fitting on a page.
 
 ## Acceptance criteria
 
-- [ ] A program that is legal under one and illegal under the other
-- [ ] The error message each produces, written out
-- [ ] A decision, with the losing option recorded in 90-rationale
+- [x] A program that is legal under one and illegal under the other
+- [x] The error message each produces, written out
+- [x] A decision, with the losing option recorded in 90-rationale
 
 ## 2026-09-10
 

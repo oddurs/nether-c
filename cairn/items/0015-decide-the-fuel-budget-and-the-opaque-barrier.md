@@ -25,9 +25,9 @@ say *do not evaluate through this, even though you could*.
 
 ## Acceptance criteria
 
-- [ ] Fuel accounting is deterministic — same source, same exhaustion point
-- [ ] Running out of fuel is a diagnostic, not a crash, and names a source span
-- [ ] `opaque` has a typing rule, not just an implementation behaviour
+- [x] Fuel accounting is deterministic — same source, same exhaustion point
+- [x] Running out of fuel is a diagnostic, not a crash, and names a source span
+- [x] `opaque` has a typing rule, not just an implementation behaviour
 
 ## 2026-09-10
 
