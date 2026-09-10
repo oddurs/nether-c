@@ -40,16 +40,11 @@ Buried. Twelve specification sections, every design question settled and every r
 
 ## lamp — The Lamp
 
-`#######···` 70% · 7 of 10 done · due 2026-10-31
+`#########·` 90% · 9 of 10 done · due 2026-10-31
 
 ### marked
 
-- [ ] [`0091`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0091-publish-the-site.md) Publish the site <sup>chore · p1</sup>
 - [ ] [`0092`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0092-accessibility-and-no-javascript-pass.md) Accessibility and no-JavaScript pass <sup>chore · p2</sup>
-
-### descending
-
-- [ ] [`0090`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0090-icon-metadata-and-social-preview.md) Icon, metadata and social preview <sup>chore · p2</sup>
 
 ### buried
 
@@ -59,6 +54,8 @@ Buried. Twelve specification sections, every design question settled and every r
 - [x] [`0087`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0087-the-landing-page.md) The landing page <sup>feature · p0</sup>
 - [x] [`0088`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0088-syntax-colouring-for-nether-c.md) Syntax colouring for Nether C <sup>feature · p1</sup>
 - [x] [`0089`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0089-the-lamp-the-temple-s-colours-on-demand.md) The lamp: the temple's colours, on demand <sup>feature · p1</sup>
+- [x] [`0090`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0090-icon-metadata-and-social-preview.md) Icon, metadata and social preview <sup>chore · p2</sup>
+- [x] [`0091`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0091-publish-the-site.md) Publish the site <sup>chore · p1</sup>
 - [x] [`0093`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0093-fail-the-build-when-the-committed-site-is-stale.md) Fail the build when the committed site is stale <sup>chore · p1</sup>
 
 ## ledger — The Ledger
