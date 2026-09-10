@@ -2,7 +2,7 @@
 id: 94
 title: 'Decide: what a prelude function does when it cannot answer'
 type: spec
-status: marked
+status: buried
 milestone: codex
 depends_on:
 - 23
@@ -51,7 +51,11 @@ admission turned into work.
 
 ## Acceptance criteria
 
-- [ ] A decision, written into spec/09-prelude.md, replacing the current 9.9
-- [ ] The rejected candidates recorded in spec/90-rationale.md 90.2
-- [ ] A worked example: read a file that may not exist, handle both outcomes
-- [ ] Stated interaction with replay: what the trace records about a recovery
+- [x] A decision, written into spec/09-prelude.md, replacing the current 9.9
+- [x] The rejected candidates recorded in spec/90-rationale.md 90.2
+- [x] A worked example: read a file that may not exist, handle both outcomes
+- [x] Stated interaction with replay: what the trace records about a recovery
+
+## 2026-09-10
+
+SETTLED: failure is an answer; starvation is a bug. Partial world functions return Answer<T> = Given T | Refused Refusal, with Refusal a closed set of six codes (absent, denied, malformed, unreachable, exhausted, conflict) and nothing else — the platform's error text lives in the witness, not the value, because a value whose encoding varies by operating system cannot have a stable cairn. given/refusal/must inspect it with ordinary if, as C always has. Starvation is reserved for programmer error and is deliberately not catchable. Exceptions, rescue-on-starvation and 'no recovery at all' are all recorded as rejected in 90.2 — rescue was the tempting one and it was rejected because it makes evaluation order observable.

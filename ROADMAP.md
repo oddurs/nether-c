@@ -12,11 +12,9 @@ Statuses are the language's own: work is `descending` while it is underway,
 
 ## codex — The Codex
 
-`##########` 95% · 18 of 19 done · due 2026-10-15
+`##########` 100% · 19 of 19 done · due 2026-10-15
 
-### marked
-
-- [ ] [`0094`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0094-decide-what-a-prelude-function-does-when-it-cannot-answer.md) Decide: what a prelude function does when it cannot answer <sup>spec · p0</sup>
+Buried. Twelve specification sections, every design question settled and every rejected alternative recorded in 90.2, every code sample a fixture in tests/transcripts, and the Decay Rule proven by a pull request that was refused. Only one claim in the specification is frozen: there is no run.
 
 ### buried
 
@@ -38,6 +36,7 @@ Statuses are the language's own: work is `descending` while it is underway,
 - [x] [`0026`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0026-spec-style-guide-and-normative-language.md) Spec style guide and normative language <sup>chore · p1</sup>
 - [x] [`0027`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0027-extract-every-spec-code-sample-into-tests-transcripts.md) Extract every spec code sample into tests/transcripts <sup>chore · p0</sup>
 - [x] [`0083`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0083-the-decay-rule-ci-fails-if-the-trusted-core-grows.md) The Decay Rule: CI fails if the trusted core grows <sup>chore · p1 · 0</sup>
+- [x] [`0094`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0094-decide-what-a-prelude-function-does-when-it-cannot-answer.md) Decide: what a prelude function does when it cannot answer <sup>spec · p0</sup>
 
 ## lamp — The Lamp
 
