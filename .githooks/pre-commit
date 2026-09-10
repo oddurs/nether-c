@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fast gate only. The slow checks live in pre-push.
+set -eu
+exec ./scripts/task fmt:check

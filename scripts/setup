@@ -1,0 +1,20 @@
+#!/bin/sh
+# Run once per clone.
+set -eu
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+git config core.hooksPath .githooks
+echo "setup: hooks wired to .githooks"
+
+if command -v cairn >/dev/null 2>&1; then
+  cairn init --git --force >/dev/null 2>&1 || true
+  echo "setup: cairn merge driver registered"
+else
+  echo "setup: cairn is not installed; the roadmap is still readable in ROADMAP.md"
+fi
+
+command -v cargo   >/dev/null 2>&1 || echo "setup: cargo not found; see rust-toolchain.toml"
+command -v python3 >/dev/null 2>&1 || echo "setup: python3 not found; site/bake needs it"
+
+echo "setup: done. Try 'scripts/agent doctor'."

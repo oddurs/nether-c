@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the specification
+    url: https://github.com/oddurs/nether-c/tree/main/spec
+    about: Most questions about what Nether C does are answered here first.
+  - name: Report a vulnerability
+    url: https://github.com/oddurs/nether-c/security/advisories/new
+    about: Privately, never as a public issue.

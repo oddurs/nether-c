@@ -1,0 +1,45 @@
+#!/bin/sh
+# The Decay Rule.
+#
+# TempleOS was fixed at a size given by covenant and never grew. Nether C
+# inverts that: the trusted core may only ever get SMALLER. Below, things
+# only decay.
+#
+# The trusted core is the Rust that every guarantee rests on. Lowering the
+# ceiling in .decay-ceiling is an ordinary commit. Raising it is a deliberate
+# act that must be argued for in the pull request.
+set -eu
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+ceiling_file=.decay-ceiling
+
+count=$(find crates -name '*.rs' -not -path '*/target/*' -print0 2>/dev/null \
+  | xargs -0 cat 2>/dev/null \
+  | grep -cvE '^\s*(//.*)?$' || true)
+count=${count:-0}
+
+if [ ! -f "$ceiling_file" ]; then
+  echo "$count" > "$ceiling_file"
+  echo "decay: no ceiling found; sealed the current core at $count lines"
+  exit 0
+fi
+
+ceiling=$(tr -dc '0-9' < "$ceiling_file")
+
+if [ "$count" -gt "$ceiling" ]; then
+  echo "decay: the trusted core grew." >&2
+  echo "       ceiling  $ceiling lines  (.decay-ceiling)" >&2
+  echo "       now      $count lines" >&2
+  echo "" >&2
+  echo "  Below, things only decay. Either take $((count - ceiling)) lines back" >&2
+  echo "  out, or raise the ceiling deliberately and say why in the PR body." >&2
+  exit 1
+fi
+
+if [ "$count" -lt "$ceiling" ]; then
+  echo "decay: core is $((ceiling - count)) lines below the ceiling ($count/$ceiling)"
+  echo "       lower it:  echo $count > $ceiling_file"
+else
+  echo "decay: core at the ceiling ($count lines)"
+fi

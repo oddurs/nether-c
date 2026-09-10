@@ -1,0 +1,167 @@
+#!/bin/sh
+# One unit of work, one worktree, one branch, one pull request.
+#
+# Two agents never share a checkout, and main only ever advances through a
+# merged PR. This script is the only supported way to move work through the
+# repository; everything it does is idempotent and says what it is doing.
+set -eu
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  echo "agent: not inside a git repository" >&2; exit 1; }
+repo=$(basename "$root")
+trees=$(cd "$root/.." && pwd)/.worktrees/$repo
+
+default_branch() {
+  git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' \
+    || git config --get init.defaultBranch 2>/dev/null \
+    || echo main
+}
+
+die() { echo "agent: $*" >&2; exit 1; }
+say() { printf '\033[2m→\033[0m %s\n' "$*"; }
+
+# ── doctor ───────────────────────────────────────────────────────────────────
+cmd_doctor() {
+  problems=0
+  check() { # label command...
+    label=$1; shift
+    if "$@" >/dev/null 2>&1; then printf '  \033[32mok\033[0m    %s\n' "$label"
+    else printf '  \033[31mfail\033[0m  %s\n' "$label"; problems=$((problems+1)); fi
+  }
+  echo "agent doctor — $repo"
+  check "git present"            command -v git
+  check "gh present"             command -v gh
+  check "gh authenticated"       gh auth status
+  check "cargo present"          command -v cargo
+  check "python3 present"        command -v python3
+  check "cairn present"          command -v cairn
+  check "origin configured"      git remote get-url origin
+
+  hooks=$(git config --get core.hooksPath 2>/dev/null || echo "")
+  if [ "$hooks" = ".githooks" ]; then printf '  \033[32mok\033[0m    hooks path\n'
+  else
+    printf '  \033[33mfix\033[0m   hooks path was "%s"; setting it\n' "$hooks"
+    git config core.hooksPath .githooks
+  fi
+
+  if git diff --quiet && git diff --cached --quiet; then
+    printf '  \033[32mok\033[0m    working tree clean\n'
+  else
+    printf '  \033[33mwarn\033[0m  working tree dirty\n'
+  fi
+
+  if [ -d "$trees" ]; then
+    printf '  \033[32mok\033[0m    worktree root %s\n' "$trees"
+  else
+    printf '  \033[2m--\033[0m    worktree root will be created at %s\n' "$trees"
+  fi
+
+  [ "$problems" -eq 0 ] || die "$problems problem(s) above"
+  echo "clean."
+}
+
+# ── start ────────────────────────────────────────────────────────────────────
+cmd_start() {
+  branch=${1:-}
+  [ -n "$branch" ] || die "usage: scripts/agent start <type>/<slug>"
+  echo "$branch" | grep -qE '^(feat|fix|chore|docs|spec|perf|refactor|test)/[a-z0-9][a-z0-9._-]*$' \
+    || die "branch must be <type>/<slug>, type one of feat fix chore docs spec perf refactor test"
+
+  base=$(default_branch)
+  git show-ref --verify --quiet "refs/heads/$branch" && die "branch $branch already exists"
+  dest=$trees/$branch
+  [ -e "$dest" ] && die "worktree already exists at $dest"
+
+  say "fetching origin"
+  git fetch --quiet origin
+  say "creating $branch from origin/$base"
+  mkdir -p "$(dirname "$dest")"
+  git worktree add -b "$branch" "$dest" "origin/$base" >/dev/null
+  ( cd "$dest" && git config core.hooksPath .githooks )
+
+  printf '\nworktree ready. move into it:\n\n  cd %s\n\n' "$dest"
+}
+
+# ── the rest ─────────────────────────────────────────────────────────────────
+cmd_check() { exec "$root/scripts/task" check; }
+
+cmd_commit() {
+  msg=${1:-}
+  [ -n "$msg" ] || die "usage: scripts/agent commit \"type(scope): subject\""
+  git commit -m "$msg"
+}
+
+cmd_pr() {
+  base=$(default_branch)
+  branch=$(git rev-parse --abbrev-ref HEAD)
+  [ "$branch" = "$base" ] && die "refusing to open a PR from $base"
+  say "running checks"
+  "$root/scripts/task" check
+  say "pushing $branch"
+  git push -u origin "$branch"
+  say "opening pull request"
+  if [ "${1:-}" = "--draft" ]; then gh pr create --fill --draft --base "$base"
+  else gh pr create --fill --base "$base"; fi
+  gh pr view --json url --jq .url
+}
+
+cmd_sync() {
+  base=$(default_branch)
+  say "fetching origin"
+  git fetch --quiet origin
+  say "rebasing onto origin/$base"
+  git rebase "origin/$base"
+}
+
+cmd_done() {
+  branch=$(git rev-parse --abbrev-ref HEAD)
+  base=$(default_branch)
+  [ "$branch" = "$base" ] && die "nothing to finish: already on $base"
+
+  state=$(gh pr view "$branch" --json state --jq .state 2>/dev/null || echo NONE)
+  [ "$state" = "MERGED" ] || die "pull request for $branch is $state, not MERGED"
+
+  dest=$(git rev-parse --show-toplevel)
+  say "leaving $dest"
+  cd "$root"
+  git worktree remove "$dest" --force
+  git branch -D "$branch" >/dev/null 2>&1 || true
+  git worktree prune
+  git fetch --prune --quiet origin
+  printf '\nsurfaced. %s is gone; you are in %s\n' "$branch" "$root"
+}
+
+cmd_list() {
+  git worktree list --porcelain | awk '/^worktree /{w=$2} /^branch /{sub("refs/heads/","",$2); print $2"\t"w}' \
+  | while IFS="$(printf '\t')" read -r b w; do
+      st=$(gh pr view "$b" --json state --jq .state 2>/dev/null || echo "-")
+      printf '  %-34s %-10s %s\n' "$b" "$st" "$w"
+    done
+}
+
+case "${1:-}" in
+  doctor)            shift; cmd_doctor "$@" ;;
+  start|descend)     shift; cmd_start  "$@" ;;
+  check)             shift; cmd_check  "$@" ;;
+  commit)            shift; cmd_commit "$@" ;;
+  pr)                shift; cmd_pr     "$@" ;;
+  sync)              shift; cmd_sync   "$@" ;;
+  done|surface)      shift; cmd_done   "$@" ;;
+  list|strata)       shift; cmd_list   "$@" ;;
+  *)
+    cat >&2 <<'USAGE'
+usage: scripts/agent <command>
+
+  doctor                    check the environment, fix what it safely can
+  start <type>/<slug>       new branch + worktree, from origin/main   [descend]
+  check                     scripts/task check
+  commit "type: subject"    commit, conventionally
+  pr [--draft]              check, push, open the pull request
+  sync                      rebase onto origin/main
+  done                      confirm merged, remove worktree and branch [surface]
+  list                      worktrees, branches, PR state              [strata]
+
+Branch types: feat fix chore docs spec perf refactor test
+USAGE
+    exit 2 ;;
+esac

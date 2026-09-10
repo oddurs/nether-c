@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 The strata &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 01 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/01-strata.md">edit the source</a></p><h1 id="the-strata"><a href="#the-strata">The strata</a></h1><p>Every value in Nether C carries a <strong>depth</strong>: a natural number between 0 and 8 recording how far into the world its history reaches. Every expression has a depth. Every function&#x27;s type includes the deepest stratum it may reach.</p><p>Depth is not a permission that is checked and forgotten. It is part of the type, it propagates through every operation, and it is recorded permanently in the trace.</p><h2 id="11-the-lattice"><a href="#11-the-lattice">1.1 The lattice</a></h2><p>The nine strata form a total order, 0 ≤ 1 ≤ … ≤ 8. Depth composes by maximum: an expression built from parts is exactly as deep as its deepest part.</p><div class="scroll"><table><thead><tr><th align="right">Depth</th><th align="left">Name</th><th align="left">Grants</th><th align="left">Costs</th><th align="left">Witness obligation</th></tr></thead><tbody><tr><td align="right">0</td><td align="left"><strong>Pure</strong></td><td align="left">arithmetic, data, functions</td><td align="left">nothing</td><td align="left">none</td></tr><tr><td align="right">1</td><td align="left"><strong>Store</strong></td><td align="left">reading the ledger by cairn</td><td align="left">nothing observable</td><td align="left">the cairn read</td></tr><tr><td align="right">2</td><td align="left"><strong>Frozen Environment</strong></td><td align="left">declared variables, a pinned clock, the target triple</td><td align="left">the value must be declared in advance</td><td align="left">the declaration and the value</td></tr><tr><td align="right">3</td><td align="left"><strong>Read the Disk</strong></td><td align="left">reading files</td><td align="left">the result depends on a filesystem</td><td align="left">path, bytes read, and their cairn</td></tr><tr><td align="right">4</td><td align="left"><strong>Write the Disk</strong></td><td align="left">creating and modifying files</td><td align="left">irreversibility outside the ledger</td><td align="left">path and the cairn of what was written</td></tr><tr><td align="right">5</td><td align="left"><strong>Read the Network</strong></td><td align="left">fetching</td><td align="left">the result depends on a remote party</td><td align="left">request, response, and its cairn</td></tr><tr><td align="right">6</td><td align="left"><strong>Write the Network</strong></td><td align="left">sending</td><td align="left">the world remembers what was said</td><td align="left">request and the response, if any</td></tr><tr><td align="right">7</td><td align="left"><strong>Entropy</strong></td><td align="left">true randomness</td><td align="left">replayability</td><td align="left">the drawn value</td></tr><tr><td align="right">8</td><td align="left"><strong>Unrecorded</strong></td><td align="left">foreign code</td><td align="left">provenance itself</td><td align="left">nothing can be recorded</td></tr></tbody></table></div><p>Strata 0 through 7 are <strong>recordable</strong>: everything the world answered can be written to the ledger and served back later, so a trace that reached them can be replayed exactly. Stratum 8 is not, and is treated separately in §1.7.</p><h2 id="12-the-monotonicity-law"><a href="#12-the-monotonicity-law">1.2 The monotonicity law</a></h2><blockquote><p><strong>Law.</strong> No evaluation step lowers the depth of a value.</p></blockquote><p>This is the one invariant the whole design rests on. An implementation MUST NOT provide any operation that produces a value of lower depth than its inputs, except the two escapes defined in §1.5 and §1.6, both of which carry a name or an opacity rather than the value itself.</p><p>There is no <code>ascend</code>.</p><h2 id="13-descent"><a href="#13-descent">1.3 Descent</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Bytes</span><span class="d3">@3</span> src = <span class="k">descend</span> disk { read(<span class="s">&quot;kernel.nc&quot;</span>) };</code></pre></figure><p><code>descend κ { … }</code> is an <strong>expression</strong>. It acquires the capability named κ for the duration of the block, evaluates the block, and takes the value of the block&#x27;s tail expression. The body is checked at depth <code>max(δ, stratum(κ))</code>, where <code>δ</code> is the ambient depth of the enclosing scope.</p><p>A <code>descend</code> whose tail expression is <code>U0</code> may be used as a statement.</p><ul><li>Descent is lexically scoped: the capability is not available outside the block, and neither are the block&#x27;s local bindings. Only the tail value leaves, carrying its depth with it.</li><li>Descent is one-way <em>within</em> the block: no construct inside the block returns the scope to a shallower depth.</li><li>Descents nest, and nesting takes the maximum. <code>descend disk { descend net { … } }</code> has a body at depth 5.</li><li>A <code>descend</code> whose body reaches no deeper than the enclosing scope is legal and has no effect. An implementation SHOULD warn about it.</li></ul><p>The capability names and their strata are fixed by this specification and listed in <a href="09-prelude.html">section 09</a>. An implementation MUST NOT define additional capability names; a capability that is not in the prelude cannot be audited by a reader of this document, which defeats the purpose of naming them at all.</p><h2 id="14-what-the-trace-records"><a href="#14-what-the-trace-records">1.4 What the trace records</a></h2><p>When an expression at depth <em>d</em> &gt; 0 is evaluated, the implementation MUST write to the ledger, before the value is returned to the program:</p><ol><li>the <strong>witness</strong> listed for that stratum in the table in §1.1;</li><li>the source span of the expression that reached it;</li><li>the depth itself.</li></ol><p>The order matters. An answer that is returned before it is recorded is an answer that can be lost, and a ledger with a gap in it cannot support any of the guarantees in <a href="06-evaluation.html">section 06</a>.</p><h2 id="15-seal"><a href="#15-seal">1.5 Seal</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Cairn</span> id = <span class="k">seal</span> src;    <span class="c">// src : Bytes@3, id : Cairn@0</span></code></pre></figure><p><code>seal e</code> produces the <strong>cairn</strong> of <code>e</code> — the content address of its value. The result has depth 0 regardless of the depth of <code>e</code>.</p><p>This is sound because a cairn is a name, and a name is pure. Knowing that a file&#x27;s contents hash to <code>a1f0c93d</code> tells you nothing about the file that you could not have computed yourself given the same bytes; it is a claim <em>about</em> the deep value, not the deep value.</p><p><code>seal</code> on a shade (§1.6) is legal and yields the cairn of the underlying value.</p><h2 id="16-shade-and-the-orpheus-rule"><a href="#16-shade-and-the-orpheus-rule">1.6 Shade, and the Orpheus rule</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Shade</span>&lt;<span class="t">Json</span>&gt; reply = <span class="k">descend</span> net { <span class="k">shade</span> fetch(<span class="s">&quot;https://example.invalid/index.json&quot;</span>) };
+
+<span class="t">Cairn</span> witness = <span class="k">seal</span> reply;      <span class="c">// legal: Cairn@0</span>
+<span class="t">I64</span>   n       = <span class="k">look</span>(reply).len; <span class="c">// ILLEGAL here — see below</span></code></pre></figure><p><code>shade e</code>, where <code>e : T@d</code>, produces a value of type <code>Shade&lt;T&gt;</code> at depth 0. The shade is <strong>opaque</strong>: it MAY be stored, copied, passed, compared for equality, and sealed. It MUST NOT be destructured, pattern-matched, or otherwise observed.</p><p><code>look s</code>, where <code>s : Shade&lt;T&gt;</code> originating at depth <code>d</code>, has type <code>T@d</code>, and is well-typed <strong>only where the current descent depth is at least <code>d</code></strong>.</p><blockquote><p><strong>The Orpheus rule.</strong> You may carry a shade up out of any stratum. You may only look at it by going back down.</p></blockquote><p>The check is local: it compares the shade&#x27;s origin depth against the ambient depth at the point of the <code>look</code>. It does not propagate, it does not stain the enclosing scope, and it produces an error that names both numbers and the <code>descend</code> that would fix it.</p><figure class="listing"><pre><code>error: cannot look at a shade from stratum 5 at depth 0
+  --&gt; stamp.nc:14:11
+   |
+14 |   I64   n       = look(reply).len;
+   |                   ^^^^^^^^^^^ this shade came from `fetch` at stratum 5
+   |
+   = the value is here, but you are not. Wrap the look in `descend net { … }`.</code></pre></figure><blockquote><p>Two rejected alternatives — re-staining the entire enclosing scope, and tainting only the binding — are recorded in <a href="90-rationale.html">section 90</a>. The roadmap item is <em>Decide: does look re-stain the scope, or taint the binding?</em>, which this rule proposes to close.</p></blockquote><h2 id="17-stratum-8-the-unrecorded"><a href="#17-stratum-8-the-unrecorded">1.7 Stratum 8, the Unrecorded</a></h2><p>Stratum 8 is foreign code: anything whose behaviour the implementation cannot observe well enough to record a witness for.</p><p>It is in the lattice because a language that cannot call C is a language nobody can adopt. It is at the bottom because it is the only stratum that breaks the language&#x27;s central promise rather than merely deepening it: a trace that reached stratum 8 has a gap in it, and no amount of later care can fill that gap in.</p><p>An implementation MUST:</p><ul><li>mark any trace that reached stratum 8, permanently and transitively, in the trace itself;</li><li>refuse to report such a trace as replayable, in every rite that reports replayability;</li><li>surface the mark in <code>nether strata</code> output without being asked.</li></ul><p>A value derived from an unrecorded call is itself at depth 8. There is no sealing or shading out of stratum 8 that removes the mark — <code>seal</code> still yields a <code>Cairn@0</code>, but the <em>trace</em> remains marked, because what is unsound is not the name but the claim that the trace is complete.</p><blockquote><p>The roadmap item <em>Decide: is stratum 8 admissible at all?</em> is open. This section states the position that it is, quarantined loudly. The alternative — refusing foreign code entirely — is purer and is recorded in section 90.</p></blockquote><h2 id="18-why-write-is-deeper-than-read"><a href="#18-why-write-is-deeper-than-read">1.8 Why write is deeper than read</a></h2><p>Strata 4 and 6 sit below 3 and 5 because the ordering is <em>how much of the world you have disturbed</em>, not <em>how much you have learned</em>. A read can be replayed from the ledger with no trace left outside it; a write cannot be taken back, and a message sent cannot be unsent.</p><p>This makes the ordering slightly unusual: a program that only reads the network (5) is deeper than one that writes the disk (4), which is arguable. The specification takes the position that reaching outside the machine is a larger commitment than modifying the machine you are already on. An implementation MUST use the ordering in §1.1 regardless of its opinion, since depth comparisons must mean the same thing everywhere.</p><hr class="thin"><nav class="bar"><a href="00-overview.html">&larr; Overview</a><span class="spacer"></span><a href="02-calculus.html">The calculus of depth &rarr;</a></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

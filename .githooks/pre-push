@@ -1,0 +1,16 @@
+#!/bin/sh
+# main only ever advances through a merged pull request.
+set -eu
+
+remote_ref_default=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || echo main)
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+    "refs/heads/$remote_ref_default")
+      echo "pre-push: refusing to push to $remote_ref_default." >&2
+      echo "          Open a pull request:  scripts/agent pr" >&2
+      exit 1 ;;
+  esac
+done
+
+exec ./scripts/task check

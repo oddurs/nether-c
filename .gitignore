@@ -1,0 +1,15 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# worktrees live beside the repo, but never inside it
+.worktrees/
+
+# editors and operating systems
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# nothing generated belongs here except the site, which is committed on purpose

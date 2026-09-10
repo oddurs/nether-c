@@ -1,0 +1,244 @@
+# cairn.toml — the roadmap and issues for Nether C.
+#
+# The vocabulary here is the language's own. An item is not "done", it is
+# `buried`: evaluated as far as the world currently allows. It is not
+# "blocked", it is `starved`: waiting on a hole somebody else has to fill.
+# This is not decoration — if the words we use to plan the compiler are not
+# the words the compiler uses, one of the two is wrong.
+#
+#   cairn config          show the resolved schema
+#   cairn check           validate every item against it
+#   man cairn             full reference
+
+format = 2
+
+[project]
+name = "Nether C"
+dir = "cairn/items"
+id_width = 4
+default_type = "feature"
+default_status = "unmarked"
+url = "https://github.com/oddurs/nether-c/blob/main"
+
+# ─── Item types ──────────────────────────────────────────────────────────────
+
+[[type]]
+name = "spec"
+icon = "§"
+color = "magenta"
+description = "A section of the language specification. Prose is the deliverable."
+template = """
+## What this section must answer
+
+## Constraints it inherits
+
+## Open questions
+
+- [ ]
+
+## Acceptance criteria
+
+- [ ] Every normative claim is stated once, in one place
+- [ ] Every code sample in it is in `tests/transcripts/`
+- [ ] A reader who has not read the rest of the spec can follow it
+"""
+
+[[type]]
+name = "feature"
+icon = "+"
+color = "cyan"
+template = """
+## Problem
+
+## Proposal
+
+## Which stratum does this reach?
+
+## Acceptance criteria
+
+- [ ]
+"""
+
+[[type]]
+name = "bug"
+icon = "!"
+color = "red"
+template = """
+## What happens
+
+## What should happen
+
+## Reproduction
+
+1.
+
+## Cairn of the offending trace
+
+"""
+
+[[type]]
+name = "chore"
+icon = "~"
+color = "gray"
+
+[[type]]
+name = "docs"
+icon = "*"
+color = "blue"
+
+[[type]]
+name = "milestone"
+icon = "▲"
+color = "yellow"
+description = "A descent. What we can honestly claim once it lands."
+
+# ─── Statuses ────────────────────────────────────────────────────────────────
+# Order is board order. `category` is what cairn reasons about; the names are
+# ours.
+
+[[status]]
+name = "unmarked"
+label = "unmarked"
+category = "open"
+color = "gray"
+
+[[status]]
+name = "marked"
+label = "marked"
+category = "open"
+color = "blue"
+
+[[status]]
+name = "descending"
+label = "descending"
+category = "active"
+color = "yellow"
+
+[[status]]
+name = "starved"
+label = "starved"
+category = "active"
+color = "red"
+
+[[status]]
+name = "buried"
+label = "buried"
+category = "done"
+color = "green"
+
+[[status]]
+name = "unrecorded"
+label = "unrecorded"
+category = "dropped"
+color = "gray"
+board = false
+
+# ─── Fields ──────────────────────────────────────────────────────────────────
+
+[[field]]
+name = "milestone"
+kind = "ref"
+target = "milestone"
+by = "key"
+rollup = true
+inverse = "scheduled"
+description = "which descent this ships in"
+
+[[field]]
+name = "due"
+kind = "date"
+description = "when a descent is meant to land"
+
+[[field]]
+name = "part_of"
+kind = "ref"
+target = "*"
+cardinality = "many"
+acyclic = true
+rollup = true
+inverse = "contains"
+description = "a larger piece of work this belongs to"
+
+[[field]]
+name = "priority"
+kind = "enum"
+values = ["p0", "p1", "p2", "p3"]
+default = "p2"
+column = true
+description = "p0 blocks the descent"
+
+[[field]]
+name = "effort"
+kind = "enum"
+values = ["s", "m", "l", "xl"]
+description = "rough size, not an estimate"
+
+[[field]]
+name = "stratum"
+kind = "enum"
+values = ["0", "1", "2", "3", "4", "5", "6", "7", "8"]
+column = true
+description = "deepest stratum this work reaches: 0 pure, 3 disk, 5 net, 7 entropy, 8 unrecorded"
+
+[[field]]
+name = "area"
+kind = "text"
+description = "crate or directory this touches"
+
+[[field]]
+name = "proof"
+kind = "text"
+description = "the observable fact that settles whether this is buried"
+
+# ─── Saved views ─────────────────────────────────────────────────────────────
+
+[[view]]
+name = "now"
+description = "What is actually being worked on"
+filter = "category=active"
+sort = "priority,id"
+
+[[view]]
+name = "next"
+description = "Marked work, nearest descent first"
+filter = "status=marked"
+sort = "priority,milestone"
+
+[[view]]
+name = "triage"
+description = "Items with no descent or no proof"
+filter = "milestone=,category!=done"
+columns = ["id", "type", "title", "created"]
+
+[[view]]
+name = "deep"
+description = "Everything that reaches past the disk. Review these hardest."
+filter = "stratum>=5,category!=done"
+sort = "stratum,id"
+
+[[view]]
+name = "unproven"
+description = "Work with no stated proof. A proof is not optional here."
+filter = "proof=,category!=done"
+sort = "milestone,id"
+
+# ─── Hooks ───────────────────────────────────────────────────────────────────
+
+[hooks]
+after-create = "cairn render -q"
+after-change = "cairn render -q"
+after-remove = "cairn render -q"
+
+# ─── Rendered roadmap ────────────────────────────────────────────────────────
+
+[render]
+target = "ROADMAP.md"
+title = "Roadmap"
+group_by = "milestone"
+include = "category!=dropped"
+checkbox = true
+show_ids = true
+progress = true
+group_by_status = true
+link_items = true
+header = "spec/roadmap-preamble.md"

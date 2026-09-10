@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>09 The prelude &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 09 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/09-prelude.md">edit the source</a></p><h1 id="the-prelude"><a href="#the-prelude">The prelude</a></h1><p>Every function&#x27;s signature carries the stratum it costs. Reading this section is how a programmer finds out what a thing will do to their program&#x27;s depth, so nothing here may be deeper than it must.</p><p>The prelude is deliberately small. It should be readable in full in ten minutes.</p><h2 id="91-capabilities"><a href="#91-capabilities">9.1 Capabilities</a></h2><p>These are the names <code>descend</code> accepts. An implementation MUST NOT define others.</p><div class="scroll"><table><thead><tr><th align="left">Capability</th><th align="right">Stratum</th><th align="left">Grants</th></tr></thead><tbody><tr><td align="left"><code>store</code></td><td align="right">1</td><td align="left">reading the ledger by cairn</td></tr><tr><td align="left"><code>env</code></td><td align="right">2</td><td align="left">the frozen environment</td></tr><tr><td align="left"><code>disk</code></td><td align="right">3</td><td align="left">reading files</td></tr><tr><td align="left"><code>disk!</code></td><td align="right">4</td><td align="left">creating and modifying files</td></tr><tr><td align="left"><code>net</code></td><td align="right">5</td><td align="left">fetching</td></tr><tr><td align="left"><code>net!</code></td><td align="right">6</td><td align="left">sending</td></tr><tr><td align="left"><code>entropy</code></td><td align="right">7</td><td align="left">true randomness</td></tr><tr><td align="left"><code>unrecorded</code></td><td align="right">8</td><td align="left">foreign code</td></tr></tbody></table></div><p>The <code>!</code> suffix marks the writing half of a pair, and reads as it does in the rest of the language: this one does not take back.</p><h2 id="92-depth-0"><a href="#92-depth-0">9.2 Depth 0</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">I64</span>   min(<span class="t">I64</span> a, <span class="t">I64</span> b)                <span class="d0">@0</span>;
+<span class="t">I64</span>   max(<span class="t">I64</span> a, <span class="t">I64</span> b)                <span class="d0">@0</span>;
+<span class="t">I64</span>   abs(<span class="t">I64</span> x)                       <span class="d0">@0</span>;
+
+<span class="t">I64</span>   len(<span class="t">Bytes</span> b)                     <span class="d0">@0</span>;
+<span class="t">Bytes</span> slice(<span class="t">Bytes</span> b, <span class="t">I64</span> from, <span class="t">I64</span> to) <span class="d0">@0</span>;
+<span class="t">Bytes</span> concat(<span class="t">Bytes</span> a, <span class="t">Bytes</span> b)         <span class="d0">@0</span>;
+<span class="t">Bool</span>  starts_with(<span class="t">Bytes</span> b, <span class="t">Bytes</span> p)    <span class="d0">@0</span>;
+
+<span class="t">Str</span>   utf8(<span class="t">Bytes</span> b)                    <span class="d0">@0</span>;   <span class="c">// fails if not well-formed</span>
+<span class="t">Bytes</span> raw(<span class="t">Str</span> s)                       <span class="d0">@0</span>;
+<span class="t">Str</span>   join(<span class="t">Str</span>[] parts, <span class="t">Str</span> sep)       <span class="d0">@0</span>;
+<span class="t">Str</span>[] split(<span class="t">Str</span> s, <span class="t">Str</span> sep)            <span class="d0">@0</span>;
+
+<span class="t">Cairn</span> cairn_of(<span class="t">Bytes</span> b)                <span class="d0">@0</span>;   <span class="c">// the same value `seal` would give</span>
+<span class="t">Str</span>   hex(<span class="t">Cairn</span> c)                     <span class="d0">@0</span>;</code></pre></figure><p><code>compile</code> is not in the prelude. Nether C does not know how to compile Nether C until <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">Self-Burial</a>; until then it is an ordinary function a program supplies for itself.</p><h2 id="93-stratum-1-store"><a href="#93-stratum-1-store">9.3 Stratum 1 — <code>store</code></a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Bytes</span> fetch_node(<span class="t">Cairn</span> c)              <span class="d1">@1</span>;
+<span class="t">Bool</span>  has_node(<span class="t">Cairn</span> c)                <span class="d1">@1</span>;</code></pre></figure><p>Reading the ledger is at depth 1 rather than 0 because the ledger is a place on a machine, and a program that reads it can fail in a way a pure program cannot. The value it returns is nevertheless fully determined by the cairn, which is why it is only one stratum down.</p><h2 id="94-stratum-2-env"><a href="#94-stratum-2-env">9.4 Stratum 2 — <code>env</code></a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Str</span>   env(<span class="t">Str</span> name)                    <span class="d2">@2</span>;   <span class="c">// fails if not declared</span>
+<span class="t">I64</span>   clock()                          <span class="d2">@2</span>;   <span class="c">// the pinned build time</span>
+<span class="t">Str</span>   target()                         <span class="d2">@2</span>;   <span class="c">// the target triple</span></code></pre></figure><p><code>env</code> fails on an undeclared variable rather than returning empty. A build that silently behaves differently because a variable was absent is exactly the class of bug this language exists to make impossible.</p><p>The declaration lives outside the program, in the burial invocation. A trace records the declared set and every value read from it.</p><h2 id="95-strata-3-and-4-disk-disk"><a href="#95-strata-3-and-4-disk-disk">9.5 Strata 3 and 4 — <code>disk</code>, <code>disk!</code></a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Bytes</span> read(<span class="t">Str</span> path)                   <span class="d3">@3</span>;
+<span class="t">Str</span>[] list(<span class="t">Str</span> path)                   <span class="d3">@3</span>;
+<span class="t">Bool</span>  exists(<span class="t">Str</span> path)                 <span class="d3">@3</span>;
+
+<span class="t">U0</span>    write(<span class="t">Str</span> path, <span class="t">Bytes</span> contents)  <span class="d4">@4</span>;
+<span class="t">U0</span>    remove(<span class="t">Str</span> path)                 <span class="d4">@4</span>;</code></pre></figure><p><code>read</code> becomes a hole; the answer is sealed and recorded before it reaches the program. <code>write</code> is the first genuinely irreversible thing the language can do, and the only prelude function whose witness records something the ledger cannot later reproduce on its own.</p><h2 id="96-strata-5-and-6-net-net"><a href="#96-strata-5-and-6-net-net">9.6 Strata 5 and 6 — <code>net</code>, <code>net!</code></a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Bytes</span> get(<span class="t">Str</span> url)                     <span class="d5">@5</span>;
+<span class="t">Bytes</span> post(<span class="t">Str</span> url, <span class="t">Bytes</span> body)        <span class="d6">@6</span>;</code></pre></figure><p>The response is sealed on arrival, with the request as its witness. Replay serves the recorded response and MUST NOT open a socket.</p><h2 id="97-stratum-7-entropy"><a href="#97-stratum-7-entropy">9.7 Stratum 7 — <code>entropy</code></a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Bytes</span> draw(<span class="t">I64</span> n)                      <span class="d7">@7</span>;</code></pre></figure><p><code>draw</code> is the only source of nondeterminism in the language, and it is nearly the deepest thing in it.</p><blockquote><p>In TempleOS, entropy was the Oracle — revelation, arriving from above. Here it is stratum 7: the deepest recordable thing, and the one act that means a program can never be re-derived, only replayed. The inversion is exact and it is the reason the lattice is oriented the way it is.</p></blockquote><p>A trace that called <code>draw</code> records the drawn bytes as a witness, so replay is exact. What is lost is re-derivation: burying the same source again produces a different trace. See <a href="06-evaluation.html#67-replay">§6.7</a>.</p><h2 id="98-stratum-8-unrecorded"><a href="#98-stratum-8-unrecorded">9.8 Stratum 8 — <code>unrecorded</code></a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Bytes</span> call_foreign(<span class="t">Str</span> symbol, <span class="t">Bytes</span> args) <span class="d8">@8</span>;</code></pre></figure><p>Marks the trace, permanently and transitively. Everything downstream of the call is at depth 8 and the trace can no longer claim to be replayable.</p><p>An implementation MUST make this unpleasant to reach for — at minimum, naming the symbol in <code>nether strata</code> output — because a stratum-8 call is a hole in the record that no later care can fill in.</p><h2 id="99-failure"><a href="#99-failure">9.9 Failure</a></h2><p>There are no exceptions and no error type in this draft. A prelude function that cannot answer — <code>read</code> on a missing file, <code>utf8</code> on invalid bytes — <strong>starves</strong>: it produces no value and the burial reports it, naming the span.</p><blockquote><p>This is under-specified and known to be. A language for build systems needs a way to say <em>try this, and if it fails do that</em>, and starvation as specified here has no recovery. The roadmap has no item for it yet; it needs one before <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">The Surface</a> lands.</p></blockquote><hr class="thin"><nav class="bar"><a href="08-rites.html">&larr; The rites</a><span class="spacer"></span><a href="10-glossary.html">Glossary &rarr;</a></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

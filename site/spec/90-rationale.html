@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>90 Rationale &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 90 &middot; non-normative &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/90-rationale.md">edit the source</a></p><h1 id="rationale"><a href="#rationale">Rationale</a></h1><p>Non-normative throughout. Nothing here constrains an implementation.</p><p>This section exists because a design document that lists only advantages is marketing. For each inversion: what HolyC did, what Nether C does, and what that cost.</p><h2 id="901-the-inversions"><a href="#901-the-inversions">90.1 The inversions</a></h2><h3 id="the-command-line-is-the-compiler-there-is-no-run"><a href="#the-command-line-is-the-compiler-there-is-no-run">The command line is the compiler → there is no <code>run</code></a></h3><p>HolyC compiles and executes each top-level statement as it is read. The shell, the REPL and the build are one act, and the result is a system with extraordinary immediacy: you type, and the machine has already done it.</p><p>Nether C moves all of it to the other side. Burial is partial evaluation, and the artifact is the residue.</p><p><strong>What it cost.</strong> Immediacy. There is no REPL and there cannot be a good one, because the thing a REPL is for — see the effect now — is precisely what this language refuses to do. The Necropolis playground is the compensation, and it is a worse experience than a REPL for the things a REPL is best at.</p><h3 id="a-bare-string-prints-a-bare-expression-deposits"><a href="#a-bare-string-prints-a-bare-expression-deposits">A bare string prints → a bare expression deposits</a></h3><p>The syntax is preserved exactly; the semantics are reversed. <code>&quot;Hello\n&quot;;</code> is still a complete statement, and it still means <em>this value matters</em>. It simply no longer reaches anybody.</p><p><strong>What it cost.</strong> <code>printf</code> debugging. The first thing every programmer does in a new language is print something, and in Nether C that takes two commands instead of one. This is the single largest ergonomic tax in the design, and it is charged on the first thirty seconds of every newcomer&#x27;s experience.</p><p>The defence is that it buys the strongest property in the language: a program holds no capability that reaches a log, so it cannot leak to one. Whether that trade is worth it is genuinely arguable, and if Nether C fails to find users, this is the most likely reason.</p><h3 id="the-oracle-stratum-7"><a href="#the-oracle-stratum-7">The Oracle → stratum 7</a></h3><p>Terry&#x27;s random number generator was a channel: entropy arriving from above, the highest thing in the system. Nether C puts randomness at depth 7 — nearly the deepest thing there is — because it is the one act that makes a program impossible to re-derive.</p><p>This is the cleanest inversion in the design. The same mechanism sits at opposite ends of the same axis, for reasons each system states outright.</p><p><strong>What it cost.</strong> Nothing, in engineering terms. Everything, in the sense that it is the point where Nether C is most obviously arguing with TempleOS rather than merely differing from it. That is intentional and it is meant respectfully.</p><h3 id="ring-0-for-everyone-nine-strata"><a href="#ring-0-for-everyone-nine-strata">Ring 0 for everyone → nine strata</a></h3><p>TempleOS gives every task every privilege over all of memory at all times, and gets a system that switches tasks in half a microsecond and is a joy to program. Nether C partitions authority into a lattice and records the partition in every type.</p><p><strong>What it cost.</strong> Speed of expression. In HolyC you write what you mean. In Nether C you write what you mean, discover it is at depth 5, and go back to add a <code>descend</code>. Depth inference is what keeps this from being intolerable, and if inference is not good enough the language is not usable.</p><h3 id="everything-mutable-nothing-mutable"><a href="#everything-mutable-nothing-mutable">Everything mutable → nothing mutable</a></h3><p>Both systems share everything. TempleOS lets every task write to it; Nether C lets none write to anything.</p><p><strong>What it cost.</strong> Every algorithm that wants an in-place update. §5.4 permits building an aggregate before it is first read, which covers construction but not, say, a hash table that is updated a million times. A Nether C program that needs one will be slow, and the honest answer today is that such a program should be written somewhere else and called at stratum 8.</p><h3 id="doldoc-the-ledger-graph"><a href="#doldoc-the-ledger-graph">DolDoc → the ledger graph</a></h3><p>TempleOS&#x27;s file is alive: source, documentation, UI and runnable macros in one illuminated hypertext, with sprites drawn inline. It is the most charming thing about the system.</p><p>Nether C makes the <em>text</em> disposable and the <em>graph</em> canonical. The source is one rendering of the program; the trace is what actually exists.</p><p><strong>What it cost.</strong> Charm, so far. The ledger graph is a better substrate for diffing, provenance and reproducibility, and it is currently much less pleasant to look at than a DolDoc file. The Necropolis exists to close that gap and has not yet been built, so this comparison is not yet one Nether C wins.</p><h3 id="640480-forever-the-decay-rule"><a href="#640480-forever-the-decay-rule">640×480 forever → the Decay Rule</a></h3><p>Terry fixed the dimensions of the system by covenant and never changed them. Nether C&#x27;s counterpart is that the trusted core may only ever get smaller — checked in CI, recorded in <code>.decay-ceiling</code>.</p><p>A fixed constraint and a monotonically decreasing one are both ways of refusing to let a system sprawl. The second is more demanding.</p><h2 id="902-rejected-alternatives"><a href="#902-rejected-alternatives">90.2 Rejected alternatives</a></h2><h3 id="the-orpheus-rule-two-rejected-forms"><a href="#the-orpheus-rule-two-rejected-forms">The Orpheus rule: two rejected forms</a></h3><p><strong>Scope re-stain.</strong> <code>look</code> raises the depth of the whole enclosing scope to the shade&#x27;s origin. Mythologically exact — turning around costs you everything — and it produces errors nobody can read: one <code>look</code> deep inside a function poisons every caller, and the diagnostic points at the caller rather than the cause.</p><p><strong>Binding taint.</strong> Only the bound value takes the depth. Tractable, familiar, and it reduces <code>shade</code> to a newtype: if looking is free, nothing has been carried.</p><p>The rule in <a href="01-strata.html#16-shade-and-the-orpheus-rule">§1.6</a> — <em>you may only look by going back down</em> — was chosen because it is a local check rather than a propagation, gives an error that names the exact fix, and keeps the myth intact. Orpheus could have kept her; what he could not do was look on the way up.</p><h3 id="stratum-8-refusing-foreign-code"><a href="#stratum-8-refusing-foreign-code">Stratum 8: refusing foreign code</a></h3><p>The purer design has no stratum 8. Every value in every trace would then have a complete history, unconditionally, and every claim in this specification could drop its qualifier.</p><p>It was rejected because a language that cannot call C cannot be adopted, and an unadopted language proves nothing about whether its ideas were good. The quarantine in <a href="01-strata.html#17-stratum-8-the-unrecorded">§1.7</a> is the compromise: foreign code is permitted, and a trace that used it is permanently forbidden from claiming to be replayable.</p><p>This remains the weakest part of the design.</p><h3 id="depth-as-a-monad-stack"><a href="#depth-as-a-monad-stack">Depth as a monad stack</a></h3><p>The obvious alternative to a lattice. Rejected because effects that compose by <code>max</code> need no lifting, no transformers, and no ordering decisions, and because <code>max</code> is a rule every programmer already holds in their head.</p><p>The cost is expressiveness: a lattice cannot distinguish <em>reads the disk</em> from <em>reads the disk and the network</em> except by taking the deeper of the two. Nether C accepts a coarser answer in exchange for one people will actually use.</p><h3 id="floating-point"><a href="#floating-point">Floating point</a></h3><p>Excluded from <a href="03-lexical.html#36-literals">§3.6</a> because IEEE 754 has platform-observable behaviour, and canonical encoding cannot be built on top of it. This makes Nether C unsuitable for numerical work today, which is a real and large exclusion.</p><h2 id="903-things-nether-c-is-worse-at"><a href="#903-things-nether-c-is-worse-at">90.3 Things Nether C is worse at</a></h2><p>Stated plainly, because the roadmap requires at least one such statement and because they are all true.</p><ul><li><strong>Interactive programs.</strong> A language whose central act happens before the program is delivered is the worst possible fit for anything that responds to a person. Nether C should not be used for a UI, a game, or a server that holds a connection.</li><li><strong>Numerics.</strong> No floats. See above.</li><li><strong>Debugging by print.</strong> Two commands instead of one, forever.</li><li><strong>Storage.</strong> The ledger never shrinks. §7.6 argues that this is affordable; it has not yet been measured, and until it is that argument is a hope.</li><li><strong>Learning curve.</strong> Depth is a genuinely new thing to learn. HolyC&#x27;s whole proposition was that you already knew it — it was C, plus permission.</li></ul><h2 id="904-on-templeos"><a href="#904-on-templeos">90.4 On TempleOS</a></h2><p>Nether C is an inversion of HolyC in the way a photographic negative is an inversion: every value reversed, every edge in the same place.</p><p>Terry Davis built a complete operating system, a compiler, a graphics stack, a document format and a language, alone, and made every one of them coherent with a single stated idea. Whatever one makes of the idea, the coherence is the achievement, and it is rarer than the code.</p><p>An inversion is a form of close reading. You cannot turn something over without first understanding which way up it was.</p><hr class="thin"><nav class="bar"><a href="10-glossary.html">&larr; Glossary</a><span class="spacer"></span><span class="sep">end &rarr;</span></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

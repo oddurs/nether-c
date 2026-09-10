@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 Types and the data model &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 05 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/05-types.md">edit the source</a></p><h1 id="types-and-the-data-model"><a href="#types-and-the-data-model">Types and the data model</a></h1><h2 id="51-base-types"><a href="#51-base-types">5.1 Base types</a></h2><div class="scroll"><table><thead><tr><th align="left">Type</th><th align="left">Values</th><th align="left">Canonical encoding</th></tr></thead><tbody><tr><td align="left"><code>U0</code></td><td align="left">exactly one, written <code>()</code></td><td align="left">the empty sequence</td></tr><tr><td align="left"><code>Bool</code></td><td align="left"><code>true</code>, <code>false</code></td><td align="left">one byte, <code>0x00</code> or <code>0x01</code></td></tr><tr><td align="left"><code>I64</code></td><td align="left">−2⁶³ … 2⁶³−1</td><td align="left">fixed 8 bytes, two&#x27;s complement, big-endian</td></tr><tr><td align="left"><code>Bytes</code></td><td align="left">any finite byte string</td><td align="left">length prefix, then the bytes</td></tr><tr><td align="left"><code>Str</code></td><td align="left">any well-formed UTF-8 string, NFC</td><td align="left">as <code>Bytes</code>, over the NFC form</td></tr><tr><td align="left"><code>Cairn</code></td><td align="left">a content address</td><td align="left">32 bytes</td></tr><tr><td align="left"><code>Shadeᵈ⟨T⟩</code></td><td align="left">an opaque <code>T</code> from depth <code>d</code></td><td align="left">the cairn of the underlying value</td></tr></tbody></table></div><p><code>I64</code> is the only integer type. There is no unsigned type, no <code>char</code>, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT make overflow undefined, because a canonical encoding cannot be built on top of behaviour that varies by compiler.</p><blockquote><p>HolyC made everything an <code>I64</code> and let everything coerce into everything. Nether C keeps the one integer type and removes every coercion. The inversion is not the width; it is the silence.</p></blockquote><h2 id="52-aggregates"><a href="#52-aggregates">5.2 Aggregates</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="k">struct</span> Header {
+  <span class="t">I64</span>   len;
+  <span class="t">Bytes</span> tag;
+};
+
+<span class="k">typedef</span> <span class="t">I64</span>[<span class="n">16</span>] Row;</code></pre></figure><p>Structs are nominal: two structs with identical fields are different types. Arrays are fixed-length when the length is written and slices when it is not.</p><p>There is no union type, and no pointer type at all. A value is reached by name, index or field; there is no way to name a location. This is not a safety feature bolted on — <a href="07-ledger.html">section 07</a> requires every value to have a content address, and an address that depends on where a value happens to live is not a content address.</p><h2 id="53-equality"><a href="#53-equality">5.3 Equality</a></h2><p>Equality is <strong>structural</strong> and total: two values of the same type are equal exactly when their canonical encodings are equal, which is exactly when their cairns are equal.</p><p>An implementation MUST compare by cairn. This makes deep equality a 32-byte comparison, which is the main practical payoff of content addressing and is worth stating as a requirement rather than leaving as an optimisation.</p><p><code>Shade</code> is comparable: two shades are equal when their underlying values are. Comparing shades does not count as looking at them, because it reveals only what <code>seal</code> already revealed.</p><h2 id="54-mutation"><a href="#54-mutation">5.4 Mutation</a></h2><p>There is none, observably.</p><p>A binding may not be reassigned. A local aggregate may be built up field-by-field before it is first used as a value, and an implementation SHOULD compile that to in-place writes, but no program can observe the difference: once a value has been read, its cairn exists, and nothing can change what a cairn names.</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">U0</span> build()
+{
+  Header h;
+  h.len = <span class="n">3</span>;          <span class="c">// legal: h has not been read yet</span>
+  h.tag = <span class="s">b&quot;nc&quot;</span>;
+  <span class="t">Cairn</span> c = <span class="k">seal</span> h;
+  h.len = <span class="n">4</span>;          <span class="c">// error: h was sealed at line 6</span>
+}</code></pre></figure><blockquote><p>In TempleOS every task could write to all of memory at all times. Nether C keeps the total sharing and removes the writing. Below, nothing changes; that is what makes it the nether.</p></blockquote><h2 id="55-depth-is-not-a-type-constructor"><a href="#55-depth-is-not-a-type-constructor">5.5 Depth is not a type constructor</a></h2><p><code>τ@d</code> is a type paired with a depth, not a type of its own. In particular <code>Bytes@3</code> and <code>Bytes@0</code> are the same type at different depths: they unify, and unification takes the maximum.</p><p><code>Shadeᵈ⟨T⟩</code> <em>is</em> a distinct type, because a shade&#x27;s whole purpose is to be something you cannot use as a <code>T</code>.</p><h2 id="56-type-inference"><a href="#56-type-inference">5.6 Type inference</a></h2><p>Types are inferred within a function body and MUST be written on:</p><ul><li>struct fields,</li><li>function parameters and return types,</li><li>unit-level <code>let</code> declarations.</li></ul><p>Depth is inferred everywhere and MAY be written anywhere a type is written. A written depth is a checked assertion: if inference produces a different depth, that is an error naming both depths and the expression responsible.</p><blockquote><p>Depth annotations must remain optional in ordinary code. The roadmap item <em>Depth inference</em> is proven by deleting every <code>@n</code> from every sample program in this specification and requiring them all still to compile.</p></blockquote><hr class="thin"><nav class="bar"><a href="04-grammar.html">&larr; Grammar</a><span class="spacer"></span><a href="06-evaluation.html">Burial, holes and replay &rarr;</a></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

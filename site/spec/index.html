@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The specification &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<h1>The specification</h1><p>The specification is written in Markdown in <a href="https://github.com/oddurs/nether-c/tree/main/spec">spec/</a> and is canonical there. These pages are baked from it by <a href="https://github.com/oddurs/nether-c/blob/main/site/bake">site/bake</a>, which is one file of standard library Python and has no dependencies. If these pages ever disagree with the Markdown, the Markdown is right and continuous integration is broken.</p><div class="scroll"><table><thead><tr><th>&sect;</th><th>Section</th><th>Status</th></tr></thead><tbody><tr><td><a href="00-overview.html">00</a></td><td><a href="00-overview.html">Overview</a></td><td>draft</td></tr><tr><td><a href="01-strata.html">01</a></td><td><a href="01-strata.html">The strata</a></td><td>draft</td></tr><tr><td><a href="02-calculus.html">02</a></td><td><a href="02-calculus.html">The calculus of depth</a></td><td>draft</td></tr><tr><td><a href="03-lexical.html">03</a></td><td><a href="03-lexical.html">Lexical structure</a></td><td>draft</td></tr><tr><td><a href="04-grammar.html">04</a></td><td><a href="04-grammar.html">Grammar</a></td><td>draft</td></tr><tr><td><a href="05-types.html">05</a></td><td><a href="05-types.html">Types and the data model</a></td><td>draft</td></tr><tr><td><a href="06-evaluation.html">06</a></td><td><a href="06-evaluation.html">Burial, holes and replay</a></td><td>draft</td></tr><tr><td><a href="07-ledger.html">07</a></td><td><a href="07-ledger.html">The ledger</a></td><td>draft</td></tr><tr><td><a href="08-rites.html">08</a></td><td><a href="08-rites.html">The rites</a></td><td>draft</td></tr><tr><td><a href="09-prelude.html">09</a></td><td><a href="09-prelude.html">The prelude</a></td><td>draft</td></tr><tr><td><a href="10-glossary.html">10</a></td><td><a href="10-glossary.html">Glossary</a></td><td>draft</td></tr><tr><td><a href="90-rationale.html">90</a></td><td><a href="90-rationale.html">Rationale</a></td><td>non-normative</td></tr></tbody></table></div><div class="box shout"><strong>Nothing here is frozen</strong> except one thing: there is no <code>run</code>. Everything else is a draft and will change without a version bump.</div>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

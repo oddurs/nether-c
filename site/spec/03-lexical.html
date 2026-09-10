@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 Lexical structure &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 03 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/03-lexical.md">edit the source</a></p><h1 id="lexical-structure"><a href="#lexical-structure">Lexical structure</a></h1><h2 id="31-source-encoding"><a href="#31-source-encoding">3.1 Source encoding</a></h2><p>A Nether C source file is a sequence of Unicode scalar values encoded as UTF-8. An implementation MUST reject a file that is not well-formed UTF-8, rather than substituting replacement characters.</p><blockquote><p>HolyC used 8-bit ASCII throughout its toolchain, deliberately. This is one of the few places Nether C does not invert: a ledger that cannot record a name is not a ledger, and half the names in the world need more than 256 code points.</p></blockquote><p>Line terminators are <code>U+000A</code>. A <code>U+000D</code> immediately preceding <code>U+000A</code> is discarded; a <code>U+000D</code> anywhere else is an error. Source files SHOULD end with a line terminator.</p><h2 id="32-comments"><a href="#32-comments">3.2 Comments</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// to the end of the line</span>
+<span class="c">/* to the closing delimiter; these do not nest */</span></code></pre></figure><p>Comments are whitespace. They are not preserved in the AST and do not appear in the ledger.</p><h2 id="33-identifiers"><a href="#33-identifiers">3.3 Identifiers</a></h2><figure class="listing"><pre><code>identifier := XID_Start XID_Continue*</code></pre></figure><p>Identifiers are compared by exact code-point sequence after NFC normalisation. An implementation MUST normalise before comparison and MUST store the normalised form in the ledger, so that two spellings of the same name cannot produce two different cairns.</p><h2 id="34-keywords"><a href="#34-keywords">3.4 Keywords</a></h2><p>Reserved, and never usable as identifiers:</p><figure class="listing"><pre><code>descend   seal    shade   look    opaque   demand
+if        else    while   for     return   break    continue
+struct    typedef sizeof  true    false</code></pre></figure><p>Type names in the prelude (<code>U0</code>, <code>I64</code>, <code>Bytes</code>, <code>Str</code>, <code>Cairn</code>, <code>Shade</code>, <code>Json</code>, <code>Bool</code>) are ordinary identifiers bound in the prelude scope, not keywords. A program MAY shadow them, and SHOULD NOT.</p><h2 id="35-depth-annotations"><a href="#35-depth-annotations">3.5 Depth annotations</a></h2><figure class="listing"><pre><code>depth_annotation := &quot;@&quot; ( &quot;0&quot;..&quot;8&quot; )</code></pre></figure><p>A depth annotation may appear:</p><ul><li>after a type, binding tighter than anything else: <code>Bytes@3</code>, <code>I64@0</code>;</li><li>after a function signature, giving its latent depth: <code>Bytes read(Str p) @3</code>.</li></ul><p>It MUST NOT appear anywhere else. In particular there is no depth annotation on an expression — depth is inferred for expressions and only ever <em>asserted</em> on declarations. An annotation that disagrees with inference is an error, not a coercion.</p><p>Whitespace is permitted between <code>@</code> and the digit in a signature annotation and forbidden in a type annotation, so that <code>Bytes@3</code> is unambiguously one token sequence.</p><h2 id="36-literals"><a href="#36-literals">3.6 Literals</a></h2><figure class="listing"><pre><code>int_literal    := dec | hex | bin
+dec            := digit ( digit | &quot;_&quot; )*
+hex            := &quot;0x&quot; hexdigit ( hexdigit | &quot;_&quot; )*
+bin            := &quot;0b&quot; ( &quot;0&quot; | &quot;1&quot; ) ( &quot;0&quot; | &quot;1&quot; | &quot;_&quot; )*
+
+bool_literal   := &quot;true&quot; | &quot;false&quot;
+
+str_literal    := &#x27;&quot;&#x27; ( str_char | escape )* &#x27;&quot;&#x27;
+bytes_literal  := &quot;b&quot; str_literal
+
+escape         := &quot;\\&quot; ( &quot;n&quot; | &quot;t&quot; | &quot;r&quot; | &quot;0&quot; | &quot;\\&quot; | &#x27;&quot;&#x27; | &quot;u{&quot; hexdigit+ &quot;}&quot; )</code></pre></figure><p>There are no floating-point literals. Floating-point arithmetic is not in the language, because IEEE 754 has platform-observable behaviour that would make the canonical encoding of <a href="07-ledger.html">section 07</a> unsound, and a reproducibility guarantee with an asterisk on it is not a guarantee. A future version MAY add a rational or fixed-point type; it will not add binary floats without a stated evaluation semantics.</p><p>An integer literal is <code>I64</code>. There is no unsigned type and no integer promotion; see <a href="05-types.html">section 05</a>.</p><h2 id="37-punctuation"><a href="#37-punctuation">3.7 Punctuation</a></h2><figure class="listing"><pre><code>( ) { } [ ] ; , . -&gt; @
++ - * / % ! ~ &amp; | ^ &lt;&lt; &gt;&gt;
+= == != &lt; &lt;= &gt; &gt;= &amp;&amp; ||
++= -= *= /= %= &amp;= |= ^= &lt;&lt;= &gt;&gt;=</code></pre></figure><h2 id="38-tokens-the-language-does-not-have"><a href="#38-tokens-the-language-does-not-have">3.8 Tokens the language does not have</a></h2><p>For the avoidance of doubt, and because a C programmer will look for them:</p><ul><li>No preprocessor. No <code>#include</code>, no <code>#define</code>, no <code>#if</code>, and in particular no <code>#exe</code>. Everything <code>#exe</code> did, burial does — see <a href="06-evaluation.html">section 06</a> — so a second mechanism for it would be a second, worse burial.</li><li>No <code>goto</code>.</li><li>No pointer syntax. See <a href="05-types.html">section 05</a>.</li></ul><hr class="thin"><nav class="bar"><a href="02-calculus.html">&larr; The calculus of depth</a><span class="spacer"></span><a href="04-grammar.html">Grammar &rarr;</a></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

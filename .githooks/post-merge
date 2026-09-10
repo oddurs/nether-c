@@ -1,0 +1,13 @@
+#!/bin/sh
+# Two branches can allocate the same cairn item id; git merges the files
+# cleanly and leaves a project that fails `cairn check`. Settle it here.
+set -eu
+command -v cairn >/dev/null 2>&1 || exit 0
+
+cairn renumber --quiet
+cairn render --quiet
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "cairn: the merge changed identifiers or the roadmap; review and commit:"
+  git status --short -- "$(git rev-parse --show-toplevel)" | sed 's/^/  /'
+fi

@@ -1,0 +1,438 @@
+#!/usr/bin/env python3
+"""
+bake — turn spec/*.md into site/spec/*.html.
+
+There is no framework here and there is not going to be one. This is one file
+of standard library Python, and the HTML it produces is committed alongside it
+so that anybody who wants to read the site can read the site.
+
+    site/bake            write the site
+    site/bake --check    fail if what is committed is stale
+
+The specification in spec/ is canonical. This is a lamp held over it.
+"""
+
+from __future__ import annotations
+
+import html
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SPEC = ROOT / "spec"
+SITE = ROOT / "site"
+REPO = "https://github.com/oddurs/nether-c"
+
+# ── the little markdown ────────────────────────────────────────────────────
+
+KEYWORDS = {
+    "descend", "seal", "shade", "look", "opaque", "demand", "if", "else",
+    "while", "for", "return", "break", "continue", "struct", "typedef",
+    "sizeof", "true", "false",
+}
+TYPES = {"U0", "I64", "Bytes", "Str", "Cairn", "Shade", "Json", "Bool"}
+
+
+def esc(s: str) -> str:
+    return html.escape(s, quote=True)
+
+
+def slug(text: str) -> str:
+    """GitHub's heading anchors, which the spec's internal links assume."""
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[^\w\s-]", "", text.strip().lower())
+    return re.sub(r"\s+", "-", text)
+
+
+def rewrite_href(href: str) -> str:
+    if href.startswith("../ROADMAP.md"):
+        return f"{REPO}/blob/main/ROADMAP.md"
+    if re.fullmatch(r"[\w.-]+\.md(#.*)?", href):
+        return href.replace(".md", ".html", 1)
+    return href
+
+
+def inline(text: str) -> str:
+    """Inline markdown. Code spans are extracted first so nothing rewrites them."""
+    spans: list[str] = []
+
+    def stash(m: re.Match[str]) -> str:
+        spans.append(f"<code>{esc(m.group(1))}</code>")
+        return f"\x00{len(spans) - 1}\x00"
+
+    text = re.sub(r"`([^`]+)`", stash, text)
+    text = esc(text)
+
+    def link(m: re.Match[str]) -> str:
+        label, href = m.group(1), rewrite_href(m.group(2))
+        ext = ' target="_blank" rel="noreferrer noopener"' if href.startswith("http") else ""
+        return f'<a href="{esc(href)}"{ext}>{label}</a>'
+
+    text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", link, text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", text)
+    text = re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], text)
+    return text
+
+
+# ── syntax colouring ───────────────────────────────────────────────────────
+
+NC_TOKEN = re.compile(
+    r"(//[^\n]*)"                          # 1 line comment
+    r"|(/\*[\s\S]*?\*/)"                   # 2 block comment
+    r"|(b?\"(?:[^\"\\\n]|\\.)*\")"         # 3 string
+    r"|(@\s?[0-8])"                        # 4 depth
+    r"|\b(0x[0-9a-fA-F_]+|0b[01_]+|\d[\d_]*)\b"  # 5 number
+    r"|\b([A-Za-z_][A-Za-z0-9_]*)\b"       # 6 word
+)
+
+
+def paint_nc(src: str) -> str:
+    out, last = [], 0
+    for m in NC_TOKEN.finditer(src):
+        out.append(esc(src[last:m.start()]))
+        last = m.end()
+        if m.group(1) or m.group(2):
+            out.append(f'<span class="c">{esc(m.group(1) or m.group(2))}</span>')
+        elif m.group(3):
+            out.append(f'<span class="s">{esc(m.group(3))}</span>')
+        elif m.group(4):
+            d = re.sub(r"[^0-8]", "", m.group(4))
+            out.append(f'<span class="d{d}">{esc(m.group(4))}</span>')
+        elif m.group(5):
+            out.append(f'<span class="n">{esc(m.group(5))}</span>')
+        else:
+            w = m.group(6)
+            cls = "k" if w in KEYWORDS else "t" if w in TYPES else None
+            out.append(f'<span class="{cls}">{esc(w)}</span>' if cls else esc(w))
+    out.append(esc(src[last:]))
+    return "".join(out)
+
+
+def paint_console(src: str) -> str:
+    lines = []
+    for line in src.split("\n"):
+        m = re.match(r"^(\s*)\$ (.*)$", line)
+        if m:
+            cmd = esc(m.group(2))
+            cmd = re.sub(
+                r"^(nether)(\s+)(\w+)",
+                r'\1\2<span class="k">\3</span>',
+                cmd,
+            )
+            lines.append(f'{m.group(1)}<span class="p">$</span> {cmd}')
+            continue
+        out = esc(line)
+        out = re.sub(r"\b([0-9a-f]{8})\b", r'<span class="h">\1</span>', out)
+        out = re.sub(r"^(\s*)(error|warning)(:)", r'\1<span class="e">\2\3</span>', out)
+        lines.append(out)
+    return "\n".join(lines)
+
+
+def paint(src: str, lang: str) -> str:
+    if lang in ("c", "nc"):
+        return paint_nc(src)
+    if lang in ("console", "sh", "shell"):
+        return paint_console(src)
+    return esc(src)
+
+
+LANG_LABEL = {"c": "nether c", "console": "shell", "ebnf": "grammar", "": ""}
+
+
+# ── block parser ───────────────────────────────────────────────────────────
+
+def render(md: str) -> str:
+    lines = md.split("\n")
+    out: list[str] = []
+    i = 0
+
+    def flush_para(buf: list[str]) -> None:
+        if buf:
+            out.append(f"<p>{inline(' '.join(buf).strip())}</p>")
+            buf.clear()
+
+    para: list[str] = []
+
+    while i < len(lines):
+        line = lines[i]
+
+        # fenced code
+        if line.startswith("```"):
+            lang = line[3:].strip()
+            i += 1
+            body: list[str] = []
+            while i < len(lines) and not lines[i].startswith("```"):
+                body.append(lines[i])
+                i += 1
+            i += 1
+            flush_para(para)
+            label = LANG_LABEL.get(lang, lang)
+            cap = f"<figcaption>{esc(label)}</figcaption>" if label else ""
+            out.append(
+                f'<figure class="listing">{cap}'
+                f'<pre><code>{paint(chr(10).join(body), lang)}</code></pre></figure>'
+            )
+            continue
+
+        # heading
+        m = re.match(r"^(#{1,6})\s+(.*)$", line)
+        if m:
+            flush_para(para)
+            level, text = len(m.group(1)), inline(m.group(2))
+            anchor = slug(m.group(2))
+            out.append(f'<h{level} id="{anchor}"><a href="#{anchor}">{text}</a></h{level}>')
+            i += 1
+            continue
+
+        # rule
+        if re.match(r"^(-{3,}|={3,})\s*$", line):
+            flush_para(para)
+            out.append("<hr>")
+            i += 1
+            continue
+
+        # table
+        if line.lstrip().startswith("|") and i + 1 < len(lines) and re.match(
+            r"^\s*\|[\s:|-]+\|\s*$", lines[i + 1]
+        ):
+            flush_para(para)
+            def cells(row: str) -> list[str]:
+                return [c.strip() for c in row.strip().strip("|").split("|")]
+
+            head = cells(line)
+            aligns = ["right" if c.strip().endswith(":") and c.strip().startswith("-") is False
+                      else "right" if c.strip().startswith("-") and c.strip().endswith(":")
+                      else "left" for c in cells(lines[i + 1])]
+            i += 2
+            rows = []
+            while i < len(lines) and lines[i].lstrip().startswith("|"):
+                rows.append(cells(lines[i]))
+                i += 1
+            th = "".join(
+                f'<th align="{aligns[n] if n < len(aligns) else "left"}">{inline(c)}</th>'
+                for n, c in enumerate(head)
+            )
+            tb = "".join(
+                "<tr>"
+                + "".join(
+                    f'<td align="{aligns[n] if n < len(aligns) else "left"}">{inline(c)}</td>'
+                    for n, c in enumerate(r)
+                )
+                + "</tr>"
+                for r in rows
+            )
+            out.append(
+                f'<div class="scroll"><table><thead><tr>{th}</tr></thead>'
+                f"<tbody>{tb}</tbody></table></div>"
+            )
+            continue
+
+        # blockquote
+        if line.startswith(">"):
+            flush_para(para)
+            body = []
+            while i < len(lines) and (lines[i].startswith(">") or (body and lines[i].strip() and not lines[i].startswith(("#", "```", "|")))):
+                body.append(re.sub(r"^>\s?", "", lines[i]))
+                i += 1
+            out.append(f"<blockquote>{render(chr(10).join(body))}</blockquote>")
+            continue
+
+        # lists
+        m = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", line)
+        if m:
+            flush_para(para)
+            ordered = not m.group(2) in ("-", "*")
+            tag = "ol" if ordered else "ul"
+            items: list[str] = []
+            while i < len(lines):
+                mm = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", lines[i])
+                if not mm:
+                    if lines[i].startswith("  ") and lines[i].strip() and items:
+                        items[-1] += " " + lines[i].strip()
+                        i += 1
+                        continue
+                    break
+                text = mm.group(3)
+                text = re.sub(r"^\[ \]\s*", '<span class="c">[ ]</span> ', text)
+                text = re.sub(r"^\[x\]\s*", '<span class="s">[x]</span> ', text)
+                items.append(text)
+                i += 1
+            body = "".join(f"<li>{inline(it)}</li>" for it in items)
+            out.append(f"<{tag}>{body}</{tag}>")
+            continue
+
+        if not line.strip():
+            flush_para(para)
+            i += 1
+            continue
+
+        para.append(line.strip())
+        i += 1
+
+    flush_para(para)
+    return "".join(out)
+
+
+# ── front matter ───────────────────────────────────────────────────────────
+
+def split_front_matter(raw: str) -> tuple[dict[str, str], str]:
+    if not raw.startswith("---\n"):
+        return {}, raw
+    end = raw.index("\n---\n", 3)
+    meta = {}
+    for line in raw[4:end].split("\n"):
+        if ":" in line:
+            k, v = line.split(":", 1)
+            meta[k.strip()] = v.strip().strip('"')
+    return meta, raw[end + 5:]
+
+
+# ── the pages ──────────────────────────────────────────────────────────────
+
+def load_sections() -> list[dict[str, str]]:
+    out = []
+    for path in sorted(SPEC.glob("*.md")):
+        if not path.name[0].isdigit():
+            continue
+        meta, body = split_front_matter(path.read_text(encoding="utf-8"))
+        out.append(
+            {
+                "slug": path.stem,
+                "section": meta.get("section", ""),
+                "title": meta.get("title", path.stem),
+                "status": meta.get("status", "draft"),
+                "html": render(body),
+            }
+        )
+    return out
+
+
+def navbar(current: str, depth: int) -> str:
+    up = "../" if depth else ""
+    links = [("index", f"{up}index.html"), ("spec", f"{up}spec/index.html")]
+    items = []
+    for name, href in links:
+        cur = ' aria-current="page"' if name == current else ""
+        items.append(f'<a href="{href}"{cur}>{name}</a>')
+    items.append(f'<a href="{REPO}" target="_blank" rel="noreferrer noopener">source</a>')
+    items.append(f'<a href="{REPO}/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a>')
+    body = '<span class="sep">|</span>'.join(items)
+    return (
+        f'<nav class="bar">{body}<span class="spacer"></span>'
+        f'<button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>'
+    )
+
+
+def page(title: str, body: str, *, current: str, depth: int) -> str:
+    tpl = (SITE / "template.html").read_text(encoding="utf-8")
+    up = "../" if depth else ""
+    return (
+        tpl.replace("{{TITLE}}", esc(title))
+        .replace("{{UP}}", up)
+        .replace("{{NAV}}", navbar(current, depth))
+        .replace("{{BODY}}", body)
+    )
+
+
+def build() -> dict[Path, str]:
+    sections = load_sections()
+    files: dict[Path, str] = {}
+
+    # the front page
+    body = (SITE / "src" / "index.html").read_text(encoding="utf-8")
+    toc = "".join(
+        f'<tr><td><a href="spec/{s["slug"]}.html">{esc(s["section"])}</a></td>'
+        f'<td><a href="spec/{s["slug"]}.html">{esc(s["title"])}</a></td>'
+        f'<td>{esc(s["status"])}</td></tr>'
+        for s in sections
+    )
+    body = body.replace("{{TOC}}", toc)
+    files[SITE / "index.html"] = page("Nether C", body, current="index", depth=0)
+
+    # the specification index
+    rows = "".join(
+        f'<tr><td><a href="{s["slug"]}.html">{esc(s["section"])}</a></td>'
+        f'<td><a href="{s["slug"]}.html">{esc(s["title"])}</a></td>'
+        f'<td>{esc(s["status"])}</td></tr>'
+        for s in sections
+    )
+    index_body = (
+        "<h1>The specification</h1>"
+        "<p>The specification is written in Markdown in "
+        f'<a href="{REPO}/tree/main/spec">spec/</a> and is canonical there. '
+        "These pages are baked from it by "
+        f'<a href="{REPO}/blob/main/site/bake">site/bake</a>, which is one file '
+        "of standard library Python and has no dependencies. If these pages ever "
+        "disagree with the Markdown, the Markdown is right and continuous "
+        "integration is broken.</p>"
+        '<div class="scroll"><table><thead><tr><th>&sect;</th><th>Section</th>'
+        f"<th>Status</th></tr></thead><tbody>{rows}</tbody></table></div>"
+        '<div class="box shout"><strong>Nothing here is frozen</strong> except '
+        "one thing: there is no <code>run</code>. Everything else is a draft and "
+        "will change without a version bump.</div>"
+    )
+    files[SITE / "spec" / "index.html"] = page(
+        "The specification", index_body, current="spec", depth=1
+    )
+
+    # each section
+    for n, s in enumerate(sections):
+        prev_s = sections[n - 1] if n else None
+        next_s = sections[n + 1] if n + 1 < len(sections) else None
+        foot = ['<hr class="thin"><nav class="bar">']
+        foot.append(
+            f'<a href="{prev_s["slug"]}.html">&larr; {esc(prev_s["title"])}</a>'
+            if prev_s
+            else '<span class="sep">&larr; start</span>'
+        )
+        foot.append('<span class="spacer"></span>')
+        foot.append(
+            f'<a href="{next_s["slug"]}.html">{esc(next_s["title"])} &rarr;</a>'
+            if next_s
+            else '<span class="sep">end &rarr;</span>'
+        )
+        foot.append("</nav>")
+        head = (
+            f'<p class="c">&sect; {esc(s["section"])} &middot; {esc(s["status"])} '
+            f'&middot; <a href="{REPO}/blob/main/spec/{s["slug"]}.md">edit the source</a></p>'
+        )
+        files[SITE / "spec" / f'{s["slug"]}.html'] = page(
+            f'{s["section"]} {s["title"]}', head + s["html"] + "".join(foot),
+            current="spec", depth=1,
+        )
+
+    return files
+
+
+def main() -> int:
+    check = "--check" in sys.argv
+    files = build()
+    stale = []
+    for path, content in files.items():
+        current = path.read_text(encoding="utf-8") if path.exists() else None
+        if current == content:
+            continue
+        if check:
+            stale.append(path.relative_to(ROOT))
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            print(f"baked   {path.relative_to(ROOT)}")
+
+    if check:
+        if stale:
+            print("bake: the committed site is stale:", file=sys.stderr)
+            for p in stale:
+                print(f"  {p}", file=sys.stderr)
+            print("\n  run site/bake and commit the result", file=sys.stderr)
+            return 1
+        print(f"bake: {len(files)} page(s) up to date")
+    elif not any(True for _ in files):
+        print("bake: nothing to do")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

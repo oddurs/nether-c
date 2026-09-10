@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>06 Burial, holes and replay &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 06 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/06-evaluation.md">edit the source</a></p><h1 id="burial-holes-and-replay"><a href="#burial-holes-and-replay">Burial, holes and replay</a></h1><h2 id="61-burial"><a href="#61-burial">6.1 Burial</a></h2><p><strong>Burial</strong> is the only form of evaluation Nether C has. It takes source and a set of granted capabilities, and produces a <strong>trace</strong>.</p><figure class="listing"><pre><code>bury : Source × Capabilities × Fuel → Trace</code></pre></figure><p>Burial evaluates every expression it can and stops at every expression it cannot. It can evaluate an expression when the expression&#x27;s depth is within the granted capabilities and every subexpression it depends on has a value. It cannot when the expression needs the world and the world has not been granted. Every such point becomes a <strong>hole</strong>.</p><p>A trace is complete and immutable. Burial MUST NOT modify a trace it was given; every burial produces a new trace with a new cairn.</p><h2 id="62-demand"><a href="#62-demand">6.2 Demand</a></h2><p>There is no <code>main</code>. A file&#x27;s top level is a sequence of declarations and <code>demand</code> statements, and nothing is evaluated except what a <code>demand</code> transitively requires.</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">Bytes</span><span class="d3">@3</span> src = read(<span class="s">&quot;main.nc&quot;</span>);
+<span class="t">Bytes</span>   obj = compile(src);      <span class="c">// pure, but starves: src is a hole</span>
+<span class="t">Bytes</span>   unused = compile(other); <span class="c">// never evaluated: nothing demands it</span>
+
+<span class="k">demand</span> obj;</code></pre></figure><p>Evaluation is demand-driven. The implementation MUST NOT evaluate any expression that no <code>demand</code> depends on, transitively — not as an optimisation but as a semantic guarantee, because evaluating an undemanded expression could reach the world and leave a witness for something the program never asked for.</p><p>Where several <code>demand</code>s exist, they are evaluated in source order. Within a single demand, evaluation order is unspecified <strong>except</strong> that it MUST be deterministic for a given source and capability set: two burials of the same input MUST produce the same trace, including the order in which holes were discovered.</p><h2 id="63-holes"><a href="#63-holes">6.3 Holes</a></h2><p>A <strong>hole</strong> is a suspended world-question. An implementation MUST record, for each hole:</p><div class="scroll"><table><thead><tr><th align="left">Field</th><th align="left">Meaning</th></tr></thead><tbody><tr><td align="left"><code>call</code></td><td align="left">the prelude function and its fully-evaluated arguments</td></tr><tr><td align="left"><code>stratum</code></td><td align="left">the depth the call would reach</td></tr><tr><td align="left"><code>span</code></td><td align="left">the source location that asked</td></tr><tr><td align="left"><code>depends</code></td><td align="left">the cairns of the nodes that must exist for this call to be made</td></tr><tr><td align="left"><code>dependents</code></td><td align="left">the nodes whose evaluation is suspended on this answer</td></tr></tbody></table></div><p>A hole&#x27;s arguments are themselves fully buried. <code>read(concat(dir, name))</code> does not leave a hole containing <code>concat</code>; it leaves a hole containing the finished path string. A hole is always a question the world can answer immediately.</p><p>Two holes with identical <code>call</code> fields in the same trace MUST be the same hole. This is what makes exhumation cheap: reading the same file twice is one question, asked once.</p><h2 id="64-starvation-and-fuel"><a href="#64-starvation-and-fuel">6.4 Starvation and fuel</a></h2><p>An expression <strong>starves</strong> when it cannot be evaluated and cannot become a hole — because it depends, transitively, on a hole. Starvation is normal; a starved expression is residualised and waits.</p><p>Burial takes a <strong>fuel budget</strong>: a bound on the number of evaluation steps. Fuel accounting MUST be deterministic — the same source and capabilities must exhaust at exactly the same point on every implementation and every machine.</p><p>Exhausting fuel is a diagnostic, not a crash. The implementation MUST report the source span at which fuel ran out and the shape of what was being evaluated:</p><figure class="listing"><pre><code>error: burial ran out of fuel after 1,000,000 steps
+  --&gt; lib/table.nc:31:3
+   |
+31 |   for (I64 i = 0; i &lt; n; i++)
+   |   ^^^ unrolled 262,144 times; `n` is a literal, so this will not stop
+   |
+   = raise the budget with --fuel, or place an `opaque` barrier at line 29</code></pre></figure><p><code>opaque e</code> evaluates to <code>e</code> but is never burned through: burial residualises it whole. It is how a programmer says <em>do not evaluate through this, even though you could</em> — for a loop that would unroll into a gigabyte, or a function whose specialised form would be larger than its general one.</p><p><code>opaque</code> has a typing rule ([OPAQUE], <a href="02-calculus.html">section 02</a>) rather than being a compiler flag, because whether an expression is burned through changes the artifact, and anything that changes the artifact belongs in the language.</p><h2 id="65-residue"><a href="#65-residue">6.5 Residue</a></h2><p>What survives burial is the <strong>residue</strong>: every node that could not be reduced, plus the holes, plus the provenance edges between them.</p><p>The residue is a complete program. It can be buried again, with more capabilities, and the result is the same as if those capabilities had been granted the first time:</p><blockquote><p><strong>Staging law.</strong> For capability sets <em>A</em> and <em>B</em>, <code>bury(bury(p, A), B) ≡ bury(p, A ∪ B)</code>.</p></blockquote><p>An implementation MUST satisfy this. It is what makes descent incremental rather than a single all-or-nothing act, and it is the property <code>nether graft</code> relies on.</p><h2 id="66-exhumation"><a href="#66-exhumation">6.6 Exhumation</a></h2><p><strong>Exhumation</strong> grants a capability, answers the holes it can, records every answer, and buries the residue again.</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">bury</span> build.nc
+buried   build.nc → <span class="h">4c02ab7f</span>   depth 3   holes 1   903 nodes
+  hole ①  read(&quot;main.nc&quot;)              stratum 3  disk
+
+<span class="p">$</span> nether <span class="k">exhume</span> 4c02ab7f --grant disk
+  ①  read(&quot;main.nc&quot;)  →  11,204 bytes  <span class="h">a1f0c93d</span>
+sealed   <span class="h">4c02ab7f</span> + <span class="h">a1f0c93d</span> → <span class="h">77de9b31</span>   depth 3   holes 0</code></pre></figure><p>The result is a new trace with a new cairn. The original trace still exists, unchanged, and still has its hole. Nothing in the ledger is ever revised.</p><p>A trace with no holes is <strong>sealed</strong>. A sealed trace has a value.</p><h2 id="67-replay"><a href="#67-replay">6.7 Replay</a></h2><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 77de9b31 --replay
+identical.</code></pre></figure><p>Replay re-buries a trace using only the answers already recorded in the ledger. The implementation MUST hold no capabilities at all during replay: it does not prefer the ledger over the world, it cannot reach the world.</p><blockquote><p><strong>Replay law.</strong> Replaying a sealed trace produces a trace with the same cairn, unless the original trace is marked as having reached stratum 8.</p></blockquote><p>&quot;Identical&quot; means byte-identical under the canonical encoding of <a href="07-ledger.html">section 07</a> — not merely equal in value. A trace that replays to a different cairn is a bug in the implementation, and <code>nether exhume --replay</code> MUST report the first differing node rather than only the mismatch.</p><p>Stratum 7 (entropy) does not break replay: the drawn value is a recorded witness like any other, and replaying serves it back. What entropy breaks is <em>re-derivation</em> — burying the same source again produces a different trace — which is a different and weaker property that Nether C does not promise for programs that reached stratum 7.</p><p>Stratum 8 breaks replay outright, because there is no witness to serve back. See <a href="01-strata.html#17-stratum-8-the-unrecorded">§1.7</a>.</p><h2 id="68-what-burial-prints"><a href="#68-what-burial-prints">6.8 What burial prints</a></h2><p>Burial prints a summary of what it wrote, and nothing else:</p><figure class="listing"><pre><code>buried   &lt;source&gt; → &lt;cairn&gt;   depth &lt;n&gt;   holes &lt;n&gt;   &lt;n&gt; nodes</code></pre></figure><p>It MUST NOT print any value the program deposited. A program&#x27;s deposits are read with <code>nether lamp</code> (<a href="08-rites.html">section 08</a>), by a person who decided to go and look. This is the inversion of HolyC&#x27;s bare-string-prints, and it is the reason a Nether C program cannot leak to a log: it holds no capability that reaches one.</p><hr class="thin"><nav class="bar"><a href="05-types.html">&larr; Types and the data model</a><span class="spacer"></span><a href="07-ledger.html">The ledger &rarr;</a></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

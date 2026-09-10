@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 The rites &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 08 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/08-rites.md">edit the source</a></p><h1 id="the-rites"><a href="#the-rites">The rites</a></h1><p>Six verbs. The one that is missing is the point.</p><h2 id="80-there-is-no-run"><a href="#80-there-is-no-run">8.0 There is no <code>run</code></a></h2><p>An implementation MUST NOT provide a command that executes a Nether C program without producing a trace, under any name.</p><p><code>nether run</code> MUST exit with code 64 and explain what to use instead. It is spelled out here, in the specification, so that it is a rule rather than a joke, and so that anyone proposing to add it has something to argue against.</p><p>This is the only frozen requirement in this draft.</p><h2 id="81-common-behaviour"><a href="#81-common-behaviour">8.1 Common behaviour</a></h2><p>Every rite:</p><ul><li>accepts <code>--json</code> and, when given it, writes a single JSON object to stdout and nothing else;</li><li>writes human-readable output to stdout and diagnostics to stderr;</li><li>treats a cairn argument as a full cairn or an unambiguous hexadecimal prefix, and MUST fail on an ambiguous prefix rather than choosing;</li><li>exits with a code from §8.8.</li></ul><p>No rite writes to the ledger except <code>bury</code>, <code>exhume</code> and <code>graft</code>, and each of those writes before it prints.</p><h2 id="82-bury"><a href="#82-bury">8.2 <code>bury</code></a></h2><figure class="listing"><pre><code>nether bury &lt;file.nc&gt; [--grant &lt;cap&gt;]... [--fuel &lt;n&gt;] [--json]</code></pre></figure><p>Evaluates as far as the granted capabilities allow; writes a trace; prints a summary of what was written.</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">bury</span> build.nc
+buried   build.nc → <span class="h">4c02ab7f</span>   depth 3   holes 1   903 nodes
+  hole ①  read(&quot;main.nc&quot;)              stratum 3  disk</code></pre></figure><p>With no <code>--grant</code>, burial holds no capabilities and every world-touching expression becomes a hole. This is the default because it is the only default that cannot surprise anyone.</p><p><code>--fuel</code> sets the budget of <a href="06-evaluation.html#64-starvation-and-fuel">§6.4</a>. Its default MUST be finite and MUST be reported in the trace, because a trace buried under a different budget is a different trace.</p><h2 id="83-exhume"><a href="#83-exhume">8.3 <code>exhume</code></a></h2><figure class="listing"><pre><code>nether exhume &lt;cairn&gt; [--grant &lt;cap&gt;]... [--replay] [--json]</code></pre></figure><p>Grants capabilities, answers holes, records every answer, re-buries the residue, and writes a new trace.</p><p><code>--replay</code> grants nothing and serves only from the ledger. It MUST fail rather than reach the world if an answer is missing, and it MUST report the first node whose cairn differs from the original.</p><p><code>--grant</code> and <code>--replay</code> are mutually exclusive.</p><h2 id="84-lamp"><a href="#84-lamp">8.4 <code>lamp</code></a></h2><figure class="listing"><pre><code>nether lamp &lt;cairn&gt; [--provenance] [--depth &lt;n&gt;] [--json]</code></pre></figure><p>Carries light down. With no flags, renders the value at that cairn — including every <code>Deposit</code> node in a trace, in source order, which is how a program&#x27;s output is read.</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> 8f3a1c0e
+Hello from the nether</code></pre></figure><p><code>--provenance</code> walks backwards instead: from a value to the nodes that produced it, to their inputs, to the literals and holes at the bottom.</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> a1f0c93d --provenance
+<span class="h">a1f0c93d</span>  Bytes, 11204 bytes
+└─ witness  read(&quot;main.nc&quot;)            stratum 3   build.nc:1:15
+   └─ hole ①  answered by exhumation of <span class="h">4c02ab7f</span> at 2026-09-10T11:04:02Z</code></pre></figure><p><code>lamp</code> is a tool the operator carries, not a capability the program holds. A program cannot invoke it, cannot reach a terminal, and has no way to know whether anyone is looking. This is the inversion of HolyC&#x27;s bare-string <code>PrintF</code>, and it is what makes it structurally impossible for a Nether C program to leak to a log.</p><h2 id="85-cairn"><a href="#85-cairn">8.5 <code>cairn</code></a></h2><figure class="listing"><pre><code>nether cairn &lt;path&gt; | --verify &lt;cairn&gt; [--json]</code></pre></figure><p>Names a thing by its content, or checks that a name still holds. <code>--verify</code> MUST report <em>what</em> differs, not merely that something does.</p><h2 id="86-strata"><a href="#86-strata">8.6 <code>strata</code></a></h2><figure class="listing"><pre><code>nether strata &lt;cairn&gt; [--json]</code></pre></figure><p>Blame for depth. Reports the deepest stratum a trace reached and the source span that took it there.</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">strata</span> 77de9b31
+depth 3   disk
+
+  3  read(&quot;main.nc&quot;)          build.nc:1:15
+  0  everything else
+
+  replayable: yes</code></pre></figure><p>If the trace is marked as having reached stratum 8, <code>strata</code> MUST say so without being asked, and MUST report <code>replayable: no</code>.</p><p>&quot;Why is this value at depth 5&quot; has to be a command, not an investigation.</p><h2 id="87-graft"><a href="#87-graft">8.7 <code>graft</code></a></h2><figure class="listing"><pre><code>nether graft &lt;cairn&gt; --replace &lt;cairn&gt; --with &lt;cairn&gt; [--json]</code></pre></figure><p>Substitutes a subtrace and re-buries only what changed, which <a href="06-evaluation.html#65-residue">§6.5</a> guarantees is sound.</p><p><code>graft</code> MUST report how many nodes were reused and how many were recomputed. That ratio is the whole argument for content addressing, and a build tool that hides it is asking to be trusted rather than measured.</p><h2 id="88-exit-codes"><a href="#88-exit-codes">8.8 Exit codes</a></h2><div class="scroll"><table><thead><tr><th align="right">Code</th><th align="left">Meaning</th></tr></thead><tbody><tr><td align="right">0</td><td align="left">success</td></tr><tr><td align="right">1</td><td align="left">the operation failed for a stated reason</td></tr><tr><td align="right">64</td><td align="left">usage error, including <code>run</code></td></tr><tr><td align="right">65</td><td align="left">the source or trace is malformed</td></tr><tr><td align="right">66</td><td align="left">a cairn was not found in the ledger</td></tr><tr><td align="right">69</td><td align="left">not implemented in this build</td></tr><tr><td align="right">70</td><td align="left">internal error; this is a bug</td></tr><tr><td align="right">75</td><td align="left">fuel exhausted</td></tr><tr><td align="right">77</td><td align="left">a capability was needed and not granted</td></tr></tbody></table></div><hr class="thin"><nav class="bar"><a href="07-ledger.html">&larr; The ledger</a><span class="spacer"></span><a href="09-prelude.html">The prelude &rarr;</a></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

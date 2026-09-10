@@ -1,0 +1,52 @@
+name: Bug report
+description: Something behaves differently from what the specification says
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If the specification and the implementation disagree, the specification
+        is right and this is a bug. If the specification is silent, this is a
+        specification gap — file it as a feature instead.
+
+  - type: input
+    id: section
+    attributes:
+      label: Which part of the specification
+      description: The section and clause this contradicts, if you know it.
+      placeholder: "spec/06-evaluation.md §6.7"
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The smallest program and the exact commands.
+      render: console
+    validations:
+      required: true
+
+  - type: input
+    id: cairn
+    attributes:
+      label: Cairn of the offending trace
+      description: If you have one. `nether strata <cairn>` output is even better.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `nether --version`.

@@ -1,0 +1,40 @@
+#!/bin/sh
+# Conventional Commits, and the attribution ban.
+set -eu
+msg_file=$1
+subject=$(sed -n '1p' "$msg_file")
+
+# Allow merges and fixups through untouched.
+case "$subject" in
+  "Merge "*|"Revert "*|"fixup!"*|"squash!"*) exit 0 ;;
+esac
+
+pattern='^(feat|fix|chore|docs|spec|perf|refactor|test|build|ci|style|revert)(\([a-z0-9._/-]+\))?!?: .+'
+if ! printf '%s' "$subject" | grep -qE "$pattern"; then
+  cat >&2 <<'MSG'
+commit-msg: subject must be a Conventional Commit.
+
+  type(scope): subject
+
+  types: feat fix chore docs spec perf refactor test build ci style revert
+
+  spec(strata): state the witness obligation for stratum 5
+  fix(ledger): sort map keys before encoding
+MSG
+  exit 1
+fi
+
+if [ "${#subject}" -gt 72 ]; then
+  echo "commit-msg: subject is ${#subject} characters; keep it to 72" >&2
+  exit 1
+fi
+
+case "$subject" in
+  *.) echo "commit-msg: no trailing period on the subject" >&2; exit 1 ;;
+esac
+
+# The work is published under the owner's name.
+if grep -qiE 'co-authored-by:.*(claude|anthropic|copilot|assistant|\bai\b)|generated with|🤖|\bas an AI\b' "$msg_file"; then
+  echo "commit-msg: attribution to a tool or model is not permitted in this repository" >&2
+  exit 1
+fi

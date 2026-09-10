@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>00 Overview &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 00 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/00-overview.md">edit the source</a></p><h1 id="overview"><a href="#overview">Overview</a></h1><p>Nether C is a C dialect in which nothing runs.</p><p>A Nether C program is not executed. It is <strong>buried</strong>: evaluated as far as the world currently permits, leaving behind a <strong>trace</strong> — a complete, immutable, content-addressed record of everything that happened — together with the <strong>holes</strong> where the program asked the world a question that has not yet been answered. Answering a hole is a separate, later act called <strong>exhumation</strong>, and it produces a new trace rather than modifying the old one.</p><p>That is the whole language. Everything below is consequence.</p><h2 id="01-why"><a href="#01-why">0.1 Why</a></h2><p>Most languages draw a line between compile time and run time and then spend their lifetime negotiating across it: constant folding, macros, <code>constexpr</code>, build systems, staged metaprogramming, reproducible builds, provenance tracking, incremental compilation. Each is a separate mechanism for the same underlying question — <em>how much of this program can we settle now, and what must wait for the world?</em></p><p>Nether C makes that question the only question. There is one mechanism, and the line between what is settled and what is pending is a first-class, inspectable, addressable thing.</p><p>The design is an inversion of HolyC, in which every commitment collapses toward the present moment of total trust: the command line is the compiler, top-level statements run as they are read, a bare string prints, and every task holds every privilege over all of memory at all times. Nether C takes each of those commitments and turns it over. The reasoning for each inversion, and what it cost, is in <a href="90-rationale.html">section 90</a>, which is not normative.</p><p>The comparison is a reading aid, not the argument. If Nether C only makes sense to a reader who already knows TempleOS, the design is a costume, and this document has failed.</p><h2 id="02-the-thesis-in-one-sentence"><a href="#02-the-thesis-in-one-sentence">0.2 The thesis, in one sentence</a></h2><blockquote><p>Evaluation is not something a program does later; it is something that has already happened as far as it could, and the artifact is the record of how far that was.</p></blockquote><h2 id="03-what-a-nether-c-implementation-must-provide"><a href="#03-what-a-nether-c-implementation-must-provide">0.3 What a Nether C implementation must provide</a></h2><p>An implementation MUST provide:</p><ol><li>A <strong>burier</strong>, which takes source and a set of granted capabilities and produces a trace (<a href="06-evaluation.html">section 06</a>).</li><li>A <strong>ledger</strong>, a content-addressed store of immutable values and traces (<a href="07-ledger.html">section 07</a>).</li><li>The <strong>rites</strong>, a command-line interface over the two (<a href="08-rites.html">section 08</a>).</li></ol><p>An implementation MUST NOT provide a way to execute a Nether C program that does not produce a trace. There is no <code>run</code>. This is not a missing feature; it is the single load-bearing constraint of the design, and an implementation that adds it is not an implementation of this specification.</p><h2 id="04-reading-order"><a href="#04-reading-order">0.4 Reading order</a></h2><p>The specification is written to be read in order, but sections 01, 02 and 06 are the ones that carry the design. A reader in a hurry should read those three and skip the rest until they need it.</p><div class="scroll"><table><thead><tr><th align="left">Section</th><th align="left">What it settles</th></tr></thead><tbody><tr><td align="left"><a href="01-strata.html">01 Strata</a></td><td align="left">The nine depths, what each grants, what each costs</td></tr><tr><td align="left"><a href="02-calculus.html">02 Calculus</a></td><td align="left">The typing rules for depth, <code>seal</code>, <code>shade</code>, <code>look</code></td></tr><tr><td align="left"><a href="03-lexical.html">03 Lexical</a></td><td align="left">Source encoding and tokens</td></tr><tr><td align="left"><a href="04-grammar.html">04 Grammar</a></td><td align="left">The complete EBNF</td></tr><tr><td align="left"><a href="05-types.html">05 Types</a></td><td align="left">The type system and the data model</td></tr><tr><td align="left"><a href="06-evaluation.html">06 Evaluation</a></td><td align="left">Burial, demand, holes, residue, replay</td></tr><tr><td align="left"><a href="07-ledger.html">07 Ledger</a></td><td align="left">Canonical encoding, cairns, the trace format</td></tr><tr><td align="left"><a href="08-rites.html">08 Rites</a></td><td align="left">The command-line contract</td></tr><tr><td align="left"><a href="09-prelude.html">09 Prelude</a></td><td align="left">The standard library, and what each function costs</td></tr><tr><td align="left"><a href="10-glossary.html">10 Glossary</a></td><td align="left">Every term, defined once</td></tr><tr><td align="left"><a href="90-rationale.html">90 Rationale</a></td><td align="left">Non-normative: why, and what it cost</td></tr></tbody></table></div><h2 id="05-normative-language"><a href="#05-normative-language">0.5 Normative language</a></h2><p>The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY and OPTIONAL are to be interpreted as described in RFC 2119.</p><p>Every normative claim appears exactly once, in one section. Where another section needs it, it links rather than restates. A claim stated twice will eventually be stated two different ways.</p><p>Text in a block quote, and the whole of section 90, is non-normative.</p><h2 id="06-status"><a href="#06-status">0.6 Status</a></h2><p>This specification is a <strong>draft</strong>. Sections marked <code>status: draft</code> are subject to change without a version bump. Nothing here is frozen except where a section says so explicitly, and today only one thing is: <strong>there is no <code>run</code></strong>.</p><p>Open design questions are tracked as items in the repository&#x27;s roadmap (<code>cairn list --filter &#x27;title~Decide&#x27;</code>), not as inline TODOs. Where this document states a rule that a roadmap item is still arguing about, it says so in a block quote and names the item.</p><h2 id="07-a-first-program"><a href="#07-a-first-program">0.7 A first program</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// hello.nc — there is no main; there is a demand.</span>
+
+<span class="t">U0</span> greet()
+{
+  <span class="s">&quot;Hello from the nether\n&quot;</span>;   <span class="c">// deposited, not printed</span>
+}
+
+<span class="k">demand</span> greet;</code></pre></figure><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">bury</span> hello.nc
+buried   hello.nc → <span class="h">8f3a1c0e</span>   depth 0   holes 0   17 nodes
+
+<span class="p">$</span> nether <span class="k">lamp</span> 8f3a1c0e
+Hello from the nether</code></pre></figure><p>Burying said nothing about the greeting, and it never can: a Nether C program holds no capability that reaches a terminal. It left a deposit in the ledger. Seeing it is a second act, performed by a person who chose to carry a light down there. See <a href="08-rites.html">section 08</a> for why observation is a tool rather than a power.</p><hr class="thin"><nav class="bar"><span class="sep">&larr; start</span><span class="spacer"></span><a href="01-strata.html">The strata &rarr;</a></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

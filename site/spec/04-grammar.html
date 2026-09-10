@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 Grammar &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="c">&sect; 04 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/04-grammar.md">edit the source</a></p><h1 id="grammar"><a href="#grammar">Grammar</a></h1><p>EBNF. <code>{ x }</code> is zero or more, <code>[ x ]</code> is optional, <code>|</code> is alternation. Terminals are quoted. Lexical productions are in <a href="03-lexical.html">section 03</a>.</p><h2 id="41-compilation-unit"><a href="#41-compilation-unit">4.1 Compilation unit</a></h2><figure class="listing"><figcaption>grammar</figcaption><pre><code>unit          := { item } ;
+
+item          := struct_decl
+               | typedef_decl
+               | func_decl
+               | let_decl
+               | demand_stmt ;
+
+demand_stmt   := &quot;demand&quot; expr &quot;;&quot; ;</code></pre></figure><p>There is no entry point. A unit is a set of declarations plus the demands that give some of them a reason to be evaluated.</p><h2 id="42-declarations"><a href="#42-declarations">4.2 Declarations</a></h2><figure class="listing"><figcaption>grammar</figcaption><pre><code>struct_decl   := &quot;struct&quot; identifier &quot;{&quot; { field } &quot;}&quot; &quot;;&quot; ;
+field         := type identifier &quot;;&quot; ;
+
+typedef_decl  := &quot;typedef&quot; type identifier &quot;;&quot; ;
+
+func_decl     := type identifier &quot;(&quot; [ params ] &quot;)&quot; [ latent ] block ;
+params        := param { &quot;,&quot; param } ;
+param         := type identifier ;
+latent        := &quot;@&quot; digit ;
+
+let_decl      := type identifier &quot;=&quot; expr &quot;;&quot; ;</code></pre></figure><p>A <code>let_decl</code> at unit level is a declaration; the same production inside a block is a statement. Both are immutable bindings: there is no assignment to a binding after its declaration, only to the fields of a local aggregate before it escapes. See <a href="05-types.html#54-mutation">section 05</a>.</p><h2 id="43-types"><a href="#43-types">4.3 Types</a></h2><figure class="listing"><figcaption>grammar</figcaption><pre><code>type          := type_atom { &quot;[&quot; [ int_literal ] &quot;]&quot; } [ &quot;@&quot; digit ] ;
+
+type_atom     := identifier
+               | identifier &quot;&lt;&quot; type { &quot;,&quot; type } &quot;&gt;&quot; ;</code></pre></figure><p><code>Shade&lt;Json&gt;@0</code> is a shade of <code>Json</code> at value depth 0. The origin depth of a shade is part of its type but is not written in source syntax; it is always inferred, because writing it would let a programmer claim an origin the value does not have.</p><h2 id="44-statements"><a href="#44-statements">4.4 Statements</a></h2><figure class="listing"><figcaption>grammar</figcaption><pre><code>block         := &quot;{&quot; { stmt } [ expr ] &quot;}&quot; ;
+
+stmt          := let_decl
+               | expr &quot;;&quot;
+               | &quot;if&quot; &quot;(&quot; expr &quot;)&quot; block [ &quot;else&quot; ( block | if_stmt ) ]
+               | &quot;while&quot; &quot;(&quot; expr &quot;)&quot; block
+               | &quot;for&quot; &quot;(&quot; [ let_decl | expr ] &quot;;&quot; [ expr ] &quot;;&quot; [ expr ] &quot;)&quot; block
+               | &quot;return&quot; [ expr ] &quot;;&quot;
+               | &quot;break&quot; &quot;;&quot;
+               | &quot;continue&quot; &quot;;&quot;
+               | block ;</code></pre></figure><p>A block&#x27;s optional trailing <code>expr</code> — with no semicolon — is its <strong>tail value</strong>. A block with no tail value has type <code>U0</code>.</p><h2 id="45-expressions"><a href="#45-expressions">4.5 Expressions</a></h2><figure class="listing"><figcaption>grammar</figcaption><pre><code>expr          := assign ;
+
+assign        := logical_or [ assign_op assign ] ;
+assign_op     := &quot;=&quot; | &quot;+=&quot; | &quot;-=&quot; | &quot;*=&quot; | &quot;/=&quot; | &quot;%=&quot;
+               | &quot;&amp;=&quot; | &quot;|=&quot; | &quot;^=&quot; | &quot;&lt;&lt;=&quot; | &quot;&gt;&gt;=&quot; ;
+
+logical_or    := logical_and { &quot;||&quot; logical_and } ;
+logical_and   := bit_or      { &quot;&amp;&amp;&quot; bit_or } ;
+bit_or        := bit_xor     { &quot;|&quot;  bit_xor } ;
+bit_xor       := bit_and     { &quot;^&quot;  bit_and } ;
+bit_and       := equality    { &quot;&amp;&quot;  equality } ;
+equality      := relational  { ( &quot;==&quot; | &quot;!=&quot; ) relational } ;
+relational    := shift       { ( &quot;&lt;&quot; | &quot;&lt;=&quot; | &quot;&gt;&quot; | &quot;&gt;=&quot; ) shift } ;
+shift         := additive    { ( &quot;&lt;&lt;&quot; | &quot;&gt;&gt;&quot; ) additive } ;
+additive      := multiply    { ( &quot;+&quot; | &quot;-&quot; ) multiply } ;
+multiply      := unary       { ( &quot;*&quot; | &quot;/&quot; | &quot;%&quot; ) unary } ;
+
+unary         := ( &quot;-&quot; | &quot;!&quot; | &quot;~&quot; ) unary
+               | &quot;seal&quot;   unary
+               | &quot;shade&quot;  unary
+               | &quot;look&quot;   unary
+               | &quot;opaque&quot; unary
+               | postfix ;
+
+postfix       := primary { call_suffix | index_suffix | field_suffix } ;
+call_suffix   := &quot;(&quot; [ args ] &quot;)&quot; ;
+index_suffix  := &quot;[&quot; expr &quot;]&quot; ;
+field_suffix  := &quot;.&quot; identifier ;
+args          := expr { &quot;,&quot; expr } ;
+
+primary       := int_literal
+               | str_literal
+               | bytes_literal
+               | bool_literal
+               | identifier
+               | &quot;sizeof&quot; &quot;(&quot; type &quot;)&quot;
+               | descend_expr
+               | block
+               | &quot;(&quot; expr &quot;)&quot; ;
+
+descend_expr  := &quot;descend&quot; identifier block ;</code></pre></figure><h2 id="46-precedence"><a href="#46-precedence">4.6 Precedence</a></h2><p>Highest to lowest. All binary operators are left-associative; assignment and the unary rites are right-associative.</p><div class="scroll"><table><thead><tr><th align="right">Level</th><th align="left">Operators</th></tr></thead><tbody><tr><td align="right">1</td><td align="left"><code>()</code> <code>[]</code> <code>.</code></td></tr><tr><td align="right">2</td><td align="left"><code>-</code> <code>!</code> <code>~</code> <code>seal</code> <code>shade</code> <code>look</code> <code>opaque</code> (unary)</td></tr><tr><td align="right">3</td><td align="left"><code>*</code> <code>/</code> <code>%</code></td></tr><tr><td align="right">4</td><td align="left"><code>+</code> <code>-</code></td></tr><tr><td align="right">5</td><td align="left"><code>&lt;&lt;</code> <code>&gt;&gt;</code></td></tr><tr><td align="right">6</td><td align="left"><code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></td></tr><tr><td align="right">7</td><td align="left"><code>==</code> <code>!=</code></td></tr><tr><td align="right">8</td><td align="left"><code>&amp;</code></td></tr><tr><td align="right">9</td><td align="left"><code>^</code></td></tr><tr><td align="right">10</td><td align="left">`\</td><td align="left">`</td></tr><tr><td align="right">11</td><td align="left"><code>&amp;&amp;</code></td></tr><tr><td align="right">12</td><td align="left">`\</td><td align="left">\</td><td align="left">`</td></tr><tr><td align="right">13</td><td align="left"><code>=</code> and the compound assignments</td></tr></tbody></table></div><p><code>seal read(p)</code> therefore seals the result of the call, not the function.</p><h2 id="47-the-bare-expression-statement"><a href="#47-the-bare-expression-statement">4.7 The bare-expression statement</a></h2><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="s">&quot;Hello from the nether\n&quot;</span>;</code></pre></figure><p>An expression statement whose value is not <code>U0</code> <strong>deposits</strong> that value into the trace, tagged with its source span. It is not printed; nothing in Nether C is printed. See <a href="06-evaluation.html#68-what-burial-prints">§6.8</a>.</p><p>This is the direct inversion of HolyC, in which a bare string is a call to <code>PrintF</code>. The syntax is the same gesture; the semantics are its opposite.</p><p>An implementation MUST NOT warn about a discarded value in this position. It is not discarded.</p><hr class="thin"><nav class="bar"><a href="03-lexical.html">&larr; Lexical structure</a><span class="spacer"></span><a href="05-types.html">Types and the data model &rarr;</a></nav>
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="../gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

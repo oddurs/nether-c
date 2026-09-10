@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nether C &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<link rel="stylesheet" href="nether.css">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body>
+
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+
+<hr class="heavy">
+
+<nav class="bar"><a href="index.html" aria-current="page">index</a><span class="sep">|</span><a href="spec/index.html">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<main>
+<p class="center"><img class="banner" src="gfx/excavation.gif" width="396" height="44" alt="Under excavation. Nothing is implemented; the spec comes first."></p>
+
+<h1>Read this first</h1>
+
+<p><strong>A Nether C program is never executed.</strong></p>
+
+<p>It is <strong>buried</strong>. Burial evaluates it as far as the world will
+currently allow and stops. What is left behind is a <strong>trace</strong>: a
+complete, immutable, content-addressed record of everything that happened, and
+the <strong>holes</strong> where the program asked the world a question that
+nobody has answered yet.</p>
+
+<p>Answering a hole is a separate act, performed later, by somebody who decided
+to. It is called <strong>exhumation</strong>. It produces a new trace. It does
+not touch the old one. <em>Nothing in the ledger is ever revised.</em></p>
+
+<p>That is the entire language. Everything after this is consequence.</p>
+
+<img class="rule" src="gfx/rule.gif" width="396" height="9" alt="">
+
+<h2>The nine things that are true</h2>
+
+<ol class="doctrine">
+<li><b>The program has already run.</b><span>You are not going to start it. You
+are going to read what is left of it. There is no <code>run</code> and there is
+never going to be a <code>run</code>.</span></li>
+
+<li><b>Depth only ever increases.</b><span>Every value carries a number between
+0 and 8: how far into the world its history reaches. Nothing lowers it. There is
+no <code>ascend</code>. Going down is a decision and it is the last one you get
+to make about that value.</span></li>
+
+<li><b>Nothing down here changes.</b><span>TempleOS let every task write to all
+of memory at all times. We kept the sharing and removed the writing. Immutability
+is not a safety feature. It is what the word <em>nether</em> means.</span></li>
+
+<li><b>You never make a value. You find it.</b><span>Every value already exists
+at its content address. Allocation is a thing other languages do because they
+have not worked out that the value was always there.</span></li>
+
+<li><b>Nothing is printed.</b><span>A bare expression is deposited into the
+ledger. A program holds no capability that reaches a terminal, a log, or you. If
+you want to see it, carry a lamp down and look.</span></li>
+
+<li><b>Randomness is the deepest recordable sin.</b><span>In TempleOS, entropy
+was the Oracle: revelation, arriving from above, the highest channel in the
+system. Here it is stratum 7. It is the one act that makes a program impossible
+to re-derive. The mechanism is identical. The orientation is not.</span></li>
+
+<li><b>Every answer the world gives is written down before you get it.</b><span>Read
+a file and the bytes are sealed into the ledger before your program sees them.
+Not afterwards. Not usually. Before.</span></li>
+
+<li><b>The trusted core only ever gets smaller.</b><span>Terry fixed the size of
+the temple by covenant and never changed it. We inverted that too. A file called
+<code>.decay-ceiling</code> holds a number, and the build fails if the core
+exceeds it. Below, things only decay.</span></li>
+
+<li><b>You may carry a shade up. You may not look at it on the way.</b><span>Orpheus
+could have kept her.</span></li>
+</ol>
+
+<img class="rule" src="gfx/rule.gif" width="396" height="9" alt="">
+
+<h2>The first program</h2>
+
+<figure class="listing">
+<figcaption>hello.nc</figcaption>
+<pre><code><span class="c">// There is no main. There is a demand.</span>
+
+<span class="t">U0</span> greet()
+{
+  <span class="s">"Hello from the nether\n"</span>;   <span class="c">// deposited, not printed</span>
+}
+
+<span class="k">demand</span> greet;</code></pre>
+</figure>
+
+<figure class="listing">
+<figcaption>shell</figcaption>
+<pre><code><span class="p">$</span> nether <span class="k">bury</span> hello.nc
+buried   hello.nc &rarr; <span class="h">8f3a1c0e</span>   depth 0   holes 0   17 nodes
+
+<span class="p">$</span> nether <span class="k">lamp</span> <span class="h">8f3a1c0e</span>
+Hello from the nether</code></pre>
+</figure>
+
+<p>Burial said nothing about the greeting. It cannot. The program has no way to
+reach your terminal and would not know whether anyone was watching if it did. It
+left a deposit. Reading it is a second act, and a person had to choose to
+perform it.</p>
+
+<div class="plaque">
+<h3>WHAT THIS COSTS YOU</h3>
+<div>
+<p>Two commands instead of one, forever, starting with your first thirty seconds
+in the language. This is the largest ergonomic tax in the design.</p>
+<p>It buys the strongest property in the language: a program holds no capability
+that reaches a log, so it cannot leak to one. Whether that is worth it is
+genuinely arguable. If Nether C fails, this is the most likely reason, and
+<a href="spec/90-rationale.html#901-the-inversions">&sect;90.1</a> says so
+rather than pretending otherwise.</p>
+</div>
+</div>
+
+<img class="rule" src="gfx/rule.gif" width="396" height="9" alt="">
+
+<h2>The nine strata</h2>
+
+<img class="descent" src="gfx/descent.gif" width="52" height="146" alt="The nine strata, descending.">
+
+<p>Every value carries a <strong>depth</strong>. Depth composes by
+<code>max</code>: a thing built from parts is exactly as deep as its deepest
+part.</p>
+
+<p><strong>0</strong> is pure. Arithmetic and data. No world at all. Pure code
+does not survive burial, because there is nothing left of it but its answer.</p>
+
+<p><strong>1</strong> reads the ledger. <strong>2</strong> reads a frozen
+environment you declared in advance. <strong>3</strong> reads the disk.
+<strong>4</strong> writes it. <strong>5</strong> reads the network.
+<strong>6</strong> writes it.</p>
+
+<p><strong>7</strong> is entropy.</p>
+
+<p><strong>8</strong> is foreign code, whose history the ledger cannot keep. A
+trace that reaches 8 is marked, permanently and transitively, and may never again
+claim to be replayable. It is in the lattice because a language that cannot call
+C cannot be adopted. It is at the bottom because it is the only stratum that
+breaks the promise rather than deepening it. It is the weakest part of the
+design and <a href="spec/90-rationale.html#902-rejected-alternatives">&sect;90.2</a>
+says that too.</p>
+
+<p>Read <a href="spec/01-strata.html">&sect;01</a> for what each one grants, what
+it costs, and what the implementation is obliged to write down when you reach
+it.</p>
+
+<img class="rule" src="gfx/rule.gif" width="396" height="9" alt="">
+
+<h2>The Orpheus rule</h2>
+
+<p>Depth never decreases. So how does anything come back up?</p>
+
+<p>You carry the record, not the thing. <code>seal</code> gives you a
+<strong>cairn</strong> &mdash; a content address &mdash; which is always at depth
+0, because a name is pure no matter what it names. <code>shade</code> gives you
+the value itself, opaque: you may store it, seal it, compare it, pass it on. You
+may not look inside it.</p>
+
+<figure class="listing">
+<figcaption>nether c</figcaption>
+<pre><code><span class="t">Shade</span>&lt;<span class="t">Json</span>&gt; reply = <span class="k">descend</span> net { <span class="k">shade</span> get(<span class="s">"https://example.invalid/x.json"</span>) };
+
+<span class="t">Cairn</span> witness = <span class="k">seal</span> reply;      <span class="c">// fine. you carried its name up</span>
+<span class="t">I64</span>   n       = <span class="k">look</span>(reply).len; <span class="c">// not here you don't</span></code></pre>
+</figure>
+
+<figure class="listing">
+<figcaption>shell</figcaption>
+<pre><code><span class="e">error:</span> cannot look at a shade from stratum <span class="d5">5</span> at depth <span class="d0">0</span>
+  --&gt; stamp.nc:14:11
+   |
+14 |   I64   n       = look(reply).len;
+   |                   ^^^^^^^^^^^ this shade came from `get` at stratum 5
+   |
+   = the value is here, but you are not. Wrap the look in `descend net { … }`.</code></pre>
+</figure>
+
+<p class="center"><strong>YOU MAY CARRY A SHADE UP OUT OF ANY STRATUM.<br>
+YOU MAY ONLY LOOK AT IT BY GOING BACK DOWN.</strong></p>
+
+<p>This is a local check, not a propagation. It costs one comparison and it
+produces an error that names the exact fix. Two more dramatic versions of the
+rule were considered and rejected; both are recorded in
+<a href="spec/90-rationale.html#902-rejected-alternatives">&sect;90.2</a>,
+because a design document that lists only its advantages is marketing.</p>
+
+<img class="rule" src="gfx/rule.gif" width="396" height="9" alt="">
+
+<h2>The six rites</h2>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Rite</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>bury</code></td><td>evaluate as far as the world allows; emit a trace</td></tr>
+<tr><td><code>exhume</code></td><td>grant a stratum, answer holes, emit a deeper trace</td></tr>
+<tr><td><code>lamp</code></td><td>carry light down: render a value, or walk its provenance</td></tr>
+<tr><td><code>cairn</code></td><td>name a thing by its content; check that a name still holds</td></tr>
+<tr><td><code>strata</code></td><td>which stratum this reached, and the line that took it there</td></tr>
+<tr><td><code>graft</code></td><td>substitute a subtrace and re-bury only what changed</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="box shout">
+<p class="center"><strong class="blink">THERE IS NO <code>NETHER RUN</code></strong></p>
+<p>It exits 64 and tells you what to use instead. This is the only frozen
+requirement in the entire draft &mdash;
+<a href="spec/08-rites.html#80-there-is-no-run">&sect;8.0</a> &mdash; written into
+the specification so that it is a rule rather than a joke, and so that anyone
+proposing to add it has something to argue against.</p>
+</div>
+
+<img class="rule" src="gfx/rule.gif" width="396" height="9" alt="">
+
+<h2>On the palette</h2>
+
+<p>TempleOS was 640&times;480 and sixteen colours, fixed by covenant, forever.
+This site takes those sixteen colours and complements every single one of
+them.</p>
+
+<p><strong>Fourteen of the sixteen land back inside the palette.</strong>
+Complement blue and you get yellow. Complement green and you get light purple.
+Complement light grey and you get dark grey. The VGA palette is very nearly its
+own opposite, which is either a fact about the 1980s or a fact about
+opposites.</p>
+
+<p>Two colours have nowhere to go. Brown (#AA5500) complements to #55AAFF.
+Light blue (#5555FF) complements to #AAAA00. Neither of those is a VGA colour at
+all.</p>
+
+<p>We kept both and named them <strong>ROT</strong> and <strong>BILE</strong>.
+It is the most honest thing about this project.</p>
+
+<dl class="swatches">
+<div style="background:#FFFFFF"><dt>BONE</dt><dd>was BLACK</dd></div>
+<div style="background:#FFFF55"><dt>SULPHUR</dt><dd>was BLUE</dd></div>
+<div style="background:#FF55FF"><dt>LILAC</dt><dd>was GREEN</dd></div>
+<div style="background:#FF5555"><dt>SALMON</dt><dd>was CYAN</dd></div>
+<div style="background:#55FFFF"><dt>ICE</dt><dd>was RED</dd></div>
+<div style="background:#55FF55"><dt>LIME</dt><dd>was PURPLE</dd></div>
+<div style="background:#AAAAAA"><dt>SMOKE</dt><dd>was DKGRAY</dd></div>
+<div style="background:#555555;color:#fff"><dt>ASH</dt><dd>was LTGRAY</dd></div>
+<div style="background:#AA00AA;color:#fff"><dt>PLUM</dt><dd>was LTGREEN</dd></div>
+<div style="background:#AA0000;color:#fff"><dt>BLOOD</dt><dd>was LTCYAN</dd></div>
+<div style="background:#00AA00;color:#fff"><dt>MOSS</dt><dd>was LTPURPLE</dd></div>
+<div style="background:#00AAAA"><dt>TEAL</dt><dd>was LTRED</dd></div>
+<div style="background:#0000AA;color:#fff"><dt>DEEP</dt><dd>was YELLOW</dd></div>
+<div style="background:#000000;color:#fff"><dt>VOID</dt><dd>was WHITE</dd></div>
+<div style="background:#55AAFF"><dt>ROT</dt><dd>no opposite</dd></div>
+<div style="background:#AAAA00"><dt>BILE</dt><dd>no opposite</dd></div>
+</dl>
+
+<p class="center"><img src="gfx/lamp.gif" width="24" height="24" alt=""> &nbsp;
+Press <strong>lamp</strong> in the bar above and you get the temple's own colours
+back, on the temple's own ground. It is the only place in this entire project
+where anything ascends.</p>
+
+<img class="rule" src="gfx/rule.gif" width="396" height="9" alt="">
+
+<h2>The specification</h2>
+
+<p>Written before the compiler. Deliberately. The compiler does not exist and
+will not be started until the specification stops changing.</p>
+
+<p>It is Markdown in
+<a href="https://github.com/oddurs/nether-c/tree/main/spec">spec/</a> and it is
+canonical there. These pages are baked from it by
+<a href="https://github.com/oddurs/nether-c/blob/main/site/bake">site/bake</a>,
+one file of standard library Python with no dependencies. If the two ever
+disagree, the Markdown is right and continuous integration is broken.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>&sect;</th><th>Section</th><th>Status</th></tr></thead>
+<tbody><tr><td><a href="spec/00-overview.html">00</a></td><td><a href="spec/00-overview.html">Overview</a></td><td>draft</td></tr><tr><td><a href="spec/01-strata.html">01</a></td><td><a href="spec/01-strata.html">The strata</a></td><td>draft</td></tr><tr><td><a href="spec/02-calculus.html">02</a></td><td><a href="spec/02-calculus.html">The calculus of depth</a></td><td>draft</td></tr><tr><td><a href="spec/03-lexical.html">03</a></td><td><a href="spec/03-lexical.html">Lexical structure</a></td><td>draft</td></tr><tr><td><a href="spec/04-grammar.html">04</a></td><td><a href="spec/04-grammar.html">Grammar</a></td><td>draft</td></tr><tr><td><a href="spec/05-types.html">05</a></td><td><a href="spec/05-types.html">Types and the data model</a></td><td>draft</td></tr><tr><td><a href="spec/06-evaluation.html">06</a></td><td><a href="spec/06-evaluation.html">Burial, holes and replay</a></td><td>draft</td></tr><tr><td><a href="spec/07-ledger.html">07</a></td><td><a href="spec/07-ledger.html">The ledger</a></td><td>draft</td></tr><tr><td><a href="spec/08-rites.html">08</a></td><td><a href="spec/08-rites.html">The rites</a></td><td>draft</td></tr><tr><td><a href="spec/09-prelude.html">09</a></td><td><a href="spec/09-prelude.html">The prelude</a></td><td>draft</td></tr><tr><td><a href="spec/10-glossary.html">10</a></td><td><a href="spec/10-glossary.html">Glossary</a></td><td>draft</td></tr><tr><td><a href="spec/90-rationale.html">90</a></td><td><a href="spec/90-rationale.html">Rationale</a></td><td>non-normative</td></tr></tbody>
+</table>
+</div>
+
+<p>Start at <a href="spec/00-overview.html">&sect;00</a>. Sections
+<a href="spec/01-strata.html">01</a>, <a href="spec/02-calculus.html">02</a> and
+<a href="spec/06-evaluation.html">06</a> carry the design. The rest can wait
+until you need it.</p>
+
+<img class="rule" src="gfx/rule.gif" width="396" height="9" alt="">
+
+<h2>Where it actually is</h2>
+
+<p>Nothing is implemented. There is a specification, a roadmap of 82 items
+across nine descents, and one binary that refuses correctly:</p>
+
+<figure class="listing">
+<figcaption>shell</figcaption>
+<pre><code><span class="p">$</span> nether <span class="k">run</span> hello.nc
+<span class="e">nether:</span> there is no `run`.
+
+  A Nether C program is not executed. It is buried — evaluated as far as the
+  world allows — and what remains is a trace and the holes the world still
+  owes an answer to.</code></pre>
+</figure>
+
+<p>That is the one behaviour the language will never change, so it was the
+honest thing to build first.</p>
+
+<div class="plaque">
+<h3>ON TERRY DAVIS</h3>
+<div>
+<p>Terry Davis wrote an operating system, a compiler, a graphics stack, a
+document format and a language, alone, and made every one of them follow from a
+single stated idea. Whatever you make of the idea, the coherence is the
+achievement, and it is rarer than the code.</p>
+<p>Nether C is an inversion of his language the way a photographic negative is an
+inversion: every value reversed, every edge in exactly the same place. That is a
+form of close reading. You cannot turn something over without first working out
+which way up it was.</p>
+</div>
+</div>
+
+</main>
+
+<hr class="thin">
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>, which is the licence
+TempleOS shipped under. Take it. It was always there.</p>
+<div class="badges">
+<img src="gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
+<img src="gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
+<img src="gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
+<img src="gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>this page is named</span>
+  <img src="gfx/cairn.gif" width="107" height="26" alt="Cairn 8F3A1C0E">
+</div>
+
+<p class="center">Every graphic on this site was written by hand in
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+})();
+</script>
+
+</body>
+</html>

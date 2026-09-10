@@ -1,0 +1,59 @@
+#!/bin/sh
+# The seam. CI, the git hooks and scripts/agent know only these verbs;
+# everything stack-specific lives here and nowhere else.
+set -eu
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+case "${1:-}" in
+  fmt)
+    cargo fmt --all
+    ;;
+  fmt:check)
+    cargo fmt --all -- --check
+    ;;
+  lint)
+    cargo clippy --workspace --all-targets -- -D warnings
+    ;;
+  test)
+    cargo test --workspace
+    ;;
+  build)
+    cargo build --workspace
+    ;;
+  site)
+    # The site is baked from spec/ and committed. No node, no lockfile,
+    # nothing to install.
+    python3 site/bake
+    ;;
+  site:check)
+    python3 site/bake --check
+    ;;
+  gfx)
+    # Every graphic on the site is drawn by site/gfx.py, which contains a
+    # GIF89a encoder and a bitmap font. There is no image library here.
+    python3 site/gfx.py
+    ;;
+  gfx:check)
+    python3 site/gfx.py --check
+    ;;
+  decay)
+    # The Decay Rule. The trusted core may only ever get smaller.
+    exec "$root/scripts/decay"
+    ;;
+  check)
+    "$0" fmt:check
+    "$0" lint
+    "$0" test
+    "$0" build
+    "$0" site:check
+    "$0" gfx:check
+    "$0" decay
+    if command -v cairn >/dev/null 2>&1; then cairn check; fi
+    ;;
+  *)
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|site|site:check|gfx|gfx:check|decay|check}" >&2
+    exit 2
+    ;;
+esac

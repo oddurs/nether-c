@@ -1,0 +1,51 @@
+name: Proposal
+description: A change to the language, the specification, or the tooling
+labels: [feature]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The specification comes before the compiler. A proposal that changes
+        behaviour is a proposal to change `spec/`, so argue it at that level.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is hard or impossible today. Not the solution — the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stratum
+    attributes:
+      label: Deepest stratum this reaches
+      options: ["0 pure", "1 store", "2 environment", "3 disk read", "4 disk write", "5 net read", "6 net write", "7 entropy", "8 unrecorded", "not applicable"]
+    validations:
+      required: true
+
+  - type: textarea
+    id: cost
+    attributes:
+      label: What it costs
+      description: >
+        Every inversion in this language cost something and the specification
+        says so. What does this one give up? An answer of "nothing" usually
+        means the proposal has not been thought through yet.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proof
+    attributes:
+      label: The proof
+      description: The observable fact that would settle whether this is done.
+    validations:
+      required: true
