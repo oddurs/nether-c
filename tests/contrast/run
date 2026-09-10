@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""
+contrast — the complemented VGA palette was not designed for legibility.
+
+Sixteen colours chosen in the 1980s for a 640x480 text mode, complemented, are
+under no obligation to clear WCAG. Several pairs did not, and the rule the
+roadmap set was that where a pair fails, **the pair changes, not the standard**.
+
+This encodes every foreground/background pair the stylesheet actually uses and
+checks both palettes against WCAG 2.1 AA: 4.5:1 for text, 3:1 for large text
+and for anything that is only a boundary.
+
+Colours are duplicated from site/nether.css on purpose. A test that reads the
+thing it is testing agrees with it by construction.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+CSS = ROOT / "site" / "nether.css"
+
+NETHER = {
+    "void": "#000000", "bone": "#FFFFFF", "sulphur": "#FFFF55", "lilac": "#FF55FF",
+    "salmon": "#FF5555", "ice": "#55FFFF", "lime": "#55FF55", "ash": "#555555",
+    "smoke": "#AAAAAA", "plum": "#AA00AA", "blood": "#AA0000", "moss": "#00AA00",
+    "deep": "#0000AA", "teal": "#00AAAA", "rot": "#55AAFF", "bile": "#AAAA00",
+    "ground": "#000000", "ink": "#FFFFFF", "dim": "#AAAAAA", "dimmer": "#555555",
+    "accent": "#FFFF55", "alt": "#55FFFF", "warn": "#FF5555", "good": "#55FF55",
+    "code": "#55FF55", "quote": "#AA00AA",
+}
+
+TEMPLE = {
+    "void": "#FFFFFF", "bone": "#000000", "sulphur": "#0000AA", "lilac": "#00AA00",
+    "salmon": "#00AAAA", "ice": "#AA0000", "lime": "#AA00AA", "ash": "#AAAAAA",
+    "smoke": "#555555", "plum": "#55FF55", "blood": "#55FFFF", "moss": "#FF55FF",
+    "deep": "#FFFF55", "teal": "#FF5555", "rot": "#AA5500", "bile": "#5555FF",
+    "ground": "#FFFFFF", "ink": "#000000", "dim": "#555555", "dimmer": "#AAAAAA",
+    "accent": "#0000AA", "alt": "#AA0000", "warn": "#AA0000", "good": "#00AA00",
+    "code": "#AA00AA", "quote": "#AA00AA",
+}
+
+# (what it is, foreground token, background token, minimum ratio)
+PAIRS = [
+    ("body text",          "ink",     "ground", 4.5),
+    ("muted prose",        "dim",     "ground", 4.5),
+    ("links",              "alt",     "ground", 4.5),
+    ("link hover",         "ground",  "alt",    4.5),
+    ("strong and h1",      "accent",  "ground", 4.5),
+    ("h2 title bar",       "ground",  "accent", 4.5),
+    ("h3",                 "alt",     "ground", 4.5),
+    ("h4",                 "rot",     "ground", 4.5),
+    ("inline code",        "code",    "ground", 4.5),
+    ("errors",             "warn",    "ground", 4.5),
+    ("table header",       "ground",  "dim",    4.5),
+    ("table row hover",    "ground",  "ink",    4.5),
+    ("listing caption",    "ground",  "dim",    4.5),
+    ("footer",             "dim",     "ground", 4.5),
+    ("footer badge text",  "dim",     "ground", 4.5),
+    ("nav bar",            "ink",     "ground", 4.5),
+    ("nav current",        "ground",  "accent", 4.5),
+    ("blockquote text",    "dim",     "ground", 4.5),
+    ("blockquote rule",    "quote",   "ground", 3.0),
+    ("marquee",            "accent",  "ground", 4.5),
+    ("cursor",             "accent",  "ground", 3.0),
+    ("rules and borders",  "dim",     "ground", 3.0),
+]
+
+# The palette swatches on the front page: label ink over the colour it names.
+SWATCHES = [
+    ("#FFFFFF", "#000000"), ("#FFFF55", "#000000"), ("#FF55FF", "#000000"),
+    ("#FF5555", "#000000"), ("#55FFFF", "#000000"), ("#55FF55", "#000000"),
+    ("#AAAAAA", "#000000"), ("#555555", "#FFFFFF"), ("#AA00AA", "#FFFFFF"),
+    ("#AA0000", "#FFFFFF"), ("#00AA00", "#000000"), ("#00AAAA", "#000000"),
+    ("#0000AA", "#FFFFFF"), ("#000000", "#FFFFFF"), ("#55AAFF", "#000000"),
+    ("#AAAA00", "#000000"),
+]
+
+
+def luminance(hex_colour: str) -> float:
+    h = hex_colour.lstrip("#")
+    parts = [int(h[i : i + 2], 16) / 255 for i in (0, 2, 4)]
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in parts]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def ratio(a: str, b: str) -> float:
+    la, lb = luminance(a), luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def check_palette(name: str, palette: dict[str, str]) -> list[str]:
+    print(f"\n  {name}")
+    bad = []
+    for label, fg, bg, minimum in PAIRS:
+        r = ratio(palette[fg], palette[bg])
+        ok = r >= minimum
+        print(f"    {'ok  ' if ok else 'FAIL'}  {r:5.2f} / {minimum}  {label}")
+        if not ok:
+            bad.append(f"{name}: {label} is {r:.2f}, needs {minimum}")
+    return bad
+
+
+def check_css_declares(palette_name: str, tokens: list[str]) -> list[str]:
+    """Every token the test knows about must exist in the stylesheet."""
+    css = CSS.read_text(encoding="utf-8")
+    missing = [t for t in tokens if not re.search(rf"--{t}\s*:", css)]
+    return [f"{palette_name}: --{t} is not declared in site/nether.css" for t in missing]
+
+
+def main() -> int:
+    failures: list[str] = []
+    failures += check_palette("nether (lamp out)", NETHER)
+    failures += check_palette("temple (lamp lit)", TEMPLE)
+
+    print("\n  palette swatches")
+    for fg, bg in SWATCHES:
+        r = ratio(fg, bg)
+        ok = r >= 4.5
+        print(f"    {'ok  ' if ok else 'FAIL'}  {r:5.2f} / 4.5   {bg} label on {fg}")
+        if not ok:
+            failures.append(f"swatch: {bg} on {fg} is {r:.2f}")
+
+    print("\n  stylesheet declares every token")
+    missing = check_css_declares("tokens", sorted({t for _, f, b, _ in PAIRS for t in (f, b)}))
+    for m in missing:
+        print(f"    FAIL  {m}")
+    failures += missing
+    if not missing:
+        print("    ok    all present")
+
+    print()
+    if failures:
+        for f in failures:
+            print(f"contrast: {f}", file=sys.stderr)
+        print(f"contrast: {len(failures)} pair(s) below standard", file=sys.stderr)
+        print("          the pair changes, not the standard.", file=sys.stderr)
+        return 1
+    print(f"contrast: every pair clears WCAG AA on both palettes")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -6,6 +6,15 @@
 <title>The specification &mdash; Nether C</title>
 <meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
 <meta name="color-scheme" content="dark light">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nether C">
+<meta property="og:title" content="The specification &mdash; Nether C">
+<meta property="og:description" content="A C dialect in which nothing runs. Programs are buried, not executed; what ships is the trace and the holes the world still owes an answer to.">
+<meta property="og:image" content="https://oddurs.github.io/nether-c/gfx/card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Nether C. A C dialect in which nothing runs. The program has already run; you read what is left of it.">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="../nether.css">
 <link rel="icon" href="../icon.svg" type="image/svg+xml">
 <script>
@@ -19,6 +28,8 @@ try {
 </script>
 </head>
 <body>
+
+<a class="skip" href="#main">Skip to the text</a>
 
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -35,7 +46,7 @@ try {
 
 <nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<main>
+<main id="main" tabindex="-1">
 <h1>The specification</h1><p>The specification is written in Markdown in <a href="https://github.com/oddurs/nether-c/tree/main/spec">spec/</a> and is canonical there. These pages are baked from it by <a href="https://github.com/oddurs/nether-c/blob/main/site/bake">site/bake</a>, which is one file of standard library Python and has no dependencies. If these pages ever disagree with the Markdown, the Markdown is right and continuous integration is broken.</p><div class="scroll"><table><thead><tr><th>&sect;</th><th>Section</th><th>Status</th></tr></thead><tbody><tr><td><a href="00-overview.html">00</a></td><td><a href="00-overview.html">Overview</a></td><td>draft</td></tr><tr><td><a href="01-strata.html">01</a></td><td><a href="01-strata.html">The strata</a></td><td>draft</td></tr><tr><td><a href="02-calculus.html">02</a></td><td><a href="02-calculus.html">The calculus of depth</a></td><td>draft</td></tr><tr><td><a href="03-lexical.html">03</a></td><td><a href="03-lexical.html">Lexical structure</a></td><td>draft</td></tr><tr><td><a href="04-grammar.html">04</a></td><td><a href="04-grammar.html">Grammar</a></td><td>draft</td></tr><tr><td><a href="05-types.html">05</a></td><td><a href="05-types.html">Types and the data model</a></td><td>draft</td></tr><tr><td><a href="06-evaluation.html">06</a></td><td><a href="06-evaluation.html">Burial, holes and replay</a></td><td>draft</td></tr><tr><td><a href="07-ledger.html">07</a></td><td><a href="07-ledger.html">The ledger</a></td><td>draft</td></tr><tr><td><a href="08-rites.html">08</a></td><td><a href="08-rites.html">The rites</a></td><td>draft</td></tr><tr><td><a href="09-prelude.html">09</a></td><td><a href="09-prelude.html">The prelude</a></td><td>draft</td></tr><tr><td><a href="10-glossary.html">10</a></td><td><a href="10-glossary.html">Glossary</a></td><td>draft</td></tr><tr><td><a href="90-rationale.html">90</a></td><td><a href="90-rationale.html">Rationale</a></td><td>non-normative</td></tr></tbody></table></div><div class="box shout"><strong>Nothing here is frozen</strong> except one thing: there is no <code>run</code>. Everything else is a draft and will change without a version bump.</div>
 </main>
 

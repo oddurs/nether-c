@@ -15,7 +15,10 @@ Everything it emits is committed. Nothing here downloads anything.
 
 from __future__ import annotations
 
+import binascii
+import struct
 import sys
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -179,6 +182,57 @@ def write_gif(path: Path, frames: list[Frame], delays: list[int], loop: bool = T
 
     out += b"\x3b"
     return bytes(out)
+
+
+# ── PNG, for the one thing that cannot be a GIF ─────────────────────────────
+#
+# Link previews want a PNG. PNG is a signature, four chunk types and a zlib
+# stream, and zlib is in the standard library, so this is about forty lines and
+# not a dependency.
+
+
+def chunk(kind: bytes, data: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(data))
+        + kind
+        + data
+        + struct.pack(">I", binascii.crc32(kind + data) & 0xFFFFFFFF)
+    )
+
+
+def write_png(frame: Frame, scale: int = 1) -> bytes:
+    w, h = frame.w * scale, frame.h * scale
+
+    raw = bytearray()
+    for y in range(frame.h):
+        row = bytes(frame.px[y * frame.w : (y + 1) * frame.w])
+        if scale > 1:
+            row = bytes(b for px in row for _ in range(scale) for b in (px,))
+        for _ in range(scale):
+            raw.append(0)  # filter: none. The image is flat colour; nothing to predict.
+            raw += row
+
+    plte = b"".join(bytes(c) for c in PALETTE)
+
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 3, 0, 0, 0))
+        + chunk(b"PLTE", plte)
+        + chunk(b"IDAT", zlib.compress(bytes(raw), 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def big_text(f: Frame, x: int, y: int, s: str, c: int, scale: int) -> int:
+    """The 5x7 font, blown up. Blocky on purpose."""
+    for ch in s.upper():
+        glyph = FONT.get(ch, FONT[" "])
+        for row, bits in enumerate(glyph):
+            for col, on in enumerate(bits):
+                if on == "#":
+                    f.rect(x + col * scale, y + row * scale, scale, scale, c)
+        x += 6 * scale
+    return x
 
 
 # ── a 5x7 font, typed out ───────────────────────────────────────────────────
@@ -373,6 +427,30 @@ def counter(text: str) -> tuple[list[Frame], list[int]]:
     return frames, [55, 55]
 
 
+def og_card() -> Frame:
+    """1200x630, drawn at 200x105 and scaled six times. Blocky on purpose."""
+    W, H = 200, 105
+    f = Frame(W, H, VOID)
+
+    f.rect(0, 0, W, 3, SULPHUR)
+    for d in range(9):
+        f.rect(d * (W // 9), H - 4, (W // 9) + 1, 4, DEPTH[d])
+
+    # sediment, only in the margins, so it never sits behind a letter
+    for y in range(8, H - 8, 6):
+        for x in ((y // 6) % 3, W - 5 + ((y // 6) % 3)):
+            f.set(x, y, ASH)
+
+    big_text(f, 12, 14, "NETHER C", BONE, 3)          # 8 chars * 18 = 144
+    big_text(f, 12, 42, "A C DIALECT IN WHICH", SMOKE, 1)
+    big_text(f, 12, 52, "NOTHING RUNS", SALMON, 2)    # 12 chars * 12 = 144
+
+    f.rect(12, 74, W - 24, 1, ASH)
+    big_text(f, 12, 81, "THE PROGRAM HAS ALREADY RUN.", SMOKE, 1)
+    big_text(f, 12, 90, "YOU READ WHAT IS LEFT OF IT.", ASH, 1)
+    return f
+
+
 GRAPHICS = {
     "bg.gif": bg_tile,
     "rule.gif": rule_bar,
@@ -393,9 +471,14 @@ def main() -> int:
     check = "--check" in sys.argv
     OUT.mkdir(parents=True, exist_ok=True)
     stale = []
+
+    work: list[tuple[str, bytes, str]] = []
     for name, make in GRAPHICS.items():
         frames, delays = make()
-        data = write_gif(OUT / name, frames, delays)
+        work.append((name, write_gif(OUT / name, frames, delays), f"{len(frames)} frame(s)"))
+    work.append(("card.png", write_png(og_card(), scale=6), "1200x630"))
+
+    for name, data, note in work:
         path = OUT / name
         current = path.read_bytes() if path.exists() else None
         if current == data:
@@ -404,7 +487,7 @@ def main() -> int:
             stale.append(name)
         else:
             path.write_bytes(data)
-            print(f"drew    site/gfx/{name}  {len(data):>6} bytes  {len(frames)} frame(s)")
+            print(f"drew    site/gfx/{name}  {len(data):>6} bytes  {note}")
 
     if check:
         if stale:
@@ -413,7 +496,7 @@ def main() -> int:
                 print(f"  site/gfx/{n}", file=sys.stderr)
             print("\n  run python3 site/gfx.py and commit the result", file=sys.stderr)
             return 1
-        print(f"gfx: {len(GRAPHICS)} graphic(s) up to date")
+        print(f"gfx: {len(work)} graphic(s) up to date")
     return 0
 
 

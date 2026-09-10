@@ -17,6 +17,8 @@ status: draft
 | `Str` | any well-formed UTF-8 string, NFC | as `Bytes`, over the NFC form |
 | `Cairn` | a content address | 32 bytes |
 | `Shadeᵈ⟨T⟩` | an opaque `T` from depth `d` | the cairn of the underlying value |
+| `Answer⟨T⟩` | what the world said: a `T`, or a refusal | tag byte, then the `T` or the `Refusal` |
+| `Refusal` | one of six codes, and nothing else | one byte |
 
 `I64` is the only integer type. There is no unsigned type, no `char`, no
 integer promotion and no implicit narrowing. Arithmetic wraps; an
@@ -26,6 +28,43 @@ cannot be built on top of behaviour that varies by compiler.
 > HolyC made everything an `I64` and let everything coerce into everything.
 > Nether C keeps the one integer type and removes every coercion. The
 > inversion is not the width; it is the silence.
+
+## 5.1.1 Answers and refusals
+
+Nether C has no exceptions and no error type. It has `Answer⟨T⟩`, which is what
+a function returns when the world is entitled to say no.
+
+```
+Answer⟨T⟩  ::=  Given T  |  Refused Refusal
+
+Refusal    ::=  absent       the thing is not there
+             |  denied       it is there and you may not have it
+             |  malformed    it is there and it is not what it claims to be
+             |  unreachable  nothing answered
+             |  exhausted    a limit was reached: space, quota, size
+             |  conflict      something else changed it first
+```
+
+The set of refusal codes is **closed** and fixed by this specification. An
+implementation MUST NOT add to it. The six names are bound in the prelude scope
+and compare by equality:
+
+```c
+if (refusal(a) == absent) { /* ... */ }
+```
+
+A `Refusal` carries a code and nothing else — no message, no platform error
+number, no path. Those things vary between operating systems, and a value whose
+encoding varies between operating systems cannot have a stable cairn, which
+would put a hole in [section 07](07-ledger.md) large enough to sink every
+reproducibility claim in this document.
+
+The detail is not lost. It is recorded in the **witness**, alongside everything
+else the world said ([§1.4](01-strata.md#14-what-the-trace-records)), where
+`nether lamp` can show it to a person and no program can branch on it.
+
+> A program may act on *what kind* of no it received. It may not act on how a
+> particular kernel chose to phrase it.
 
 ## 5.2 Aggregates
 

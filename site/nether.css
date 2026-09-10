@@ -12,6 +12,17 @@
 
    The palette is therefore almost, but not quite, its own opposite. That is
    the most honest thing about this project.
+
+   Sixteen colours chosen in the 1980s for a text mode are under no obligation
+   to clear WCAG, and several pairs did not. The rule was that where a pair
+   fails, the pair changes and the standard does not. tests/contrast/run holds
+   every pair this file uses to 4.5:1 for text and 3:1 for anything that marks
+   a boundary, on both grounds, and the build fails if one slips.
+
+   Two consequences are visible here: inline code is LIME on black and PURPLE
+   on white, because GREEN on white is 3.11:1; and h4 is the one colour with no
+   opposite, because ROT and BROWN clear on their respective grounds and
+   LILAC and its complement do not.
    =========================================================================== */
 
 :root {
@@ -36,11 +47,12 @@
   --ground:  var(--void);
   --ink:     var(--bone);
   --dim:     var(--smoke);
-  --dimmer:  var(--ash);
   --accent:  var(--sulphur);
   --alt:     var(--ice);
   --warn:    var(--salmon);
   --good:    var(--lime);
+  --code:    var(--lime);
+  --quote:   var(--plum);
   --bevel-hi: var(--smoke);
   --bevel-lo: var(--ash);
 
@@ -68,11 +80,12 @@
   --bile:    #5555FF;
 
   --dim:     #555555;
-  --dimmer:  #AAAAAA;
   --accent:  #0000AA;
   --alt:     #AA0000;
   --warn:    #AA0000;
   --good:    #00AA00;
+  --code:    #AA00AA;   /* GREEN on white is 3.11:1, so code is PURPLE here */
+  --quote:   #AA00AA;   /* LTGREEN on white is 1.33:1; a rule you cannot see is not a rule */
   --bevel-hi: #FFFFFF;
   --bevel-lo: #555555;
 }
@@ -84,6 +97,21 @@
    -------------------------------------------------------------------------- */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Straight to the text, for anyone arriving by keyboard. */
+a.skip {
+  position: absolute;
+  left: -9999px;
+  padding: .3rem .8rem;
+  background: var(--accent);
+  color: var(--ground);
+  text-decoration: none;
+}
+a.skip:focus {
+  left: .5rem;
+  top: .5rem;
+  z-index: 10;
+}
 
 html {
   background: var(--ground) url("gfx/bg.gif") repeat;
@@ -132,7 +160,7 @@ hr {
   border: 0;
   border-top: 3px double var(--dim);
 }
-hr.thin  { border-top: 1px solid var(--dimmer); }
+hr.thin  { border-top: 1px solid var(--dim); }
 hr.heavy { border-top: 3px double var(--accent); }
 
 /* --- navigation ----------------------------------------------------------- */
@@ -147,7 +175,7 @@ nav.bar {
   border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
   background: var(--ground);
 }
-nav.bar .sep { color: var(--dimmer); }
+nav.bar .sep { color: var(--dim); }
 nav.bar a { color: var(--ink); }
 nav.bar a:hover { background: var(--accent); color: var(--ground); }
 nav.bar a[aria-current] { background: var(--accent); color: var(--ground); }
@@ -185,7 +213,7 @@ h3::before { content: "\25B8 "; color: var(--dim); }
 
 h4 {
   margin: 1.2rem 0 .4rem;
-  color: var(--lilac);
+  color: var(--rot);
   font-size: 15px;
   font-weight: bold;
 }
@@ -213,7 +241,7 @@ ol > li::marker { color: var(--accent); }
 blockquote {
   margin: 0 0 .9rem;
   padding: .5rem .9rem;
-  border-left: 4px solid var(--plum);
+  border-left: 4px solid var(--quote);
   background: var(--ground);
   color: var(--dim);
 }
@@ -223,7 +251,7 @@ blockquote p:last-child { margin-bottom: 0; }
 /* --- code ----------------------------------------------------------------- */
 
 code {
-  color: var(--good);
+  color: var(--code);
   font-family: inherit;
   white-space: pre-wrap;
 }
@@ -236,7 +264,7 @@ figure.listing {
 }
 figure.listing figcaption {
   padding: .1rem .6rem;
-  background: var(--dimmer);
+  background: var(--dim);
   color: var(--ground);
   font-size: 12px;
   letter-spacing: .1em;
@@ -286,17 +314,18 @@ caption {
 th {
   padding: .2rem .7rem;
   border: 1px solid var(--dim);
-  background: var(--dimmer);
+  background: var(--dim);
   color: var(--ground);
   text-align: left;
   white-space: nowrap;
 }
 td {
   padding: .25rem .7rem;
-  border: 1px solid var(--dimmer);
+  border: 1px solid var(--dim);
   vertical-align: top;
 }
-tbody tr:hover td { background: var(--dimmer); color: var(--ground); }
+/* Full inversion on hover. Twenty-one to one, and period-appropriate. */
+tbody tr:hover td { background: var(--ink); color: var(--ground); }
 tbody tr:hover td a { color: var(--ground); }
 
 /* --- boxes ---------------------------------------------------------------- */
@@ -347,8 +376,8 @@ footer .badge {
   display: inline-block;
   margin: .5rem .4ch 0 0;
   padding: 0 .5ch;
-  border: 1px solid var(--dimmer);
-  color: var(--dimmer);
+  border: 1px solid var(--dim);
+  color: var(--dim);
   font-size: 11px;
   text-transform: uppercase;
 }
@@ -383,8 +412,8 @@ img.rule   { width: 100%; max-width: 396px; margin: 1rem auto; }
   overflow: hidden;
   margin: 0 0 1rem;
   padding: .2rem 0;
-  border-top: 1px solid var(--dimmer);
-  border-bottom: 1px solid var(--dimmer);
+  border-top: 1px solid var(--dim);
+  border-bottom: 1px solid var(--dim);
   white-space: nowrap;
 }
 .marquee > span {
@@ -402,7 +431,7 @@ img.rule   { width: 100%; max-width: 396px; margin: 1rem auto; }
 .plaque > h3 {
   margin: 0;
   padding: .15rem .6rem;
-  background: var(--dimmer);
+  background: var(--dim);
   color: var(--ground);
   font-size: 13px;
   letter-spacing: .12em;

@@ -2,7 +2,7 @@
 id: 23
 title: 'Spec: the prelude'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -19,8 +19,8 @@ of every world-touching function with the stratum it costs.
 
 ## Acceptance criteria
 
-- [ ] Every prelude function has a stratum in its signature
-- [ ] Nothing in the prelude reaches deeper than it must
+- [x] Every prelude function has a stratum in its signature
+- [x] Nothing in the prelude reaches deeper than it must
 
 ## 2026-09-10
 

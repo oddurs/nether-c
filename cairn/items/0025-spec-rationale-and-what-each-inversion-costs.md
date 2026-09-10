@@ -2,7 +2,7 @@
 id: 25
 title: 'Spec: rationale, and what each inversion costs'
 type: docs
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -20,8 +20,8 @@ advantages is marketing.
 
 ## Acceptance criteria
 
-- [ ] Every 'Decide:' item that closed has its losing option recorded here
-- [ ] At least one honest statement of a thing Nether C is worse at
+- [x] Every 'Decide:' item that closed has its losing option recorded here
+- [x] At least one honest statement of a thing Nether C is worse at
 
 ## 2026-09-10
 

@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""
+transcripts — every code sample in the documentation is a test fixture.
+
+Documentation that lies fails the build. This walks every prose source in the
+repository, extracts every code sample, and does one of two things with it:
+
+  CHECKED   the sample is a shell transcript whose commands `nether` can
+            answer today. It is executed and the output is compared.
+
+  PINNED    the sample describes behaviour that does not exist yet, or is not
+            executable at all. Its content is hashed into MANIFEST.tsv, so
+            editing it is a deliberate, reviewed act rather than a silent one.
+
+Nothing is skipped quietly. Both counts are printed on every run, and a sample
+that is neither checked nor pinned is an error.
+
+    tests/transcripts/run             check
+    tests/transcripts/run --record    re-record MANIFEST.tsv after a change
+"""
+
+from __future__ import annotations
+
+import hashlib
+import html
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+MANIFEST = Path(__file__).resolve().parent / "MANIFEST.tsv"
+
+# Prose that carries samples. Order is stable so the manifest is stable.
+SOURCES = ["README.md", "site/src/index.html"] + sorted(
+    str(p.relative_to(ROOT)) for p in (ROOT / "spec").glob("*.md")
+)
+
+ELISION = "[...]"
+
+
+class Sample:
+    __slots__ = ("source", "line", "kind", "body")
+
+    def __init__(self, source: str, line: int, kind: str, body: str) -> None:
+        self.source, self.line, self.kind, self.body = source, line, kind, body
+
+    @property
+    def ref(self) -> str:
+        return f"{self.source}:{self.line}"
+
+    @property
+    def digest(self) -> str:
+        return hashlib.sha256(self.body.encode()).hexdigest()[:16]
+
+
+# ── extraction ──────────────────────────────────────────────────────────────
+
+FENCE = re.compile(r"^```(\w*)\s*$")
+LISTING = re.compile(
+    r'<figure class="listing">\s*(?:<figcaption>([^<]*)</figcaption>\s*)?<pre><code>(.*?)</code></pre>',
+    re.S,
+)
+
+
+def from_markdown(rel: str) -> list[Sample]:
+    out, lines = [], (ROOT / rel).read_text(encoding="utf-8").split("\n")
+    i = 0
+    while i < len(lines):
+        m = FENCE.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        kind, start, body = m.group(1) or "text", i + 1, []
+        i += 1
+        while i < len(lines) and not lines[i].startswith("```"):
+            body.append(lines[i])
+            i += 1
+        i += 1
+        out.append(Sample(rel, start, kind, "\n".join(body)))
+    return out
+
+
+def from_html(rel: str) -> list[Sample]:
+    """The front page is hand-written HTML; its samples count too."""
+    text = (ROOT / rel).read_text(encoding="utf-8")
+    out = []
+    for m in LISTING.finditer(text):
+        caption = (m.group(1) or "text").strip().lower()
+        kind = {"shell": "console", "nether c": "c", "grammar": "ebnf"}.get(caption, caption)
+        body = html.unescape(re.sub(r"<[^>]+>", "", m.group(2)))
+        out.append(Sample(rel, text[: m.start()].count("\n") + 1, kind, body))
+    return out
+
+
+def collect() -> list[Sample]:
+    out: list[Sample] = []
+    for rel in SOURCES:
+        out += from_html(rel) if rel.endswith(".html") else from_markdown(rel)
+    return out
+
+
+# ── execution ───────────────────────────────────────────────────────────────
+
+# What `nether` can answer today. Anything else in a transcript is PINNED, and
+# moves to CHECKED the moment the rite exists.
+RUNNABLE = re.compile(r"^nether\s+(run|--version|-V|--help|-h)\b")
+
+
+def binary() -> Path:
+    exe = ROOT / "target" / "debug" / "nether"
+    if not exe.exists():
+        subprocess.run(
+            ["cargo", "build", "--quiet", "--bin", "nether"], cwd=ROOT, check=True
+        )
+    return exe
+
+
+def parse_transcript(body: str) -> list[tuple[str, str]]:
+    """A transcript is a sequence of `$ command` lines and the output beneath."""
+    pairs, cmd, buf = [], None, []
+    for line in body.split("\n"):
+        m = re.match(r"^\s*\$ (.*)$", line)
+        if m:
+            if cmd is not None:
+                pairs.append((cmd, "\n".join(buf)))
+            cmd, buf = m.group(1), []
+        elif cmd is not None:
+            buf.append(line)
+    if cmd is not None:
+        pairs.append((cmd, "\n".join(buf)))
+    return pairs
+
+
+def matches(expected: str, actual: str) -> bool:
+    """Exact, except that `[...]` elides everything up to the next segment."""
+    segments = [s.strip("\n") for s in expected.split(ELISION)]
+    actual = actual.strip("\n")
+    if len(segments) == 1:
+        return segments[0] == actual
+    first, rest = segments[0], segments[1:]
+    if not actual.startswith(first):
+        return False
+    pos = len(first)
+    for seg in rest:
+        if not seg:
+            continue
+        found = actual.find(seg, pos)
+        if found < 0:
+            return False
+        pos = found + len(seg)
+    return True
+
+
+def check(sample: Sample, exe: Path) -> tuple[bool, str]:
+    for cmd, expected in parse_transcript(sample.body):
+        if not RUNNABLE.match(cmd):
+            continue
+        argv = [str(exe)] + cmd.split()[1:]
+        proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
+        actual = (proc.stdout + proc.stderr).rstrip("\n")
+        if not matches(expected, actual):
+            return False, (
+                f"  $ {cmd}\n"
+                f"  --- documented ---\n{expected}\n"
+                f"  --- actual ---\n{actual}"
+            )
+    return True, ""
+
+
+def is_checkable(sample: Sample) -> bool:
+    return sample.kind == "console" and any(
+        RUNNABLE.match(c) for c, _ in parse_transcript(sample.body)
+    )
+
+
+# ── manifest ────────────────────────────────────────────────────────────────
+
+def manifest_lines(samples: list[Sample]) -> list[str]:
+    rows = ["# ref\tkind\tstatus\tdigest"]
+    for s in samples:
+        rows.append(
+            f"{s.ref}\t{s.kind}\t{'checked' if is_checkable(s) else 'pinned'}\t{s.digest}"
+        )
+    return rows
+
+
+def main() -> int:
+    record = "--record" in sys.argv
+    samples = collect()
+    if not samples:
+        print("transcripts: found no samples at all; the extractor is broken", file=sys.stderr)
+        return 1
+
+    wanted = "\n".join(manifest_lines(samples)) + "\n"
+
+    if record:
+        MANIFEST.write_text(wanted, encoding="utf-8")
+        print(f"transcripts: recorded {len(samples)} sample(s) into MANIFEST.tsv")
+        return 0
+
+    if not MANIFEST.exists():
+        print("transcripts: MANIFEST.tsv is missing; run tests/transcripts/run --record", file=sys.stderr)
+        return 1
+
+    have = MANIFEST.read_text(encoding="utf-8")
+    if have != wanted:
+        print("transcripts: the documentation changed and MANIFEST.tsv did not.\n", file=sys.stderr)
+        old = {l.split("\t")[0]: l for l in have.strip().split("\n")[1:]}
+        new = {l.split("\t")[0]: l for l in wanted.strip().split("\n")[1:]}
+        for ref in sorted(set(old) | set(new)):
+            if old.get(ref) != new.get(ref):
+                print(f"  {'added  ' if ref not in old else 'removed' if ref not in new else 'changed'}  {ref}", file=sys.stderr)
+        print("\n  If the change was intended, re-record it:\n"
+              "    tests/transcripts/run --record\n", file=sys.stderr)
+        return 1
+
+    if shutil.which("cargo") is None:
+        print("transcripts: cargo is not available; cannot execute anything", file=sys.stderr)
+        return 1
+
+    exe = binary()
+    checked = pinned = 0
+    failures = []
+    for s in samples:
+        if is_checkable(s):
+            ok, detail = check(s, exe)
+            checked += 1
+            if not ok:
+                failures.append((s, detail))
+        else:
+            pinned += 1
+
+    for s, detail in failures:
+        print(f"transcripts: {s.ref} does not match the implementation\n{detail}\n", file=sys.stderr)
+
+    total = checked + pinned
+    print(f"transcripts: {total} sample(s) — {checked} executed, {pinned} pinned")
+    if pinned:
+        print(f"             {pinned} describe behaviour that does not exist yet;")
+        print("             each becomes executable the moment its rite does.")
+    if failures:
+        print(f"transcripts: {len(failures)} sample(s) disagree with the implementation", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

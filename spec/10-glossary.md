@@ -12,6 +12,10 @@ Every term used normatively elsewhere, defined once.
 held. 0 at the top level; raised only by `descend`.
 [§2.1](02-calculus.md#21-judgement-form)
 
+**Answer** — what a function returns when the world is entitled to say no:
+either the value, or a refusal. Not an error type; a record of what was said.
+[§5.1.1](05-types.md#511-answers-and-refusals)
+
 **Bury** — to evaluate a program as far as the granted capabilities allow,
 producing a trace. The only form of evaluation in the language.
 [§6.1](06-evaluation.md#61-burial)
@@ -84,6 +88,11 @@ look at it by going back down.
 **Provenance** — the backwards reading of the apply and witness nodes: what
 produced this value, and what produced that. [§7.4](07-ledger.md#74-provenance)
 
+**Refusal** — one of six closed codes — `absent`, `denied`, `malformed`,
+`unreachable`, `exhausted`, `conflict` — and nothing else. The detail lives in
+the witness so that the value stays portable.
+[§5.1.1](05-types.md#511-answers-and-refusals)
+
 **Replay** — re-burying a trace with no capabilities at all, serving every
 answer from the ledger. Produces the same cairn, or reports the first node
 that differs. [§6.7](06-evaluation.md#67-replay)
@@ -105,9 +114,12 @@ is pure regardless of what it names. [§1.5](01-strata.md#15-seal)
 sealable, comparable, not observable.
 [§1.6](01-strata.md#16-shade-and-the-orpheus-rule)
 
-**Starve** — to be unevaluable because of a transitive dependency on a hole,
-or because a prelude function could not answer.
-[§6.4](06-evaluation.md#64-starvation-and-fuel)
+**Starve** — either of two things, deliberately given one name because both
+stop a burial. On a hole: unevaluable *yet*, pending exhumation
+([§6.4](06-evaluation.md#64-starvation-and-fuel)). Otherwise: unevaluable ever
+— `must` on a refusal, an out-of-range index — which is a bug in the program
+and is not catchable
+([§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them)).
 
 **Stratum** — one of the nine depths, each with a grant, a cost and a witness
 obligation. [§1.1](01-strata.md#11-the-lattice)

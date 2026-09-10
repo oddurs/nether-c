@@ -12,50 +12,37 @@ Statuses are the language's own: work is `descending` while it is underway,
 
 ## codex — The Codex
 
-`#·········` 6% · 1 of 18 done · due 2026-10-15
+`##########` 100% · 19 of 19 done · due 2026-10-15
 
-### unmarked
-
-- [ ] [`0083`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0083-the-decay-rule-ci-fails-if-the-trusted-core-grows.md) The Decay Rule: CI fails if the trusted core grows <sup>chore · p1 · 0</sup>
-
-### marked
-
-- [ ] [`0027`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0027-extract-every-spec-code-sample-into-tests-transcripts.md) Extract every spec code sample into tests/transcripts <sup>chore · p0</sup>
-
-### descending
-
-- [ ] [`0011`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0011-spec-the-thesis-and-how-to-read-this.md) Spec: the thesis and how to read this <sup>spec · p0</sup>
-- [ ] [`0012`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0012-spec-the-nine-strata-and-their-laws.md) Spec: the nine strata and their laws <sup>spec · p0</sup>
-- [ ] [`0013`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0013-spec-the-typing-rules-for-depth.md) Spec: the typing rules for depth <sup>spec · p0</sup>
-- [ ] [`0014`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0014-decide-does-look-re-stain-the-scope-or-taint-the-binding.md) Decide: does look re-stain the scope, or taint the binding? <sup>spec · p0</sup>
-- [ ] [`0015`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0015-decide-the-fuel-budget-and-the-opaque-barrier.md) Decide: the fuel budget and the opaque barrier <sup>spec · p0</sup>
-- [ ] [`0016`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0016-decide-is-stratum-8-admissible-at-all.md) Decide: is stratum 8 admissible at all? <sup>spec · p1 · 8</sup>
-- [ ] [`0017`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0017-spec-lexical-structure.md) Spec: lexical structure <sup>spec · p1</sup>
-- [ ] [`0018`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0018-spec-the-grammar.md) Spec: the grammar <sup>spec · p1</sup>
-- [ ] [`0019`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0019-spec-the-type-system-and-data-model.md) Spec: the type system and data model <sup>spec · p1</sup>
-- [ ] [`0020`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0020-spec-burial-demand-holes-and-residualization.md) Spec: burial, demand, holes and residualization <sup>spec · p0</sup>
-- [ ] [`0021`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0021-spec-the-ledger-and-the-artifact-format.md) Spec: the ledger and the artifact format <sup>spec · p0 · 1</sup>
-- [ ] [`0022`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0022-spec-the-six-rites.md) Spec: the six rites <sup>spec · p1</sup>
-- [ ] [`0023`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0023-spec-the-prelude.md) Spec: the prelude <sup>spec · p2</sup>
-- [ ] [`0024`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0024-spec-glossary.md) Spec: glossary <sup>spec · p2</sup>
-- [ ] [`0025`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0025-spec-rationale-and-what-each-inversion-costs.md) Spec: rationale, and what each inversion costs <sup>docs · p2</sup>
+Buried. Twelve specification sections, every design question settled and every rejected alternative recorded in 90.2, every code sample a fixture in tests/transcripts, and the Decay Rule proven by a pull request that was refused. Only one claim in the specification is frozen: there is no run.
 
 ### buried
 
+- [x] [`0011`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0011-spec-the-thesis-and-how-to-read-this.md) Spec: the thesis and how to read this <sup>spec · p0</sup>
+- [x] [`0012`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0012-spec-the-nine-strata-and-their-laws.md) Spec: the nine strata and their laws <sup>spec · p0</sup>
+- [x] [`0013`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0013-spec-the-typing-rules-for-depth.md) Spec: the typing rules for depth <sup>spec · p0</sup>
+- [x] [`0014`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0014-decide-does-look-re-stain-the-scope-or-taint-the-binding.md) Decide: does look re-stain the scope, or taint the binding? <sup>spec · p0</sup>
+- [x] [`0015`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0015-decide-the-fuel-budget-and-the-opaque-barrier.md) Decide: the fuel budget and the opaque barrier <sup>spec · p0</sup>
+- [x] [`0016`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0016-decide-is-stratum-8-admissible-at-all.md) Decide: is stratum 8 admissible at all? <sup>spec · p1 · 8</sup>
+- [x] [`0017`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0017-spec-lexical-structure.md) Spec: lexical structure <sup>spec · p1</sup>
+- [x] [`0018`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0018-spec-the-grammar.md) Spec: the grammar <sup>spec · p1</sup>
+- [x] [`0019`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0019-spec-the-type-system-and-data-model.md) Spec: the type system and data model <sup>spec · p1</sup>
+- [x] [`0020`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0020-spec-burial-demand-holes-and-residualization.md) Spec: burial, demand, holes and residualization <sup>spec · p0</sup>
+- [x] [`0021`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0021-spec-the-ledger-and-the-artifact-format.md) Spec: the ledger and the artifact format <sup>spec · p0 · 1</sup>
+- [x] [`0022`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0022-spec-the-six-rites.md) Spec: the six rites <sup>spec · p1</sup>
+- [x] [`0023`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0023-spec-the-prelude.md) Spec: the prelude <sup>spec · p2</sup>
+- [x] [`0024`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0024-spec-glossary.md) Spec: glossary <sup>spec · p2</sup>
+- [x] [`0025`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0025-spec-rationale-and-what-each-inversion-costs.md) Spec: rationale, and what each inversion costs <sup>docs · p2</sup>
 - [x] [`0026`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0026-spec-style-guide-and-normative-language.md) Spec style guide and normative language <sup>chore · p1</sup>
+- [x] [`0027`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0027-extract-every-spec-code-sample-into-tests-transcripts.md) Extract every spec code sample into tests/transcripts <sup>chore · p0</sup>
+- [x] [`0083`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0083-the-decay-rule-ci-fails-if-the-trusted-core-grows.md) The Decay Rule: CI fails if the trusted core grows <sup>chore · p1 · 0</sup>
+- [x] [`0094`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0094-decide-what-a-prelude-function-does-when-it-cannot-answer.md) Decide: what a prelude function does when it cannot answer <sup>spec · p0</sup>
 
 ## lamp — The Lamp
 
-`#######···` 70% · 7 of 10 done · due 2026-10-31
+`##########` 100% · 10 of 10 done · due 2026-10-31
 
-### marked
-
-- [ ] [`0091`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0091-publish-the-site.md) Publish the site <sup>chore · p1</sup>
-- [ ] [`0092`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0092-accessibility-and-no-javascript-pass.md) Accessibility and no-JavaScript pass <sup>chore · p2</sup>
-
-### descending
-
-- [ ] [`0090`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0090-icon-metadata-and-social-preview.md) Icon, metadata and social preview <sup>chore · p2</sup>
+Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphic drawn by site/gfx.py — a GIF89a encoder, an LZW compressor, a PNG encoder and a 5x7 bitmap font, none of them imported, because a link preview is not worth a dependency. The palette is the VGA sixteen complemented; fourteen land back inside it and the two that do not are named ROT and BILE. Published at https://oddurs.github.io/nether-c/ from site/ as committed. Every colour pair clears WCAG AA on both grounds, enforced by tests/contrast/run in CI.
 
 ### buried
 
@@ -65,6 +52,9 @@ Statuses are the language's own: work is `descending` while it is underway,
 - [x] [`0087`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0087-the-landing-page.md) The landing page <sup>feature · p0</sup>
 - [x] [`0088`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0088-syntax-colouring-for-nether-c.md) Syntax colouring for Nether C <sup>feature · p1</sup>
 - [x] [`0089`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0089-the-lamp-the-temple-s-colours-on-demand.md) The lamp: the temple's colours, on demand <sup>feature · p1</sup>
+- [x] [`0090`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0090-icon-metadata-and-social-preview.md) Icon, metadata and social preview <sup>chore · p2</sup>
+- [x] [`0091`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0091-publish-the-site.md) Publish the site <sup>chore · p1</sup>
+- [x] [`0092`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0092-accessibility-and-no-javascript-pass.md) Accessibility and no-JavaScript pass <sup>chore · p2</sup>
 - [x] [`0093`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0093-fail-the-build-when-the-committed-site-is-stale.md) Fail the build when the committed site is stale <sup>chore · p1</sup>
 
 ## ledger — The Ledger

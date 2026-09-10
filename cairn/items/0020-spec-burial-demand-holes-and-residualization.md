@@ -2,7 +2,7 @@
 id: 20
 title: 'Spec: burial, demand, holes and residualization'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -19,10 +19,10 @@ evaluation, and exactly what the residual program contains.
 
 ## Acceptance criteria
 
-- [ ] Demand-driven evaluation order, stated deterministically
-- [ ] What a hole records: the call, the stratum, the dependency graph, the span
-- [ ] What exhumation does to a trace, and why the result is a new cairn
-- [ ] Replay semantics: what "identical" means, formally
+- [x] Demand-driven evaluation order, stated deterministically
+- [x] What a hole records: the call, the stratum, the dependency graph, the span
+- [x] What exhumation does to a trace, and why the result is a new cairn
+- [x] Replay semantics: what "identical" means, formally
 
 ## 2026-09-10
 
