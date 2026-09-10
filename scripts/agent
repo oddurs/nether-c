@@ -131,12 +131,20 @@ cmd_done() {
 
   dest=$(git rev-parse --show-toplevel)
   say "leaving $dest"
-  cd "$root"
+
+  # Retreat to the primary checkout BEFORE removing the worktree. Removing the
+  # directory the shell is standing in leaves it with no working directory, and
+  # every git command after it fails with "Unable to read current working
+  # directory" -- including the branch delete and the prune, silently.
+  cd "$primary"
   git worktree remove "$dest" --force
   git branch -D "$branch" >/dev/null 2>&1 || true
   git worktree prune
+  rmdir "$(dirname "$dest")" 2>/dev/null || true
   git fetch --prune --quiet origin
-  printf '\nsurfaced. %s is gone; you are in %s\n' "$branch" "$root"
+  git merge --ff-only --quiet "origin/$base" 2>/dev/null || true
+
+  printf '\nsurfaced. %s is gone.\n\n  cd %s\n\n' "$branch" "$primary"
 }
 
 cmd_list() {
