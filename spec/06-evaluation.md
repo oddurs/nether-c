@@ -103,6 +103,10 @@ function whose specialised form would be larger than its general one.
 being a compiler flag, because whether an expression is burned through changes
 the artifact, and anything that changes the artifact belongs in the language.
 
+This is **settled**. The rejected alternative — leaving both the budget and the
+barrier to the command line — is recorded in
+[§90.2](90-rationale.md#902-rejected-alternatives).
+
 ## 6.5 Residue
 
 What survives burial is the **residue**: every node that could not be reduced,

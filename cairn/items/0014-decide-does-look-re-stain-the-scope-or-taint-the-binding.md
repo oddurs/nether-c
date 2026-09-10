@@ -2,7 +2,7 @@
 id: 14
 title: 'Decide: does look re-stain the scope, or taint the binding?'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -38,3 +38,7 @@ Whichever we pick has to survive section 02 fitting on a page.
 ## 2026-09-10
 
 PROPOSED, in spec/01-strata.md 1.6: neither re-stain nor taint. `look` is well-typed only where the ambient depth already reaches the shade's origin — you may only look by going back down. It is a local check, the error names the exact fix, and the myth survives intact. Both rejected forms are recorded in spec/90-rationale.md 90.2. Awaiting confirmation before this is closed.
+
+## 2026-09-10
+
+SETTLED. `look` is well-typed only where the ambient depth already reaches the shade's origin. Local check, not a propagation; the error names both depths and the descend that fixes it. Rejected forms recorded in spec/90-rationale.md 90.2.

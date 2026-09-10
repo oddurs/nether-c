@@ -2,7 +2,7 @@
 id: 15
 title: 'Decide: the fuel budget and the opaque barrier'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -32,3 +32,7 @@ say *do not evaluate through this, even though you could*.
 ## 2026-09-10
 
 PROPOSED, in spec/06-evaluation.md 6.4: a deterministic fuel budget reported in the trace, plus `opaque` as a typing rule rather than a flag — because whether burial evaluates through an expression changes the artifact, and anything that changes the artifact belongs in the language.
+
+## 2026-09-10
+
+SETTLED. Deterministic fuel budget, reported in the trace; `opaque` is a typing rule, not a flag. Rejected alternative (both as command-line concerns) recorded in 90.2 — a trace buried under a different budget is a different trace.
