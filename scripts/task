@@ -18,6 +18,9 @@ case "${1:-}" in
     ;;
   test)
     cargo test --workspace
+    # Every code sample in the documentation is a fixture. Documentation that
+    # lies fails the build.
+    python3 tests/transcripts/run
     ;;
   build)
     cargo build --workspace

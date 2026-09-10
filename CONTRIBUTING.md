@@ -126,6 +126,24 @@ The specification is canonical as Markdown in `spec/`. The site is baked from
 it and committed, so a specification change is not finished until you have run
 `site/bake` and committed the result. CI checks this.
 
+Every code sample in the prose is a test fixture. `tests/transcripts/run`
+extracts all of them, executes the ones `nether` can answer today, and pins the
+rest by hash in `tests/transcripts/MANIFEST.tsv`. Nothing is skipped quietly:
+both counts are printed every run.
+
+If you change a sample, the manifest goes stale and the build fails. Re-record
+it deliberately:
+
+```sh
+tests/transcripts/run --record
+```
+
+A transcript that shows only part of a command's output must say so with a line
+containing `[...]`. Everything before it must match exactly, and everything
+after it must appear in order. An excerpt that does not admit to being one is a
+documentation lie, and the harness was written because two of them had already
+crept in.
+
 Three things the specification asks of a change:
 
 1. **One claim, one place.** If a rule is already stated in another section,

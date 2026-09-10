@@ -2,7 +2,7 @@
 id: 24
 title: 'Spec: glossary'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -20,7 +20,7 @@ places.
 
 ## Acceptance criteria
 
-- [ ] Cross-checked against every other spec file for undefined terms
+- [x] Cross-checked against every other spec file for undefined terms
 
 ## 2026-09-10
 

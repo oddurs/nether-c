@@ -2,7 +2,7 @@
 id: 13
 title: 'Spec: the typing rules for depth'
 type: spec
-status: descending
+status: buried
 milestone: codex
 created: 2026-09-10
 updated: 2026-09-10
@@ -25,10 +25,10 @@ and a lattice nobody can hold in their head will be worked around.
 
 ## Acceptance criteria
 
-- [ ] Judgement form for depth-annotated typing
-- [ ] Rule for application taking max of its parts
-- [ ] Rules for seal (always @0) and shade (opaque lift)
-- [ ] The Orpheus rule for look, whichever form we settle on
+- [x] Judgement form for depth-annotated typing
+- [x] Rule for application taking max of its parts
+- [x] Rules for seal (always @0) and shade (opaque lift)
+- [x] The Orpheus rule for look, whichever form we settle on
 
 ## 2026-09-10
 
