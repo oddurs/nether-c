@@ -31,6 +31,12 @@ case "${1:-}" in
   build)
     cargo build --workspace
     ;;
+  proofs)
+    # The size demonstrations. Not part of `check`: they are evidence for a
+    # roadmap item rather than a gate. `check` still compiles them, so they
+    # cannot rot unnoticed, and cargo test runs the ones that are cheap.
+    cargo test --release -p nether-ledger --test proofs -- --ignored --nocapture
+    ;;
   site)
     # The site is baked from spec/ and committed. No node, no lockfile,
     # nothing to install.
@@ -62,7 +68,7 @@ case "${1:-}" in
     if command -v cairn >/dev/null 2>&1; then cairn check; fi
     ;;
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|site|site:check|gfx|gfx:check|decay|check}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|site|site:check|gfx|gfx:check|decay|check}" >&2
     exit 2
     ;;
 esac
