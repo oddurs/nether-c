@@ -165,6 +165,27 @@ stopped burial. The cost is a check at every world-touching call site, which is
 the bargain C has always offered and which this language is in no position to
 improve on.
 
+### Normalising text in the ledger
+
+An earlier draft had the ledger encode `Str` over its NFC form, so that two
+spellings of one string could not produce two cairns. It was removed while
+freezing [§7.1](07-ledger.md#71-canonical-encoding), for two reasons.
+
+The first is a matter of what a content-addressed store is for. If the store
+normalises, then `cairn(s)` is not the name of `s`; it is the name of something
+the store decided `s` ought to be. A program that writes a decomposed string
+and reads back a composed one has been lied to by the one component whose
+entire job is not lying about bytes.
+
+The second is that normalisation belongs where the ambiguity is actually a
+problem: identifiers. Two spellings of a variable name must resolve to one
+binding, and [§3.3](03-lexical.md#33-identifiers) makes the lexer responsible
+for that. Nothing below the lexer needs an opinion.
+
+It also removes a dependency — full NFC is a megabyte of Unicode tables — but
+that is a consequence of the decision, not the reason for it. Had the argument
+gone the other way, the tables would have been the right thing to add.
+
 ### Writing our own cryptography
 
 The repository has no third-party dependencies. Not in Rust, not in the site,

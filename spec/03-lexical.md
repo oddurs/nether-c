@@ -38,9 +38,15 @@ identifier := XID_Start XID_Continue*
 ```
 
 Identifiers are compared by exact code-point sequence after NFC
-normalisation. An implementation MUST normalise before comparison and MUST
-store the normalised form in the ledger, so that two spellings of the same
-name cannot produce two different cairns.
+normalisation, and an implementation MUST normalise an identifier before
+comparing or recording it, so that two spellings of one name cannot resolve to
+two different bindings.
+
+Normalisation happens **here**, in the lexer, and nowhere below it. The ledger
+stores the bytes it is handed and does not alter them
+([§7.1](07-ledger.md#71-canonical-encoding) rule 6): a `Str` that a program
+constructs from arbitrary input is that program's business, and a store that
+quietly rewrites it would be addressing something the caller never wrote.
 
 ## 3.4 Keywords
 
