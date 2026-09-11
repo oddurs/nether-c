@@ -9,8 +9,9 @@
 //! `spec/07-ledger.md` §7.6, which also admits that this is a real cost.
 
 use std::fs;
-use std::io;
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::cairn::Cairn;
 use crate::codec::{DecodeError, Stored, decode_stored};
@@ -151,29 +152,60 @@ impl Store {
         Ok(cairn)
     }
 
+    /// A path nothing else will choose.
+    ///
+    /// The process id alone is not enough: two threads in one process writing
+    /// the same object picked the same path, both wrote it, the first renamed
+    /// it away, and the second's rename failed with ENOENT. The counter makes
+    /// it per write rather than per process.
+    fn temp_path(&self, hint: &str) -> PathBuf {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        self.root.join("tmp").join(format!("{hint}.{}.{n}", std::process::id()))
+    }
+
     fn write_atomically(&self, path: &Path, bytes: &[u8], hint: &str) -> io::Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        // Unique per writer, so two processes storing the same object do not
-        // share a partial file.
-        let temp = self.root.join("tmp").join(format!("{hint}.{}", std::process::id()));
-        fs::write(&temp, bytes)?;
-        fs::rename(&temp, path)
+        // `open` creates this, but a handle outlives the directory if an
+        // operator or a tmp reaper clears it, and every write after that
+        // failed with ENOENT.
+        let tmp_dir = self.root.join("tmp");
+        fs::create_dir_all(&tmp_dir)?;
+
+        let temp = self.temp_path(hint);
+        if let Err(e) = fs::write(&temp, bytes) {
+            let _ = fs::remove_file(&temp);
+            return Err(e);
+        }
+        if let Err(e) = fs::rename(&temp, path) {
+            // Do not leave a partial behind for a reaper to puzzle over.
+            let _ = fs::remove_file(&temp);
+            return Err(e);
+        }
+        Ok(())
     }
 
+    /// Records that `referrer` names `target`.
+    ///
+    /// An append of one record, not a read-modify-write. Two writers adding an
+    /// edge to the same target used to each read the old file and write their
+    /// own one-entry result, so whichever renamed last erased the other's edge
+    /// permanently — and nothing repaired it, because `put` early-returns on an
+    /// object it already has and never reaches this code again. That is exactly
+    /// the silent incompleteness the ordering in `put` is meant to avoid.
+    ///
+    /// Appending means a duplicate is possible where a read-modify-write would
+    /// have collapsed it. `referrers` deduplicates on the way out, which is the
+    /// cheap half of the trade.
     fn add_ref(&self, target: Cairn, referrer: Cairn) -> io::Result<()> {
         let path = self.fanned("refs", target);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let mut existing = fs::read(&path).unwrap_or_default();
-        if existing.chunks_exact(32).any(|c| c == referrer.as_bytes()) {
-            return Ok(());
-        }
-        existing.extend_from_slice(referrer.as_bytes());
-        let hint = format!("ref.{target}");
-        self.write_atomically(&path, &existing, &hint)
+        let mut file = fs::OpenOptions::new().create(true).append(true).open(&path)?;
+        file.write_all(referrer.as_bytes())
     }
 
     /// Reads back what that name holds.
@@ -220,10 +252,13 @@ impl Store {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(e) => return Err(e),
         };
+        let mut seen = std::collections::HashSet::new();
         Ok(bytes
             .chunks_exact(32)
             .filter_map(|c| <[u8; 32]>::try_from(c).ok())
             .map(Cairn::from_bytes)
+            // Appending admits duplicates; collapse them here.
+            .filter(|c| seen.insert(*c))
             // An edge written just before a crash can outlive its object.
             .filter(|c| self.has(*c))
             .collect())
@@ -444,6 +479,86 @@ mod tests {
 
         assert_eq!(store.referrers(arg).unwrap(), vec![cairn]);
         assert_eq!(store.referrers(source).unwrap(), vec![cairn]);
+    }
+
+    // ── concurrency ─────────────────────────────────────────────────────────
+    //
+    // Spec 7.5: two burials that compute the same value write the same bytes to
+    // the same place and need no coordination beyond each write being atomic.
+    // Both of these failed before review found them.
+
+    /// Sixteen writers, one shared target. Every edge must survive.
+    #[test]
+    fn concurrent_writers_do_not_lose_reverse_edges() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let target = store.put(&value(0)).unwrap();
+
+        let mut expected = Vec::new();
+        let handles: Vec<_> = (0..16)
+            .map(|i| {
+                let store = store.clone();
+                let node = Stored::Node(Node::Apply {
+                    function: Cairn::of_encoded(format!("f{i}").as_bytes()),
+                    args: vec![target],
+                    result: Cairn::of_encoded(b"r"),
+                });
+                expected.push(node.cairn());
+                std::thread::spawn(move || store.put(&node).expect("a concurrent put failed"))
+            })
+            .collect();
+
+        for handle in handles {
+            handle.join().expect("a writer panicked");
+        }
+
+        let found = store.referrers(target).unwrap();
+        for cairn in &expected {
+            assert!(found.contains(cairn), "edge from {cairn:?} was lost");
+        }
+        assert_eq!(found.len(), expected.len(), "duplicate edges survived");
+    }
+
+    /// Sixteen writers, all storing the identical object.
+    #[test]
+    fn concurrent_writers_of_one_object_all_succeed() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let handles: Vec<_> = (0..16)
+            .map(|_| {
+                let store = store.clone();
+                std::thread::spawn(move || store.put(&value(99)).expect("a concurrent put failed"))
+            })
+            .collect();
+
+        let names: Vec<Cairn> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert!(names.windows(2).all(|w| w[0] == w[1]), "one object, one name");
+        assert_eq!(store.get(names[0]).unwrap(), value(99));
+    }
+
+    /// A handle outlives the directory when something clears `/tmp`.
+    #[test]
+    fn a_cleared_tmp_directory_does_not_break_the_handle() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        store.put(&value(1)).unwrap();
+
+        std::fs::remove_dir_all(scratch.0.join("tmp")).unwrap();
+
+        let cairn = store.put(&value(2)).expect("put failed after tmp was cleared");
+        assert_eq!(store.get(cairn).unwrap(), value(2));
+    }
+
+    /// Nothing is left in `tmp` once a write has landed.
+    #[test]
+    fn writes_do_not_litter() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        for n in 0..8 {
+            store.put(&node_pointing_at(store.put(&value(n)).unwrap())).unwrap();
+        }
+        let left: Vec<_> = std::fs::read_dir(scratch.0.join("tmp")).unwrap().collect();
+        assert!(left.is_empty(), "{} files left in tmp", left.len());
     }
 
     // ── resolving a short cairn ─────────────────────────────────────────────
