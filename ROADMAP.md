@@ -154,6 +154,19 @@ Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphi
 - [ ] [`0077`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0077-the-playground-editor.md) The playground editor <sup>feature · p1 · 0</sup>
 - [ ] [`0078`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0078-proof-a-stranger-explains-a-hole.md) Proof: a stranger explains a hole <sup>chore · p0</sup>
 
+## futamura — Self-Burial
+
+`··········` 0% · 0 of 4 done · due 2027-09-01
+
+Given a due date so the roadmap orders correctly against After the Burial. It is a target on a roadmap, not a promise: the third projection is the one claim here that might turn out to be false, and if it does it closes as unrecorded, in public.
+
+### unmarked
+
+- [ ] [`0079`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0079-the-interpreter-in-nether-c.md) The interpreter, in Nether C <sup>feature · p1 · 0</sup>
+- [ ] [`0080`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0080-the-first-projection.md) The first projection <sup>feature · p1 · 0</sup>
+- [ ] [`0081`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0081-the-second-projection.md) The second projection <sup>feature · p2 · 0</sup>
+- [ ] [`0082`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0082-the-third-projection.md) The third projection <sup>feature · p2 · 0</sup>
+
 ## after — After the Burial
 
 `··········` 0% · 0 of 7 done · due 2027-10-01
@@ -167,15 +180,4 @@ Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphi
 - [ ] [`0105`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0105-a-conformance-suite-for-a-second-implementation.md) A conformance suite for a second implementation <sup>chore · p1 · 0</sup>
 - [ ] [`0106`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0106-a-public-store-and-what-it-costs-to-run.md) A public store, and what it costs to run <sup>chore · p2 · 6</sup>
 - [ ] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
-
-## futamura — Self-Burial
-
-`··········` 0% · 0 of 4 done
-
-### unmarked
-
-- [ ] [`0079`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0079-the-interpreter-in-nether-c.md) The interpreter, in Nether C <sup>feature · p1 · 0</sup>
-- [ ] [`0080`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0080-the-first-projection.md) The first projection <sup>feature · p1 · 0</sup>
-- [ ] [`0081`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0081-the-second-projection.md) The second projection <sup>feature · p2 · 0</sup>
-- [ ] [`0082`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0082-the-third-projection.md) The third projection <sup>feature · p2 · 0</sup>
 
