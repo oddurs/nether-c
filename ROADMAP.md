@@ -69,12 +69,10 @@ Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphi
 
 ## ledger — The Ledger
 
-`###·······` 22% · 2 of 9 done · due 2026-11-30
+`#####·····` 44% · 4 of 9 done · due 2026-11-30
 
 ### unmarked
 
-- [ ] [`0039`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0039-nether-ledger-the-cairn-type.md) nether-ledger: the Cairn type <sup>feature · p0 · 0</sup>
-- [ ] [`0040`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0040-canonical-encoder-and-decoder.md) Canonical encoder and decoder <sup>feature · p0 · 0</sup>
 - [ ] [`0041`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0041-the-node-model.md) The node model <sup>feature · p0 · 0</sup>
 - [ ] [`0042`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0042-the-store-layout-index-and-garbage.md) The store: layout, index, and garbage <sup>feature · p1 · 4</sup>
 - [ ] [`0043`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0043-round-trip-one-million-nodes.md) Round-trip one million nodes <sup>chore · p0 · 4</sup>
@@ -84,6 +82,8 @@ Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphi
 ### buried
 
 - [x] [`0038`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0038-freeze-the-canonical-encoding.md) Freeze the canonical encoding <sup>chore · p0 · 1</sup>
+- [x] [`0039`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0039-nether-ledger-the-cairn-type.md) nether-ledger: the Cairn type <sup>feature · p0 · 0</sup>
+- [x] [`0040`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0040-canonical-encoder-and-decoder.md) Canonical encoder and decoder <sup>feature · p0 · 0</sup>
 - [x] [`0095`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0095-decide-may-the-workspace-take-a-dependency-on-blake3.md) Decide: may the workspace take a dependency on blake3? <sup>spec · p0</sup>
 
 ## calculus — The Core Calculus

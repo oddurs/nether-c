@@ -21,10 +21,17 @@ cd "$root"
 source_dir=${1:-crates}
 ceiling_file=${2:-.decay-ceiling}
 
-count=$(find "$source_dir" -name '*.rs' -not -path '*/target/*' -print0 2>/dev/null \
-  | xargs -0 cat 2>/dev/null \
-  | grep -cvE '^[[:space:]]*(//.*)?$' || true)
-count=${count:-0}
+# What counts is the trusted core: the code every guarantee rests on. Tests are
+# not that. They are what makes it trustworthy, and a rule that makes you
+# delete tests in order to add a feature is pointing the wrong way.
+#
+# By convention a file's tests live in a trailing `#[cfg(test)] mod tests`, so
+# everything from the first such marker to the end of the file is excluded.
+count=0
+for file in $(find "$source_dir" -name '*.rs' -not -path '*/target/*' 2>/dev/null); do
+  n=$(sed '/#\[cfg(test)\]/,$d' "$file" | grep -cvE '^[[:space:]]*(//.*)?$' || true)
+  count=$((count + ${n:-0}))
+done
 
 if [ ! -f "$ceiling_file" ]; then
   echo "$count" > "$ceiling_file"

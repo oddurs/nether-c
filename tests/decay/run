@@ -24,7 +24,21 @@ BODY = """\
 fn one() {}
 
 fn two() {}
-"""  # three counted lines: two fn lines and one blank-stripped... see below
+"""
+
+# Tests are not the trusted core. Everything from the first `#[cfg(test)]` to
+# the end of the file is excluded, so adding tests must not move the number.
+TESTS = """\
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a() {}
+    #[test]
+    fn b() {}
+    #[test]
+    fn c() {}
+}
+"""
 
 
 def run(source: Path, ceiling: Path) -> subprocess.CompletedProcess[str]:
@@ -74,6 +88,11 @@ def main() -> int:
         expect("and says how far over", "the trusted core grew" in r.stderr, r.stderr)
         expect("and offers both remedies",
                "take 1 lines back" in r.stderr and "raise the ceiling" in r.stderr, r.stderr)
+
+        (src / "lib.rs").write_text(BODY + TESTS, encoding="utf-8")
+        r = run(src, at)
+        expect("adding tests does not grow the core", r.returncode == 0, r.stderr)
+        (src / "lib.rs").write_text(BODY, encoding="utf-8")
 
         high = tmp / "high"
         high.write_text(f"{actual + 10}\n")

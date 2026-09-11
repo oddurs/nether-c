@@ -1,0 +1,16 @@
+[package]
+name = "nether-ledger"
+description = "The ledger: canonical encoding, cairns, and the content-addressed store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The one permitted dependency. See spec/90-rationale.md: write your own
+# encoders, parsers, renderers and formats; do not write your own cryptography.
+blake3 = { version = "1.8", default-features = false }
+
+[lints]
+workspace = true
