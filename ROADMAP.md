@@ -69,11 +69,9 @@ Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphi
 
 ## ledger — The Ledger
 
-`#########·` 89% · 8 of 9 done · due 2026-11-30
+`##########` 100% · 9 of 9 done · due 2026-11-30
 
-### unmarked
-
-- [ ] [`0045`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0045-fuzz-the-decoder.md) Fuzz the decoder <sup>chore · p1 · 0</sup>
+Buried. Canonical encoding frozen and complete, cairns under a versioned domain separator, six node kinds, a content-addressed store with a reverse index, and both proofs measured: a million nodes round-trip byte-identical at 3.1M nodes/sec, and a one-source edit over 8,192 sources reuses 99.93% of 40,958 nodes.
 
 ### buried
 
@@ -84,6 +82,7 @@ Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphi
 - [x] [`0042`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0042-the-store-layout-index-and-garbage.md) The store: layout, index, and garbage <sup>feature · p1 · 4</sup>
 - [x] [`0043`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0043-round-trip-one-million-nodes.md) Round-trip one million nodes <sup>chore · p0 · 4</sup>
 - [x] [`0044`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0044-measure-dedup-on-two-near-identical-traces.md) Measure dedup on two near-identical traces <sup>chore · p0</sup>
+- [x] [`0045`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0045-fuzz-the-decoder.md) Fuzz the decoder <sup>chore · p1 · 0</sup>
 - [x] [`0095`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0095-decide-may-the-workspace-take-a-dependency-on-blake3.md) Decide: may the workspace take a dependency on blake3? <sup>spec · p0</sup>
 
 ## calculus — The Core Calculus
@@ -169,7 +168,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## after — After the Burial
 
-`··········` 0% · 0 of 7 done · due 2027-10-01
+`··········` 0% · 0 of 8 done · due 2027-10-01
 
 ### unmarked
 
@@ -180,4 +179,5 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [ ] [`0105`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0105-a-conformance-suite-for-a-second-implementation.md) A conformance suite for a second implementation <sup>chore · p1 · 0</sup>
 - [ ] [`0106`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0106-a-public-store-and-what-it-costs-to-run.md) A public store, and what it costs to run <sup>chore · p2 · 6</sup>
 - [ ] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
+- [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
 

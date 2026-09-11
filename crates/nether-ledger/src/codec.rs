@@ -330,8 +330,12 @@ impl Reader<'_> {
     fn cairns(&mut self) -> Result<Vec<Cairn>, DecodeError> {
         let count = self.len()?;
         // 32 bytes each: refuse to reserve for a count the input cannot carry.
-        if count.saturating_mul(32) > self.remaining() {
-            return Err(DecodeError::Truncated { needed: count * 32, had: self.remaining() });
+        // Saturating in the error too, not only in the guard — a count near
+        // usize::MAX passes the guard and then overflows building the message,
+        // which is a panic on the hostile path this check exists to close.
+        let needed = count.saturating_mul(32);
+        if needed > self.remaining() {
+            return Err(DecodeError::Truncated { needed, had: self.remaining() });
         }
         let mut out = Vec::with_capacity(count);
         for _ in 0..count {
@@ -792,6 +796,22 @@ mod node_tests {
         let mut bytes = vec![tag::NODE, kind::TRACE];
         bytes.extend_from_slice(&u64::from(u32::MAX).to_be_bytes());
         assert!(matches!(decode_node(&bytes), Err(DecodeError::Truncated { .. })));
+    }
+
+    /// Found by `tests/fuzz.rs`. The guard on a cairn count saturated, and the
+    /// error message built alongside it did not, so a count near `usize::MAX`
+    /// passed the check and then panicked constructing the complaint about it.
+    /// Pinned here because a fuzzer finding it again is luck, not coverage.
+    #[test]
+    fn a_huge_cairn_count_does_not_overflow_its_own_error() {
+        for kind_byte in [kind::APPLY, kind::TRACE] {
+            let mut bytes = vec![tag::NODE, kind_byte];
+            if kind_byte == kind::APPLY {
+                bytes.extend_from_slice(c(b"f").as_bytes());
+            }
+            bytes.extend_from_slice(&u64::MAX.to_be_bytes());
+            assert!(matches!(decode_node(&bytes), Err(DecodeError::Truncated { .. })));
+        }
     }
 
     #[test]
