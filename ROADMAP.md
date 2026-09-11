@@ -69,7 +69,7 @@ Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphi
 
 ## ledger — The Ledger
 
-`##########` 100% · 9 of 9 done · due 2026-11-30
+`##########` 100% · 15 of 15 done · due 2026-11-30
 
 Buried. Canonical encoding frozen and complete, cairns under a versioned domain separator, six node kinds, a content-addressed store with a reverse index, and both proofs measured: a million nodes round-trip byte-identical at 3.1M nodes/sec, and a one-source edit over 8,192 sources reuses 99.93% of 40,958 nodes.
 
@@ -84,10 +84,16 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0044`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0044-measure-dedup-on-two-near-identical-traces.md) Measure dedup on two near-identical traces <sup>chore · p0</sup>
 - [x] [`0045`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0045-fuzz-the-decoder.md) Fuzz the decoder <sup>chore · p1 · 0</sup>
 - [x] [`0095`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0095-decide-may-the-workspace-take-a-dependency-on-blake3.md) Decide: may the workspace take a dependency on blake3? <sup>spec · p0</sup>
+- [x] [`0109`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0109-cairn-from-str-panics-on-64-byte-non-ascii-input.md) Cairn::from_str panics on 64-byte non-ASCII input <sup>bug · p0</sup>
+- [x] [`0110`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0110-struct-and-array-counts-are-believed-without-checking-the-input.md) Struct and array counts are believed without checking the input <sup>bug · p1</sup>
+- [x] [`0111`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0111-concurrent-puts-in-one-process-fail-with-enoent.md) Concurrent puts in one process fail with ENOENT <sup>bug · p0</sup>
+- [x] [`0112`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0112-concurrent-puts-silently-lose-reverse-edges.md) Concurrent puts silently lose reverse edges <sup>bug · p0</sup>
+- [x] [`0113`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0113-a-cleared-tmp-directory-breaks-an-open-store-handle.md) A cleared tmp directory breaks an open Store handle <sup>bug · p2</sup>
+- [x] [`0114`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0114-put-writes-objects-that-get-can-never-read-back.md) put writes objects that get can never read back <sup>bug · p0</sup>
 
 ## calculus — The Core Calculus
 
-`··········` 0% · 0 of 8 done · due 2027-01-15
+`··········` 0% · 0 of 9 done · due 2027-01-15
 
 ### unmarked
 
@@ -99,6 +105,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0051`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0051-seal-shade-and-look.md) seal, shade and look <sup>feature · p0 · 0</sup>
 - [ ] [`0052`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0052-property-test-depth-is-monotone.md) Property test: depth is monotone <sup>chore · p1 · 0</sup>
 - [ ] [`0053`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0053-proof-one-read-one-hole.md) Proof: one read, one hole <sup>chore · p0 · 3</sup>
+- [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
 
 ## surface — The Surface
 
