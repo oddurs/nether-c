@@ -327,16 +327,22 @@ impl Reader<'_> {
         core::str::from_utf8(raw).map(ToOwned::to_owned).map_err(|_| DecodeError::NotUtf8)
     }
 
-    fn cairns(&mut self) -> Result<Vec<Cairn>, DecodeError> {
-        let count = self.len()?;
-        // 32 bytes each: refuse to reserve for a count the input cannot carry.
-        // Saturating in the error too, not only in the guard — a count near
-        // usize::MAX passes the guard and then overflows building the message,
-        // which is a panic on the hostile path this check exists to close.
-        let needed = count.saturating_mul(32);
+    /// A count is only believable if the input could carry that many things.
+    ///
+    /// Every element costs at least one byte, so a count past the bytes
+    /// remaining is a lie, and believing it means reserving for it. Spec
+    /// §7.1.1 requires rejecting a count that exceeds the bytes remaining.
+    fn believable(&self, count: usize, each: usize) -> Result<(), DecodeError> {
+        let needed = count.saturating_mul(each);
         if needed > self.remaining() {
             return Err(DecodeError::Truncated { needed, had: self.remaining() });
         }
+        Ok(())
+    }
+
+    fn cairns(&mut self) -> Result<Vec<Cairn>, DecodeError> {
+        let count = self.len()?;
+        self.believable(count, 32)?;
         let mut out = Vec::with_capacity(count);
         for _ in 0..count {
             out.push(self.cairn()?);
@@ -441,7 +447,8 @@ impl Reader<'_> {
                     return Err(DecodeError::EmptyStructName);
                 }
                 let count = self.len()?;
-                let mut fields = Vec::new();
+                self.believable(count, 1)?;
+                let mut fields = Vec::with_capacity(count);
                 for _ in 0..count {
                     fields.push(self.value(depth + 1)?);
                 }
@@ -449,7 +456,8 @@ impl Reader<'_> {
             }
             tag::ARRAY => {
                 let count = self.len()?;
-                let mut items = Vec::new();
+                self.believable(count, 1)?;
+                let mut items = Vec::with_capacity(count);
                 for _ in 0..count {
                     items.push(self.value(depth + 1)?);
                 }
@@ -597,6 +605,26 @@ mod tests {
         bytes.extend_from_slice(&16u64.to_be_bytes());
         bytes.extend_from_slice(&[1, 2, 3]);
         assert_eq!(decode(&bytes), Err(DecodeError::Truncated { needed: 16, had: 3 }));
+    }
+
+    /// Found by review. `cairns()` guarded its count; structs and arrays did
+    /// not, and a `Value` is larger than a cairn, so the amplification was
+    /// worse. Eight megabytes of input reserved 396 MB before erroring.
+    #[test]
+    fn rejects_counts_larger_than_the_input_could_carry() {
+        for tag_byte in [tag::ARRAY, tag::STRUCT] {
+            let mut bytes = vec![tag_byte];
+            if tag_byte == tag::STRUCT {
+                bytes.extend_from_slice(&1u64.to_be_bytes());
+                bytes.push(b'S');
+            }
+            bytes.extend_from_slice(&u64::MAX.to_be_bytes());
+            bytes.extend_from_slice(&[tag::UNIT; 8]);
+            assert!(
+                matches!(decode(&bytes), Err(DecodeError::Truncated { .. })),
+                "tag {tag_byte:#04x} believed a count of u64::MAX"
+            );
+        }
     }
 
     #[test]

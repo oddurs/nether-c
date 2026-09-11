@@ -140,6 +140,48 @@ fn run(seed: u64, rounds: usize) -> (usize, usize) {
     (rounds, accepted)
 }
 
+/// The other public entry point for untrusted input.
+///
+/// The decoder was fuzzed and `Cairn::from_str` was not, which is how a
+/// boundary panic in it survived to be found by review instead. Anything that
+/// takes bytes from a stranger belongs here.
+#[test]
+fn parsing_a_cairn_never_panics() {
+    let mut rng = Rng(0x0BAD_CA17_0000_0001);
+    let good = Cairn::of_encoded(b"seed").to_string();
+
+    for i in 0..200_000 {
+        let text: String = match i % 4 {
+            // Arbitrary bytes that happen to be UTF-8.
+            0 => (0..rng.below(80)).map(|_| char::from(rng.byte())).collect(),
+            // Arbitrary characters, so multi-byte ones turn up on every offset.
+            1 => (0..rng.below(40))
+                .map(|_| char::from_u32((rng.next() % 0x1_0000) as u32).unwrap_or('?'))
+                .collect(),
+            // A real cairn with one character replaced by a multi-byte one.
+            2 => {
+                let mut chars: Vec<char> = good.chars().collect();
+                let at = rng.below(chars.len());
+                chars[at] = ['€', 'é', '💀', 'ß'][rng.below(4)];
+                chars.into_iter().collect()
+            }
+            // A real cairn with one byte corrupted.
+            _ => {
+                let mut raw = good.clone().into_bytes();
+                let at = rng.below(raw.len());
+                raw[at] = rng.byte();
+                String::from_utf8(raw).unwrap_or_else(|_| good.clone())
+            }
+        };
+
+        // The only requirement: an answer or a refusal, never a crash.
+        if let Ok(cairn) = text.parse::<Cairn>() {
+            assert_eq!(cairn.to_string(), text, "accepted a spelling it does not produce");
+        }
+    }
+    println!("\n  0045  200000 candidate cairns parsed, no panics\n");
+}
+
 /// Every input in the corpus survives being handed back unmutated.
 #[test]
 fn the_corpus_is_canonical() {

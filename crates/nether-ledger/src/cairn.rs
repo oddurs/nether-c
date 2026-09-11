@@ -90,6 +90,15 @@ impl fmt::Display for ParseCairnError {
 
 impl core::error::Error for ParseCairnError {}
 
+/// One lowercase hexadecimal digit, or a refusal.
+fn nibble(c: u8) -> Result<u8, ParseCairnError> {
+    match c {
+        b'0'..=b'9' => Ok(c - b'0'),
+        b'a'..=b'f' => Ok(c - b'a' + 10),
+        _ => Err(ParseCairnError::NotLowercaseHex),
+    }
+}
+
 impl FromStr for Cairn {
     type Err = ParseCairnError;
 
@@ -103,16 +112,17 @@ impl FromStr for Cairn {
     /// [`ParseCairnError`] when the length is wrong or a character is not
     /// lowercase hexadecimal.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() != 64 {
-            return Err(ParseCairnError::WrongLength(s.len()));
+        // Bytes throughout. `str::len` is a byte count, so slicing by `i * 2`
+        // after a length check on it is only sound while every character is
+        // one byte, and a 64-byte string containing a multi-byte character
+        // used to panic on a boundary instead of being rejected.
+        let raw = s.as_bytes();
+        if raw.len() != 64 {
+            return Err(ParseCairnError::WrongLength(raw.len()));
         }
         let mut out = [0u8; 32];
         for (i, byte) in out.iter_mut().enumerate() {
-            let pair = &s[i * 2..i * 2 + 2];
-            if pair.bytes().any(|c| !matches!(c, b'0'..=b'9' | b'a'..=b'f')) {
-                return Err(ParseCairnError::NotLowercaseHex);
-            }
-            *byte = u8::from_str_radix(pair, 16).map_err(|_| ParseCairnError::NotLowercaseHex)?;
+            *byte = (nibble(raw[i * 2])? << 4) | nibble(raw[i * 2 + 1])?;
         }
         Ok(Self(out))
     }
@@ -156,6 +166,35 @@ mod tests {
         let cairn = Cairn::of_encoded(b"anything");
         assert_eq!(cairn.short().len(), SHORT_LEN);
         assert!(cairn.to_string().starts_with(&cairn.short()));
+    }
+
+    /// Found by review. `str::len` is a byte count and the loop sliced by byte
+    /// index, so a 64-byte string with a multi-byte character panicked on a
+    /// boundary rather than being refused. `FromStr` is how every rite takes a
+    /// cairn from a user, and SECURITY.md puts panics on untrusted input in
+    /// scope.
+    #[test]
+    fn a_64_byte_string_that_is_not_64_characters_is_refused() {
+        for s in ["\u{20ac}".to_owned() + &"a".repeat(61), "é".repeat(32), "\u{1f480}".repeat(16)]
+        {
+            assert_eq!(s.len(), 64, "the probe itself must be 64 bytes");
+            assert_eq!(s.parse::<Cairn>(), Err(ParseCairnError::NotLowercaseHex));
+        }
+    }
+
+    #[test]
+    fn every_byte_outside_lowercase_hex_is_refused() {
+        let good = Cairn::of_encoded(b"x").to_string();
+        for bad in [b'g', b'G', b'A', b'/', b':', b'@', 0x00, 0x7f] {
+            let mut raw = good.clone().into_bytes();
+            raw[7] = bad;
+            let s = String::from_utf8(raw).unwrap();
+            assert_eq!(
+                s.parse::<Cairn>(),
+                Err(ParseCairnError::NotLowercaseHex),
+                "accepted {bad:#04x}"
+            );
+        }
     }
 
     #[test]
