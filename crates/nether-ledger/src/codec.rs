@@ -8,6 +8,7 @@
 use core::fmt;
 
 use crate::cairn::Cairn;
+use crate::node::{Call, Node, Span, kind};
 use crate::value::{MAX_STRATUM, Value, tag};
 
 /// How deeply values may nest before a decoder gives up.
@@ -70,6 +71,66 @@ fn put_len(out: &mut Vec<u8>, n: usize) {
     out.extend_from_slice(&(n as u64).to_be_bytes());
 }
 
+// ── nodes ───────────────────────────────────────────────────────────────────
+
+impl Node {
+    /// The canonical encoding of this node.
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = vec![tag::NODE, self.kind()];
+        match self {
+            Self::Literal(value) => value.encode_into(&mut out),
+            Self::Apply { function, args, result } => {
+                out.extend_from_slice(function.as_bytes());
+                put_cairns(&mut out, args);
+                out.extend_from_slice(result.as_bytes());
+            }
+            Self::Hole { call, stratum, span, depends } => {
+                put_call(&mut out, call);
+                out.push(*stratum);
+                put_span(&mut out, span);
+                put_cairns(&mut out, depends);
+            }
+            Self::Deposit { value, span } => {
+                out.extend_from_slice(value.as_bytes());
+                put_span(&mut out, span);
+            }
+            Self::Witness { stratum, call, answer, span } => {
+                out.push(*stratum);
+                put_call(&mut out, call);
+                out.extend_from_slice(answer.as_bytes());
+                put_span(&mut out, span);
+            }
+            Self::Trace { roots, fuel_spent, depth, unrecorded } => {
+                put_cairns(&mut out, roots);
+                out.extend_from_slice(&fuel_spent.to_be_bytes());
+                out.push(*depth);
+                out.push(u8::from(*unrecorded));
+            }
+        }
+        out
+    }
+}
+
+fn put_cairns(out: &mut Vec<u8>, cairns: &[Cairn]) {
+    put_len(out, cairns.len());
+    for cairn in cairns {
+        out.extend_from_slice(cairn.as_bytes());
+    }
+}
+
+fn put_span(out: &mut Vec<u8>, span: &Span) {
+    out.extend_from_slice(span.source.as_bytes());
+    out.extend_from_slice(&span.start.to_be_bytes());
+    out.extend_from_slice(&span.end.to_be_bytes());
+}
+
+fn put_call(out: &mut Vec<u8>, call: &Call) {
+    put_len(out, call.function.len());
+    out.extend_from_slice(call.function.as_bytes());
+    put_cairns(out, &call.args);
+}
+
 // ── decoding ────────────────────────────────────────────────────────────────
 
 /// Why a byte string was not the canonical encoding of anything.
@@ -79,14 +140,10 @@ fn put_len(out: &mut Vec<u8>, n: usize) {
 pub enum DecodeError {
     /// A tag byte that is not in the table.
     UnknownTag(u8),
-    /// A tag the format defines but this build cannot yet read.
-    Unsupported(u8),
     /// A `Bool` payload other than `0x00` or `0x01`.
     BadBool(u8),
     /// A `Str` or struct name that was not well-formed UTF-8.
     NotUtf8,
-    /// A shade claiming to come from below stratum 8.
-    StratumTooDeep(u8),
     /// A struct with no name. A nominal type without a name is not one.
     EmptyStructName,
     /// A length or count ran past the end of the input.
@@ -102,16 +159,35 @@ pub enum DecodeError {
     TrailingBytes(usize),
     /// Nesting beyond [`MAX_DEPTH`].
     TooDeep,
+    /// A node kind byte that is not in the table.
+    UnknownKind(u8),
+    /// A stratum or depth below the bottom of the lattice.
+    ///
+    /// Shades carry an origin, holes and witnesses carry the stratum they
+    /// reached, and traces carry the deepest they got. All four are the same
+    /// claim about the same lattice, so they are rejected the same way.
+    NoSuchStratum(u8),
+    /// A stratum-8 mark other than `0x00` or `0x01`.
+    BadMark(u8),
+    /// A call with no function name.
+    EmptyCallName,
+    /// A span that ends before it starts.
+    BackwardsSpan {
+        /// Where it claimed to start.
+        start: u64,
+        /// Where it claimed to end.
+        end: u64,
+    },
+    /// A node where a value was expected, or the reverse.
+    WrongShape,
 }
 
 impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownTag(t) => write!(f, "unknown tag {t:#04x}"),
-            Self::Unsupported(t) => write!(f, "tag {t:#04x} is defined but not read by this build"),
             Self::BadBool(b) => write!(f, "a Bool payload is 0x00 or 0x01, this is {b:#04x}"),
             Self::NotUtf8 => f.write_str("not well-formed UTF-8"),
-            Self::StratumTooDeep(s) => write!(f, "no stratum {s}; the deepest is {MAX_STRATUM}"),
             Self::EmptyStructName => {
                 f.write_str("a struct's name is part of its value and cannot be empty")
             }
@@ -119,11 +195,84 @@ impl fmt::Display for DecodeError {
             Self::LengthOverflow(n) => write!(f, "length {n} does not fit in this address space"),
             Self::TrailingBytes(n) => write!(f, "a complete value, and then {n} more bytes"),
             Self::TooDeep => write!(f, "nested deeper than {MAX_DEPTH}"),
+            Self::UnknownKind(k) => write!(f, "unknown node kind {k:#04x}"),
+            Self::NoSuchStratum(s) => write!(f, "no stratum {s}; the deepest is {MAX_STRATUM}"),
+            Self::BadMark(b) => write!(f, "a stratum-8 mark is 0x00 or 0x01, this is {b:#04x}"),
+            Self::EmptyCallName => {
+                f.write_str("a call names a prelude function; the name was empty")
+            }
+            Self::BackwardsSpan { start, end } => {
+                write!(f, "span ends at {end}, before it starts at {start}")
+            }
+            Self::WrongShape => f.write_str("a node where a value was expected, or the reverse"),
         }
     }
 }
 
 impl core::error::Error for DecodeError {}
+
+/// A thing the ledger holds: a value, or a node about evaluation.
+///
+/// Both are addressed the same way, so the store reads back either.
+/// `spec/07-ledger.md` §7.5.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Stored {
+    /// A value a program could hold.
+    Value(Value),
+    /// A record of something that happened.
+    Node(Node),
+}
+
+impl Stored {
+    /// The canonical encoding.
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        match self {
+            Self::Value(v) => v.encode(),
+            Self::Node(n) => n.encode(),
+        }
+    }
+
+    /// Its name.
+    #[must_use]
+    pub fn cairn(&self) -> Cairn {
+        Cairn::of_encoded(&self.encode())
+    }
+}
+
+/// Decodes one value or node from `bytes`.
+///
+/// # Errors
+///
+/// [`DecodeError`] for anything that is not a canonical encoding, including
+/// trailing bytes after an otherwise complete one.
+pub fn decode_stored(bytes: &[u8]) -> Result<Stored, DecodeError> {
+    let mut reader = Reader { bytes, at: 0 };
+    let stored = if reader.bytes.first() == Some(&tag::NODE) {
+        reader.at = 1;
+        Stored::Node(reader.node()?)
+    } else {
+        Stored::Value(reader.value(0)?)
+    };
+    let left = reader.remaining();
+    if left > 0 {
+        return Err(DecodeError::TrailingBytes(left));
+    }
+    Ok(stored)
+}
+
+/// Decodes exactly one node from `bytes`.
+///
+/// # Errors
+///
+/// [`DecodeError::WrongShape`] if the bytes are a value, otherwise as
+/// [`decode_stored`].
+pub fn decode_node(bytes: &[u8]) -> Result<Node, DecodeError> {
+    match decode_stored(bytes)? {
+        Stored::Node(n) => Ok(n),
+        Stored::Value(_) => Err(DecodeError::WrongShape),
+    }
+}
 
 /// Decodes exactly one value from `bytes`.
 ///
@@ -133,13 +282,10 @@ impl core::error::Error for DecodeError {}
 /// including trailing bytes after an otherwise complete one. Rejection is
 /// specified rather than left to judgement: see `spec/07-ledger.md` §7.1.1.
 pub fn decode(bytes: &[u8]) -> Result<Value, DecodeError> {
-    let mut reader = Reader { bytes, at: 0 };
-    let value = reader.value(0)?;
-    let left = reader.remaining();
-    if left > 0 {
-        return Err(DecodeError::TrailingBytes(left));
+    match decode_stored(bytes)? {
+        Stored::Value(v) => Ok(v),
+        Stored::Node(_) => Err(DecodeError::WrongShape),
     }
-    Ok(value)
 }
 
 struct Reader<'a> {
@@ -181,6 +327,82 @@ impl Reader<'_> {
         core::str::from_utf8(raw).map(ToOwned::to_owned).map_err(|_| DecodeError::NotUtf8)
     }
 
+    fn cairns(&mut self) -> Result<Vec<Cairn>, DecodeError> {
+        let count = self.len()?;
+        // 32 bytes each: refuse to reserve for a count the input cannot carry.
+        if count.saturating_mul(32) > self.remaining() {
+            return Err(DecodeError::Truncated { needed: count * 32, had: self.remaining() });
+        }
+        let mut out = Vec::with_capacity(count);
+        for _ in 0..count {
+            out.push(self.cairn()?);
+        }
+        Ok(out)
+    }
+
+    fn span(&mut self) -> Result<Span, DecodeError> {
+        let source = self.cairn()?;
+        let start = u64::from_be_bytes(self.take(8)?.try_into().expect("took exactly eight"));
+        let end = u64::from_be_bytes(self.take(8)?.try_into().expect("took exactly eight"));
+        if end < start {
+            return Err(DecodeError::BackwardsSpan { start, end });
+        }
+        Ok(Span { source, start, end })
+    }
+
+    fn call(&mut self) -> Result<Call, DecodeError> {
+        let function = self.text()?;
+        if function.is_empty() {
+            return Err(DecodeError::EmptyCallName);
+        }
+        Ok(Call { function, args: self.cairns()? })
+    }
+
+    fn stratum(&mut self) -> Result<u8, DecodeError> {
+        let s = self.byte()?;
+        if s > MAX_STRATUM {
+            return Err(DecodeError::NoSuchStratum(s));
+        }
+        Ok(s)
+    }
+
+    fn node(&mut self) -> Result<Node, DecodeError> {
+        match self.byte()? {
+            kind::LITERAL => Ok(Node::Literal(self.value(0)?)),
+            kind::APPLY => Ok(Node::Apply {
+                function: self.cairn()?,
+                args: self.cairns()?,
+                result: self.cairn()?,
+            }),
+            kind::HOLE => Ok(Node::Hole {
+                call: self.call()?,
+                stratum: self.stratum()?,
+                span: self.span()?,
+                depends: self.cairns()?,
+            }),
+            kind::DEPOSIT => Ok(Node::Deposit { value: self.cairn()?, span: self.span()? }),
+            kind::WITNESS => Ok(Node::Witness {
+                stratum: self.stratum()?,
+                call: self.call()?,
+                answer: self.cairn()?,
+                span: self.span()?,
+            }),
+            kind::TRACE => {
+                let roots = self.cairns()?;
+                let fuel_spent =
+                    u64::from_be_bytes(self.take(8)?.try_into().expect("took exactly eight"));
+                let depth = self.stratum()?;
+                let unrecorded = match self.byte()? {
+                    0x00 => false,
+                    0x01 => true,
+                    other => return Err(DecodeError::BadMark(other)),
+                };
+                Ok(Node::Trace { roots, fuel_spent, depth, unrecorded })
+            }
+            other => Err(DecodeError::UnknownKind(other)),
+        }
+    }
+
     fn value(&mut self, depth: usize) -> Result<Value, DecodeError> {
         if depth > MAX_DEPTH {
             return Err(DecodeError::TooDeep);
@@ -205,7 +427,7 @@ impl Reader<'_> {
             tag::SHADE => {
                 let origin = self.byte()?;
                 if origin > MAX_STRATUM {
-                    return Err(DecodeError::StratumTooDeep(origin));
+                    return Err(DecodeError::NoSuchStratum(origin));
                 }
                 Ok(Value::Shade { origin, value: self.cairn()? })
             }
@@ -229,7 +451,7 @@ impl Reader<'_> {
                 }
                 Ok(Value::Array(items))
             }
-            tag::NODE => Err(DecodeError::Unsupported(tag::NODE)),
+            tag::NODE => Err(DecodeError::WrongShape),
             other => Err(DecodeError::UnknownTag(other)),
         }
     }
@@ -328,9 +550,12 @@ mod tests {
         assert_eq!(decode(&[0x07]), Err(DecodeError::UnknownTag(0x07)));
     }
 
+    /// `0x20` is dispatched as a node rather than rejected as a tag, so a bare
+    /// one is an incomplete node and says so. Handing a *complete* node to the
+    /// value decoder is the wrong shape, which `node_tests` covers.
     #[test]
-    fn rejects_the_node_tag_as_unsupported_not_unknown() {
-        assert_eq!(decode(&[tag::NODE]), Err(DecodeError::Unsupported(tag::NODE)));
+    fn the_node_tag_is_dispatched_not_rejected() {
+        assert!(matches!(decode(&[tag::NODE]), Err(DecodeError::Truncated { .. })));
     }
 
     #[test]
@@ -351,7 +576,7 @@ mod tests {
     fn rejects_strata_that_do_not_exist() {
         let mut bytes = vec![tag::SHADE, 9];
         bytes.extend_from_slice(Cairn::of_encoded(b"x").as_bytes());
-        assert_eq!(decode(&bytes), Err(DecodeError::StratumTooDeep(9)));
+        assert_eq!(decode(&bytes), Err(DecodeError::NoSuchStratum(9)));
     }
 
     #[test]
@@ -406,5 +631,183 @@ mod tests {
             value = Value::Array(vec![value]);
         }
         assert_eq!(decode(&value.encode()).unwrap(), value);
+    }
+}
+
+#[cfg(test)]
+mod node_tests {
+    use super::{DecodeError, Stored, decode, decode_node, decode_stored};
+    use crate::cairn::Cairn;
+    use crate::node::{Call, Node, Span, kind};
+    use crate::value::{Value, tag};
+
+    fn c(seed: &[u8]) -> Cairn {
+        Cairn::of_encoded(seed)
+    }
+
+    fn span() -> Span {
+        Span { source: c(b"hello.nc"), start: 12, end: 31 }
+    }
+
+    fn call() -> Call {
+        Call { function: "read".to_owned(), args: vec![c(b"main.nc")] }
+    }
+
+    fn sample() -> Vec<Node> {
+        vec![
+            Node::Literal(Value::Int(7)),
+            Node::Literal(Value::Array(vec![Value::Unit])),
+            Node::Apply { function: c(b"f"), args: vec![], result: c(b"r") },
+            Node::Apply { function: c(b"f"), args: vec![c(b"a"), c(b"b")], result: c(b"r") },
+            Node::Hole { call: call(), stratum: 3, span: span(), depends: vec![c(b"d")] },
+            Node::Hole {
+                call: Call { function: "draw".to_owned(), args: vec![] },
+                stratum: 7,
+                span: span(),
+                depends: vec![],
+            },
+            Node::Deposit { value: c(b"greeting"), span: span() },
+            Node::Witness { stratum: 3, call: call(), answer: c(b"bytes"), span: span() },
+            Node::Trace { roots: vec![c(b"obj")], fuel_spent: 903, depth: 3, unrecorded: false },
+            Node::Trace { roots: vec![], fuel_spent: 0, depth: 8, unrecorded: true },
+        ]
+    }
+
+    #[test]
+    fn nodes_round_trip() {
+        for node in sample() {
+            assert_eq!(decode_node(&node.encode()).unwrap(), node, "decoding {node:?}");
+        }
+    }
+
+    #[test]
+    fn decoding_then_encoding_reproduces_the_bytes() {
+        for node in sample() {
+            let bytes = node.encode();
+            assert_eq!(decode_node(&bytes).unwrap().encode(), bytes);
+        }
+    }
+
+    #[test]
+    fn every_node_begins_with_the_node_tag() {
+        for node in sample() {
+            assert_eq!(node.encode()[0], tag::NODE);
+        }
+    }
+
+    #[test]
+    fn distinct_nodes_have_distinct_names() {
+        let mut seen = std::collections::HashSet::new();
+        for node in sample() {
+            assert!(seen.insert(node.cairn()), "{node:?} collided");
+        }
+    }
+
+    #[test]
+    fn values_and_nodes_share_one_address_space() {
+        for node in sample() {
+            assert_eq!(decode_stored(&node.encode()).unwrap(), Stored::Node(node));
+        }
+        let value = Value::Int(7);
+        assert_eq!(decode_stored(&value.encode()).unwrap(), Stored::Value(value));
+    }
+
+    /// A `Literal(v)` is a different thing from `v`, and must have a different name.
+    #[test]
+    fn wrapping_a_value_in_a_node_renames_it() {
+        let value = Value::Int(7);
+        assert_ne!(Node::Literal(value.clone()).cairn(), value.cairn());
+    }
+
+    #[test]
+    fn asking_for_the_wrong_shape_is_an_error() {
+        assert_eq!(decode(&sample()[0].encode()), Err(DecodeError::WrongShape));
+        assert_eq!(decode_node(&Value::Unit.encode()), Err(DecodeError::WrongShape));
+    }
+
+    /// The forward edge. Provenance is this, read backwards.
+    #[test]
+    fn references_names_every_cairn_the_node_holds() {
+        let hole = Node::Hole { call: call(), stratum: 3, span: span(), depends: vec![c(b"d")] };
+        assert_eq!(hole.references(), vec![c(b"main.nc"), c(b"hello.nc"), c(b"d")]);
+        assert!(Node::Literal(Value::Unit).references().is_empty());
+
+        // Nothing a node holds may be missing from `references`, or the reverse
+        // index is incomplete and provenance silently stops early.
+        for node in sample() {
+            let encoded = node.encode();
+            for cairn in node.references() {
+                assert!(
+                    encoded.windows(32).any(|w| w == cairn.as_bytes()),
+                    "{node:?} claims {cairn:?} but does not encode it"
+                );
+            }
+        }
+    }
+
+    // ── rejection ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn rejects_unknown_kinds() {
+        assert_eq!(decode_node(&[tag::NODE, 0x7f]), Err(DecodeError::UnknownKind(0x7f)));
+    }
+
+    #[test]
+    fn rejects_strata_below_the_lattice() {
+        let mut bytes = vec![tag::NODE, kind::WITNESS, 9];
+        bytes.extend_from_slice(&0u64.to_be_bytes());
+        assert_eq!(decode_node(&bytes), Err(DecodeError::NoSuchStratum(9)));
+    }
+
+    #[test]
+    fn rejects_nameless_calls() {
+        let mut bytes = vec![tag::NODE, kind::HOLE];
+        bytes.extend_from_slice(&0u64.to_be_bytes());
+        assert_eq!(decode_node(&bytes), Err(DecodeError::EmptyCallName));
+    }
+
+    #[test]
+    fn rejects_backwards_spans() {
+        let mut bytes = vec![tag::NODE, kind::DEPOSIT];
+        bytes.extend_from_slice(c(b"v").as_bytes());
+        bytes.extend_from_slice(c(b"s").as_bytes());
+        bytes.extend_from_slice(&9u64.to_be_bytes());
+        bytes.extend_from_slice(&4u64.to_be_bytes());
+        assert_eq!(decode_node(&bytes), Err(DecodeError::BackwardsSpan { start: 9, end: 4 }));
+    }
+
+    #[test]
+    fn rejects_marks_that_are_not_a_bit() {
+        let mut bytes = vec![tag::NODE, kind::TRACE];
+        bytes.extend_from_slice(&0u64.to_be_bytes());
+        bytes.extend_from_slice(&0u64.to_be_bytes());
+        bytes.push(0);
+        bytes.push(0x02);
+        assert_eq!(decode_node(&bytes), Err(DecodeError::BadMark(0x02)));
+    }
+
+    /// A count of four billion cairns must not become a four-billion allocation.
+    #[test]
+    fn rejects_counts_the_input_cannot_carry() {
+        let mut bytes = vec![tag::NODE, kind::TRACE];
+        bytes.extend_from_slice(&u64::from(u32::MAX).to_be_bytes());
+        assert!(matches!(decode_node(&bytes), Err(DecodeError::Truncated { .. })));
+    }
+
+    #[test]
+    fn rejects_truncation_at_every_prefix() {
+        for node in sample() {
+            let bytes = node.encode();
+            for cut in 0..bytes.len() {
+                assert!(decode_node(&bytes[..cut]).is_err(), "{node:?} accepted {cut} bytes");
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_trailing_bytes() {
+        let mut bytes = sample()[0].encode();
+        bytes.push(0);
+        assert_eq!(decode_node(&bytes), Err(DecodeError::TrailingBytes(1)));
     }
 }

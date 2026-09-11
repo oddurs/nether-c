@@ -105,6 +105,41 @@ Nodes reference other nodes only by cairn. The graph is therefore acyclic by
 construction: a node cannot name a node that does not yet exist, and a node
 that exists cannot change.
 
+### 7.3.1 Node encoding
+
+**Frozen**, on the same terms as [§7.1](#71-canonical-encoding). A node is the
+tag `0x20`, then a kind byte, then the kind's payload.
+
+| Kind | Node | Payload |
+| --- | --- | --- |
+| `0x00` | `Literal` | one `value` |
+| `0x01` | `Apply` | `cairn` of the function, `cairn-list` of arguments, `cairn` of the result |
+| `0x02` | `Hole` | `call`, one byte stratum, `span`, `cairn-list` of what it depends on |
+| `0x03` | `Deposit` | `cairn` of the value, `span` |
+| `0x04` | `Witness` | one byte stratum, `call`, `cairn` of the answer, `span` |
+| `0x05` | `Trace` | `cairn-list` of roots, `u64` fuel spent, one byte depth reached, one byte stratum-8 mark |
+
+Three shapes appear inside more than one of them:
+
+| Shape | Encoding |
+| --- | --- |
+| `cairn-list` | `u64` count, then that many thirty-two byte cairns |
+| `span` | `cairn` of the source, `u64` start, `u64` end |
+| `call` | `u64` name length, the name in UTF-8, `cairn-list` of arguments |
+
+A decoder MUST reject, in addition to the clauses in
+[§7.1.1](#711-what-a-decoder-must-reject):
+
+- a kind byte not in the table above;
+- a stratum or depth greater than `8`;
+- a stratum-8 mark other than `0x00` or `0x01`;
+- a `call` with an empty name;
+- a `span` whose end is before its start.
+
+A span names its source by cairn rather than by path. A path is a fact about
+one machine at one moment; the trace has to mean the same thing on a machine
+that has never seen that filesystem.
+
 ## 7.4 Provenance
 
 Provenance is not a separate index. It is the `Apply` and `Witness` nodes
@@ -119,11 +154,14 @@ rite that makes the language comprehensible.
 
 ## 7.5 The store
 
-The store is a set of `(cairn, node)` pairs. Required operations:
+The store is a set of `(cairn, bytes)` pairs, where the bytes are the canonical
+encoding of a **value or a node**. Both have cairns and both are addressed the
+same way: a `Deposit` names the value it deposited directly, rather than naming
+a `Literal` node that wraps it.
 
 ```
-put(node)    -> Cairn      idempotent
-get(Cairn)   -> Node       fails if absent
+put(stored)  -> Cairn      idempotent
+get(Cairn)   -> Stored     fails if absent
 has(Cairn)   -> Bool
 resolve(hex_prefix) -> Cairn | Ambiguous | Absent
 ```
