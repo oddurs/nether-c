@@ -48,6 +48,14 @@ pub enum StoreError {
     NoMatch(String),
     /// A prefix that is not lowercase hexadecimal, or is empty.
     BadPrefix(String),
+    /// Something was handed to `put` that `get` could never read back.
+    ///
+    /// `Value` and `Node` can express states the encoding forbids — an unnamed
+    /// struct, a stratum below the lattice, a backwards span. Writing one
+    /// produces an object that is permanently unreadable and, worse, is
+    /// reported afterwards as [`StoreError::Corrupt`], which is the store's
+    /// signal for bit rot. The store refuses at the door instead.
+    Invalid(DecodeError),
 }
 
 impl std::fmt::Display for StoreError {
@@ -67,6 +75,9 @@ impl std::fmt::Display for StoreError {
             }
             Self::NoMatch(p) => write!(f, "nothing in this store starts with {p}"),
             Self::BadPrefix(p) => write!(f, "{p:?} is not the start of a cairn"),
+            Self::Invalid(why) => {
+                write!(f, "refusing to write bytes that cannot be read back: {why}")
+            }
         }
     }
 }
@@ -126,9 +137,18 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// If the bytes cannot be written.
-    pub fn put(&self, stored: &Stored) -> io::Result<Cairn> {
+    /// [`StoreError::Invalid`] if the bytes would not decode — the store will
+    /// not write something it could never read back — or [`StoreError::Io`] if
+    /// they cannot be written.
+    pub fn put(&self, stored: &Stored) -> Result<Cairn, StoreError> {
         let bytes = stored.encode();
+
+        // The round trip, before anything reaches disk. It costs a decode per
+        // put, which is the same work `get` does anyway, and it is the only
+        // thing standing between an upstream bug and an object that is
+        // permanently unreadable and reported forever as disk corruption.
+        decode_stored(&bytes).map_err(StoreError::Invalid)?;
+
         let cairn = Cairn::of_encoded(&bytes);
         if self.has(cairn) {
             return Ok(cairn);
@@ -382,6 +402,44 @@ mod tests {
         let store = scratch.store();
         let cairn = store.put(&value(42)).unwrap();
         assert_eq!(cairn, value(42).cairn());
+    }
+
+    /// Found by review. `Value` and `Node` can express states the encoding
+    /// forbids; writing one produced an object `get` could never read, and the
+    /// complaint it produced afterwards was `Corrupt`, which is supposed to
+    /// mean the disk lied.
+    #[test]
+    fn the_store_refuses_what_it_could_never_read_back() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let c = Cairn::of_encoded(b"x");
+
+        let unwritable = [
+            Stored::Value(Value::Struct { name: String::new(), fields: vec![] }),
+            Stored::Value(Value::Shade { origin: 200, value: c }),
+            Stored::Node(Node::Witness {
+                stratum: 9,
+                call: Call { function: "read".to_owned(), args: vec![] },
+                answer: c,
+                span: Span { source: c, start: 0, end: 1 },
+            }),
+            Stored::Node(Node::Hole {
+                call: Call { function: String::new(), args: vec![] },
+                stratum: 3,
+                span: Span { source: c, start: 0, end: 1 },
+                depends: vec![],
+            }),
+            Stored::Node(Node::Deposit { value: c, span: Span { source: c, start: 9, end: 4 } }),
+        ];
+
+        for stored in unwritable {
+            let refused = store.put(&stored);
+            assert!(
+                matches!(refused, Err(StoreError::Invalid(_))),
+                "the store accepted {stored:?}, which it cannot read back: {refused:?}"
+            );
+            assert!(!store.has(stored.cairn()), "{stored:?} reached the disk anyway");
+        }
     }
 
     #[test]
