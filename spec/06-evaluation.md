@@ -64,7 +64,15 @@ each hole:
 | `stratum` | the depth the call would reach |
 | `span` | the source location that asked |
 | `depends` | the cairns of the nodes that must exist for this call to be made |
-| `dependents` | the nodes whose evaluation is suspended on this answer |
+
+A hole does **not** record its dependents. It cannot: a node is immutable and
+named by its content, so a hole that listed the things waiting on it would get
+a new name every time something else came to wait, and every reference to the
+old name would be to a hole that no longer exists.
+
+Which nodes are suspended on a hole is derived by reading the graph backwards,
+the same way provenance is, and for the same reason
+([§7.4](07-ledger.md#74-provenance)).
 
 A hole's arguments are themselves fully buried. `read(concat(dir, name))` does
 not leave a hole containing `concat`; it leaves a hole containing the finished

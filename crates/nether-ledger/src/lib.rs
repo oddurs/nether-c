@@ -10,8 +10,10 @@
 
 mod cairn;
 mod codec;
+mod node;
 mod value;
 
-pub use cairn::Cairn;
-pub use codec::{DecodeError, MAX_DEPTH, decode};
+pub use cairn::{Cairn, ParseCairnError, SHORT_LEN};
+pub use codec::{DecodeError, MAX_DEPTH, Stored, decode, decode_node, decode_stored};
+pub use node::{Call, Node, Span};
 pub use value::{MAX_STRATUM, Value};
