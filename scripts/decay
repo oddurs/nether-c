@@ -28,7 +28,12 @@ ceiling_file=${2:-.decay-ceiling}
 # By convention a file's tests live in a trailing `#[cfg(test)] mod tests`, so
 # everything from the first such marker to the end of the file is excluded.
 count=0
-for file in $(find "$source_dir" -name '*.rs' -not -path '*/target/*' 2>/dev/null); do
+# Integration tests and benches live beside the code they exercise and are no
+# more the trusted core than a `#[cfg(test)]` module is.
+for file in $(find "$source_dir" -name '*.rs' \
+    -not -path '*/target/*' \
+    -not -path '*/tests/*' \
+    -not -path '*/benches/*' 2>/dev/null); do
   n=$(sed '/#\[cfg(test)\]/,$d' "$file" | grep -cvE '^[[:space:]]*(//.*)?$' || true)
   count=$((count + ${n:-0}))
 done
