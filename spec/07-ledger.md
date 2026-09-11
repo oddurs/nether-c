@@ -12,28 +12,34 @@ years from now by somebody who cannot fix it.
 
 ## 7.1 Canonical encoding
 
-Every value has exactly one encoding, on every platform, forever.
+**Frozen.** Every value has exactly one encoding, on every platform, forever.
+Changing anything in this section changes the domain separator in
+[§7.2](#72-cairns), which changes every cairn that has ever existed. Treat it
+as immovable and mean it.
 
-```
-value      := tag byte_content
+A value is a tag byte followed by a payload. There is no length prefix on the
+value as a whole and no terminator: every payload's extent is determined by
+the tag and by lengths inside it.
 
-tag        := 0x00  U0
-            | 0x01  Bool
-            | 0x02  I64
-            | 0x03  Bytes
-            | 0x04  Str
-            | 0x05  Cairn
-            | 0x06  Shade
-            | 0x10  Struct
-            | 0x11  Array
-            | 0x20  Node
-```
+| Tag | Type | Payload |
+| --- | --- | --- |
+| `0x00` | `U0` | empty |
+| `0x01` | `Bool` | one byte, `0x00` or `0x01`, and nothing else |
+| `0x02` | `I64` | eight bytes, two's complement, big-endian |
+| `0x03` | `Bytes` | `u64` length, then exactly that many bytes |
+| `0x04` | `Str` | `u64` length, then exactly that many bytes of well-formed UTF-8 |
+| `0x05` | `Cairn` | thirty-two bytes |
+| `0x06` | `Shade` | one byte origin stratum, then the thirty-two byte cairn of the value |
+| `0x10` | `Struct` | `u64` name length, the name in UTF-8, `u64` field count, then the fields |
+| `0x11` | `Array` | `u64` element count, then the elements |
+| `0x20` | `Node` | see [§7.3](#73-nodes) |
 
 Rules an implementation MUST follow:
 
 1. Integers are fixed-width big-endian. There is no variable-length integer
    encoding anywhere in the format, including lengths.
-2. Lengths are `u64` big-endian, even where the value is small.
+2. Lengths and counts are `u64` big-endian, even where the value is small.
+   Eight bytes to say `0` is the price of there being one encoding.
 3. Struct fields are encoded in **declaration order**, not alphabetical order,
    and the struct's type name is encoded with it. Nominal typing means the
    name is part of the value.
@@ -41,9 +47,29 @@ Rules an implementation MUST follow:
    association is an array of pairs, and its order is the program's.
 5. There is no floating-point type. See
    [§3.6](03-lexical.md#36-literals).
-6. A decoder MUST reject any input that is not the canonical encoding of the
-   value it decodes to. Lenient decoding of a canonical format is how two
-   implementations start disagreeing.
+6. The encoder does not transform what it is given. It does not normalise
+   text, reorder anything, or trim anything. A store that silently alters the
+   bytes you handed it is not content-addressed; it is content-addressed to
+   something else. See §7.1.1.
+
+### 7.1.1 What a decoder MUST reject
+
+Lenient decoding of a canonical format is how two implementations start
+disagreeing, so rejection is specified rather than left to judgement. A
+decoder MUST reject:
+
+- a tag byte not in the table above;
+- a `Bool` payload other than `0x00` or `0x01`;
+- a `Str` payload that is not well-formed UTF-8;
+- a `Shade` origin byte greater than `8`;
+- a `Struct` whose name is empty, or whose name is not well-formed UTF-8;
+- any length or count that exceeds the bytes remaining;
+- trailing bytes after a complete value.
+
+A decoder MUST NOT accept an input and then re-encode it differently. For
+every byte string `b` that decodes to a value `v`, `encode(v)` MUST equal `b`.
+That round trip is the definition of canonical and is the property worth
+testing first.
 
 ## 7.2 Cairns
 

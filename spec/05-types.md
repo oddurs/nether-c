@@ -14,7 +14,7 @@ status: draft
 | `Bool` | `true`, `false` | one byte, `0x00` or `0x01` |
 | `I64` | −2⁶³ … 2⁶³−1 | fixed 8 bytes, two's complement, big-endian |
 | `Bytes` | any finite byte string | length prefix, then the bytes |
-| `Str` | any well-formed UTF-8 string, NFC | as `Bytes`, over the NFC form |
+| `Str` | any well-formed UTF-8 string | as `Bytes`, over the bytes as given |
 | `Cairn` | a content address | 32 bytes |
 | `Shadeᵈ⟨T⟩` | an opaque `T` from depth `d` | the cairn of the underlying value |
 | `Answer⟨T⟩` | what the world said: a `T`, or a refusal | tag byte, then the `T` or the `Refusal` |
