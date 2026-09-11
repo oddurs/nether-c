@@ -10,7 +10,7 @@
 #   cairn check           validate every item against it
 #   man cairn             full reference
 
-format = 2
+format = 3
 
 [project]
 name = "Nether C"
@@ -91,6 +91,8 @@ name = "milestone"
 icon = "▲"
 color = "yellow"
 description = "A descent. What we can honestly claim once it lands."
+groups = "one"
+inverse = "scheduled"
 
 # ─── Statuses ────────────────────────────────────────────────────────────────
 # Order is board order. `category` is what cairn reasons about; the names are
@@ -132,17 +134,6 @@ label = "unrecorded"
 category = "dropped"
 color = "gray"
 board = false
-
-# ─── Fields ──────────────────────────────────────────────────────────────────
-
-[[field]]
-name = "milestone"
-kind = "ref"
-target = "milestone"
-by = "key"
-rollup = true
-inverse = "scheduled"
-description = "which descent this ships in"
 
 [[field]]
 name = "due"
