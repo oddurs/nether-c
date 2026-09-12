@@ -2,10 +2,9 @@
 id: 61
 title: nether exhume
 type: feature
-status: starved
+status: buried
 milestone: rites
 assignee: Oddur Sigurdsson
-claimed: 2026-09-12
 depends_on:
 - 22
 - 60
@@ -48,3 +47,7 @@ STARVED on 0163 for the other half of its proof. Replaying a sealed trace produc
 ## 2026-09-12
 
 An answer is a value burial can fold through and never write down: section 04 has no syntax for one, so must, given and refusal consume it and an answer that is bound stays the question it was. That needed no change to the IR and no change to the language.
+
+## 2026-09-12
+
+Unstarved and closed: 0163 took fuel_spent out of the trace and --replay reproduces. Both halves of the proof hold -- filling a hole produces a new cairn, and replaying the sealed trace prints identical.

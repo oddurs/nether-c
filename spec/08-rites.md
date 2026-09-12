@@ -62,7 +62,7 @@ summary of what was written.
 
 ```console
 $ nether bury build.nc
-buried   build.nc → dd1289f4   depth 3   holes 1   4 nodes
+buried   build.nc → 76c4b655   depth 3   holes 1   4 nodes
   hole ①  read("main.nc")                stratum 3  disk
 ```
 
@@ -84,8 +84,12 @@ Running out of fuel produces a halt and no trace at all
 outcomes: the burial finished, or there is nothing to record it in. A budget
 that did not bind left no mark, and a budget that bound left no trace.
 
-What a trace does record is `fuel_spent`, which is a fact about the burial that
-happened rather than about the room it was given.
+Nor is what the burial *spent*, and for the same reason one step further on.
+How many steps a burial took is a fact about that burial rather than about the
+program it produced, and a trace that recorded it could not be replayed: §6.7
+asks a sealed trace to come back byte-identical, and replaying buries a residue
+that is already folded, which is a cheaper burial. A rite reports what it
+spent, because that is where it is a fact.
 
 ## 8.3 `exhume`
 
@@ -121,7 +125,7 @@ a source has no other order: one trace's two sources were never written down in
 a sequence.
 
 ```console
-$ nether lamp fd996152
+$ nether lamp efed9b2a
 Hello from the nether
 ```
 
@@ -129,9 +133,9 @@ Hello from the nether
 produced it, to their inputs, to the literals and holes at the bottom.
 
 ```console
-$ nether lamp d3ea6558 --provenance
-d3ea6558  hole     read("main.nc")   stratum 3
-└─ trace    depth 3   residue f1221324   1 hole(s)   0 witness(es)   0 deposit(s)   11 steps
+$ nether lamp 21ca4ef0 --provenance
+21ca4ef0  hole     read("main.nc")   stratum 3
+└─ trace    depth 3   residue 61a6cc41   1 hole(s)   0 witness(es)   0 deposit(s)
 ```
 
 That is the walk over the trace from [§8.2](#82-bury), which has a hole and no
@@ -165,10 +169,10 @@ Blame for depth. Reports the deepest stratum a trace reached and the source
 span that took it there.
 
 ```console
-$ nether strata dd1289f4
+$ nether strata 76c4b655
 depth 3   disk
 
-  3  read("main.nc")           7bced69b:10:35   pending
+  3  read("main.nc")           8106589a:10:35   pending
   0  everything else
 
   replayable: yes

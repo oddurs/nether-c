@@ -150,21 +150,20 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## rites — The Rites
 
-`#########·` 86% · 25 of 29 done · due 2027-03-31
+`##########` 93% · 27 of 29 done · due 2027-03-31
 
 ### unmarked
 
 - [ ] [`0065`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0065-nether-graft.md) nether graft <sup>feature · p1 · 4</sup>
-- [ ] [`0163`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0163-fuel-spent-is-the-one-thing-stopping-replay.md) fuel_spent is the one thing stopping replay <sup>spec · p0 · 0</sup>
 
 ### starved
 
-- [ ] [`0061`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0061-nether-exhume.md) nether exhume <sup>feature · p0 · 5</sup>
 - [ ] [`0066`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0066-transcript-tests-for-every-documented-invocation.md) Transcript tests for every documented invocation <sup>chore · p0</sup>
 
 ### buried
 
 - [x] [`0060`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0060-nether-bury.md) nether bury <sup>feature · p0 · 4</sup>
+- [x] [`0061`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0061-nether-exhume.md) nether exhume <sup>feature · p0 · 5</sup>
 - [x] [`0062`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0062-nether-lamp-and-provenance.md) nether lamp, and --provenance <sup>feature · p0 · 1</sup>
 - [x] [`0063`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0063-nether-cairn.md) nether cairn <sup>feature · p1 · 1</sup>
 - [x] [`0064`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0064-nether-strata.md) nether strata <sup>feature · p1 · 1</sup>
@@ -189,6 +188,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0160`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0160-a-call-renders-its-bytes-arguments-unreadably.md) A call renders its bytes arguments unreadably <sup>bug · p2 · 1</sup>
 - [x] [`0161`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0161-as-unit-drops-a-demand-rather-than-failing.md) as_unit drops a demand rather than failing <sup>bug · p3 · 0</sup>
 - [x] [`0162`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0162-a-ledger-was-committed-to-the-repository.md) A ledger was committed to the repository <sup>chore · p2 · 0</sup>
+- [x] [`0163`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0163-fuel-spent-is-the-one-thing-stopping-replay.md) fuel_spent is the one thing stopping replay <sup>spec · p0 · 0</sup>
 
 ## world — The World
 
