@@ -38,10 +38,10 @@ spec/05-types.md:71	c	pinned	bae6053b958ec44b
 spec/05-types.md:113	c	pinned	b90bad42db5f84e0
 spec/06-evaluation.md:14	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md:33	c	pinned	32047b898ae2a1c0
-spec/06-evaluation.md:104	text	pinned	07c9e60510dab9cc
-spec/06-evaluation.md:148	console	pinned	62a0ec6a54925078
-spec/06-evaluation.md:165	console	pinned	de840300ab71ca8d
-spec/06-evaluation.md:195	text	pinned	a39449193e40ee44
+spec/06-evaluation.md:121	text	pinned	07c9e60510dab9cc
+spec/06-evaluation.md:165	console	pinned	62a0ec6a54925078
+spec/06-evaluation.md:182	console	pinned	de840300ab71ca8d
+spec/06-evaluation.md:212	text	pinned	a39449193e40ee44
 spec/07-ledger.md:76	text	pinned	44a818ca5c7ac6dd
 spec/07-ledger.md:162	text	pinned	ebd628943dfe60de
 spec/08-rites.md:18	console	checked	eb5d09b394458e0f

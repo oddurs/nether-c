@@ -94,8 +94,25 @@ An expression **starves** when it cannot be evaluated and cannot become a hole
 expression is residualised and waits.
 
 Burial takes a **fuel budget**: a bound on the number of evaluation steps.
+
+A **step** is one evaluation of one expression node. It is charged when
+evaluation of that node begins, before anything else happens to it, and it is
+charged once. Three consequences, because each is a place two implementations
+could otherwise disagree:
+
+- A unit-level binding is evaluated at most once, however many times it is
+  named, and the steps its value costs are charged to the first demand that
+  reaches it.
+- `opaque e` costs one step and `e` costs nothing, because `e` is not
+  evaluated.
+- A residue costs nothing for what has already been reduced, which is what
+  makes the staging law in [§6.5](#65-residue) affordable rather than merely
+  true.
+
 Fuel accounting MUST be deterministic — the same source and capabilities must
 exhaust at exactly the same point on every implementation and every machine.
+That is a requirement about agreement between implementations and not only
+with oneself, which is why the step is defined here rather than left to one.
 
 Exhausting fuel is a diagnostic, not a crash. The implementation MUST report
 the source span at which fuel ran out and the shape of what was being

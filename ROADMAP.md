@@ -95,7 +95,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`#######···` 62% · 8 of 13 done · due 2027-01-15
+`#######···` 64% · 9 of 14 done · due 2027-01-15
 
 ### unmarked
 
@@ -115,6 +115,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0120`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0120-spec-app-s-premise-forbids-the-specification-s-own-examples.md) Spec: APP's premise forbids the specification's own examples <sup>spec · p0</sup>
 - [x] [`0121`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0121-spec-the-orpheus-error-points-at-the-wrong-column.md) Spec: the Orpheus error points at the wrong column <sup>spec · p1</sup>
 - [x] [`0122`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0122-spec-a-function-cannot-contain-a-descent-and-be-called.md) Spec: a function cannot contain a descent and be called <sup>spec · p0</sup>
+- [x] [`0124`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0124-spec-fuel-must-be-deterministic-and-a-step-is-undefined.md) Spec: fuel must be deterministic and a step is undefined <sup>spec · p0</sup>
 
 ## surface — The Surface
 
