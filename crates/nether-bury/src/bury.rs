@@ -201,7 +201,7 @@ impl Halt {
                 ),
             ),
         };
-        Diagnostic { span: self.span, headline, label, note }
+        Diagnostic { span: self.span, headline, label, cause: None, note }
     }
 }
 

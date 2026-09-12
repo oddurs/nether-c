@@ -21,9 +21,25 @@ pub struct Diagnostic {
     pub headline: String,
     /// What goes at the end of the caret row, about the thing underlined.
     pub label: Option<String>,
+    /// Somewhere else that explains this one.
+    ///
+    /// A depth error is about a number, and the number came from a line that
+    /// is almost never the line the error is on. Naming the symptom and not
+    /// the cause is what makes a depth system feel arbitrary.
+    pub cause: Option<Cause>,
     /// The line after the gap, which says what to do rather than what is
     /// wrong.
     pub note: Option<String>,
+}
+
+/// The other end of a diagnostic: where the thing it is complaining about
+/// came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cause {
+    /// What to underline there.
+    pub span: Span,
+    /// What to say about it.
+    pub label: String,
 }
 
 /// Render a diagnostic against the source it came from.
@@ -33,14 +49,41 @@ pub struct Diagnostic {
 /// moment.
 #[must_use]
 pub fn report(d: &Diagnostic, source: &str, path: &str) -> String {
-    let start = (d.span.start as usize).min(source.len());
+    let headline = &d.headline;
+    let mut out = format!("error: {headline}\n");
+    let more = d.cause.is_some() || d.note.is_some();
+    out.push_str(&snippet(d.span, d.label.as_deref(), source, path, more));
+    if let Some(cause) = &d.cause {
+        let label = Some(cause.label.as_str());
+        out.push_str(&snippet(cause.span, label, source, path, d.note.is_some()));
+    }
+    if let Some(note) = &d.note {
+        let gutter = line_of(d.span, source).0.to_string().len();
+        let _ = writeln!(out, "{:gutter$} = {note}", "", gutter = gutter);
+    }
+    out
+}
+
+/// The line number a span is on, and where that line starts and ends.
+fn line_of(span: Span, source: &str) -> (usize, usize, usize) {
+    let start = (span.start as usize).min(source.len());
     let before = &source[..start];
     let number = before.matches('\n').count() + 1;
     let line_start = before.rfind('\n').map_or(0, |i| i + 1);
     let line_end = source[line_start..].find('\n').map_or(source.len(), |i| line_start + i);
+    (number, line_start, line_end)
+}
+
+/// One `--> file:line:col` block, with its source line and its carets.
+///
+/// The bar that closes it is a separator rather than a border: it is there
+/// when something follows and gone when nothing does.
+fn snippet(span: Span, label: Option<&str>, source: &str, path: &str, followed: bool) -> String {
+    let start = (span.start as usize).min(source.len());
+    let (number, line_start, line_end) = line_of(span, source);
     let text = source[line_start..line_end].trim_end_matches('\r');
     let column = source[line_start..start].chars().count() + 1;
-    let end = (d.span.end as usize).clamp(start, line_end);
+    let end = (span.end as usize).clamp(start, line_end);
     let width = source[start..end].chars().count().max(1);
 
     // Everything lines up against the widest line number, which is this one.
@@ -48,19 +91,16 @@ pub fn report(d: &Diagnostic, source: &str, path: &str) -> String {
     let bar = format!("{:gutter$} |", "", gutter = gutter);
 
     let mut out = String::new();
-    let headline = &d.headline;
-    let _ = writeln!(out, "error: {headline}");
     let _ = writeln!(out, "{:gutter$}--> {path}:{number}:{column}", "", gutter = gutter);
     let _ = writeln!(out, "{bar}");
     let _ = writeln!(out, "{number} | {text}");
     let _ = write!(out, "{bar} {:column$}{:^<width$}", "", "", column = column - 1, width = width);
-    if let Some(label) = &d.label {
+    if let Some(label) = label {
         let _ = write!(out, " {label}");
     }
     let _ = writeln!(out);
-    if let Some(note) = &d.note {
+    if followed {
         let _ = writeln!(out, "{bar}");
-        let _ = writeln!(out, "{:gutter$} = {note}", "", gutter = gutter);
     }
     out
 }
@@ -87,7 +127,7 @@ mod tests {
     use super::*;
 
     fn plain(span: Span, headline: &str) -> Diagnostic {
-        Diagnostic { span, headline: headline.into(), label: None, note: None }
+        Diagnostic { span, headline: headline.into(), label: None, cause: None, note: None }
     }
 
     #[test]

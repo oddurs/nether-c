@@ -92,6 +92,7 @@ impl Fault {
             span: self.span,
             headline: self.to_string(),
             label: None,
+            cause: None,
             note: note.map(ToString::to_string),
         }
     }
