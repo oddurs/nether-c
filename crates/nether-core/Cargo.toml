@@ -1,0 +1,15 @@
+[package]
+name = "nether-core"
+description = "The intermediate representation: types, terms, and a depth on every node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# No dependencies, and there is nothing here that wants one. The ledger is not
+# among them on purpose: the IR is a fact about a source file, and it becomes a
+# fact about the world only when something writes it down.
+
+[lints]
+workspace = true
