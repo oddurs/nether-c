@@ -269,7 +269,7 @@ fn an_out_of_range_slice_starves() {
 #[test]
 fn running_out_of_fuel_is_a_diagnostic_and_not_a_crash() {
     let halt = bury(&fib_demanding(20), 100).expect_err("100 steps is not enough for fib(20)");
-    assert_eq!(halt.kind, HaltKind::OutOfFuel);
+    assert!(matches!(halt.kind, HaltKind::OutOfFuel { spent: 100 }));
 }
 
 #[test]
@@ -282,7 +282,7 @@ fn fuel_accounting_is_the_same_on_every_run() {
         assert_eq!(bury(&unit, 5_000_000).unwrap().fuel_spent, spent);
     }
     // And one step short of it is one step short.
-    assert_eq!(bury(&unit, spent - 1).unwrap_err().kind, HaltKind::OutOfFuel);
+    assert!(matches!(bury(&unit, spent - 1).unwrap_err().kind, HaltKind::OutOfFuel { .. }));
     assert_eq!(bury(&unit, spent).unwrap().fuel_spent, spent);
 }
 

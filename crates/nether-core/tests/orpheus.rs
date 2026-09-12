@@ -170,7 +170,7 @@ fn the_error_is_the_one_printed_in_the_codex() {
     assert_eq!(faults.len(), 1, "{faults:?}");
     assert_eq!(faults[0].kind, FaultKind::Orpheus { origin: Depth::NET, ambient: Depth::PURE });
 
-    let printed = report(&faults[0], &source(), "stamp.nc");
+    let printed = report(&faults[0].diagnostic(), &source(), "stamp.nc");
     assert_eq!(printed.trim_end(), the_error_in_the_codex());
 }
 
