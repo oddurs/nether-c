@@ -1,0 +1,19 @@
+[package]
+name = "nether-syntax"
+description = "The lexer: UTF-8 in, tokens with byte spans out"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nether-core = { path = "../nether-core" }
+
+# Unicode's two tables, and nothing else. `spec/90-rationale.md`: a dependency
+# is admissible when what it holds is data somebody else is the authority for.
+unicode-ident = "1.0"
+unicode-normalization = "0.1"
+
+[lints]
+workspace = true
