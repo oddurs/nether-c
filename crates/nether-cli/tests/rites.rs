@@ -845,3 +845,22 @@ fn strata_with_no_cairn_is_a_usage_error() {
     assert_eq!(code(&out), 64, "{}", stderr(&out));
     assert!(stderr(&out).contains("nether strata <cairn>"), "{}", stderr(&out));
 }
+
+#[test]
+fn bury_refuses_a_grant_it_cannot_honour() {
+    // §8.2: a flag that validates its argument and changes nothing looks like
+    // it worked. `--grant disk` used to produce the same trace, to the cairn,
+    // as no grant at all.
+    let out = nether(None, &["bury", "--grant", "disk", "tests/programs/build.nc"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("cannot honour a grant yet"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("nether exhume"), "it does not say what will:\n{}", stderr(&out));
+    assert!(stdout(&out).is_empty(), "a refusal is not output");
+}
+
+#[test]
+fn a_grant_that_is_not_a_capability_is_still_a_usage_error() {
+    let out = nether(None, &["bury", "--grant", "telepathy", "tests/programs/build.nc"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("no capability by that name"), "{}", stderr(&out));
+}
