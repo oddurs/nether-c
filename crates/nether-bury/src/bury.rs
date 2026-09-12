@@ -549,12 +549,7 @@ impl Burial<'_> {
     /// Two holes with identical calls in one trace MUST be the same hole,
     /// which is what makes exhumation cheap: reading the same file twice is
     /// one question, asked once. §6.3.
-    fn dig(&mut self, p: Prim, args: Vec<Value>, span: Span) -> Cairn {
-        // The arguments are named as values rather than wrapped in anything.
-        // A value has one name, and `seal` of the same value gives the same
-        // one, which is the whole point of addressing by content.
-        let args = args.into_iter().map(|v| self.remember(Stored::Value(v))).collect();
-        let call = nether_ledger::Call { function: p.name().to_string(), args };
+    fn dig(&mut self, p: Prim, call: nether_ledger::Call, span: Span) -> Cairn {
         // §6.3: two holes with identical calls in one trace MUST be the same
         // hole. The second place to ask is not a second question, so it gets
         // the hole the first one made — span and all.
@@ -923,18 +918,19 @@ impl Burial<'_> {
         if let Kind::Prim(p) = f.kind {
             if p.latent() > Depth::PURE {
                 if let Some(args) = values.iter().map(as_value).collect::<Option<Vec<_>>>() {
+                    // The arguments are named as values rather than wrapped
+                    // in anything. A value has one name, and `seal` of the
+                    // same value gives the same one, which is the whole point
+                    // of addressing by content.
                     let asked = nether_ledger::Call {
                         function: p.name().to_string(),
-                        args: args
-                            .iter()
-                            .map(|v| self.remember(Stored::Value(v.clone())))
-                            .collect(),
+                        args: args.into_iter().map(|v| self.remember(Stored::Value(v))).collect(),
                     };
                     if let Some(said) = self.answers.get(&asked).cloned() {
                         self.remember(Stored::Value(said.clone()));
                         return Ok(Self::answered(&said, x));
                     }
-                    self.dig(p, args, x.span);
+                    self.dig(p, asked, x.span);
                 }
             }
         }

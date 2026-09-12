@@ -14,7 +14,9 @@
 mod disk;
 mod provider;
 mod recorder;
+mod replay;
 
 pub use disk::Disk;
 pub use provider::{Provider, Unanswered, World};
 pub use recorder::{Recorded, Recorder};
+pub use replay::Replay;

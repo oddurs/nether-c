@@ -12,7 +12,7 @@ use nether_bury::{Answers, HaltKind, bury_with};
 use nether_core::{Capability, check};
 use nether_ledger::{Cairn, Call, Node, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
-use nether_world::{Disk, Recorder, World};
+use nether_world::{Disk, Recorder, Replay, World};
 
 use crate::{FAILED, code, json, ledger, usage_error};
 
@@ -95,20 +95,6 @@ fn questions(store: &Store, holes: &[Cairn]) -> Vec<(Cairn, Call, u8)> {
         .collect()
 }
 
-/// What the trace already recorded. §6.7 serves this and nothing else.
-fn already(store: &Store, witnesses: &[Cairn]) -> Vec<(Call, Value)> {
-    witnesses
-        .iter()
-        .filter_map(|w| match store.get(*w) {
-            Ok(Stored::Node(Node::Witness { call, answer, .. })) => match store.get(answer) {
-                Ok(Stored::Value(v)) => Some((call, v)),
-                _ => None,
-            },
-            _ => None,
-        })
-        .collect()
-}
-
 /// The world a grant asks for, or the reason there is not one yet.
 fn world_from(granted: &[Capability], root: &Path) -> Result<World, Capability> {
     let mut world = World::sealed();
@@ -172,16 +158,16 @@ fn dig_up(
         // §6.7: only the ledger. There is no `World` in this branch to reach
         // the world with — which is the difference between preferring the
         // ledger and being unable to leave it.
-        let have = already(store, &witnesses);
+        let have = Replay::of_trace(store, &witnesses);
         for (_, call, _) in questions(store, &holes) {
-            if !have.iter().any(|(c, _)| *c == call) {
+            if have.answer(&call).is_none() {
                 eprintln!("nether: nothing recorded answers `{}`", call.function);
                 eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
                 return FAILED;
             }
         }
-        for (call, value) in have {
-            answers = answers.and(call, value);
+        for (call, value) in have.all() {
+            answers = answers.and(call.clone(), value.clone());
         }
     } else {
         let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
