@@ -64,9 +64,23 @@ pub fn report(d: &Diagnostic, source: &str, path: &str) -> String {
     out
 }
 
+/// An offset into this source, floored to somewhere it can be cut.
+///
+/// A span is produced against one source and rendered against whatever the
+/// caller has open, and the two need not be the same file any more. Landing
+/// inside a character would panic, which is a worse way to report a
+/// diagnostic than being a character early.
+fn cut(at: u32, source: &str) -> usize {
+    let mut at = (at as usize).min(source.len());
+    while !source.is_char_boundary(at) {
+        at -= 1;
+    }
+    at
+}
+
 /// The line number a span is on, and where that line starts and ends.
 fn line_of(span: Span, source: &str) -> (usize, usize, usize) {
-    let start = (span.start as usize).min(source.len());
+    let start = cut(span.start, source);
     let before = &source[..start];
     let number = before.matches('\n').count() + 1;
     let line_start = before.rfind('\n').map_or(0, |i| i + 1);
@@ -79,11 +93,11 @@ fn line_of(span: Span, source: &str) -> (usize, usize, usize) {
 /// The bar that closes it is a separator rather than a border: it is there
 /// when something follows and gone when nothing does.
 fn snippet(span: Span, label: Option<&str>, source: &str, path: &str, followed: bool) -> String {
-    let start = (span.start as usize).min(source.len());
+    let start = cut(span.start, source);
     let (number, line_start, line_end) = line_of(span, source);
     let text = source[line_start..line_end].trim_end_matches('\r');
     let column = source[line_start..start].chars().count() + 1;
-    let end = (span.end as usize).clamp(start, line_end);
+    let end = cut(span.end, source).clamp(start, line_end);
     let width = source[start..end].chars().count().max(1);
 
     // Everything lines up against the widest line number, which is this one.
@@ -161,5 +175,26 @@ mod tests {
         assert_eq!(grouped(1_000), "1,000");
         assert_eq!(grouped(262_144), "262,144");
         assert_eq!(grouped(1_000_000), "1,000,000");
+    }
+
+    /// A span computed against one source and rendered against another.
+    ///
+    /// The lexer only ever produces boundaries, so nothing inside this project
+    /// reaches this — but `report` takes the source as an argument, and a file
+    /// edited between burial and rendering is enough. A diagnostic that panics
+    /// is a worse diagnostic than one that is a character early.
+    #[test]
+    fn a_span_inside_a_character_renders_rather_than_panicking() {
+        let source = "I64 n = \u{1F480};\n";
+        let skull = u32::try_from(source.find('\u{1F480}').expect("it is there")).expect("small");
+        for at in 0..u32::try_from(source.len()).expect("small") {
+            let span = Span { start: at, end: at + 2 };
+            let out = report(&plain(span, "somewhere in a character"), source, "x.nc");
+            assert!(out.contains("x.nc:1:"), "{at}: {out}");
+        }
+        // And the one that used to panic points at the character it is inside.
+        let span = Span { start: skull + 2, end: skull + 3 };
+        let out = report(&plain(span, "inside it"), source, "x.nc");
+        assert!(out.contains(&format!("x.nc:1:{}", skull + 1)), "{out}");
     }
 }

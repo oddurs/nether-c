@@ -2,8 +2,9 @@
 id: 143
 title: A span that lands mid-character panics the reporter
 type: bug
-status: unmarked
+status: buried
 milestone: surface
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p2
@@ -33,5 +34,9 @@ place the rest of the project renders from does not.
 
 ## Acceptance criteria
 
-- [ ] A span that lands inside a character renders rather than panicking
-- [ ] A test with a span pointed into the middle of a character
+- [x] A span that lands inside a character renders rather than panicking
+- [x] A test with a span pointed into the middle of a character
+
+## 2026-09-12
+
+Both offsets go through one cut(), which floors to the nearest boundary. A character early is a worse diagnostic than an exact one and a better one than a panic. The test walks a span across every byte of a source with an astral character in it.
