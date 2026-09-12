@@ -27,9 +27,10 @@
 //!   be written down cannot be residualised. See the item *a struct cannot be
 //!   constructed*.
 
-use crate::depth::Depth;
+use crate::depth::{Capability, Depth};
 use crate::ir::{BinOp, Block, Expr, ExprKind, FuncId, Literal, Place, Rite, Span, Stmt, UnOp};
 use crate::prim::Prim;
+use crate::report::{Diagnostic, grouped};
 use crate::ty::Type;
 use crate::unit::Unit;
 
@@ -48,10 +49,15 @@ pub struct Residue {
 /// Why a burial stopped without finishing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Halt {
-    /// Where it stopped.
+    /// What to point at. For fuel this is the construct evaluation was going
+    /// round in, not the expression it happened to be holding when the budget
+    /// reached zero: §6.4 asks for where it starved rather than where it
+    /// stopped.
     pub span: Span,
     /// What stopped it.
     pub kind: HaltKind,
+    /// What it was grinding through, when it was grinding through something.
+    pub grinding: Option<Grinding>,
 }
 
 /// The two ways a burial does not finish.
@@ -64,7 +70,102 @@ pub enum HaltKind {
     Starved(&'static str),
     /// The budget ran out. A diagnostic, not a crash.
     /// `spec/06-evaluation.md` §6.4.
-    OutOfFuel,
+    OutOfFuel {
+        /// Steps spent, which is the budget it was given.
+        spent: u64,
+    },
+    /// This implementation's own limit, which §6.4 requires it to state and
+    /// to report rather than crash into. Fuel bounds work and this bounds
+    /// space, and no single budget is both.
+    TooDeep {
+        /// [`MAX_FRAMES`].
+        limit: u32,
+    },
+}
+
+/// How deep a chain of calls this burial can hold.
+///
+/// One of the two limits §6.4 requires an implementation to state. The other
+/// is [`STACK`], and they are stated together because neither means anything
+/// alone: burial evaluates by recursion, so a frame here is a handful of the
+/// host's, and the limit is only a limit if the stack underneath it is known.
+pub const MAX_FRAMES: u32 = 2048;
+
+/// The stack a burial is given.
+///
+/// Burial does not run on the stack it was called on. An unoptimised build
+/// spends something like sixteen kilobytes of host stack per frame, and the
+/// smallest stack a caller is likely to have — a test harness thread — holds
+/// about a hundred of those, which is not a depth a language can offer. So it
+/// runs on a stack of its own, sized for [`MAX_FRAMES`] with room to spare,
+/// and the number is written down here rather than inherited from whoever
+/// called.
+pub const STACK: usize = 64 << 20;
+
+/// What burial was going round in when the fuel ran out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Grinding {
+    /// A loop, and how many times it went round.
+    Loop {
+        /// Completed turns.
+        turns: u64,
+    },
+    /// A call chain, and how deep it went.
+    Calls {
+        /// Frames of it on the stack.
+        deep: u64,
+        /// What was being called.
+        name: String,
+    },
+}
+
+impl Halt {
+    /// This halt, ready to print.
+    #[must_use]
+    pub fn diagnostic(&self) -> Diagnostic {
+        let (headline, label, note) = match self.kind {
+            HaltKind::Starved(why) => (
+                why.to_string(),
+                None,
+                Some(
+                    "starvation is not catchable, and there will be no recovery form. \
+                     This is a mistake in the program rather than a fact about the world."
+                        .to_string(),
+                ),
+            ),
+            HaltKind::TooDeep { limit } => (
+                format!("burial went more than {limit} calls deep"),
+                match &self.grinding {
+                    Some(Grinding::Calls { deep, name }) => {
+                        Some(format!("`{name}` called {} deep", grouped(*deep)))
+                    }
+                    _ => None,
+                },
+                Some(
+                    "this is a limit of the implementation and not of the language. \
+                     Recursion that does not stop is the usual reason for reaching it."
+                        .to_string(),
+                ),
+            ),
+            HaltKind::OutOfFuel { spent } => (
+                format!("burial ran out of fuel after {} steps", grouped(spent)),
+                match &self.grinding {
+                    Some(Grinding::Loop { turns }) => {
+                        Some(format!("unrolled {} times", grouped(*turns)))
+                    }
+                    Some(Grinding::Calls { deep, name }) => {
+                        Some(format!("`{name}` called {} deep", grouped(*deep)))
+                    }
+                    None => None,
+                },
+                Some(
+                    "raise the budget with `--fuel`, or put an `opaque` barrier around it."
+                        .to_string(),
+                ),
+            ),
+        };
+        Diagnostic { span: self.span, headline, label, note }
+    }
 }
 
 /// Bury a unit with a budget of evaluation steps.
@@ -74,13 +175,35 @@ pub enum HaltKind {
 /// Starvation and exhausted fuel, which are different things: the first is a
 /// mistake in the program and the second is a bound that was too small.
 pub fn bury(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
-    let mut b =
-        Burial { unit, left: fuel, spent: 0, globals: vec![None; unit.globals.len()], flow: None };
+    let run = || burrow(unit, fuel);
+    std::thread::scope(|s| {
+        match std::thread::Builder::new().stack_size(STACK).spawn_scoped(s, run) {
+            // A burial that panicked is a bug in this crate, and the caller
+            // should see it as one.
+            Ok(h) => h.join().unwrap_or_else(|p| std::panic::resume_unwind(p)),
+            // Nothing left to spawn with. Better a shallower burial than none.
+            Err(_) => burrow(unit, fuel),
+        }
+    })
+}
+
+fn burrow(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
+    let mut b = Burial {
+        unit,
+        left: fuel,
+        spent: 0,
+        globals: vec![None; unit.globals.len()],
+        flow: None,
+        grind: Vec::new(),
+    };
     let mut demands = Vec::with_capacity(unit.demands.len());
     // In source order, which §6.2 fixes: two burials of the same input produce
     // the same trace, and that includes the order things were discovered in.
     for d in &unit.demands {
-        let v = b.expr(&d.value, &mut Vec::new())?;
+        let v = match b.expr(&d.value, &mut Vec::new()) {
+            Ok(v) => v,
+            Err(halt) => return Err(b.blame(halt)),
+        };
         demands.push(Burial::residual(v, &d.value));
     }
     let depth = demands.iter().fold(Depth::PURE, |acc, d| acc.join(d.depth));
@@ -157,15 +280,77 @@ struct Burial<'a> {
     globals: Vec<Option<Val>>,
     /// A `break`, `continue` or `return` that has happened and not yet landed.
     flow: Option<Flow>,
+    /// The loops and calls currently open, innermost last. Nothing pops it on
+    /// the way out of an error, which is the point: when the budget runs out
+    /// this is what evaluation was going round in.
+    grind: Vec<Grind>,
+}
+
+/// One open loop or call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Grind {
+    span: Span,
+    what: Open,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Open {
+    Loop { turns: u64 },
+    Call(FuncId),
 }
 
 /// A frame: one slot per local of the function being evaluated.
 type Env = Vec<Option<Val>>;
 
 impl Burial<'_> {
+    /// Where a halt should point, and what it was going round in.
+    ///
+    /// `burn` reports the leaf it was holding, which is almost never the
+    /// interesting place. A loop that went round two hundred thousand times is
+    /// the answer to *why did this not stop*; the expression it happened to be
+    /// inside is not.
+    fn blame(&self, halt: Halt) -> Halt {
+        if matches!(halt.kind, HaltKind::Starved(_)) {
+            return halt;
+        }
+        let looping = self
+            .grind
+            .iter()
+            .rev()
+            .filter_map(|g| match g.what {
+                Open::Loop { turns } => Some((g.span, turns)),
+                Open::Call(_) => None,
+            })
+            .max_by_key(|(_, turns)| *turns);
+        let calls = self.grind.iter().filter(|g| matches!(g.what, Open::Call(_))).count() as u64;
+
+        match looping {
+            Some((span, turns)) if turns >= calls => {
+                Halt { span, grinding: Some(Grinding::Loop { turns }), ..halt }
+            }
+            _ => {
+                let first = self.grind.iter().find_map(|g| match g.what {
+                    Open::Call(id) => Some((g.span, id)),
+                    Open::Loop { .. } => None,
+                });
+                match first {
+                    Some((span, id)) => {
+                        let name = self
+                            .unit
+                            .func(id)
+                            .map_or_else(|| "a function".to_string(), |f| f.name.clone());
+                        Halt { span, grinding: Some(Grinding::Calls { deep: calls, name }), ..halt }
+                    }
+                    None => halt,
+                }
+            }
+        }
+    }
+
     fn burn(&mut self, span: Span) -> Result<(), Halt> {
         if self.left == 0 {
-            return Err(Halt { span, kind: HaltKind::OutOfFuel });
+            let kind = HaltKind::OutOfFuel { spent: self.spent };
+            return Err(Halt { span, kind, grinding: None });
         }
         self.left -= 1;
         self.spent += 1;
@@ -234,68 +419,19 @@ impl Burial<'_> {
 
             ExprKind::Call { callee, args } => self.call(x, callee, args, env)?,
 
-            ExprKind::Unary { op, operand } => {
-                let v = self.expr(operand, env)?;
-                if let Some(l) = unary(*op, &v) {
-                    Self::known(l, x)
-                } else {
-                    let operand = Box::new(Self::residual(v, operand));
-                    let depth = operand.depth;
-                    Self::rebuild(ExprKind::Unary { op: *op, operand }, x, depth)
-                }
-            }
+            ExprKind::Unary { op, operand } => self.unary(x, *op, operand, env)?,
 
-            ExprKind::Binary { op, lhs, rhs } => {
-                let (a, b) = (self.expr(lhs, env)?, self.expr(rhs, env)?);
-                let folded = binary(*op, &a, &b)
-                    .map_err(|why| Halt { span: x.span, kind: HaltKind::Starved(why) })?;
-                if let Some(l) = folded {
-                    Self::known(l, x)
-                } else {
-                    let lhs = Box::new(Self::residual(a, lhs));
-                    let rhs = Box::new(Self::residual(b, rhs));
-                    let depth = lhs.depth.join(rhs.depth);
-                    Self::rebuild(ExprKind::Binary { op: *op, lhs, rhs }, x, depth)
-                }
-            }
+            ExprKind::Binary { op, lhs, rhs } => self.binary(x, *op, lhs, rhs, env)?,
 
-            // A branch on something that is not here residualises whole, both
-            // arms unevaluated. Evaluating the arm that will not be taken is
-            // exactly what §6.2 forbids.
             ExprKind::Select { cond, then, otherwise } => {
-                let c = self.expr(cond, env)?;
-                match c.bool() {
-                    Some(true) => self.expr(then, env)?,
-                    Some(false) => self.expr(otherwise, env)?,
-                    None => {
-                        let cond = Box::new(Self::residual(c, cond));
-                        let depth = x.depth;
-                        let kind = ExprKind::Select {
-                            cond,
-                            then: then.clone(),
-                            otherwise: otherwise.clone(),
-                        };
-                        Self::rebuild(kind, x, depth)
-                    }
-                }
+                self.select(x, cond, then, otherwise, env)?
             }
 
             ExprKind::Block(b) => self.block(b, env)?,
 
             ExprKind::Loop { .. } => self.loop_(x, env)?,
 
-            // A descent is a scope marker. Evaluating it evaluates its body;
-            // what the body could not do, the descent still cannot.
-            ExprKind::Descend { capability, body } => {
-                let v = self.expr(body, env)?;
-                if v.is_stuck() {
-                    let body = Box::new(Self::residual(v, body));
-                    let depth = body.depth;
-                    Self::rebuild(ExprKind::Descend { capability: *capability, body }, x, depth)
-                } else {
-                    v
-                }
-            }
+            ExprKind::Descend { capability, body } => self.descend(x, *capability, body, env)?,
 
             ExprKind::Rite { rite, operand } => self.rite(x, *rite, operand, env)?,
 
@@ -323,6 +459,87 @@ impl Burial<'_> {
             // size, and nothing has defined one.
             ExprKind::Field { .. } | ExprKind::Index { .. } | ExprKind::SizeOf(_) => Self::stuck(x),
         })
+    }
+
+    fn unary(&mut self, x: &Expr, op: UnOp, operand: &Expr, env: &mut Env) -> Result<Val, Halt> {
+        let v = self.expr(operand, env)?;
+        Ok(if let Some(l) = unary(op, &v) {
+            Self::known(l, x)
+        } else {
+            let operand = Box::new(Self::residual(v, operand));
+            let depth = operand.depth;
+            Self::rebuild(ExprKind::Unary { op, operand }, x, depth)
+        })
+    }
+
+    fn binary(
+        &mut self,
+        x: &Expr,
+        op: BinOp,
+        lhs: &Expr,
+        rhs: &Expr,
+        env: &mut Env,
+    ) -> Result<Val, Halt> {
+        let a = self.expr(lhs, env)?;
+        let b = self.expr(rhs, env)?;
+        let folded = binary(op, &a, &b).map_err(|why| Halt {
+            span: x.span,
+            kind: HaltKind::Starved(why),
+            grinding: None,
+        })?;
+        Ok(if let Some(l) = folded {
+            Self::known(l, x)
+        } else {
+            let lhs = Box::new(Self::residual(a, lhs));
+            let rhs = Box::new(Self::residual(b, rhs));
+            let depth = lhs.depth.join(rhs.depth);
+            Self::rebuild(ExprKind::Binary { op, lhs, rhs }, x, depth)
+        })
+    }
+
+    /// A branch on something that is not here residualises whole, both arms
+    /// unevaluated. Evaluating the arm that will not be taken is exactly what
+    /// §6.2 forbids.
+    fn select(
+        &mut self,
+        x: &Expr,
+        cond: &Expr,
+        then: &Expr,
+        otherwise: &Expr,
+        env: &mut Env,
+    ) -> Result<Val, Halt> {
+        let c = self.expr(cond, env)?;
+        Ok(match c.bool() {
+            Some(true) => self.expr(then, env)?,
+            Some(false) => self.expr(otherwise, env)?,
+            None => {
+                let cond = Box::new(Self::residual(c, cond));
+                let kind = ExprKind::Select {
+                    cond,
+                    then: Box::new(then.clone()),
+                    otherwise: Box::new(otherwise.clone()),
+                };
+                Self::rebuild(kind, x, x.depth)
+            }
+        })
+    }
+
+    /// A descent is a scope marker. Evaluating it evaluates its body; what the
+    /// body could not do, the descent still cannot.
+    fn descend(
+        &mut self,
+        x: &Expr,
+        capability: Capability,
+        body: &Expr,
+        env: &mut Env,
+    ) -> Result<Val, Halt> {
+        let v = self.expr(body, env)?;
+        if !v.is_stuck() {
+            return Ok(v);
+        }
+        let body = Box::new(Self::residual(v, body));
+        let depth = body.depth;
+        Ok(Self::rebuild(ExprKind::Descend { capability, body }, x, depth))
     }
 
     /// A unit-level binding, evaluated once and only if something reaches it.
@@ -357,7 +574,10 @@ impl Burial<'_> {
         let folded = match &f.kind {
             Kind::Prim(p) => match prim(*p, &values) {
                 Ok(l) => l.map(|l| Self::known(l, x)),
-                Err(why) => return Err(Halt { span: x.span, kind: HaltKind::Starved(why) }),
+                Err(why) => {
+                    let kind = HaltKind::Starved(why);
+                    return Err(Halt { span: x.span, kind, grinding: None });
+                }
             },
             Kind::Func(id) => self.apply(*id, &values)?,
             _ => None,
@@ -386,7 +606,14 @@ impl Burial<'_> {
                 *cell = Some(v.clone());
             }
         }
+        let frames = self.grind.iter().filter(|g| matches!(g.what, Open::Call(_))).count();
+        if u32::try_from(frames).is_ok_and(|n| n >= MAX_FRAMES) {
+            let kind = HaltKind::TooDeep { limit: MAX_FRAMES };
+            return Err(Halt { span: f.span, kind, grinding: None });
+        }
+        self.grind.push(Grind { span: f.span, what: Open::Call(id) });
         let fell = self.block(&f.body, &mut frame)?;
+        self.grind.pop();
         let out = match self.flow.take() {
             Some(Flow::Returned(v)) => v,
             // A `break` outside a loop is not a program this can run.
@@ -428,6 +655,15 @@ impl Burial<'_> {
     /// Abandoning is safe because nothing evaluated so far can have reached
     /// the world: reaching the world is what made it stop.
     fn loop_(&mut self, x: &Expr, env: &mut Env) -> Result<Val, Halt> {
+        self.grind.push(Grind { span: x.span, what: Open::Loop { turns: 0 } });
+        // `?` on the way out of `unroll` leaves the frame where it is, which
+        // is how the halt finds out what was going round.
+        let out = self.unroll(x, env)?;
+        self.grind.pop();
+        Ok(out)
+    }
+
+    fn unroll(&mut self, x: &Expr, env: &mut Env) -> Result<Val, Halt> {
         let ExprKind::Loop { body, step } = &x.kind else {
             return Ok(Self::stuck(x));
         };
@@ -456,6 +692,11 @@ impl Burial<'_> {
                     *env = before;
                     return Ok(Self::stuck(x));
                 }
+            }
+            // Counted at the bottom, so that a turn the fuel cut short is not
+            // one this claims to have finished.
+            if let Some(Grind { what: Open::Loop { turns }, .. }) = self.grind.last_mut() {
+                *turns += 1;
             }
         }
     }

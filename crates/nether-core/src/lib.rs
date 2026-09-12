@@ -31,12 +31,12 @@ mod unit;
 
 pub use check::{Blame, Fault, FaultKind, check};
 pub use depth::{Capability, Depth};
-pub use eval::{Halt, HaltKind, Residue, bury};
+pub use eval::{Grinding, Halt, HaltKind, MAX_FRAMES, Residue, bury};
 pub use ir::{
     BinOp, Block, Expr, ExprKind, FuncId, GlobalId, Literal, LocalId, Place, Proj, Rite, Span,
     Stmt, UnOp,
 };
 pub use prim::Prim;
-pub use report::report;
+pub use report::{Diagnostic, report};
 pub use ty::{Refusal, Type};
 pub use unit::{Asserted, Demand, Field, FuncDef, GlobalDef, LocalDef, StructDef, Unit};

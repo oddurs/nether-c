@@ -22,9 +22,10 @@
 
 use core::fmt;
 
-use crate::depth::Depth;
+use crate::depth::{Capability, Depth};
 use crate::ir::{Block, Expr, ExprKind, LocalId, Proj, Rite, Span, Stmt};
 use crate::prim::Prim;
+use crate::report::Diagnostic;
 use crate::ty::Type;
 use crate::unit::{Asserted, FuncDef, Unit};
 
@@ -88,6 +89,51 @@ pub enum FaultKind {
     },
     /// The IR is not well-formed enough to have a judgement at all.
     Malformed(&'static str),
+}
+
+impl Fault {
+    /// This fault, ready to print.
+    #[must_use]
+    pub fn diagnostic(&self) -> Diagnostic {
+        Diagnostic {
+            span: self.span,
+            headline: self.to_string(),
+            label: self.label(),
+            note: self.note(),
+        }
+    }
+
+    /// What goes at the end of the caret row, about the thing underlined.
+    fn label(&self) -> Option<String> {
+        let blame = self.blame.as_ref()?;
+        match self.kind {
+            FaultKind::Orpheus { origin, .. } => {
+                Some(format!("this shade came from `{}` at stratum {origin}", blame.what))
+            }
+            FaultKind::Ungranted { needed, .. } => {
+                Some(format!("`{}` reaches stratum {needed}", blame.what))
+            }
+            _ => None,
+        }
+    }
+
+    /// The line after the gap, which says what to do rather than what is wrong.
+    fn note(&self) -> Option<String> {
+        match self.kind {
+            FaultKind::Orpheus { origin, .. } => Capability::at(origin).map(|c| {
+                format!(
+                    "the value is here, but you are not. Wrap the look in `descend {c} {{ … }}`."
+                )
+            }),
+            FaultKind::Ungranted { needed, .. } => {
+                Capability::at(needed).map(|c| format!("wrap it in `descend {c} {{ … }}`."))
+            }
+            FaultKind::Asserted { derived, .. } => {
+                Some(format!("inference is not a coercion. Write `@{derived}`, or write nothing."))
+            }
+            FaultKind::Stated { .. } | FaultKind::Malformed(_) => None,
+        }
+    }
 }
 
 impl fmt::Display for Fault {
