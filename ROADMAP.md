@@ -95,11 +95,10 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`###·······` 27% · 3 of 11 done · due 2027-01-15
+`####······` 36% · 4 of 11 done · due 2027-01-15
 
 ### unmarked
 
-- [ ] [`0047`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0047-the-bidirectional-depth-checker.md) The bidirectional depth checker <sup>feature · p0 · 0</sup>
 - [ ] [`0048`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0048-normalization-by-evaluation.md) Normalization by evaluation <sup>feature · p0 · 0</sup>
 - [ ] [`0049`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0049-holes-and-residualization.md) Holes and residualization <sup>feature · p0 · 0</sup>
 - [ ] [`0050`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0050-fuel-and-starvation-diagnostics.md) Fuel and starvation diagnostics <sup>feature · p0 · 0</sup>
@@ -111,6 +110,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 ### buried
 
 - [x] [`0046`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0046-nether-core-the-ir.md) nether-core: the IR <sup>feature · p0 · 0</sup>
+- [x] [`0047`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0047-the-bidirectional-depth-checker.md) The bidirectional depth checker <sup>feature · p0 · 0</sup>
 - [x] [`0119`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0119-spec-ambient-soundness-is-stated-as-something-that-is-not-true.md) Spec: ambient soundness is stated as something that is not true <sup>spec · p0</sup>
 - [x] [`0120`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0120-spec-app-s-premise-forbids-the-specification-s-own-examples.md) Spec: APP's premise forbids the specification's own examples <sup>spec · p0</sup>
 
