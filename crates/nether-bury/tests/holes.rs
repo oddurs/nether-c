@@ -306,3 +306,32 @@ fn everything_burial_names_is_named_by_its_content() {
         made.push(*cairn);
     }
 }
+
+/// Naming is constant in what has already been named.
+///
+/// `remember` used to scan `named` on every call, so a burial that named N
+/// values cost N². §6.6 counts nine hundred and three nodes for a program with
+/// one hole in it, and a real one names more.
+///
+/// Measured as a shape rather than a duration, because a wall clock says more
+/// about the machine than about the code: four times the questions is four
+/// times the work, and the scan made it sixteen.
+#[test]
+fn naming_is_constant_in_what_has_already_been_named() {
+    let ask = |n: usize| {
+        let asks: Vec<Expr> = (0..n).map(|i| descending(reading(&format!("{i}.nc")))).collect();
+        let unit = demanding(asks);
+        let start = std::time::Instant::now();
+        let r = bury(&unit, source(), 4_000_000).expect("this finishes");
+        assert_eq!(r.holes.len(), n, "{n} different questions");
+        start.elapsed()
+    };
+
+    ask(3_000); // warm.
+    let small = ask(3_000);
+    let large = ask(12_000);
+    assert!(
+        large < small * 8,
+        "four times the questions took {large:?} against {small:?}; that is the scan"
+    );
+}

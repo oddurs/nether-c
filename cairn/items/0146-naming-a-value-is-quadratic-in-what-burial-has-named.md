@@ -2,8 +2,9 @@
 id: 146
 title: Naming a value is quadratic in what burial has named
 type: chore
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p2
@@ -35,5 +36,13 @@ in — and put a `HashMap<Cairn, usize>` beside it.
 
 ## Acceptance criteria
 
-- [ ] `remember` is constant time in what has already been named
-- [ ] The order of `named` and `holes` is unchanged
+- [x] `remember` is constant time in what has already been named
+- [x] The order of `named` and `holes` is unchanged
+
+## 2026-09-12
+
+A HashSet beside the Vec: the vector keeps the order section 6.2 fixes and the set answers whether a name is already there. Residue::get stays a scan and says so -- named is iterated by whoever writes it, and nothing looks one up in a loop.
+
+## 2026-09-12
+
+Proved as a shape rather than a duration: four times the questions is four times the work and the scan made it sixteen. With the scan back the test fails at 13.6x.
