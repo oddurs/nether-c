@@ -28,7 +28,7 @@ spec/03-lexical.md § 3.5 Depth annotations #1	text	pinned	f3d54dbae87a451e
 spec/03-lexical.md § 3.6 Literals #1	text	pinned	e5fdf9832863d9cd
 spec/03-lexical.md § 3.7 Punctuation #1	text	pinned	25fd164649674a25
 spec/04-grammar.md § 4.1 Compilation unit #1	ebnf	pinned	d8137d228d3b4996
-spec/04-grammar.md § 4.2 Declarations #1	ebnf	pinned	c50348b7580e5439
+spec/04-grammar.md § 4.2 Declarations #1	ebnf	pinned	82a7b0222c7269d4
 spec/04-grammar.md § 4.3 Types #1	ebnf	pinned	f3e5d72d58b38266
 spec/04-grammar.md § 4.4 Statements #1	ebnf	pinned	30a4f3e68261c45a
 spec/04-grammar.md § 4.5 Expressions #1	ebnf	pinned	88eb88666b0c5b62

@@ -107,13 +107,28 @@ reveal anyway.
 
 ## 5.4 Mutation
 
-There is none, observably.
+Nothing in the ledger ever changes. A local, before it is in the ledger, is not
+in the ledger.
 
-A binding may not be reassigned. A local aggregate may be built up
-field-by-field before it is first used as a value, and an implementation
-SHOULD compile that to in-place writes, but no program can observe the
-difference: once a value has been read, its cairn exists, and nothing can
-change what a cairn names.
+That is the whole of the rule, and the rest of this section is what it means.
+
+A **local** is a binding inside a block. It may be assigned, and its fields and
+elements may be assigned, until it is **named** — and after that it may not.
+A local is named the moment its value is used as a value: sealed, shaded,
+deposited, returned, or passed as an argument. From then on its cairn exists,
+and nothing can change what a cairn names.
+
+A **global** — a unit-level `let` — may not be assigned at all. There is no
+statement above it to do the assigning, and its initialiser is required
+([§4.2](04-grammar.md#42-declarations)).
+
+An implementation SHOULD compile the assignments to in-place writes. No program
+can observe the difference, which is what makes it sound.
+
+Reading a field or an element that has not been assigned **collapses**
+([§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them)). It
+is a mistake in the program and not a fact about the world: there is no value
+there and there never was one.
 
 ```c
 U0 build()
@@ -126,9 +141,21 @@ U0 build()
 }
 ```
 
+This is also what makes a `for` loop work. Its step assigns the counter, which
+is a local and has not been named, so the loop advances without anything in the
+ledger changing.
+
 > In TempleOS every task could write to all of memory at all times. Nether C
-> keeps the total sharing and removes the writing. Below, nothing changes;
-> that is what makes it the nether.
+> keeps the total sharing and removes the writing.
+>
+> The line is drawn at the ledger rather than at the function body, and it is
+> worth being exact about why. What the inversion is about is *shared,
+> addressable, permanent* memory — the thing every task could reach. A counter
+> in a loop is none of those: nothing else can see it, it has no name, and it
+> stops existing when the block does. Forbidding it would buy nothing and cost
+> the language its loops.
+>
+> Below, nothing changes. A local is not below yet.
 
 ## 5.5 Depth is not a type constructor
 

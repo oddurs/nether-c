@@ -45,13 +45,17 @@ params        := param { "," param } ;
 param         := type identifier ;
 latent        := "@" digit ;
 
-let_decl      := type identifier "=" expr ";" ;
+let_decl      := type identifier [ "=" expr ] ";" ;
 ```
 
-A `let_decl` at unit level is a declaration; the same production inside a
-block is a statement. Both are immutable bindings: there is no assignment to a
-binding after its declaration, only to the fields of a local aggregate before
-it escapes. See [section 05](05-types.md#54-mutation).
+A `let_decl` at unit level is a declaration; the same production inside a block
+is a statement. A unit-level one MUST have its initialiser: a global with no
+value is a value nothing can supply, since there is no statement above it to
+assign one.
+
+A block-level one may go without, and that is the only way to construct an
+aggregate: declare it, then write its fields. What may be written, and for how
+long, is [§5.4](05-types.md#54-mutation).
 
 ## 4.3 Types
 
