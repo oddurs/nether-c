@@ -27,7 +27,7 @@
 //!   be written down cannot be residualised. See the item *a struct cannot be
 //!   constructed*.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use nether_core::{
     BinOp, Block, Capability, Depth, Diagnostic, Expr, ExprKind, FuncId, GlobalId, Literal, Place,
@@ -62,6 +62,10 @@ pub struct Residue {
 
 impl Residue {
     /// Whatever this burial filed under that name.
+    ///
+    /// A scan. `named` is in the order things were named, which is what §6.2
+    /// fixes and what a writer iterates; this is for looking one up
+    /// afterwards, which nothing does in a loop.
     #[must_use]
     pub fn get(&self, cairn: Cairn) -> Option<&Stored> {
         self.named.iter().find(|(c, _)| *c == cairn).map(|(_, s)| s)
@@ -273,6 +277,7 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
         flow: None,
         grind: Vec::new(),
         named: Vec::new(),
+        known: HashSet::new(),
         holes: Vec::new(),
         asked: HashMap::new(),
     };
@@ -366,8 +371,14 @@ struct Burial<'a> {
     /// the way out of an error, which is the point: when the budget runs out
     /// this is what evaluation was going round in.
     grind: Vec<Grind>,
-    /// Everything named so far.
+    /// Everything named so far, in the order it was named.
     named: Vec<(Cairn, Stored)>,
+    /// The same names, for asking whether one is already there.
+    ///
+    /// `named` keeps the order §6.2 fixes and this keeps the lookup constant:
+    /// scanning the vector made naming N values cost N², and §6.6 counts nine
+    /// hundred nodes for a program with one hole in it.
+    known: HashSet<Cairn>,
     /// The holes, in the order they were found.
     holes: Vec<Cairn>,
     /// The holes already dug, by the question each one asks.
@@ -402,7 +413,7 @@ impl Burial<'_> {
     /// write when one is given the capability to.
     fn remember(&mut self, what: Stored) -> Cairn {
         let cairn = what.cairn();
-        if !self.named.iter().any(|(c, _)| *c == cairn) {
+        if self.known.insert(cairn) {
             self.named.push((cairn, what));
         }
         cairn
