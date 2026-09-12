@@ -51,7 +51,7 @@ try {
 
 <span class="t">Cairn</span> witness = <span class="k">seal</span> reply;      <span class="c">// legal: Cairn@0</span>
 <span class="t">I64</span>   n       = <span class="k">look</span>(reply).len; <span class="c">// ILLEGAL here — see below</span></code></pre></figure><p><code>shade e</code>, where <code>e : T@d</code>, produces a value of type <code>Shade&lt;T&gt;</code> at depth 0. The shade is <strong>opaque</strong>: it MAY be stored, copied, passed, compared for equality, and sealed. It MUST NOT be destructured, pattern-matched, or otherwise observed.</p><p><code>look s</code>, where <code>s : Shade&lt;T&gt;</code> originating at depth <code>d</code>, has type <code>T@d</code>, and is well-typed <strong>only where the current descent depth is at least <code>d</code></strong>.</p><blockquote><p><strong>The Orpheus rule.</strong> You may carry a shade up out of any stratum. You may only look at it by going back down.</p></blockquote><p>The check is local: it compares the shade&#x27;s origin depth against the ambient depth at the point of the <code>look</code>. It does not propagate, it does not stain the enclosing scope, and it produces an error that names both numbers and the <code>descend</code> that would fix it.</p><figure class="listing"><pre><code>error: cannot look at a shade from stratum 5 at depth 0
-  --&gt; stamp.nc:14:11
+  --&gt; stamp.nc:14:19
    |
 14 |   I64   n       = look(reply).len;
    |                   ^^^^^^^^^^^ this shade came from `fetch` at stratum 5

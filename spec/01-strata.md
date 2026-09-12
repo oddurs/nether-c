@@ -133,7 +133,7 @@ enclosing scope, and it produces an error that names both numbers and the
 
 ```
 error: cannot look at a shade from stratum 5 at depth 0
-  --> stamp.nc:14:11
+  --> stamp.nc:14:19
    |
 14 |   I64   n       = look(reply).len;
    |                   ^^^^^^^^^^^ this shade came from `fetch` at stratum 5

@@ -95,7 +95,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`####······` 36% · 4 of 11 done · due 2027-01-15
+`#####·····` 42% · 5 of 12 done · due 2027-01-15
 
 ### unmarked
 
@@ -113,6 +113,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0047`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0047-the-bidirectional-depth-checker.md) The bidirectional depth checker <sup>feature · p0 · 0</sup>
 - [x] [`0119`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0119-spec-ambient-soundness-is-stated-as-something-that-is-not-true.md) Spec: ambient soundness is stated as something that is not true <sup>spec · p0</sup>
 - [x] [`0120`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0120-spec-app-s-premise-forbids-the-specification-s-own-examples.md) Spec: APP's premise forbids the specification's own examples <sup>spec · p0</sup>
+- [x] [`0121`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0121-spec-the-orpheus-error-points-at-the-wrong-column.md) Spec: the Orpheus error points at the wrong column <sup>spec · p1</sup>
 
 ## surface — The Surface
 
