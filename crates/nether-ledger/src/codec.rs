@@ -96,11 +96,10 @@ impl Node {
                 put_cairns(&mut out, args);
                 out.extend_from_slice(result.as_bytes());
             }
-            Self::Hole { call, stratum, span, depends } => {
+            Self::Hole { call, stratum, span } => {
                 put_call(&mut out, call);
                 out.push(*stratum);
                 put_span(&mut out, span);
-                put_cairns(&mut out, depends);
             }
             Self::Deposit { value, span } => {
                 out.extend_from_slice(value.as_bytes());
@@ -112,8 +111,11 @@ impl Node {
                 out.extend_from_slice(answer.as_bytes());
                 put_span(&mut out, span);
             }
-            Self::Trace { roots, fuel_spent, depth, unrecorded } => {
-                put_cairns(&mut out, roots);
+            Self::Trace { residue, holes, deposits, source, fuel_spent, depth, unrecorded } => {
+                out.extend_from_slice(residue.as_bytes());
+                put_cairns(&mut out, holes);
+                put_cairns(&mut out, deposits);
+                out.extend_from_slice(source.as_bytes());
                 out.extend_from_slice(&fuel_spent.to_be_bytes());
                 out.push(*depth);
                 out.push(u8::from(*unrecorded));
@@ -408,12 +410,9 @@ impl Reader<'_> {
                 args: self.cairns()?,
                 result: self.cairn()?,
             }),
-            kind::HOLE => Ok(Node::Hole {
-                call: self.call()?,
-                stratum: self.stratum()?,
-                span: self.span()?,
-                depends: self.cairns()?,
-            }),
+            kind::HOLE => {
+                Ok(Node::Hole { call: self.call()?, stratum: self.stratum()?, span: self.span()? })
+            }
             kind::DEPOSIT => Ok(Node::Deposit { value: self.cairn()?, span: self.span()? }),
             kind::WITNESS => Ok(Node::Witness {
                 stratum: self.stratum()?,
@@ -422,7 +421,10 @@ impl Reader<'_> {
                 span: self.span()?,
             }),
             kind::TRACE => {
-                let roots = self.cairns()?;
+                let residue = self.cairn()?;
+                let holes = self.cairns()?;
+                let deposits = self.cairns()?;
+                let source = self.cairn()?;
                 let fuel_spent =
                     u64::from_be_bytes(self.take(8)?.try_into().expect("took exactly eight"));
                 let depth = self.stratum()?;
@@ -431,7 +433,7 @@ impl Reader<'_> {
                     0x01 => true,
                     other => return Err(DecodeError::BadMark(other)),
                 };
-                Ok(Node::Trace { roots, fuel_spent, depth, unrecorded })
+                Ok(Node::Trace { residue, holes, deposits, source, fuel_spent, depth, unrecorded })
             }
             other => Err(DecodeError::UnknownKind(other)),
         }
@@ -786,17 +788,32 @@ mod node_tests {
             Node::Literal(Value::Array(vec![Value::Unit])),
             Node::Apply { function: c(b"f"), args: vec![], result: c(b"r") },
             Node::Apply { function: c(b"f"), args: vec![c(b"a"), c(b"b")], result: c(b"r") },
-            Node::Hole { call: call(), stratum: 3, span: span(), depends: vec![c(b"d")] },
+            Node::Hole { call: call(), stratum: 3, span: span() },
             Node::Hole {
                 call: Call { function: "draw".to_owned(), args: vec![] },
                 stratum: 7,
                 span: span(),
-                depends: vec![],
             },
             Node::Deposit { value: c(b"greeting"), span: span() },
             Node::Witness { stratum: 3, call: call(), answer: c(b"bytes"), span: span() },
-            Node::Trace { roots: vec![c(b"obj")], fuel_spent: 903, depth: 3, unrecorded: false },
-            Node::Trace { roots: vec![], fuel_spent: 0, depth: 8, unrecorded: true },
+            Node::Trace {
+                residue: c(b"residue"),
+                holes: vec![c(b"hole")],
+                deposits: vec![c(b"obj")],
+                source: c(b"build.nc"),
+                fuel_spent: 903,
+                depth: 3,
+                unrecorded: false,
+            },
+            Node::Trace {
+                residue: c(b"residue"),
+                holes: vec![],
+                deposits: vec![],
+                source: c(b"x.nc"),
+                fuel_spent: 0,
+                depth: 8,
+                unrecorded: true,
+            },
         ]
     }
 
@@ -855,8 +872,8 @@ mod node_tests {
     /// The forward edge. Provenance is this, read backwards.
     #[test]
     fn references_names_every_cairn_the_node_holds() {
-        let hole = Node::Hole { call: call(), stratum: 3, span: span(), depends: vec![c(b"d")] };
-        assert_eq!(hole.references(), vec![c(b"main.nc"), c(b"hello.nc"), c(b"d")]);
+        let hole = Node::Hole { call: call(), stratum: 3, span: span() };
+        assert_eq!(hole.references(), vec![c(b"main.nc"), c(b"hello.nc")]);
         assert!(Node::Literal(Value::Unit).references().is_empty());
 
         // Nothing a node holds may be missing from `references`, or the reverse
@@ -905,8 +922,12 @@ mod node_tests {
 
     #[test]
     fn rejects_marks_that_are_not_a_bit() {
+        // residue, no holes, no deposits, source, fuel, depth, then the mark.
         let mut bytes = vec![tag::NODE, kind::TRACE];
+        bytes.extend_from_slice(c(b"residue").as_bytes());
         bytes.extend_from_slice(&0u64.to_be_bytes());
+        bytes.extend_from_slice(&0u64.to_be_bytes());
+        bytes.extend_from_slice(c(b"source").as_bytes());
         bytes.extend_from_slice(&0u64.to_be_bytes());
         bytes.push(0);
         bytes.push(0x02);

@@ -43,7 +43,7 @@ spec/06-evaluation.md § 6.4 Starvation and fuel #1	text	pinned	07c9e60510dab9cc
 spec/06-evaluation.md § 6.6 Exhumation #1	console	pinned	62a0ec6a54925078
 spec/06-evaluation.md § 6.7 Replay #1	console	pinned	de840300ab71ca8d
 spec/06-evaluation.md § 6.8 What burial prints #1	text	pinned	a39449193e40ee44
-spec/07-ledger.md § 7.2 Cairns #1	text	pinned	44a818ca5c7ac6dd
+spec/07-ledger.md § 7.2 Cairns #1	text	pinned	cd500d49d4cf886c
 spec/07-ledger.md § 7.5 The store #1	text	pinned	ebd628943dfe60de
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
 spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5

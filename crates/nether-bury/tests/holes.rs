@@ -90,7 +90,7 @@ fn a_question_the_world_can_answer_becomes_a_hole() {
     let r = buried(&demanding(vec![descending(read_of(str_lit("main.nc"), at))]));
 
     assert_eq!(r.holes.len(), 1);
-    let [Node::Hole { call, stratum, span, depends }] = r.questions()[..] else {
+    let [Node::Hole { call, stratum, span }] = r.questions()[..] else {
         panic!("not one hole: {:?}", r.questions())
     };
     assert_eq!(call.function, "read");
@@ -101,7 +101,8 @@ fn a_question_the_world_can_answer_becomes_a_hole() {
     // A hole does not record its dependents, and within one burial it records
     // no dependencies either: a hole is only formed once every argument is a
     // finished value, so nothing it needs can still be waiting.
-    assert!(depends.is_empty());
+    // `depends` is gone: a hole is formed only once every argument is a
+    // finished value, so it could never hold anything. See 0128.
 
     // The argument is in the ledger beside it, so the question is readable
     // without the program that asked it.

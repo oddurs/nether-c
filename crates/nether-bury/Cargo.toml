@@ -13,5 +13,10 @@ repository.workspace = true
 nether-core = { path = "../nether-core" }
 nether-ledger = { path = "../nether-ledger" }
 
+[dev-dependencies]
+# The round-trip proof §6.5 now requires: print a residue, lower it again,
+# and insist it is the same program. No cycle — syntax depends only on core.
+nether-syntax = { path = "../nether-syntax" }
+
 [lints]
 workspace = true

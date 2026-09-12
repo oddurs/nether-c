@@ -9,7 +9,7 @@ depends_on:
 created: 2026-09-12
 updated: 2026-09-12
 priority: p0
-effort: m
+effort: l
 area: spec/07-ledger.md
 proof: Every residue burial can produce has an encoding in section 07, and burying that encoding again gives the same result
 ---
@@ -58,10 +58,10 @@ and the residue is a program, and those have never needed the same encoding.
 
 ## Acceptance criteria
 
-- [ ] §6.5 and §7.3 agree about what a residue is made of
-- [ ] `depends` has a value some burial actually produces, or it goes
-- [ ] The staging law is stated over something that has an encoding
-- [ ] `spec/90-rationale.md` records the rejected shape
+- [x] §6.5 and §7.3 agree about what a residue is made of
+- [x] `depends` has a value some burial actually produces, or it goes
+- [x] The staging law is stated over something that has an encoding
+- [x] `spec/90-rationale.md` records the rejected shape
 
 ## 2026-09-12
 
@@ -86,3 +86,17 @@ What three still needs is a Trace node that can hold it. Trace is roots, fuel_sp
 ## 2026-09-12
 
 Watch out when wiring the residue to the ledger: nether-bury's Residue::depth is the deepest stratum anything in the residue still reaches -- what is owed -- and Node::Trace's depth is the deepest stratum a witness reached. A burial that has answered nothing has a residue at 5 and a trace at 0. See section 7.3.2, added by 0136.
+
+## 2026-09-12
+
+SETTLED on reading three: a residue is a program, a program is source, and source is Bytes. Nothing in the frozen value encoding changes for it.
+
+6.5 now says so, and adds the obligation that makes the staging law provable: an implementation MUST be able to print any residue it can produce, and lowering what it printed MUST give back the same program. crates/nether-bury/tests/residue_is_source.rs holds it — bury, print, parse, lower, bury again, and the two printed programs must be identical. Compared as source rather than as IR, because two lowerings of two different texts carry different spans and a span is a fact about where something was written.
+
+Residue::as_unit(&buried) is the new surface. Declarations come from the unit that was buried: burial reduces demands and never touches a struct, a function or a global, so carrying them across loses nothing and an unreduced call still has something to name.
+
+depends is GONE. The item argued it was provably always empty; nether-bury was already passing Vec::new() with a comment saying so, which is about as direct as evidence gets.
+
+Node::Trace changed shape: residue, holes, deposits, source, fuel_spent, depth, unrecorded. That is changing what an existing tag means, which is the bumping case under the rule 0117 just established, so the domain went to v2. Nothing had been buried, so it cost nothing — and that is exactly why the rule was worth having before it was not.
+
+Effort was m and it was l: the change reached five crates, because Trace and Hole are matched exhaustively in lamp, strata and bury. Every one of those was the compiler pointing at something that genuinely had to change.

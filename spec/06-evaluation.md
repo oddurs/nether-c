@@ -63,7 +63,11 @@ each hole:
 | `call` | the prelude function and its fully-evaluated arguments |
 | `stratum` | the depth the call would reach |
 | `span` | the source location that asked |
-| `depends` | the cairns of the nodes that must exist for this call to be made |
+
+A hole does **not** record what it depends on. It cannot depend on anything: a
+hole is only formed once every one of its arguments is a finished value, so
+nothing it needs can still be waiting on another hole. A field for it would be
+empty in every trace any burial could produce.
 
 A hole does **not** record its dependents. It cannot: a node is immutable and
 named by its content, so a hole that listed the things waiting on it would get
@@ -168,8 +172,25 @@ barrier to the command line — is recorded in
 
 ## 6.5 Residue
 
-What survives burial is the **residue**: every node that could not be reduced,
-plus the holes, plus the provenance edges between them.
+What survives burial is the **residue**: the program that is left once
+everything that could be evaluated has been.
+
+A residue is a **program**, not a set of nodes. It has branches, loops,
+bindings and blocks in it — a `while` whose condition waits on a hole
+residualises whole, and so does the `if` around it — and none of those is a
+thing [§7.3](07-ledger.md#73-nodes) knows how to store. Nor should it: a node
+records something that *happened*, and a residue is something that has not
+happened yet.
+
+So a residue is written down the way programs are written down. It is source,
+in the syntax of [section 04](04-grammar.md), held in the ledger as an ordinary
+`Bytes` value and named like any other. Burying it again means lexing, parsing
+and lowering it again, which is exactly what burying anything means.
+
+> An implementation MUST be able to print any residue it can produce, and
+> lowering what it printed MUST give back the same program. Without that the
+> staging law below is unprovable, because the second burial would not be
+> burying the first one's residue.
 
 The residue is a complete program. It can be buried again, with more
 capabilities, and the result is the same as if those capabilities had been

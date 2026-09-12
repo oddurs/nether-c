@@ -454,7 +454,6 @@ mod tests {
                 call: Call { function: String::new(), args: vec![] },
                 stratum: 3,
                 span: Span { source: c, start: 0, end: 1 },
-                depends: vec![],
             }),
             Stored::Node(Node::Deposit { value: c, span: Span { source: c, start: 9, end: 4 } }),
         ];
@@ -594,7 +593,6 @@ mod tests {
             call: Call { function: "read".to_owned(), args: vec![arg] },
             stratum: 3,
             span: Span { source, start: 0, end: 1 },
-            depends: vec![],
         };
         let cairn = store.put(&Stored::Node(hole)).unwrap();
 

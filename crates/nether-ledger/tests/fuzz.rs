@@ -80,10 +80,18 @@ fn corpus() -> Vec<Vec<u8>> {
     let nodes = vec![
         Node::Literal(Value::Int(3)),
         Node::Apply { function: c, args: vec![c, c], result: c },
-        Node::Hole { call: call.clone(), stratum: 3, span, depends: vec![c] },
+        Node::Hole { call: call.clone(), stratum: 3, span },
         Node::Deposit { value: c, span },
         Node::Witness { stratum: 5, call, answer: c, span },
-        Node::Trace { roots: vec![c], fuel_spent: 12, depth: 3, unrecorded: true },
+        Node::Trace {
+            residue: c,
+            holes: vec![c],
+            deposits: vec![c],
+            source: c,
+            fuel_spent: 12,
+            depth: 3,
+            unrecorded: true,
+        },
     ];
 
     values.into_iter().map(|v| v.encode()).chain(nodes.into_iter().map(|n| n.encode())).collect()

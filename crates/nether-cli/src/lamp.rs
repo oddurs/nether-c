@@ -193,9 +193,13 @@ fn node(store: &Store, n: &Node) -> String {
             Ok(Stored::Value(v)) => format!("deposit  {}   at {}", value(&v), span.start),
             _ => format!("deposit  {}", v.short()),
         },
-        Node::Trace { roots, fuel_spent, depth, unrecorded } => {
+        Node::Trace { holes, deposits, fuel_spent, depth, unrecorded, .. } => {
             let mark = if *unrecorded { "   UNRECORDED" } else { "" };
-            format!("trace    depth {depth}   {} root(s)   {fuel_spent} steps{mark}", roots.len())
+            format!(
+                "trace    depth {depth}   {} hole(s)   {} deposit(s)   {fuel_spent} steps{mark}",
+                holes.len(),
+                deposits.len()
+            )
         }
     }
 }

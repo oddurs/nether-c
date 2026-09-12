@@ -263,6 +263,34 @@ It also removes a dependency — full NFC is a megabyte of Unicode tables — bu
 that is a consequence of the decision, not the reason for it. Had the argument
 gone the other way, the tables would have been the right thing to add.
 
+### A residue as nodes
+
+[§6.5](06-evaluation.md#65-residue) used to say the residue was "every node
+that could not be reduced, plus the holes, plus the provenance edges between
+them", and [§7.3](07-ledger.md#73-nodes) listed six node kinds, none of which
+can hold a branch, a loop, a binding or a block. A residue routinely contains
+all four. The two sections could not both be right.
+
+The rejected fix was to add node kinds until a residual program fitted —
+`Branch`, `Loop`, `Bind`, an unreduced `Apply`. It has one real argument in its
+favour: [§6.6](06-evaluation.md#66-exhumation) counts nine hundred and three
+nodes for a program with a single hole in it, which is the residue being
+counted, so the summary already assumed this reading.
+
+It was rejected because it makes the ledger hold two unrelated things in one
+vocabulary. A node records something that *happened* — this was applied to
+that, the world said this, at this place in this file. A residue is something
+that has *not* happened. Encoding both as nodes means every consumer of a trace
+has to know which kind of node it is looking at, and the distinction is not
+visible in the type.
+
+What was chosen instead: a residue is a program, a program is source, and
+source is `Bytes`. It costs a print and a parse on every re-burial, which is
+real work that the node encoding would not have needed. It buys a `Trace` whose
+parts each mean one thing, and it means the staging law is stated over
+something that demonstrably round-trips — the printer has a proof that lowering
+what it printed gives back the same program, node for node.
+
 ### Bumping the domain for any change at all
 
 [§7.2](07-ledger.md#72-cairns) used to say that changing the encoding changed
