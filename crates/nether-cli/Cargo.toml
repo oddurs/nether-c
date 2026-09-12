@@ -15,8 +15,5 @@ path = "src/main.rs"
 nether-core = { path = "../nether-core" }
 nether-ledger = { path = "../nether-ledger" }
 
-[dev-dependencies]
-nether-ledger = { path = "../nether-ledger" }
-
 [lints]
 workspace = true

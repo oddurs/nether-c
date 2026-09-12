@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 
 use nether_core::Span;
-use nether_syntax::{FaultKind, Keyword, Punct, Token, TokenKind, lex};
+use nether_syntax::{Fault, FaultKind, Keyword, Punct, Token, TokenKind, lex};
 
 fn spec() -> String {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../spec/03-lexical.md");
@@ -260,4 +260,19 @@ fn a_fault_points_at_what_is_wrong() {
     let rendered = nether_core::report(&f.diagnostic(), "I64 n = 1;\n@9;\n", "x.nc");
     assert!(rendered.contains("--> x.nc:2:1"), "{rendered}");
     assert!(rendered.contains("a depth is 0 to 8"), "{rendered}");
+}
+
+/// The limit that keeps every span exact.
+///
+/// A `Span` is a pair of `u32` offsets. A source longer than that has bytes no
+/// diagnostic could point at, and the code used to clamp them all to the same
+/// number instead — wrong spans, with no signal. §6.4: stated, and reported.
+///
+/// Four gigabytes is not a fixture, so what is checked is the pair that could
+/// drift apart: the limit, and what a span can hold.
+#[test]
+fn a_source_a_span_cannot_address_is_refused_rather_than_clamped() {
+    assert_eq!(nether_syntax::MAX_SOURCE, u32::MAX as usize, "a span is two u32s");
+    let said = Fault { span: Span::default(), kind: FaultKind::TooBig }.to_string();
+    assert!(said.contains(&nether_syntax::MAX_SOURCE.to_string()), "{said}");
 }

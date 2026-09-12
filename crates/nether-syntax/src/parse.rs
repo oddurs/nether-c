@@ -83,6 +83,7 @@ pub fn parse(source: &[u8]) -> Result<Unit, Vec<Fault>> {
 }
 
 fn end_of(source: &[u8]) -> Span {
+    // Exact: `lex` has already refused anything a span could not address.
     let n = u32::try_from(source.len()).unwrap_or(u32::MAX);
     Span { start: n, end: n }
 }
