@@ -169,17 +169,31 @@ something you cannot use as a `T`. Its `d` is written as the depth on `T`
 same type with different origins are different types, because `look` on them
 is legal in different places.
 
-## 5.6 Type inference
+## 5.6 Types are written; depths are inferred
 
-Types are inferred within a function body and MUST be written on:
+**Every binding carries its type.** Struct fields, function parameters and
+return types, unit-level `let` declarations, and block-level ones. There is one
+`let_decl` production ([§4.2](04-grammar.md#42-declarations)) and it begins
+with a type, everywhere it appears.
 
-- struct fields,
-- function parameters and return types,
-- unit-level `let` declarations.
+**Depth is inferred everywhere**, and MAY be written anywhere a type is
+written. A written depth is a checked assertion: if inference produces a
+different one, that is an error naming both depths and the expression
+responsible.
 
-Depth is inferred everywhere and MAY be written anywhere a type is written. A
-written depth is a checked assertion: if inference produces a different depth,
-that is an error naming both depths and the expression responsible.
+That is the whole rule, and the two halves are not arbitrary. A type is a fact
+about what a value *is*, which the person writing the program knows and the
+reader wants told. A depth is a fact about where it *came from*, which is
+derived from everything it touched and is exactly the thing a person gets
+wrong. Writing what you know and deriving what you do not is the trade the
+language is making.
+
+> An earlier draft said types were inferred inside a function body, and there
+> was no way to write such a binding: the grammar has one `let_decl` and it
+> begins with a type. Adding a second form to get inference would have put a
+> keyword in the language to save four characters, and made `n = 0;` mean a
+> binding in one reading and an assignment in another. See
+> [§90.2](90-rationale.md#902-rejected-alternatives).
 
 > Depth annotations must remain optional in ordinary code. The roadmap item
 > *Depth inference* is proven by deleting every `@n` from every sample program
