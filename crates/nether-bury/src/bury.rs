@@ -45,6 +45,13 @@ pub struct Residue {
     /// anywhere: writing to a store is stratum 1, and burial holds no
     /// capability at all.
     pub named: Vec<(Cairn, Stored)>,
+    /// What the program deposited, in source order.
+    ///
+    /// A bare expression statement whose value is not `U0` deposits that value
+    /// into the trace (§4.7). It is not printed and it is not discarded — a
+    /// program holds no capability that reaches a terminal, so depositing is
+    /// the only thing it *can* do with a value it wants kept.
+    pub deposits: Vec<Cairn>,
     /// The holes, in the order they were discovered — which §6.2 fixes, since
     /// two burials of the same input produce the same trace including that
     /// order.
@@ -303,6 +310,7 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
         named: Vec::new(),
         known: HashSet::new(),
         holes: Vec::new(),
+        deposits: Vec::new(),
         asked: HashMap::new(),
     };
     let mut demands = Vec::with_capacity(unit.demands.len());
@@ -316,7 +324,14 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
         demands.push(Burial::residual(v, &d.value));
     }
     let depth = demands.iter().fold(Depth::PURE, |acc, d| acc.join(d.depth));
-    Ok(Residue { demands, named: b.named, holes: b.holes, fuel_spent: b.spent, depth })
+    Ok(Residue {
+        demands,
+        named: b.named,
+        deposits: b.deposits,
+        holes: b.holes,
+        fuel_spent: b.spent,
+        depth,
+    })
 }
 
 /// A value, as burial holds one.
@@ -405,6 +420,8 @@ struct Burial<'a> {
     known: HashSet<Cairn>,
     /// The holes, in the order they were found.
     holes: Vec<Cairn>,
+    /// What the program deposited, in source order.
+    deposits: Vec<Cairn>,
     /// The holes already dug, by the question each one asks.
     ///
     /// §6.3 makes the `call` the identity and not the node. A node carries the
@@ -473,6 +490,24 @@ impl Burial<'_> {
         self.asked.insert(call, cairn);
         self.holes.push(cairn);
         cairn
+    }
+
+    /// A value the program left behind, named and written down.
+    ///
+    /// §4.7. Unlike a hole, two identical deposits are two deposits: the
+    /// program said the same thing twice and the trace records that it did.
+    /// They differ by span, so they differ by cairn.
+    fn deposit(&mut self, value: Value, span: Span) -> Cairn {
+        let at = self.remember(Stored::Value(value));
+        let node = Node::Deposit {
+            value: at,
+            span: nether_ledger::Span {
+                source: self.source,
+                start: u64::from(span.start),
+                end: u64::from(span.end),
+            },
+        };
+        self.remember(Stored::Node(node))
     }
 
     /// Where a halt should point, and what it was going round in.
@@ -826,7 +861,20 @@ impl Burial<'_> {
                     }
                     if stuck { v } else { Self::unit() }
                 }
-                Stmt::Expr(x) => self.expr(x, env)?,
+                Stmt::Expr(x) => {
+                    let v = self.expr(x, env)?;
+                    // §4.7: a value here is deposited, not discarded. `U0` has
+                    // nothing to deposit, and one that is still waiting on the
+                    // world is not a value yet — it will be deposited by the
+                    // exhumation that finishes it.
+                    if let Some(value) = as_value(&v) {
+                        if value != Value::Unit {
+                            let at = self.deposit(value, x.span);
+                            self.deposits.push(at);
+                        }
+                    }
+                    v
+                }
             };
             // A statement that is not here takes the block with it: everything
             // after it depends on a world that has not answered yet. A jump

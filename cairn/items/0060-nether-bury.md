@@ -2,10 +2,9 @@
 id: 60
 title: nether bury
 type: feature
-status: descending
+status: buried
 milestone: rites
 assignee: Oddur Sigurdsson
-claimed: 2026-09-12
 depends_on:
 - 22
 - 49
