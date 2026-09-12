@@ -241,11 +241,12 @@ it on. You may not look inside it.</p>
 
 <figure class="listing">
 <figcaption>shell</figcaption>
-<pre><code><span class="e">error:</span> cannot look at a shade from stratum <span class="d5">5</span> at depth <span class="d0">0</span>
-  --&gt; stamp.nc:14:11
+<pre><code><span class="p">$</span> nether <span class="k">bury</span> stamp.nc
+<span class="e">error:</span> cannot look at a shade from stratum <span class="d5">5</span> at depth <span class="d0">0</span>
+  --&gt; stamp.nc:14:21
    |
-14 |   I64   n       = look(reply).len;
-   |                   ^^^^^^^^^^^ this shade came from `get` at stratum 5
+14 | I64   n       = len(look(reply));
+   |                     ^^^^^^^^^^^ this shade came from `get` at stratum 5
    |
    = the value is here, but you are not. Wrap the look in `descend net { … }`.</code></pre>
 </figure>
