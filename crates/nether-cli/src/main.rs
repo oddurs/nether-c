@@ -5,7 +5,9 @@
 
 mod bury;
 mod cairn;
+mod closing;
 mod exhume;
+mod graft;
 mod json;
 mod lamp;
 mod strata;
@@ -53,7 +55,8 @@ nether — the Nether C rites
   cairn <path>       name a thing by its content; verify a name still holds
                      `--verify <cairn>` checks the ledger still holds it
   strata <cairn>     which stratum this reached, and the line that took it there
-  graft <cairn>      substitute a subtrace and re-bury only what changed
+  graft <cairn>      substitute an answer and re-bury only what changed
+                     --replace <cairn> --with <cairn>
 
 There is no `nether run`.
 
@@ -95,11 +98,7 @@ fn main() -> ExitCode {
         Some("strata") => strata::run(&args[1..]),
         Some("bury") => bury::run(&args[1..]),
         Some("exhume") => exhume::run(&args[1..]),
-        Some("graft") => {
-            eprintln!("nether: not yet. The specification lands before the compiler does.");
-            eprintln!("        See spec/00-overview.md, and `cairn next` for what is ready.");
-            ExitCode::from(code::UNIMPLEMENTED)
-        }
+        Some("graft") => graft::run(&args[1..]),
         Some(other) => {
             eprintln!("nether: unknown rite `{other}`");
             eprint!("{USAGE}");

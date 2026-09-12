@@ -200,10 +200,14 @@ fn verify_answers_in_json_too() {
 // ── the rest ────────────────────────────────────────────────────────────────
 
 #[test]
-fn a_rite_that_is_not_built_yet_says_so_with_its_own_code() {
-    // One left. `bury`, `exhume`, `cairn`, `lamp` and `strata` are built.
-    let out = nether(None, &["graft"]);
-    assert_eq!(code(&out), 69, "§8.8 gives 69 to not implemented");
+fn every_rite_in_section_eight_is_built() {
+    // None left. All six of §08's rites are built, so none of them answers
+    // with §8.8's 69 — each says what it wants instead, which is a usage
+    // error, or does the thing.
+    for rite in ["bury", "exhume", "cairn", "lamp", "strata", "graft"] {
+        let out = nether(None, &[rite]);
+        assert_ne!(code(&out), 69, "{rite} still says it is not implemented");
+    }
 }
 
 // ── bury ────────────────────────────────────────────────────────────────────
@@ -1104,4 +1108,69 @@ fn replay_succeeds_with_the_source_deleted() {
     let out = there(&dir, &["exhume", &sealed, "--replay"]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     assert_eq!(stdout(&out), "identical.\n");
+}
+
+// ── §8.7 `graft` ────────────────────────────────────────────────────────────
+
+#[test]
+fn grafting_an_answer_reaches_the_trace_the_world_would_have() {
+    // §8.7's whole argument. Substituting an answer re-buries only what
+    // changed, and what comes out is the same name a burial that had been told
+    // the same thing would have reached — by a different route, with nothing
+    // made twice.
+    let dir = a_build("graft");
+    let buried = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    let trace = field(&buried, "cairn");
+    let hole = buried
+        .split("\"cairn\":\"")
+        .nth(2)
+        .and_then(|r| r.split('"').next())
+        .expect("the hole's cairn");
+
+    // Exhume the same trace against a different file, so the ledger holds what
+    // the world would have said.
+    std::fs::write(dir.join("main.nc"), b"int main(void) { return 1; }").expect("change it");
+    let exhumed = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+    let sealed = field(&exhumed, "sealed");
+    let answer = field(&exhumed, "answer");
+
+    let out = there(&dir, &["graft", &trace, "--replace", hole, "--with", &answer, "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let told = stdout(&out);
+    assert_eq!(field(&told, "grafted"), sealed, "a graft reached a different trace:\n{told}");
+    // Everything was already there, which is what content addressing is for.
+    assert!(told.contains("\"recomputed\":0"), "{told}");
+    assert!(!told.contains("\"reused\":0"), "{told}");
+}
+
+#[test]
+fn a_graft_says_how_much_it_reused() {
+    // §8.7 MUST: "a build tool that hides it is asking to be trusted rather
+    // than measured".
+    let dir = a_build("graft-counts");
+    let buried = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    let trace = field(&buried, "cairn");
+    let hole = buried
+        .split("\"cairn\":\"")
+        .nth(2)
+        .and_then(|r| r.split('"').next())
+        .expect("the hole's cairn");
+    let exhumed = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+    let answer = field(&exhumed, "answer");
+
+    let out = there(&dir, &["graft", &trace, "--replace", hole, "--with", &answer]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(stdout(&out).contains("reused"), "{}", stdout(&out));
+    assert!(stdout(&out).contains("recomputed"), "{}", stdout(&out));
+}
+
+#[test]
+fn grafting_something_the_trace_never_asked_says_so() {
+    let dir = a_build("graft-unknown");
+    let buried = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    let trace = field(&buried, "cairn");
+    let source = field(&buried, "source");
+    let out = there(&dir, &["graft", &trace, "--replace", &source, "--with", &source]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert!(stderr(&out).contains("answers nothing under"), "{}", stderr(&out));
 }
