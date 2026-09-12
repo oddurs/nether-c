@@ -13,13 +13,12 @@ stratum: '0'
 proof: Each of the five is fixed or has a stated reason not to be
 ---
 
-The `find` word-splitting went with 0139, which rewrote that loop.
+The `find` word-splitting went with 0139, which rewrote that loop, and
+`referrers`'s error type went with 0145, which gave it a new error to return.
 
 Small things the review turned up. None of them is wrong today; each is a way
 for something to become wrong quietly.
 
-- **`store::referrers` returns `io::Result`** where `get`, `put` and `resolve`
-  return `Result<_, StoreError>`. One error type per API.
 - **`nether-bury` and `nether-cli` list `nether-ledger` in both
   `[dependencies]` and `[dev-dependencies]`.** The second does nothing.
 - **`lex::at` and `parse`'s span constructor clamp with

@@ -191,6 +191,36 @@ Because writing is idempotent and content-addressed, concurrent writers need
 no coordination beyond atomicity of the individual write. Two burials that
 compute the same value write the same bytes to the same place.
 
+### 7.5.1 What survives a crash
+
+A store is **crash-consistent and not durable**. A `put` that returned may not
+be on the disk after a power loss, and an implementation MAY `fsync` but is not
+required to.
+
+What a store MUST NOT do is serve bytes that are not what the name says. That
+is what makes the weaker promise enough. After a crash an object is in one of
+two states, and both are safe:
+
+- **absent**, which is indistinguishable from never having been written, and
+  which a later `put` repairs by writing it again;
+- **present and wrong**, which `get` catches, because the name is the content
+  and checking costs one hash of bytes it has already read.
+
+So a crash can lose work and cannot manufacture a fact. That is the property
+the reproducibility claims in this document rest on, and it is weaker than
+durability on purpose: a build tool that paid for an `fsync` per node would pay
+it thousands of times for a single burial, to protect work it can simply do
+again.
+
+An implementation MUST NOT skip the check in `get` on the grounds that it
+`fsync`s. The check is against bit rot and a bad disk as much as against a
+crash, and those do not announce themselves.
+
+The reverse index of [§7.4](#74-provenance) is a set of fixed-size records. An
+implementation MUST detect a partial one rather than read past it — a record
+half written is a record that would otherwise be read as a different cairn, and
+a wrong edge in a provenance walk is worse than a missing one.
+
 ## 7.6 Garbage
 
 There is none.

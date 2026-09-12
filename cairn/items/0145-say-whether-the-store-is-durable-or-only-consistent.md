@@ -2,8 +2,9 @@
 id: 145
 title: Say whether the store is durable or only consistent
 type: spec
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p2
@@ -37,6 +38,14 @@ store is crash-consistent and that a torn write surfaces as `Corrupt`.
 
 ## Acceptance criteria
 
-- [ ] §07 says which of the two the store promises
-- [ ] The reverse-edge record says why a thirty-two byte append is safe, or is
+- [x] §07 says which of the two the store promises
+- [x] The reverse-edge record says why a thirty-two byte append is safe, or is
       made safe
+
+## 2026-09-12
+
+Crash-consistent and not durable, stated in 7.5.1 with the reason: after a crash an object is absent -- which a later put repairs -- or present and wrong, which get catches because the name is the content. So a crash can lose work and cannot manufacture a fact, and a build tool that paid for an fsync per node would pay it thousands of times to protect work it can simply do again.
+
+## 2026-09-12
+
+The torn append is made visible rather than argued away: referrers checks that the index is a whole number of records and returns StoreError::Ragged if it is not. Reading past a half record would misalign every record after it and hand back cairns nobody wrote, which is a wrong edge in a provenance walk and worse than a missing one. Took referrers's error type with it, which was on 0148.

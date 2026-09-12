@@ -112,6 +112,12 @@ fn complain(e: &StoreError, prefix: &str, wants_json: bool) -> ExitCode {
         StoreError::BadPrefix(p) => {
             (ExitCode::from(code::USAGE_ERROR), format!("{p} is not a cairn or a prefix of one"))
         }
+        // §7.5.1: a torn reverse-index record is reported rather than read
+        // past. The store is still readable; its provenance is not.
+        StoreError::Ragged { of, bytes } => (
+            ExitCode::from(code::MALFORMED),
+            format!("the reverse index for {of} is {bytes} bytes, which is not whole records"),
+        ),
         StoreError::Corrupt { asked, found, why } => (
             FAILED,
             // Bytes that hash to something else are answered with the hash;

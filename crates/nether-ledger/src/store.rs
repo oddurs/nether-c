@@ -48,6 +48,19 @@ pub enum StoreError {
     NoMatch(String),
     /// A prefix that is not lowercase hexadecimal, or is empty.
     BadPrefix(String),
+    /// The reverse index for a cairn is not a whole number of records.
+    ///
+    /// A thirty-two byte append to an `O_APPEND` handle is atomic on every
+    /// filesystem anybody runs, and is not atomic by guarantee. §7.5.1 requires
+    /// a partial record to be detected rather than read past: reading past one
+    /// would misalign every record after it and turn them into cairns nobody
+    /// wrote.
+    Ragged {
+        /// Whose index it is.
+        of: Cairn,
+        /// How many bytes it holds, which is not a multiple of thirty-two.
+        bytes: usize,
+    },
     /// Something was handed to `put` that `get` could never read back.
     ///
     /// `Value` and `Node` can express states the encoding forbids — an unnamed
@@ -75,6 +88,9 @@ impl std::fmt::Display for StoreError {
             }
             Self::NoMatch(p) => write!(f, "nothing in this store starts with {p}"),
             Self::BadPrefix(p) => write!(f, "{p:?} is not the start of a cairn"),
+            Self::Ragged { of, bytes } => {
+                write!(f, "the reverse index for {of} is {bytes} bytes, which is not whole records")
+            }
             Self::Invalid(why) => {
                 write!(f, "refusing to write bytes that cannot be read back: {why}")
             }
@@ -219,6 +235,11 @@ impl Store {
     /// Appending means a duplicate is possible where a read-modify-write would
     /// have collapsed it. `referrers` deduplicates on the way out, which is the
     /// cheap half of the trade.
+    ///
+    /// One record is thirty-two bytes, which every filesystem anybody runs
+    /// appends atomically and none of them promises to. `referrers` checks the
+    /// length rather than trusting it, so the day one is torn it is reported
+    /// instead of read as a cairn nobody wrote. §7.5.1.
     fn add_ref(&self, target: Cairn, referrer: Cairn) -> io::Result<()> {
         let path = self.fanned("refs", target);
         if let Some(parent) = path.parent() {
@@ -264,14 +285,20 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// If the index cannot be read.
-    pub fn referrers(&self, cairn: Cairn) -> io::Result<Vec<Cairn>> {
+    /// [`StoreError::Io`] if the index cannot be read, and
+    /// [`StoreError::Ragged`] if it is not a whole number of records.
+    pub fn referrers(&self, cairn: Cairn) -> Result<Vec<Cairn>, StoreError> {
         let path = self.fanned("refs", cairn);
         let bytes = match fs::read(&path) {
             Ok(b) => b,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(e),
+            Err(e) => return Err(StoreError::Io(e)),
         };
+        // §7.5.1. A record half written is one that would otherwise be read as
+        // a different cairn, and every record after it would be misaligned.
+        if bytes.len() % 32 != 0 {
+            return Err(StoreError::Ragged { of: cairn, bytes: bytes.len() });
+        }
         let mut seen = std::collections::HashSet::new();
         Ok(bytes
             .chunks_exact(32)
@@ -481,6 +508,42 @@ mod tests {
             args: vec![target],
             result: Cairn::of_encoded(b"r"),
         })
+    }
+
+    /// §7.5.1: a partial record is detected rather than read past.
+    ///
+    /// One record is thirty-two bytes, and appending that many is atomic on
+    /// every filesystem anybody runs and promised by none of them. Reading
+    /// past a torn one would misalign every record after it and hand back
+    /// cairns nobody wrote — a wrong edge in a provenance walk, which is worse
+    /// than a missing one.
+    #[test]
+    fn a_torn_reverse_edge_is_reported_and_not_read_past() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let target = store.put(&value(1)).unwrap();
+        let node = store
+            .put(&Stored::Node(Node::Apply {
+                function: target,
+                args: vec![target],
+                result: target,
+            }))
+            .unwrap();
+        assert_eq!(store.referrers(target).unwrap(), vec![node]);
+
+        let hex = target.to_string();
+        let refs = scratch.0.join("refs").join(&hex[..2]).join(&hex[2..]);
+        let mut bytes = std::fs::read(&refs).unwrap();
+        bytes.truncate(bytes.len() - 7);
+        std::fs::write(&refs, &bytes).unwrap();
+
+        match store.referrers(target) {
+            Err(StoreError::Ragged { of, bytes: n }) => {
+                assert_eq!(of, target);
+                assert_eq!(n % 32, 25);
+            }
+            other => panic!("a torn record was not reported: {other:?}"),
+        }
     }
 
     #[test]
