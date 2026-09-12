@@ -2,7 +2,7 @@
 id: 134
 title: 'Spec: types are inferred in a body and the grammar requires one'
 type: spec
-status: unmarked
+status: buried
 milestone: surface
 depends_on:
 - 18
@@ -53,6 +53,16 @@ if assignment goes then the spelling is free.
 
 ## Acceptance criteria
 
-- [ ] §5.6 and §4.4 agree about which bindings carry a type
-- [ ] If a form is added, it is not ambiguous with an assignment
-- [ ] nether-syntax follows
+- [x] §5.6 and §4.4 agree about which bindings carry a type
+- [x] If a form is added, it is not ambiguous with an assignment
+- [x] nether-syntax follows
+
+## 2026-09-12
+
+Settled: 5.6's list was wrong. Every binding carries its type, block-level ones included, which is what the one let_decl production has always required.
+
+0116 closed the escape route the item hoped for. It kept assignment, so 'n = 0;' is already an assignment statement and cannot also be an inferring binding — which leaves a keyword, 'let n = 0;', and a second way to bind a name. Rejected: four characters bought with a keyword, a second binding form, and a reader who has to know which one they are looking at. Nether C is a C dialect and C writes the type.
+
+The rule that came out is better than the one it replaced: TYPES ARE WRITTEN; DEPTHS ARE INFERRED. A type is a fact about what a value is, which the writer knows and the reader wants told. A depth is a fact about where it came from, derived from everything it touched, and exactly the thing a person gets wrong. Write what you know, derive what you do not.
+
+No grammar change and no implementation change — the parser already required the type. This was the specification catching up with itself.

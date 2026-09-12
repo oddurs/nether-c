@@ -263,6 +263,28 @@ It also removes a dependency — full NFC is a megabyte of Unicode tables — bu
 that is a consequence of the decision, not the reason for it. Had the argument
 gone the other way, the tables would have been the right thing to add.
 
+### Inferring the type of a block-level binding
+
+§5.6 used to say types were inferred within a function body. §4.2 has one
+`let_decl` production and it begins with a type, so the binding §5.6 described
+could not be written at all.
+
+The fix would have been a second statement form. `n = 0;` is unavailable —
+[§5.4](05-types.md#54-mutation) keeps assignment, so that spelling is already
+taken and the two would be indistinguishable — which leaves a keyword,
+`let n = 0;`, and a language with two ways to bind a name.
+
+It was rejected for what it buys: four characters, in exchange for a keyword,
+a second binding form, and a reader who has to know which one they are looking
+at. Nether C is a C dialect and C writes the type. The language already asks
+for types on every other binding, and making one of them different is the kind
+of exception that has to be remembered rather than understood.
+
+What the rule became is a better sentence than the one it replaced. *Types are
+written; depths are inferred.* A type is a fact about what a value is, which
+the writer knows. A depth is a fact about where it came from, which is derived
+from everything it touched and is exactly what a person gets wrong.
+
 ### Struct literals, and forbidding assignment outright
 
 [§4.4](04-grammar.md#44-statements) had an `assign` production and a `for` step
