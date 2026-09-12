@@ -423,6 +423,27 @@ deepest descent in the expression — where before it had two symbols. A rule
 that fits on one page is worth defending; a rule that fits on one page and is
 wrong is not.
 
+### One range for all three integer spellings
+
+Every integer literal could hold the same range, which is easier to state and
+leaves `−2⁶³` unwritable: `-` is an operator applied to a literal, so the
+literal it needs is `9223372036854775808`, which is one past the top of the
+range. C has this wart and works around it with implementation-defined
+promotion; a language with one integer type and no promotion has nowhere to
+put the workaround.
+
+The alternative considered was to let a decimal literal reach `2⁶³` — one
+higher than the type — on the grounds that it is only ever going to be read
+under a minus sign. Rejected because it makes a bare `9223372036854775808` a
+literal that is in range as a literal and out of range as a value, which is a
+distinction nothing else in the language makes and which every reader would
+have to be told about once.
+
+**What it cost.** Three spellings with two ranges between them, and a sentence
+in §3.6 explaining why. The alternative is one range and a value that cannot
+be written, and a type with a value nobody can write is a type with a hole in
+it.
+
 ### Floating point
 
 Excluded from [§3.6](03-lexical.md#36-literals) because IEEE 754 has

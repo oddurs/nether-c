@@ -111,6 +111,20 @@ without a stated evaluation semantics.
 An integer literal is `I64`. There is no unsigned type and no integer
 promotion; see [section 05](05-types.md).
 
+The three spellings do not hold the same range, because they are not spelling
+the same thing.
+
+- A **decimal** literal spells a magnitude. It is an error above `2⁶³ − 1`.
+- A **hexadecimal** or **binary** literal spells a bit pattern. It is
+  sixty-four bits wide and is read as two's complement, so
+  `0x8000_0000_0000_0000` is `−2⁶³` and `0xFFFF_FFFF_FFFF_FFFF` is `−1`. It is
+  an error above sixty-four bits.
+
+That split is what makes every `I64` writable. `-` is an operator applied to a
+literal, so `−2⁶³` has no decimal spelling at all — the literal it would need
+is one past the top — and a type with a value nobody can write is a type with
+a hole in it.
+
 ## 3.7 Punctuation
 
 ```
