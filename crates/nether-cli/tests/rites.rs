@@ -201,7 +201,7 @@ fn verify_answers_in_json_too() {
 
 #[test]
 fn a_rite_that_is_not_built_yet_says_so_with_its_own_code() {
-    for rite in ["bury", "exhume", "strata", "graft"] {
+    for rite in ["bury", "exhume", "graft"] {
         let out = nether(None, &[rite]);
         assert_eq!(code(&out), 69, "{rite}: §8.8 gives 69 to not implemented");
     }
@@ -337,4 +337,185 @@ fn a_shade_shows_its_origin_and_its_name_and_no_more() {
     assert!(text.contains("stratum 5"), "{text}");
     assert!(text.contains(&inside.short()), "{text}");
     assert!(!text.contains("secret"), "the lamp opened the shade:\n{text}");
+}
+
+// ── §8.6 `strata` ───────────────────────────────────────────────────────────
+
+/// A source a person could read, so the line `strata` blames can be checked
+/// against the text it points into.
+const BUILD: &str = "demand out;\n\nBytes@3 src = must(descend disk { read(\"main.nc\") });\n";
+
+/// A store holding one burial of `BUILD`: the source, the call that went to
+/// disk, and the trace over it.
+fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (PathBuf, Cairn, Cairn) {
+    let dir = scratch(what);
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
+    let at = BUILD.find("read(\"main.nc\")").expect("the call is in the source");
+    let span = Span { source, start: at as u64, end: (at + 15) as u64 };
+    let path = put(Value::Str("main.nc".into()));
+    let call = Call { function: "read".into(), args: vec![path] };
+    let answer = put(Value::Bytes(b"int main(void) { return 0; }".to_vec()));
+    let witness = node(Node::Witness { stratum, call, answer, span });
+
+    let trace = node(Node::Trace { roots: vec![witness], fuel_spent: 903, depth, unrecorded });
+    (dir, trace, source)
+}
+
+#[test]
+fn strata_names_the_deepest_stratum_and_the_line_that_took_it_there() {
+    // §8.6, and the whole point of the rite: "why is this thing @3" answered
+    // by a command rather than an investigation.
+    let (dir, trace, source) = a_trace_of("strata", 3, 3, false);
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+
+    assert!(text.starts_with("depth 3   disk\n"), "{text}");
+    assert!(text.contains("read(\"main.nc\")"), "the call is not named:\n{text}");
+    // §8.1: by the cairn of the source, because a path is a fact about one
+    // machine. Line 3, column 35, which is where `read` is in `BUILD`.
+    assert!(text.contains(&format!("{}:3:35", source.short())), "the position is wrong:\n{text}");
+    assert!(text.contains("  0  everything else"), "{text}");
+    assert!(text.contains("replayable: yes"), "{text}");
+}
+
+#[test]
+fn a_trace_that_reached_stratum_8_says_so_without_being_asked() {
+    // §8.6 MUST, and §9.8: naming the symbol is the minimum, because a
+    // stratum-8 call is a hole in the record no later care fills in.
+    let dir = scratch("strata-unrecorded");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
+    let span = Span { source, start: 0, end: 11 };
+    let symbol = put(Value::Str("dlopen".into()));
+    let args = put(Value::Bytes(Vec::new()));
+    let call = Call { function: "call_foreign".into(), args: vec![symbol, args] };
+    let answer = put(Value::Bytes(b"whatever it said".to_vec()));
+    let witness = node(Node::Witness { stratum: 8, call, answer, span });
+    let trace =
+        node(Node::Trace { roots: vec![witness], fuel_spent: 12, depth: 8, unrecorded: true });
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.starts_with("depth 8   unrecorded\n"), "{text}");
+    assert!(text.contains("\"dlopen\""), "the symbol is not named:\n{text}");
+    assert!(text.contains("replayable: no"), "{text}");
+    assert!(text.contains("stratum 8 was reached"), "{text}");
+}
+
+#[test]
+fn a_hole_is_a_stratum_owed_and_not_a_stratum_reached() {
+    // §7.3 makes the difference: a witness holds the stratum that *was*
+    // reached, a hole the stratum a call *would* reach.
+    let dir = scratch("strata-pending");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
+    let span = Span { source, start: 0, end: 11 };
+    let url = put(Value::Str("https://example.invalid/x".into()));
+    let call = Call { function: "get".into(), args: vec![url] };
+    let hole = node(Node::Hole { call, stratum: 5, span, depends: Vec::new() });
+    let trace = node(Node::Trace { roots: vec![hole], fuel_spent: 4, depth: 0, unrecorded: false });
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.starts_with("depth 0   pure\n"), "a hole is not a stratum reached:\n{text}");
+    assert!(text.contains("pending"), "{text}");
+    assert!(text.contains("holes reach 5 (net)"), "{text}");
+}
+
+#[test]
+fn a_trace_that_under_reports_its_own_depth_is_malformed() {
+    // The one thing this rite exists to catch. §8.8 gives 65 to a malformed
+    // trace, and a trace whose recorded depth is shallower than a witness
+    // under it has recorded a falsehood about depth.
+    let (dir, trace, _) = a_trace_of("strata-lying", 5, 3, false);
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 65, "{}", stderr(&out));
+    assert!(stderr(&out).contains("records depth 3"), "{}", stderr(&out));
+    assert!(stdout(&out).contains("read(\"main.nc\")"), "it still says where:\n{}", stdout(&out));
+}
+
+#[test]
+fn a_trace_that_never_went_anywhere_says_so() {
+    let dir = scratch("strata-pure");
+    let store = Store::open(&dir).expect("a store");
+    let literal = store.put(&Stored::Node(Node::Literal(Value::Int(7)))).expect("put");
+    let trace = store
+        .put(&Stored::Node(Node::Trace {
+            roots: vec![literal],
+            fuel_spent: 1,
+            depth: 0,
+            unrecorded: false,
+        }))
+        .expect("put");
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(stdout(&out).contains("nothing reached the world"), "{}", stdout(&out));
+}
+
+#[test]
+fn strata_on_something_that_is_not_a_trace_says_what_it_is() {
+    let (dir, cairn) = with_object("strata-not-a-trace", Value::Int(7));
+    let out = nether(Some(&dir), &["strata", &cairn.to_string()]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert!(stderr(&out).contains("is a value, not a trace"), "{}", stderr(&out));
+}
+
+#[test]
+fn strata_answers_in_json_too() {
+    let (dir, trace, source) = a_trace_of("strata-json", 3, 3, false);
+    let out = nether(Some(&dir), &["strata", &trace.to_string(), "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert_eq!(text.lines().count(), 1, "§8.1: one object and nothing else\n{text}");
+    assert!(text.contains("\"depth\":3"), "{text}");
+    assert!(text.contains("\"stratum\":\"disk\""), "{text}");
+    assert!(text.contains("\"replayable\":true"), "{text}");
+    assert!(text.contains(&format!("{}:3:35", source.short())), "{text}");
+}
+
+#[test]
+fn a_span_whose_source_is_gone_still_gives_the_offset() {
+    // A trace means the same thing on a machine that has never seen the
+    // filesystem it was buried on — but not necessarily the same amount. Say
+    // what is left rather than nothing.
+    let dir = scratch("strata-no-source");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = Value::Bytes(BUILD.as_bytes().to_vec()).cairn();
+    let span = Span { source, start: 47, end: 62 };
+    let path = put(Value::Str("main.nc".into()));
+    let call = Call { function: "read".into(), args: vec![path] };
+    let answer = put(Value::Bytes(b"x".to_vec()));
+    let witness = node(Node::Witness { stratum: 3, call, answer, span });
+    let trace =
+        node(Node::Trace { roots: vec![witness], fuel_spent: 2, depth: 3, unrecorded: false });
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.contains(&format!("{}:+47", source.short())), "{text}");
+    assert!(text.contains("not in this ledger"), "{text}");
+}
+
+#[test]
+fn strata_with_no_cairn_is_a_usage_error() {
+    let out = nether(None, &["strata"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("nether strata <cairn>"), "{}", stderr(&out));
 }

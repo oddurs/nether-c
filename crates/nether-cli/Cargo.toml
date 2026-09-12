@@ -12,6 +12,7 @@ name = "nether"
 path = "src/main.rs"
 
 [dependencies]
+nether-core = { path = "../nether-core" }
 nether-ledger = { path = "../nether-ledger" }
 
 [dev-dependencies]

@@ -146,22 +146,23 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## rites — The Rites
 
-`###·······` 30% · 3 of 10 done · due 2027-03-31
+`####······` 36% · 4 of 11 done · due 2027-03-31
 
 ### unmarked
 
 - [ ] [`0060`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0060-nether-bury.md) nether bury <sup>feature · p0 · 4</sup>
 - [ ] [`0061`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0061-nether-exhume.md) nether exhume <sup>feature · p0 · 5</sup>
-- [ ] [`0064`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0064-nether-strata.md) nether strata <sup>feature · p1 · 1</sup>
 - [ ] [`0065`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0065-nether-graft.md) nether graft <sup>feature · p1 · 4</sup>
 - [ ] [`0066`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0066-transcript-tests-for-every-documented-invocation.md) Transcript tests for every documented invocation <sup>chore · p0</sup>
 - [ ] [`0117`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0117-spec-answer-and-refusal-have-no-tag-in-the-frozen-encoding.md) Spec: Answer and Refusal have no tag in the frozen encoding <sup>spec · p0</sup>
 - [ ] [`0128`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0128-spec-a-residue-is-nodes-and-no-node-can-hold-a-branch.md) Spec: a residue is nodes, and no node can hold a branch <sup>spec · p0</sup>
+- [ ] [`0136`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0136-spec-a-trace-that-under-reports-its-own-depth-is-not-called-malformed.md) Spec: a trace that under-reports its own depth is not called malformed <sup>spec · p2</sup>
 
 ### buried
 
 - [x] [`0062`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0062-nether-lamp-and-provenance.md) nether lamp, and --provenance <sup>feature · p0 · 1</sup>
 - [x] [`0063`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0063-nether-cairn.md) nether cairn <sup>feature · p1 · 1</sup>
+- [x] [`0064`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0064-nether-strata.md) nether strata <sup>feature · p1 · 1</sup>
 - [x] [`0135`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0135-spec-the-rites-print-a-path-a-span-cannot-hold.md) Spec: the rites print a path a span cannot hold <sup>spec · p1</sup>
 
 ## world — The World
