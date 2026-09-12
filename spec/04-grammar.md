@@ -10,6 +10,11 @@ EBNF. `{ x }` is zero or more, `[ x ]` is optional, `|` is alternation.
 Terminals are quoted. Lexical productions are in
 [section 03](03-lexical.md).
 
+The grammar is recursive and an implementation is not. How deeply an
+expression or a type may nest is one of the limits
+[§6.4](06-evaluation.md#64-starvation-and-fuel) requires an implementation to
+state, and to report reaching rather than crash into.
+
 ## 4.1 Compilation unit
 
 ```ebnf

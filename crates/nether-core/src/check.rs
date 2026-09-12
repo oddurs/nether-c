@@ -16,6 +16,12 @@
 //! branches, blocks — compose by [PRIM]: the maximum of their parts. That is
 //! the only rule available and it is the conservative one.
 //!
+//! The walk is recursive and has no bound of its own. It inherits
+//! `nether-syntax`'s `MAX_NESTING`, because the IR it is given is the IR
+//! lowering produced from a parse — and a caller that hand-builds something
+//! deeper than the surface can express is a caller with a bug rather than a
+//! limit to report. §6.4.
+//!
 //! This checks depth. It is not a type checker: it reads a type exactly where
 //! a depth rule depends on one, which is a shade's origin, an arrow's latent
 //! depth, and what the four rites produce.

@@ -2,8 +2,9 @@
 id: 141
 title: Nothing bounds recursion outside burial
 type: bug
-status: unmarked
+status: buried
 milestone: surface
+assignee: Oddur Sigurdsson
 depends_on:
 - 137
 created: 2026-09-12
@@ -58,7 +59,19 @@ Nothing shipped parses untrusted input yet: `cairn` and `lamp` do not, and
 
 ## Acceptance criteria
 
-- [ ] No input to the parser overflows the stack
-- [ ] The limit is a number written down, not a consequence of the host
-- [ ] Burial's fallback path cannot overflow either
-- [ ] The limits are stated where §6.4 says implementation limits are stated
+- [x] No input to the parser overflows the stack
+- [x] The limit is a number written down, not a consequence of the host
+- [x] Burial's fallback path cannot overflow either
+- [x] The limits are stated where §6.4 says implementation limits are stated
+
+## 2026-09-12
+
+Sixty-four, not a hundred and twenty-eight, because sixty-four is what a level costs rather than what a program could want: section 4.6's ladder is ten frames deep, so a parenthesis is about twenty kilobytes of host stack. Measured: eighty parses on a two megabyte thread and a hundred and twenty does not. Raising the number means making a level cheaper first, and the constant says so.
+
+## 2026-09-12
+
+Counted in unary and in ty, which is every place recursion passes through: the ladder above, a parenthesis, a block, an index, an argument and a prefix chain all arrive at unary, and a type argument recurses in ty. Lowering and the checker inherit it and say so rather than stating a second bound.
+
+## 2026-09-12
+
+Burial's fallback now halts with NoStack instead of running on the caller's stack. MAX_FRAMES is thirty-two megabytes of frames against a main thread that has eight, so the fallback was the overflow the scoped thread exists to prevent.

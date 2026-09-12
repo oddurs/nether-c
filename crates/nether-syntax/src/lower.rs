@@ -20,6 +20,8 @@
 
 use std::collections::HashMap;
 
+// Lowering is recursive and has no bound of its own: it walks what `parse`
+// produced, and `parse` will not produce anything deeper than `MAX_NESTING`.
 use nether_core::{self as ir, Asserted, Capability, Depth, Prim, Refusal, Rite, Span, UnOp};
 
 use crate::ast;

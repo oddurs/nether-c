@@ -77,7 +77,7 @@ pub fn levels() -> Vec<(Punct, u8, BinOp)> {
 /// guesses.
 pub fn parse(source: &[u8]) -> Result<Unit, Vec<Fault>> {
     let tokens = lex(source).map_err(|f| vec![f])?;
-    let mut p = Parser { tokens: &tokens, at: 0, faults: Vec::new(), end: end_of(source) };
+    let mut p = Parser { tokens: &tokens, at: 0, faults: Vec::new(), end: end_of(source), deep: 0 };
     let unit = p.unit();
     if p.faults.is_empty() { Ok(unit) } else { Err(p.faults) }
 }
@@ -87,12 +87,32 @@ fn end_of(source: &[u8]) -> Span {
     Span { start: n, end: n }
 }
 
+/// How deeply an expression or a type may nest.
+///
+/// The grammar is recursive and this parser is not. `spec/06-evaluation.md`
+/// §6.4 requires an implementation to state a limit like this one and to
+/// report reaching it rather than crash into it, and before this one existed a
+/// hundred parentheses aborted the process.
+///
+/// Sixty-four is what a level of nesting costs here, not what a program could
+/// reasonably want. §4.6's ladder is ten frames deep, so every parenthesis is
+/// about twenty kilobytes of host stack and sixty-four of them is most of a
+/// small thread's. Raising this means making a level cheaper first — walking
+/// the ladder by precedence climbing rather than by recursion would cost one
+/// frame per level instead of ten.
+///
+/// Everything downstream inherits it. `lower` and `check` walk what this
+/// produced, so neither states a bound of its own.
+pub const MAX_NESTING: u32 = 64;
+
 struct Parser<'a> {
     tokens: &'a [Token],
     at: usize,
     faults: Vec<Fault>,
     /// Where to point when the source simply stopped.
     end: Span,
+    /// How far in the current expression or type is. See [`MAX_NESTING`].
+    deep: u32,
 }
 
 /// The parser gave up on this construct. It has already recorded why.
@@ -344,6 +364,13 @@ impl Parser<'_> {
     // ── §4.3 ────────────────────────────────────────────────────────────────
 
     fn ty(&mut self) -> Parsed<Type> {
+        self.deeper()?;
+        let out = self.ty_inner();
+        self.deep -= 1;
+        out
+    }
+
+    fn ty_inner(&mut self) -> Parsed<Type> {
         let from = self.span();
         let name = self.name("a type")?;
         let mut args = Vec::new();
@@ -558,7 +585,29 @@ impl Parser<'_> {
         Some(*op)
     }
 
+    /// Level 2 of §4.6, and the one place every level of nesting passes
+    /// through: the ladder above, a parenthesis, a block, an index, an
+    /// argument and a prefix operator all arrive here. So this is where the
+    /// depth is counted.
     fn unary(&mut self) -> Parsed<Expr> {
+        self.deeper()?;
+        let out = self.prefix();
+        self.deep -= 1;
+        out
+    }
+
+    /// One level further in, or the fault that says this is far enough.
+    fn deeper(&mut self) -> Parsed<()> {
+        if self.deep >= MAX_NESTING {
+            let span = self.span();
+            self.faults.push(Fault { span, kind: FaultKind::TooDeep });
+            return Err(Given);
+        }
+        self.deep += 1;
+        Ok(())
+    }
+
+    fn prefix(&mut self) -> Parsed<Expr> {
         let from = self.span();
         let un = match self.peek() {
             Some(TokenKind::Punct(Punct::Minus)) => Some(UnOp::Neg),

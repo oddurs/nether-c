@@ -15,6 +15,6 @@ mod token;
 
 pub use lex::{Fault, FaultKind, lex};
 pub use lower::lower;
-pub use parse::{levels, parse};
+pub use parse::{MAX_NESTING, levels, parse};
 pub use print::print;
 pub use token::{Keyword, Punct, Token, TokenKind};

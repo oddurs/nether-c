@@ -50,6 +50,10 @@ pub enum FaultKind {
     /// A word §3.4 reserves and §04 gives no production. There is one:
     /// `sizeof`, which had no answer. `spec/90-rationale.md` §90.2.
     Reserved(&'static str),
+    /// Nested further than [`crate::MAX_NESTING`]. §6.4 requires an
+    /// implementation to state a limit like this one and to report reaching it
+    /// rather than to crash into it.
+    TooDeep,
     /// Something was assigned to that is not a place. There is no pointer
     /// type, so the only thing that can be written to is a local and a path
     /// of fields and indices from it. `spec/05-types.md` §5.2.
@@ -74,6 +78,7 @@ impl fmt::Display for Fault {
             FaultKind::Reserved(word) => {
                 return write!(f, "`{word}` is reserved and has no meaning");
             }
+            FaultKind::TooDeep => return write!(f, "nested more than {} deep", crate::MAX_NESTING),
             FaultKind::NotAPlace => "there is nowhere to write this",
         })
     }
@@ -92,6 +97,10 @@ impl Fault {
             }
             FaultKind::UnknownEscape => Some(r#"the escapes are \n \t \r \0 \\ \" and \u{…}."#),
             FaultKind::NotAnI64 => Some("there is one integer type, and this is outside it."),
+            FaultKind::TooDeep => Some(
+                "this is a limit of the implementation and not of the language. \
+                 The grammar is recursive and this parser is not.",
+            ),
             FaultKind::Reserved("sizeof") => Some(
                 "there are no pointers and no allocation, so there is nothing to measure. \
                  `len` gives the length of a `Bytes` or a `Str`.",
