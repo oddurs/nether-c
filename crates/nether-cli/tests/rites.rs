@@ -248,10 +248,40 @@ fn the_first_program_in_the_specification_works() {
 
     let shown = nether(Some(&dir), &["lamp", &cairn]);
     assert_eq!(code(&shown), 0, "{}", stderr(&shown));
-    // The greeting, exactly. `lamp` adds one newline of its own to a value
-    // that already ends in one, which is filed separately — so this asserts
-    // the bytes rather than the framing.
-    assert_eq!(stdout(&shown).trim_end(), "Hello from the nether", "{}", stdout(&shown));
+    // The greeting, exactly: the newline is the one the program wrote.
+    assert_eq!(stdout(&shown), "Hello from the nether\n", "{}", stdout(&shown));
+}
+
+/// Deposits are concatenated, not joined.
+///
+/// A program that wants a separator between two of them writes one. Joining
+/// would turn two values that each end in a newline into two lines with a
+/// blank between, which is the lamp deciding what the program meant.
+#[test]
+fn deposits_are_rendered_exactly_as_the_program_wrote_them() {
+    let dir = scratch("lamp-exact");
+    let src = dir.join("two.nc");
+    std::fs::write(&src, "U0 g() @0 { \"a\\n\"; \"b\\n\"; }\ndemand g();\n").expect("write");
+
+    let buried = nether(Some(&dir), &["bury", src.to_str().expect("utf8")]);
+    let cairn = stdout(&buried).split_whitespace().nth(3).expect("a trace").to_owned();
+
+    let shown = nether(Some(&dir), &["lamp", &cairn]);
+    assert_eq!(stdout(&shown), "a\nb\n", "{:?}", stdout(&shown));
+}
+
+/// A value with no newline of its own still ends the line it is printed on.
+#[test]
+fn a_value_without_a_newline_gets_one_for_the_terminal() {
+    let dir = scratch("lamp-bare");
+    let src = dir.join("bare.nc");
+    std::fs::write(&src, "U0 g() @0 { 7; }\ndemand g();\n").expect("write");
+
+    let buried = nether(Some(&dir), &["bury", src.to_str().expect("utf8")]);
+    let cairn = stdout(&buried).split_whitespace().nth(3).expect("a trace").to_owned();
+
+    let shown = nether(Some(&dir), &["lamp", &cairn]);
+    assert_eq!(stdout(&shown), "7\n", "{:?}", stdout(&shown));
 }
 
 /// A program that needs nothing from the world leaves no holes.
@@ -400,8 +430,10 @@ fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
 
     let one = put(Value::Bytes(b"the first file".to_vec()));
     let two = put(Value::Bytes(b"the second file".to_vec()));
+    // Each deposit carries its own newline, as a program that wanted lines
+    // would write it: lamp concatenates what it is given and adds nothing.
     let at = |source, start: u64, text: &str| {
-        let v = put(Value::Str(text.into()));
+        let v = put(Value::Str(format!("{text}\n")));
         node(Node::Deposit { value: v, span: Span { source, start, end: start + 1 } })
     };
     // Offsets chosen so that sorting on them alone interleaves the two.

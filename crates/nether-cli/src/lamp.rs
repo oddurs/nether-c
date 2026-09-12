@@ -83,12 +83,20 @@ fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
         // the order the program made them. §8.4.
         Stored::Node(Node::Trace { .. }) => {
             let found = deposits(store, cairn);
-            if found.is_empty() { "nothing was deposited".to_string() } else { found.join("\n") }
+            // Concatenated, not joined. A deposit is what the program wrote,
+            // and a program that wants a newline between two of them writes
+            // one — `"a\n"` and `"b\n"` are two lines, not two lines with a
+            // blank between. §8.4: lamp renders the value.
+            if found.is_empty() { "nothing was deposited\n".to_string() } else { found.concat() }
         }
         Stored::Node(n) => node(store, n),
     };
     if wants_json {
         println!("{{\"cairn\":\"{cairn}\",\"shows\":{}}}", json::string(&text));
+    } else if text.ends_with('\n') {
+        // Exactly the bytes. A value that ends in a newline has one already,
+        // and adding a second is the lamp deciding what the program meant.
+        print!("{text}");
     } else {
         println!("{text}");
     }

@@ -2,7 +2,7 @@
 id: 152
 title: lamp adds a newline to a value that has one
 type: bug
-status: unmarked
+status: buried
 milestone: rites
 created: 2026-09-12
 updated: 2026-09-12
@@ -44,3 +44,15 @@ too many after it.
 Once this is fixed, §0.7's transcript can move from `pinned` to `checked` in
 `tests/transcripts` — it becomes a transcript the binary actually satisfies,
 which is worth more than the fix.
+
+## 2026-09-12
+
+Fixed, and it was two bugs in one path.
+
+println! added a newline to a value that already ended in one. Now: print the bytes exactly, and add a newline only when the text does not already end in one — so a value with its own newline is exact, and a bare 7 still ends the line it is printed on.
+
+deposits were joined with newlines. That inserts bytes the program never wrote: two deposits of "a\n" and "b\n" became two lines with a blank between. They are concatenated now. A program's deposits ARE its output, and a program that wants a separator writes one — which is what printf has always meant.
+
+That second part changes a decision from #83. The test there is about ORDERING (deposits grouped by source, not interleaved by offset) and only depended on the separator incidentally. Its fixture now gives each deposit its own newline, as a program that wanted lines would, so the ordering claim survives and is more realistic than it was.
+
+0.7's transcript still cannot be executed by tests/transcripts: running it needs a scratch store, a written hello.nc, and the cairn substituted from the first command into the second. That is 0066's job and it is filed there. crates/nether-cli/tests/rites.rs covers the behaviour end to end meanwhile.
