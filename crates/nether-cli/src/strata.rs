@@ -102,15 +102,16 @@ struct Reach {
     answered: bool,
     call: String,
     at: Span,
-    /// How many times this same call was asked at this same place.
-    times: usize,
 }
 
 /// Everything under a trace that touches the world.
 struct Survey {
     reaches: Vec<Reach>,
-    /// Cairns the graph names that the ledger does not hold. A survey with
-    /// holes in it can only give a lower bound, and says so.
+    /// Nodes the graph names that the ledger does not hold.
+    ///
+    /// Nodes, not cairns. A source blob that was never sealed is the ordinary
+    /// state of a ledger and bounds nothing about which strata were reached;
+    /// only a node that is not here can be hiding one.
     missing: usize,
 }
 
@@ -121,9 +122,11 @@ fn order(r: &Reach) -> (Reverse<u8>, [u8; 32], u64, bool, &str) {
 
 /// Walk the graph from a trace's roots and collect every hole and witness.
 ///
-/// The walk is forwards along `references`, which is the only direction a node
-/// can point: §7.3 makes the graph acyclic by construction, so `seen` is an
-/// economy and not a safety measure.
+/// Along `nodes` and not `references`: an argument, an answer and a span's
+/// source are values, and reading them would say nothing about depth while
+/// making every unsealed source look like a gap in the record. §7.3 makes the
+/// graph acyclic by construction, so `seen` is an economy and not a safety
+/// measure.
 fn survey(store: &Store, roots: &[Cairn]) -> Survey {
     let mut raw: Vec<Reach> = Vec::new();
     let mut missing = 0;
@@ -144,37 +147,27 @@ fn survey(store: &Store, roots: &[Cairn]) -> Survey {
                 answered: false,
                 call: lamp::said(store, &call.function, &call.args),
                 at: *span,
-                times: 1,
             }),
             Node::Witness { call, stratum, span, .. } => raw.push(Reach {
                 stratum: *stratum,
                 answered: true,
                 call: lamp::said(store, &call.function, &call.args),
                 at: *span,
-                times: 1,
             }),
             _ => {}
         }
-        stack.extend(n.references());
+        stack.extend(n.nodes());
     }
 
     // Deepest first, because that is the line the reader came for; then in
     // source order, so the rest reads like the program.
-    raw.sort_by(|a, b| order(a).cmp(&order(b)));
-    let mut reaches: Vec<Reach> = Vec::new();
-    for one in raw {
-        match reaches.last_mut() {
-            Some(last)
-                if last.stratum == one.stratum
-                    && last.answered == one.answered
-                    && last.at == one.at
-                    && last.call == one.call =>
-            {
-                last.times += 1;
-            }
-            _ => reaches.push(one),
-        }
-    }
+    //
+    // Nothing is collapsed. A node is named by its content and `seen` is keyed
+    // on that, so two entries here are two nodes — and two witnesses of one
+    // call at one place are two different answers, which is the thing a blame
+    // tool exists to show rather than tidy away.
+    let mut reaches = raw;
+    reaches.sort_by(|a, b| order(a).cmp(&order(b)));
     Survey { reaches, missing }
 }
 
@@ -226,9 +219,6 @@ impl Reading {
                 if !r.answered {
                     let _ = write!(out, "   pending");
                 }
-                if r.times > 1 {
-                    let _ = write!(out, "   ×{}", r.times);
-                }
                 let _ = writeln!(out);
             }
             let _ = writeln!(out, "  0  everything else");
@@ -261,7 +251,7 @@ impl Reading {
         }
         if self.found.missing > 0 {
             notes.push(format!(
-                "{} cairn(s) under this trace are not in this ledger, so this is a lower bound.",
+                "{} node(s) under this trace are not in this ledger, so this is a lower bound.",
                 self.found.missing
             ));
         }
@@ -275,12 +265,11 @@ impl Reading {
             .iter()
             .map(|r| {
                 format!(
-                    "{{\"stratum\":{},\"call\":{},\"at\":{},\"answered\":{},\"times\":{}}}",
+                    "{{\"stratum\":{},\"call\":{},\"at\":{},\"answered\":{}}}",
                     r.stratum,
                     json::string(&r.call),
                     json::string(&place(store, r.at)),
-                    r.answered,
-                    r.times
+                    r.answered
                 )
             })
             .collect();

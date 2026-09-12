@@ -491,7 +491,9 @@ fn strata_answers_in_json_too() {
 fn a_span_whose_source_is_gone_still_gives_the_offset() {
     // A trace means the same thing on a machine that has never seen the
     // filesystem it was buried on — but not necessarily the same amount. Say
-    // what is left rather than nothing.
+    // what is left rather than nothing, and do not call it a lower bound: a
+    // source that was never sealed is the ordinary state of a ledger and
+    // bounds nothing about which strata were reached.
     let dir = scratch("strata-no-source");
     let store = Store::open(&dir).expect("a store");
     let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
@@ -510,7 +512,67 @@ fn a_span_whose_source_is_gone_still_gives_the_offset() {
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     let text = stdout(&out);
     assert!(text.contains(&format!("{}:+47", source.short())), "{text}");
-    assert!(text.contains("not in this ledger"), "{text}");
+    assert!(!text.contains("lower bound"), "a missing source is not a missing node:\n{text}");
+}
+
+#[test]
+fn a_node_that_is_gone_is_a_lower_bound_and_says_so() {
+    // The case the note is actually about. A root that is not here could be
+    // hiding any stratum at all, so the survey can only be a floor.
+    let dir = scratch("strata-missing-node");
+    let store = Store::open(&dir).expect("a store");
+    let gone = Value::Int(404).cairn();
+    let trace = store
+        .put(&Stored::Node(Node::Trace {
+            roots: vec![gone],
+            fuel_spent: 1,
+            depth: 0,
+            unrecorded: false,
+        }))
+        .expect("put");
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(stdout(&out).contains("1 node(s)"), "{}", stdout(&out));
+    assert!(stdout(&out).contains("lower bound"), "{}", stdout(&out));
+}
+
+#[test]
+fn two_answers_to_one_question_are_two_lines() {
+    // The collapse this used to do keyed on the call and the place and left
+    // out the answer, so the same read answered two different ways came out as
+    // one line marked ×2 — which is exactly what a blame tool exists to show.
+    let dir = scratch("strata-two-answers");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
+    let at = BUILD.find("read(\"main.nc\")").expect("the call is in the source");
+    let span = Span { source, start: at as u64, end: (at + 15) as u64 };
+    let path = put(Value::Str("main.nc".into()));
+    let call = Call { function: "read".into(), args: vec![path] };
+
+    let one = node(Node::Witness {
+        stratum: 3,
+        call: call.clone(),
+        answer: put(Value::Bytes(b"before".to_vec())),
+        span,
+    });
+    let two = node(Node::Witness {
+        stratum: 3,
+        call,
+        answer: put(Value::Bytes(b"after".to_vec())),
+        span,
+    });
+    let trace =
+        node(Node::Trace { roots: vec![one, two], fuel_spent: 4, depth: 3, unrecorded: false });
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    let asked = text.lines().filter(|l| l.contains("read(\"main.nc\")")).count();
+    assert_eq!(asked, 2, "one of the two answers is hidden:\n{text}");
 }
 
 #[test]

@@ -2,8 +2,9 @@
 id: 142
 title: nether strata says two things it cannot know
 type: bug
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p1
@@ -45,6 +46,14 @@ Walk node edges only, and count `missing` over those. Delete the collapse.
 
 ## Acceptance criteria
 
-- [ ] A trace whose source is not in the ledger reports no lower bound
-- [ ] A trace missing a node under it does
-- [ ] Two witnesses with different answers are two lines
+- [x] A trace whose source is not in the ledger reports no lower bound
+- [x] A trace missing a node under it does
+- [x] Two witnesses with different answers are two lines
+
+## 2026-09-12
+
+The walk goes along Node::nodes now, which is new on the ledger and says which of the cairns a node holds are themselves nodes: a trace's roots and a hole's depends, and nothing else. Section 7.3 already implied it; this states it once where the node model is.
+
+## 2026-09-12
+
+The collapse is gone rather than fixed. A node is named by its content and the walk is keyed on that, so two entries were always two nodes -- the branch was unreachable except in the one case where it was harmful.

@@ -132,10 +132,29 @@ impl Node {
         Cairn::of_encoded(&self.encode())
     }
 
-    /// Every node this one names, in encoding order.
+    /// The cairns this node names that are themselves nodes.
+    ///
+    /// A node names two kinds of thing, and §7.3 says which is which: a
+    /// `Trace`'s roots and a `Hole`'s `depends` are nodes, and every other
+    /// cairn a node holds — an argument, an answer, a deposited value, a
+    /// span's source — is a value. A walk that wants the shape of an
+    /// evaluation rather than its contents wants these.
+    #[must_use]
+    pub fn nodes(&self) -> Vec<Cairn> {
+        match self {
+            Self::Trace { roots, .. } => roots.clone(),
+            Self::Hole { depends, .. } => depends.clone(),
+            Self::Literal(_) | Self::Apply { .. } | Self::Deposit { .. } | Self::Witness { .. } => {
+                Vec::new()
+            }
+        }
+    }
+
+    /// Every cairn this node names, in encoding order.
     ///
     /// This is the forward edge. Provenance and "what is waiting on this hole"
-    /// are both the same edge read backwards. `spec/07-ledger.md` §7.4.
+    /// are both the same edge read backwards. `spec/07-ledger.md` §7.4. For
+    /// only the ones that are nodes, see [`Node::nodes`].
     #[must_use]
     pub fn references(&self) -> Vec<Cairn> {
         match self {
