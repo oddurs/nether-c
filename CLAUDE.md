@@ -144,9 +144,16 @@ advantages is marketing.
   comment.
 - **Never use `--no-verify`, `continue-on-error` or `|| true`** to get a check to
   pass. Fix the thing.
-- **Never attribute work to a tool, a model or an assistant** — not in commits,
-  trailers, pull requests, comments, docs or release notes. The `commit-msg`
-  hook rejects it. The work is published under the owner's name.
+- **Never attribute work to a tool, a model or an assistant.** Not in a commit,
+  a trailer, a session link, a footer, a pull request, a comment, a document,
+  a release note, or anywhere else in this repository. It does not matter what
+  wrote a line; the work is published under the owner's name.
+
+  This is a check rather than a request. `.githooks/commit-msg` refuses a
+  message that does it — a `Co-authored-by:`, an `Assisted-by:`, a session URL,
+  a 🤖 — and `tests/attribution/run` refuses a tree or a branch that does, in
+  `scripts/task test`. `CLAUDE.md` is exempt as a *filename*, because this is
+  the file that states the ban.
 
 ## COMMITS
 

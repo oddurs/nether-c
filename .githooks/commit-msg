@@ -34,7 +34,23 @@ case "$subject" in
 esac
 
 # The work is published under the owner's name.
-if grep -qiE 'co-authored-by:.*(claude|anthropic|copilot|assistant|\bai\b)|generated with|🤖|\bas an AI\b' "$msg_file"; then
-  echo "commit-msg: attribution to a tool or model is not permitted in this repository" >&2
+#
+# Anywhere in the message, not only on a `Co-authored-by:` line: the trailer is
+# one shape this takes and a session link is another. `CLAUDE.md` is exempt as
+# a filename, because it is what this repository calls the file that states the
+# ban. `tests/attribution/run` applies the same rule to everything already
+# here, which is the half a hook cannot do.
+named='claude([^.]|$)|claude\.ai|anthropic|copilot|chatgpt|openai'
+trailer='^[[:space:]]*(co-authored-by|assisted-by|generated-by|authored-by)[[:space:]]*:'
+phrase='generated with|[[:<:]]AI[[:>:]]|🤖'
+
+if grep -qiE "$named|$phrase" "$msg_file" \
+  || grep -iE "$trailer" "$msg_file" | grep -qivE 'dependabot|oddurs@users\.noreply\.github\.com'; then
+  cat >&2 <<'MSG'
+commit-msg: attribution to a tool or model is not permitted in this repository.
+
+  Not in a trailer, not in a session link, not in a footer. The work is
+  published under the owner's name — CLAUDE.md, under NEVER.
+MSG
   exit 1
 fi

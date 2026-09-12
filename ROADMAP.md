@@ -186,7 +186,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`#####·····` 43% · 3 of 7 done · due 2027-05-15
+`#####·····` 50% · 4 of 8 done · due 2027-05-15
 
 ### unmarked
 
@@ -200,6 +200,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0067`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0067-the-provider-trait-and-the-recording-discipline.md) The provider trait and the recording discipline <sup>feature · p0 · 0</sup>
 - [x] [`0069`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0069-strata-3-and-4-the-disk.md) Strata 3 and 4: the disk <sup>feature · p0 · 4</sup>
 - [x] [`0073`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0073-replay-refuses-the-world.md) Replay refuses the world <sup>feature · p0 · 0</sup>
+- [x] [`0164`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0164-the-attribution-ban-is-not-enforced.md) The attribution ban is not enforced <sup>bug · p1 · 0</sup>
 
 ## necropolis — The Necropolis
 
