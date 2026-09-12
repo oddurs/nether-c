@@ -140,6 +140,24 @@ A span names its source by cairn rather than by path. A path is a fact about
 one machine at one moment; the trace has to mean the same thing on a machine
 that has never seen that filesystem.
 
+### 7.3.2 What a decoder cannot check
+
+A `Trace`'s `depth` is the greatest stratum of any `Witness` reachable from its
+roots, and its stratum-8 mark is set exactly when one of those witnesses is at
+stratum 8.
+
+*Reached* is the whole of it. A hole carries the stratum a call **would**
+reach, and a trace whose holes are at stratum 5 and whose witnesses are at 0 has
+depth 0: nothing has been done to the world yet. What exhuming it will cost is
+read off its holes, which is why no field records it — a number that can be
+derived is a number that can disagree.
+
+Neither claim is checkable on `put`. A decoder sees one node, and both are
+facts about a graph that may not be wholly present. An implementation MUST NOT
+be required to enforce them there.
+[§8.6](08-rites.md#86-strata) is where they are caught, because `strata` is the
+rite that has the whole graph in hand.
+
 ## 7.4 Provenance
 
 Provenance is not a separate index. It is the `Apply` and `Witness` nodes
