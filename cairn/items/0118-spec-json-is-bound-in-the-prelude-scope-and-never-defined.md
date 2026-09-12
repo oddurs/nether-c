@@ -2,8 +2,9 @@
 id: 118
 title: 'Spec: Json is bound in the prelude scope and never defined'
 type: spec
-status: unmarked
+status: buried
 milestone: surface
+assignee: Oddur Sigurdsson
 depends_on:
 - 19
 created: 2026-09-12
@@ -37,5 +38,9 @@ readable in full in ten minutes, and a JSON model is not a ten-minute type.
 
 ## Acceptance criteria
 
-- [ ] §3.4's list and §09 name the same set
-- [ ] §1.6's example uses a type that exists
+- [x] §3.4's list and §09 name the same set
+- [x] §1.6's example uses a type that exists
+
+## 2026-09-12
+
+Section 1.6 named two things the prelude does not have, not one. Json was the filed finding; fetch was the other, and section 09 calls that function get. The example now reads Shade<Bytes> reply = descend net { shade must(get(...)) }, the field access becomes len(look(reply)) because Bytes has no fields, and the error block moves to column 23 and blames get. Section 3.4's list gained Answer and Refusal on the way, which section 5.1 defines and the list had omitted.

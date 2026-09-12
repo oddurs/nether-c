@@ -117,7 +117,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`··········` 0% · 0 of 8 done · due 2027-02-28
+`##········` 13% · 1 of 8 done · due 2027-02-28
 
 ### unmarked
 
@@ -128,7 +128,10 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0058`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0058-diagnostics-with-source-spans.md) Diagnostics with source spans <sup>feature · p1 · 0</sup>
 - [ ] [`0059`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0059-proof-the-three-sample-programs.md) Proof: the three sample programs <sup>chore · p0 · 3</sup>
 - [ ] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
-- [ ] [`0118`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0118-spec-json-is-bound-in-the-prelude-scope-and-never-defined.md) Spec: Json is bound in the prelude scope and never defined <sup>spec · p2</sup>
+
+### buried
+
+- [x] [`0118`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0118-spec-json-is-bound-in-the-prelude-scope-and-never-defined.md) Spec: Json is bound in the prelude scope and never defined <sup>spec · p2</sup>
 
 ## rites — The Rites
 

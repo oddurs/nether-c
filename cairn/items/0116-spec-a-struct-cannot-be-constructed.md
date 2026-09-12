@@ -55,3 +55,7 @@ Whichever it is, `spec/90-rationale.md` gets the two that were rejected.
 - [ ] A production that constructs an aggregate, or an argued removal of §5.4's example
 - [ ] Array values have a form too, or a stated reason they do not need one
 - [ ] The rejected alternatives recorded in §90.2
+
+## 2026-09-12
+
+A second unreachable construct on the same seam: section 4.4's for production has a step expression and section 4.5 has the compound assignments, and section 5.4 says a binding may not be reassigned. So for (I64 i = 0; i < n; i += 1) cannot advance its own counter. Whatever settles the construction form has to settle this too, or the for loop goes.

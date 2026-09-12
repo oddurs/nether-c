@@ -59,8 +59,8 @@ struct    typedef sizeof  true    false
 ```
 
 Type names in the prelude (`U0`, `I64`, `Bytes`, `Str`, `Cairn`, `Shade`,
-`Json`, `Bool`) are ordinary identifiers bound in the prelude scope, not
-keywords. A program MAY shadow them, and SHOULD NOT.
+`Answer`, `Refusal`, `Bool`) are ordinary identifiers bound in the prelude
+scope, not keywords. A program MAY shadow them, and SHOULD NOT.
 
 ## 3.5 Depth annotations
 
