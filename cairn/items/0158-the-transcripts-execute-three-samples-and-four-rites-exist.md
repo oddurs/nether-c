@@ -2,8 +2,9 @@
 id: 158
 title: The transcripts execute three samples and four rites exist
 type: chore
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p1
@@ -41,6 +42,14 @@ which is what a transcript already is.
 
 ## Acceptance criteria
 
-- [ ] A transcript of a rite that exists is executed
-- [ ] §8.2's cairn is checked rather than pinned
-- [ ] A rite that does not exist yet is still pinned, and the count says so
+- [x] A transcript of a rite that exists is executed
+- [x] §8.2's cairn is checked rather than pinned
+- [x] A rite that does not exist yet is still pinned, and the count says so
+
+## 2026-09-12
+
+Twelve executed, up from three, and it found five drifts on the first run: the front page still said build.nc buries to 903 nodes, which is the residue counted as nodes and the reading section 6.5 rejects. Section 00 and the README still said hello.nc was 17 nodes and 8f3a1c0e.
+
+## 2026-09-12
+
+Each checked sample gets a scratch directory holding the specification's example programs and a ledger that has already buried them, because that is what a reader following the document has done by the time they reach one. A sample can still hold a line for a rite that does not exist; those are skipped and the count says how many, so checked does not read as all of it was.

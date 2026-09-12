@@ -22,12 +22,14 @@ that is neither checked nor pinned is an error.
 from __future__ import annotations
 
 import collections
+import os
 import hashlib
 import html
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -120,8 +122,17 @@ def collect() -> list[Sample]:
 # ── execution ───────────────────────────────────────────────────────────────
 
 # What `nether` can answer today. Anything else in a transcript is PINNED, and
-# moves to CHECKED the moment the rite exists.
-RUNNABLE = re.compile(r"^nether\s+(run|--version|-V|--help|-h)\b")
+# moves to CHECKED the moment the rite exists — which is what this list is:
+# add the rite here on the day it is built.
+RUNNABLE = re.compile(
+    r"^nether\s+(run|--version|-V|--help|-h|bury|cairn|lamp|strata)\b"
+)
+
+# The programs a transcript may refer to. Every checked sample runs in a
+# scratch directory holding these, with a ledger that has already buried them,
+# because that is what a reader following the document has done by the time
+# they reach one.
+PROGRAMS = sorted((ROOT / "tests" / "programs").glob("*.nc"))
 
 
 def binary() -> Path:
@@ -169,20 +180,40 @@ def matches(expected: str, actual: str) -> bool:
     return True
 
 
-def check(sample: Sample, exe: Path) -> tuple[bool, str]:
-    for cmd, expected in parse_transcript(sample.body):
-        if not RUNNABLE.match(cmd):
-            continue
-        argv = [str(exe)] + cmd.split()[1:]
-        proc = subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
-        actual = (proc.stdout + proc.stderr).rstrip("\n")
-        if not matches(expected, actual):
-            return False, (
-                f"  $ {cmd}\n"
-                f"  --- documented ---\n{expected}\n"
-                f"  --- actual ---\n{actual}"
+def check(sample: Sample, exe: Path) -> tuple[bool, str, int]:
+    """Run what the sample shows, in order, in a store of its own.
+
+    Returns whether it matched, why not, and how many of its commands were
+    skipped because their rite does not exist yet.
+    """
+    skipped = 0
+    with tempfile.TemporaryDirectory() as work:
+        work = Path(work)
+        for program in PROGRAMS:
+            shutil.copy(program, work / program.name)
+        env = dict(os.environ, NETHER_STORE=str(work / ".nether"))
+        for program in PROGRAMS:
+            subprocess.run(
+                [str(exe), "bury", program.name],
+                capture_output=True, text=True, cwd=work, env=env,
             )
-    return True, ""
+
+        for cmd, expected in parse_transcript(sample.body):
+            if not RUNNABLE.match(cmd):
+                skipped += 1
+                continue
+            argv = [str(exe)] + cmd.split()[1:]
+            proc = subprocess.run(
+                argv, capture_output=True, text=True, cwd=work, env=env
+            )
+            actual = (proc.stdout + proc.stderr).rstrip("\n")
+            if not matches(expected, actual):
+                return False, (
+                    f"  $ {cmd}\n"
+                    f"  --- documented ---\n{expected}\n"
+                    f"  --- actual ---\n{actual}"
+                ), skipped
+    return True, "", skipped
 
 
 def is_checkable(sample: Sample) -> bool:
@@ -237,12 +268,13 @@ def main() -> int:
         return 1
 
     exe = binary()
-    checked = pinned = 0
+    checked = pinned = waiting = 0
     failures = []
     for s in samples:
         if is_checkable(s):
-            ok, detail = check(s, exe)
+            ok, detail, skipped = check(s, exe)
             checked += 1
+            waiting += skipped
             if not ok:
                 failures.append((s, detail))
         else:
@@ -256,6 +288,9 @@ def main() -> int:
     if pinned:
         print(f"             {pinned} describe behaviour that does not exist yet;")
         print("             each becomes executable the moment its rite does.")
+    if waiting:
+        # Said out loud, because "checked" must not read as "all of it was".
+        print(f"             {waiting} line(s) inside executed samples wait on a rite too.")
     if failures:
         print(f"transcripts: {len(failures)} sample(s) disagree with the implementation", file=sys.stderr)
         return 1
