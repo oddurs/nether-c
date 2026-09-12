@@ -177,7 +177,7 @@ fn node(store: &Store, n: &Node) -> String {
 }
 
 /// A call, with its arguments rendered if the ledger still holds them.
-fn said(store: &Store, function: &str, args: &[Cairn]) -> String {
+pub fn said(store: &Store, function: &str, args: &[Cairn]) -> String {
     let shown: Vec<String> = args
         .iter()
         .map(|a| match store.get(*a) {

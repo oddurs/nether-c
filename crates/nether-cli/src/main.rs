@@ -6,6 +6,7 @@
 mod cairn;
 mod json;
 mod lamp;
+mod strata;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -17,6 +18,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// §8.8's exit codes, by the names the table gives them.
 mod code {
     pub const USAGE_ERROR: u8 = 64;
+    pub const MALFORMED: u8 = 65;
     pub const ABSENT: u8 = 66;
     pub const UNIMPLEMENTED: u8 = 69;
 }
@@ -87,7 +89,8 @@ fn main() -> ExitCode {
         }
         Some("cairn") => cairn::run(&args[1..]),
         Some("lamp") => lamp::run(&args[1..]),
-        Some("bury" | "exhume" | "strata" | "graft") => {
+        Some("strata") => strata::run(&args[1..]),
+        Some("bury" | "exhume" | "graft") => {
             eprintln!("nether: not yet. The specification lands before the compiler does.");
             eprintln!("        See spec/00-overview.md, and `cairn next` for what is ready.");
             ExitCode::from(code::UNIMPLEMENTED)
