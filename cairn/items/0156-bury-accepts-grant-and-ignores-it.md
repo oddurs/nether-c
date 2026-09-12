@@ -2,8 +2,9 @@
 id: 156
 title: bury accepts --grant and ignores it
 type: bug
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p1
@@ -41,5 +42,9 @@ that is not there: it looks like it worked.
 
 ## Acceptance criteria
 
-- [ ] `--grant` either changes the burial or is refused with the reason
-- [ ] §8.2 says which
+- [x] `--grant` either changes the burial or is refused with the reason
+- [x] §8.2 says which
+
+## 2026-09-12
+
+Refused rather than honoured, because honouring one is exhume's work and that rite is not built. Section 8.2 now makes it a MUST: an implementation that cannot honour a grant refuses one rather than evaluating as though it were not there. Same reasoning as section 8.0 in a smaller place.

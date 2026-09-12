@@ -69,12 +69,20 @@ pub fn run(args: &[String]) -> ExitCode {
         return usage_error();
     };
 
-    // No `--grant` means no capabilities, which is the only default that
-    // cannot surprise anybody: every world-touching expression becomes a hole.
-    // Granted capabilities do not change burial yet — every world-touching
-    // expression becomes a hole regardless, which is what `--grant` nothing
-    // does. `exhume` is where a grant means something.
-    let _ = &granted;
+    // A grant is refused rather than accepted and discarded. Honouring one is
+    // `exhume`'s work and that rite is not built, so a `--grant` here would
+    // validate its argument, change nothing, and look like it had worked.
+    // §8.2, and the same reasoning as §8.0.
+    if let Some(cap) = granted.first() {
+        eprintln!("nether: `bury` cannot honour a grant yet, so it will not take one.");
+        eprintln!();
+        eprintln!("  Burial holds no capabilities: every world-touching expression");
+        eprintln!("  becomes a hole, and answering one is what `exhume` is for.");
+        eprintln!();
+        eprintln!("    nether bury {path}");
+        eprintln!("    nether exhume <cairn> --grant {cap}");
+        return usage_error();
+    }
     inter(Path::new(path), fuel, wants_json)
 }
 

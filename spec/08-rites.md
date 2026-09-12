@@ -70,6 +70,11 @@ With no `--grant`, burial holds no capabilities and every world-touching
 expression becomes a hole. This is the default because it is the only default
 that cannot surprise anyone.
 
+Until [§8.3](#83-exhume) is built, an implementation that cannot honour a grant
+MUST refuse one rather than accept it and evaluate as though it were not there.
+A flag that validates its argument and changes nothing looks like it worked,
+which is the failure §8.0 is about in a smaller place.
+
 `--fuel` sets the budget of [§6.4](06-evaluation.md#64-starvation-and-fuel).
 Its default MUST be finite, and the rite MUST report what it was when asked.
 
