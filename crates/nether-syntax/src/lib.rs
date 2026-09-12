@@ -8,9 +8,13 @@
 
 pub mod ast;
 mod lex;
+mod lower;
 mod parse;
+mod print;
 mod token;
 
 pub use lex::{Fault, FaultKind, lex};
+pub use lower::lower;
 pub use parse::{levels, parse};
+pub use print::print;
 pub use token::{Keyword, Punct, Token, TokenKind};
