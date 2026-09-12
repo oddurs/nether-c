@@ -62,3 +62,23 @@ and the residue is a program, and those have never needed the same encoding.
 - [ ] `depends` has a value some burial actually produces, or it goes
 - [ ] The staging law is stated over something that has an encoding
 - [ ] `spec/90-rationale.md` records the rejected shape
+
+## 2026-09-12
+
+Worked through while trying to build nether bury, which is blocked on it, and so are exhume, strata and graft. Three readings, and the third is new since the item was filed.
+
+## 2026-09-12
+
+One: section 7.3 gains node kinds for a residual program — a branch, a loop, a binding, an unreduced application. That is the reading section 6.6's own summary assumes, because 903 nodes for a program with one hole is the residue being counted. It changes the frozen table in section 7.3.1, which by section 7.2 changes the domain separator and therefore every cairn that has ever existed. Nothing has ever been buried, so the cost today is zero and the cost later is total.
+
+## 2026-09-12
+
+Two: section 6.5 stops calling the residue nodes. The trace records what happened and the residue is something else. That was the item's original recommendation and it leaves the Trace node with no way to name what is left.
+
+## 2026-09-12
+
+Three, and this is the one the work since has made available: the residue is source. A residue is a program, a program is text, and 0056 built a printer that writes the IR back out as Nether C — with a round-trip proof that lowering the printed source gives the same IR node for node. So a trace can name its residue as an ordinary Bytes value, burying again means lexing and parsing and lowering that source again, and section 6.5's staging law holds because the residue really is a complete program. Nothing in the frozen encoding changes.
+
+## 2026-09-12
+
+What three still needs is a Trace node that can hold it. Trace is roots, fuel_spent, depth, unrecorded — and a burial has a residue, a set of holes, a set of deposits and the source it came from, which is four kinds of thing and one ordered list to put them in. Whichever reading wins, Node::Trace's payload has to change, and that is a frozen-section change with a domain bump behind it. That is why this is filed rather than settled.
