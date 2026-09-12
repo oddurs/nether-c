@@ -2,8 +2,9 @@
 id: 66
 title: Transcript tests for every documented invocation
 type: chore
-status: starved
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 depends_on:
 - 27
 - 60
@@ -31,3 +32,11 @@ One piece is available now and is worth doing when this unblocks: 0.7's transcri
 ## 2026-09-12
 
 The piece this said was available now is done: 0158 gave the harness a scratch store, the specification's example programs, and a ledger already buried, and carries cairns across commands in a sample. Twelve samples execute. What is still waiting is the exhume half.
+
+## 2026-09-12
+
+Closed. Every shell block in the specification and on the site runs and matches character for character: fourteen of fourteen. The other fifty-three pinned samples are not transcripts -- a c fence is a program and an ebnf fence is a grammar -- and the summary now says that rather than claiming they wait on a rite.
+
+## 2026-09-12
+
+The last one was an error display with no command in it, so nothing could run it. Adding the invocation turned up that the front page had been showing stamp.nc:14:11 and look(reply).len for a program that says 14:21 and len(look(reply)).

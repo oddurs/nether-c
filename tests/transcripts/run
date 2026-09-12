@@ -299,9 +299,16 @@ def main() -> int:
 
     total = checked + pinned
     print(f"transcripts: {total} sample(s) — {checked} executed, {pinned} pinned")
-    if pinned:
-        print(f"             {pinned} describe behaviour that does not exist yet;")
-        print("             each becomes executable the moment its rite does.")
+    # Said by kind, because most of what is pinned is not a transcript at all:
+    # a `c` fence is a program and an `ebnf` fence is a grammar, and neither
+    # was ever going to be run. What matters is how many *shell* blocks are
+    # still only hashed.
+    waiting_shell = sum(1 for s in samples if s.kind == "console" and not is_checkable(s))
+    if waiting_shell:
+        print(f"             {waiting_shell} shell block(s) wait on a rite that does not exist;")
+        print("             each becomes executable the moment it does.")
+    elif pinned:
+        print(f"             every shell block runs; the other {pinned} are not transcripts.")
     if waiting:
         # Said out loud, because "checked" must not read as "all of it was".
         print(f"             {waiting} line(s) inside executed samples wait on a rite too.")
