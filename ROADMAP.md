@@ -123,9 +123,13 @@ Buried. The IR, the bidirectional depth checker, normalization by evaluation, ho
 
 ## surface — The Surface
 
-`##########` 100% · 17 of 17 done · due 2027-02-28
+`##########` 94% · 17 of 18 done · due 2027-02-28
 
 Buried. The lexer, the recursive descent parser, lowering, depth inference, diagnostics that name the cause, and the three sample programs — plus four specification holes the implementation found and closed.
+
+### unmarked
+
+- [ ] [`0157`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0157-freezing-a-local-depends-on-which-arm-you-write-first.md) Freezing a local depends on which arm you write first <sup>bug · p1 · 0</sup>
 
 ### buried
 
@@ -149,11 +153,17 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## rites — The Rites
 
-`#########·` 86% · 18 of 21 done · due 2027-03-31
+`#######···` 67% · 18 of 27 done · due 2027-03-31
 
 ### unmarked
 
 - [ ] [`0065`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0065-nether-graft.md) nether graft <sup>feature · p1 · 4</sup>
+- [ ] [`0155`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0155-a-trace-does-not-record-what-happened.md) A trace does not record what happened <sup>bug · p0 · 0</sup>
+- [ ] [`0156`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0156-bury-accepts-grant-and-ignores-it.md) bury accepts --grant and ignores it <sup>bug · p1 · 0</sup>
+- [ ] [`0158`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0158-the-transcripts-execute-three-samples-and-four-rites-exist.md) The transcripts execute three samples and four rites exist <sup>chore · p1 · 0</sup>
+- [ ] [`0159`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0159-nothing-shows-a-trace-its-residue.md) Nothing shows a trace its residue <sup>feature · p2 · 1</sup>
+- [ ] [`0160`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0160-a-call-renders-its-bytes-arguments-unreadably.md) A call renders its bytes arguments unreadably <sup>bug · p2 · 1</sup>
+- [ ] [`0161`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0161-as-unit-drops-a-demand-rather-than-failing.md) as_unit drops a demand rather than failing <sup>bug · p3 · 0</sup>
 
 ### starved
 
