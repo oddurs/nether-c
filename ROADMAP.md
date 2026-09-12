@@ -125,14 +125,13 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`########··` 73% · 11 of 15 done · due 2027-02-28
+`########··` 80% · 12 of 15 done · due 2027-02-28
 
 ### unmarked
 
 - [ ] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
 - [ ] [`0133`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0133-spec-a-shade-parameter-has-an-origin-nothing-can-infer.md) Spec: a shade parameter has an origin nothing can infer <sup>spec · p1</sup>
 - [ ] [`0134`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0134-spec-types-are-inferred-in-a-body-and-the-grammar-requires-one.md) Spec: types are inferred in a body and the grammar requires one <sup>spec · p1</sup>
-- [ ] [`0143`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0143-a-span-that-lands-mid-character-panics-the-reporter.md) A span that lands mid-character panics the reporter <sup>bug · p2 · 0</sup>
 
 ### buried
 
@@ -147,6 +146,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0130`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0130-decide-where-the-lexer-gets-unicode.md) Decide: where the lexer gets Unicode <sup>spec · p0</sup>
 - [x] [`0131`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0131-spec-section-3-6-does-not-say-what-an-integer-literal-may-hold.md) Spec: section 3.6 does not say what an integer literal may hold <sup>spec · p1</sup>
 - [x] [`0141`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0141-nothing-bounds-recursion-outside-burial.md) Nothing bounds recursion outside burial <sup>bug · p1 · 0</sup>
+- [x] [`0143`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0143-a-span-that-lands-mid-character-panics-the-reporter.md) A span that lands mid-character panics the reporter <sup>bug · p2 · 0</sup>
 
 ## rites — The Rites
 
