@@ -25,18 +25,70 @@ ceiling_file=${2:-.decay-ceiling}
 # not that. They are what makes it trustworthy, and a rule that makes you
 # delete tests in order to add a feature is pointing the wrong way.
 #
-# By convention a file's tests live in a trailing `#[cfg(test)] mod tests`, so
-# everything from the first such marker to the end of the file is excluded.
-count=0
+# A `#[cfg(test)]` item is excluded wherever it is, by matching its braces,
+# rather than by deleting from the first marker to the end of the file. That
+# shorter rule assumed the trailing-module convention and nothing enforced it,
+# so one attribute at the top of a file removed the file from the count.
+#
 # Integration tests and benches live beside the code they exercise and are no
 # more the trusted core than a `#[cfg(test)]` module is.
-for file in $(find "$source_dir" -name '*.rs' \
+core_lines() {
+  awk '
+    # Strip what a brace could hide in: block comments, line comments, string
+    # and character literals. Nothing here needs the text, only the braces.
+    function clean(s,   out, i, c, n) {
+      out = ""; n = length(s)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (block) { if (c == "*" && substr(s, i + 1, 1) == "/") { block = 0; i++ } ; continue }
+        if (c == "/" && substr(s, i + 1, 1) == "*") { block = 1; i++; continue }
+        if (c == "/" && substr(s, i + 1, 1) == "/") { break }
+        if (c == "\"") { i = skip_quote(s, i, "\""); continue }
+        if (c == "'"'"'") { i = skip_quote(s, i, "'"'"'"); continue }
+        out = out c
+      }
+      return out
+    }
+    function skip_quote(s, i, q,   n, c) {
+      n = length(s); i++
+      while (i <= n) {
+        c = substr(s, i, 1)
+        if (c == "\\") { i += 2; continue }
+        if (c == q) { return i }
+        i++
+      }
+      return n
+    }
+    BEGIN { block = 0 }
+    {
+      bare = clean($0)
+      if (!skip && bare ~ /#\[cfg\(test\)\]/) { skip = 1; pending = 1; depth = 0 }
+      if (skip) {
+        for (i = 1; i <= length(bare); i++) {
+          c = substr(bare, i, 1)
+          if (c == "{") { pending = 0; depth++ }
+          else if (c == "}") { depth--; if (depth <= 0 && !pending) { skip = 0; break } }
+          # An attribute on something with no block at all: `#[cfg(test)] use x;`
+          else if (c == ";" && pending && depth == 0) { skip = 0; break }
+        }
+        next
+      }
+      # A line is core if it holds anything but whitespace and a line comment.
+      # The cleaned text is for finding braces, not for deciding this: a line
+      # that is nothing but the middle of a string literal is still a line.
+      if ($0 ~ /^[[:space:]]*(\/\/.*)?$/) next
+      n++
+    }
+    END { print n + 0 }
+  ' "$1"
+}
+
+count=$(find "$source_dir" -name '*.rs' \
     -not -path '*/target/*' \
     -not -path '*/tests/*' \
-    -not -path '*/benches/*' 2>/dev/null); do
-  n=$(sed '/#\[cfg(test)\]/,$d' "$file" | grep -cvE '^[[:space:]]*(//.*)?$' || true)
-  count=$((count + ${n:-0}))
-done
+    -not -path '*/benches/*' 2>/dev/null \
+  | while IFS= read -r file; do core_lines "$file"; done \
+  | awk '{ n += $1 } END { print n + 0 }')
 
 if [ ! -f "$ceiling_file" ]; then
   echo "$count" > "$ceiling_file"
