@@ -95,11 +95,10 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`######····` 54% · 7 of 13 done · due 2027-01-15
+`#######···` 62% · 8 of 13 done · due 2027-01-15
 
 ### unmarked
 
-- [ ] [`0048`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0048-normalization-by-evaluation.md) Normalization by evaluation <sup>feature · p0 · 0</sup>
 - [ ] [`0049`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0049-holes-and-residualization.md) Holes and residualization <sup>feature · p0 · 0</sup>
 - [ ] [`0050`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0050-fuel-and-starvation-diagnostics.md) Fuel and starvation diagnostics <sup>feature · p0 · 0</sup>
 - [ ] [`0052`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0052-property-test-depth-is-monotone.md) Property test: depth is monotone <sup>chore · p1 · 0</sup>
@@ -110,6 +109,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 - [x] [`0046`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0046-nether-core-the-ir.md) nether-core: the IR <sup>feature · p0 · 0</sup>
 - [x] [`0047`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0047-the-bidirectional-depth-checker.md) The bidirectional depth checker <sup>feature · p0 · 0</sup>
+- [x] [`0048`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0048-normalization-by-evaluation.md) Normalization by evaluation <sup>feature · p0 · 0</sup>
 - [x] [`0051`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0051-seal-shade-and-look.md) seal, shade and look <sup>feature · p0 · 0</sup>
 - [x] [`0119`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0119-spec-ambient-soundness-is-stated-as-something-that-is-not-true.md) Spec: ambient soundness is stated as something that is not true <sup>spec · p0</sup>
 - [x] [`0120`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0120-spec-app-s-premise-forbids-the-specification-s-own-examples.md) Spec: APP's premise forbids the specification's own examples <sup>spec · p0</sup>
@@ -118,7 +118,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`##········` 13% · 1 of 8 done · due 2027-02-28
+`##········` 11% · 1 of 9 done · due 2027-02-28
 
 ### unmarked
 
@@ -129,6 +129,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0058`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0058-diagnostics-with-source-spans.md) Diagnostics with source spans <sup>feature · p1 · 0</sup>
 - [ ] [`0059`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0059-proof-the-three-sample-programs.md) Proof: the three sample programs <sup>chore · p0 · 3</sup>
 - [ ] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
+- [ ] [`0123`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0123-spec-sizeof-has-no-answer.md) Spec: sizeof has no answer <sup>spec · p2</sup>
 
 ### buried
 

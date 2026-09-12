@@ -40,7 +40,7 @@ case "${1:-}" in
     # The size demonstrations. Not part of `check`: they are evidence for a
     # roadmap item rather than a gate. `check` still compiles them, so they
     # cannot rot unnoticed, and cargo test runs the ones that are cheap.
-    cargo test --release -p nether-ledger --test proofs -- --ignored --nocapture
+    cargo test --release --workspace --test proofs -- --ignored --nocapture
     ;;
   site)
     # The site is baked from spec/ and committed. No node, no lockfile,
