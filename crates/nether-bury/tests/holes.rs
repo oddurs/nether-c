@@ -137,6 +137,26 @@ fn the_same_question_twice_is_one_hole() {
 }
 
 #[test]
+fn one_question_asked_from_two_places_is_one_hole() {
+    // §6.3, and the case the helper above hid: three `read("k")` built by
+    // `reading()` share `Span::default()`, so interning on the node rather
+    // than on the call looked right. Two positions is the test.
+    let first = Span { start: 10, end: 20 };
+    let second = Span { start: 90, end: 100 };
+    let r = buried(&demanding(vec![
+        descending(read_of(str_lit("k"), first)),
+        descending(read_of(str_lit("k"), second)),
+    ]));
+
+    assert_eq!(r.holes.len(), 1, "two places asking one question is one question");
+    let [Node::Hole { span, .. }] = r.questions()[..] else {
+        panic!("not one hole: {:?}", r.questions())
+    };
+    // The first place that asked, in the order §6.2 fixes.
+    assert_eq!((span.start, span.end), (10, 20));
+}
+
+#[test]
 fn two_different_questions_are_two_holes_in_the_order_they_were_found() {
     let r = buried(&demanding(vec![descending(reading("b")), descending(reading("a"))]));
     assert_eq!(r.holes.len(), 2);

@@ -87,6 +87,12 @@ Two holes with identical `call` fields in the same trace MUST be the same
 hole. This is what makes exhumation cheap: reading the same file twice is one
 question, asked once.
 
+The hole keeps the `span` of the first place that asked, in the order
+[§6.2](#62-demand) fixes. Which place that is, is therefore a fact about the
+program rather than about the implementation, and two burials of the same
+source agree on it. A hole is a question for the world, and the world does not
+care how many places were waiting on the answer.
+
 ## 6.4 Starvation and fuel
 
 An expression **starves** when it cannot be evaluated and cannot become a hole
