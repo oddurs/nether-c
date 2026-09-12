@@ -263,6 +263,38 @@ It also removes a dependency — full NFC is a megabyte of Unicode tables — bu
 that is a consequence of the decision, not the reason for it. Had the argument
 gone the other way, the tables would have been the right thing to add.
 
+### Struct literals, and forbidding assignment outright
+
+[§4.4](04-grammar.md#44-statements) had an `assign` production and a `for` step
+that nothing could reach: §5.4 said a binding may not be reassigned, and §4.2
+required every `let` to have an initialiser, so there was no way to write a
+struct value and no way for `for (I64 i = 0; i < n; i += 1)` to advance its own
+counter. Three constructs in the grammar with nothing that could produce them.
+
+**A struct literal in `primary`** was the obvious fix: make aggregates ordinary
+values, `Header { len: 3, tag: b"nc" }`, and drop §5.4's build-then-seal
+discipline entirely. It is a smaller grammar and a cleaner story. It was
+rejected because it fixes one of the three: `for` still cannot step, `assign`
+is still unreachable, and a language that cannot advance a counter has no loops
+worth the name.
+
+**Forbidding assignment outright** — remove `assign`, remove the `for` step,
+remove §5.4's example — was the honest minimum, and it leaves a language with
+`while` and manual recursion and nothing else. The inversion does not require
+that. What TempleOS let every task do was write to *shared, addressable,
+permanent* memory; a counter in a block is none of those.
+
+What was chosen draws the line at the ledger. A local may be assigned until it
+is named, and naming it is exactly the moment its cairn exists. That keeps
+§5.4's original sentence — "once a value has been read, its cairn exists, and
+nothing can change what a cairn names" — which turned out to be right all
+along, and makes all three constructs reachable for one reason rather than
+three.
+
+The cost is that "there is no mutation" stops being true as a flat statement
+and becomes true only of the ledger. That is a worse sentence and a better
+rule.
+
 ### Recording the fuel budget in the trace
 
 §8.2 used to require that the budget be reported *in the trace*, "because a

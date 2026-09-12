@@ -2,7 +2,7 @@
 id: 116
 title: 'Spec: a struct cannot be constructed'
 type: spec
-status: unmarked
+status: buried
 milestone: surface
 depends_on:
 - 18
@@ -52,10 +52,26 @@ Whichever it is, `spec/90-rationale.md` gets the two that were rejected.
 
 ## Acceptance criteria
 
-- [ ] A production that constructs an aggregate, or an argued removal of §5.4's example
-- [ ] Array values have a form too, or a stated reason they do not need one
-- [ ] The rejected alternatives recorded in §90.2
+- [x] A production that constructs an aggregate, or an argued removal of §5.4's example
+- [x] Array values have a form too, or a stated reason they do not need one
+- [x] The rejected alternatives recorded in §90.2
 
 ## 2026-09-12
 
 A second unreachable construct on the same seam: section 4.4's for production has a step expression and section 4.5 has the compound assignments, and section 5.4 says a binding may not be reassigned. So for (I64 i = 0; i < n; i += 1) cannot advance its own counter. Whatever settles the construction form has to settle this too, or the for loop goes.
+
+## 2026-09-12
+
+Settled by drawing the line at the ledger rather than at the function body.
+
+A local may be assigned, and its fields and elements may be assigned, until it is NAMED — sealed, shaded, deposited, returned or passed as an argument, which is exactly the moment its cairn exists. 5.4's own sentence was already right: 'once a value has been read, its cairn exists, and nothing can change what a cairn names'. The grammar just never allowed the construct.
+
+let_decl's initialiser is now optional at block level and required at unit level, since there is no statement above a global to assign one. Reading an unassigned field collapses: there is no value there and there never was one, and a zero would be the implementation deciding what the program meant.
+
+That makes all three unreachable constructs reachable for ONE reason rather than three: assign, the for step, and aggregate construction.
+
+Both alternatives are in 90.2. A struct literal fixes construction and leaves for unable to step. Forbidding assignment outright leaves a language with while and recursion and nothing else, and the inversion does not require it — what every TempleOS task could write to was shared, addressable, permanent memory, and a counter in a block is none of those.
+
+The cost: 'there is no mutation' stops being true flat and becomes true of the ledger. A worse sentence and a better rule.
+
+The parser does not implement it yet — filed, p0, in this milestone.
