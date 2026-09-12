@@ -345,3 +345,16 @@ fn source_cairn() -> Cairn {
 fn bury(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
     nether_bury::bury(unit, source_cairn(), fuel)
 }
+
+/// The third limit, and the one that used to be a crash waiting to happen:
+/// when no thread can be spawned, burial does not fall back to the caller's
+/// stack. `MAX_FRAMES` is thirty-two megabytes of frames and a main thread has
+/// eight, so the fallback was the overflow the scoped thread exists to
+/// prevent. §6.4: reported, not crashed into.
+#[test]
+fn having_no_stack_to_bury_on_is_reported_like_any_other_limit() {
+    let halt = Halt { span: Span::default(), kind: HaltKind::NoStack, grinding: None };
+    let d = halt.diagnostic();
+    assert!(d.headline.starts_with("burial could not get a stack"), "{}", d.headline);
+    assert!(d.note.is_some_and(|n| n.contains("stack of its own")));
+}

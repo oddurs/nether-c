@@ -258,3 +258,38 @@ fn sizeof_is_reserved_and_refused_and_names_len() {
     assert_eq!(d.headline, "`sizeof` is reserved and has no meaning");
     assert!(d.note.is_some_and(|n| n.contains("`len`")), "it does not say what to write instead");
 }
+
+// ── the limit the grammar needs and the host does not have ──────────────────
+
+/// §6.4: an implementation states its limits and reports reaching one rather
+/// than crashing into it. §4.6's ladder is ten frames per level of nesting, so
+/// before this a hundred parentheses aborted the process.
+#[test]
+fn nesting_past_the_limit_is_a_fault_and_not_a_crash() {
+    let deep = |n: usize| format!("I64 a = {}1{};\n", "(".repeat(n), ")".repeat(n));
+
+    let inside = usize::try_from(nether_syntax::MAX_NESTING).expect("a small number") - 2;
+    assert!(parses(&deep(inside)).is_ok(), "{inside} deep should still parse");
+
+    let faults = parses(&deep(100_000)).expect_err("this is deeper than the parser goes");
+    assert_eq!(faults[0].kind, FaultKind::TooDeep, "{faults:?}");
+    let d = faults[0].diagnostic();
+    assert!(
+        d.headline.contains(&nether_syntax::MAX_NESTING.to_string()),
+        "the limit is not named: {}",
+        d.headline
+    );
+    assert!(d.note.is_some_and(|n| n.contains("not of the language")));
+}
+
+/// The other two shapes that recurse: a prefix operator chain, which does not
+/// pass through the precedence ladder, and a type argument.
+#[test]
+fn a_prefix_chain_and_a_nested_type_are_bounded_too() {
+    let ops = format!("I64 a = {}1;\n", "!".repeat(100_000));
+    assert_eq!(parses(&ops).expect_err("too deep")[0].kind, FaultKind::TooDeep);
+
+    let n = 100_000;
+    let ty = format!("{}I64{} a = 1;\n", "Answer<".repeat(n), ">".repeat(n));
+    assert_eq!(parses(&ty).expect_err("too deep")[0].kind, FaultKind::TooDeep);
+}

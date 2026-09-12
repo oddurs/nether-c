@@ -127,6 +127,13 @@ pub enum HaltKind {
         /// [`MAX_FRAMES`].
         limit: u32,
     },
+    /// There was no thread to bury on.
+    ///
+    /// [`MAX_FRAMES`] is a limit against [`STACK`] and means nothing against
+    /// anybody else's, so a burial that cannot have its own stack does not run
+    /// on the caller's — it says so. §6.4: a limit is reported, not crashed
+    /// into.
+    NoStack,
 }
 
 /// How deep a chain of calls this burial can hold.
@@ -193,6 +200,15 @@ impl Halt {
                         .to_string(),
                 ),
             ),
+            HaltKind::NoStack => (
+                format!("burial could not get a stack of {} bytes", grouped(STACK as u64)),
+                None,
+                Some(
+                    "burial runs on a stack of its own: its frame limit means \
+                     nothing against anybody else's."
+                        .to_string(),
+                ),
+            ),
             HaltKind::OutOfFuel { spent } => (
                 format!("burial ran out of fuel after {} steps", grouped(spent)),
                 match &self.grinding {
@@ -238,8 +254,11 @@ pub fn bury(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
             // A burial that panicked is a bug in this crate, and the caller
             // should see it as one.
             Ok(h) => h.join().unwrap_or_else(|p| std::panic::resume_unwind(p)),
-            // Nothing left to spawn with. Better a shallower burial than none.
-            Err(_) => burrow(unit, source, fuel),
+            // Nothing left to spawn with. Not a reason to run on the
+            // caller's stack: MAX_FRAMES is thirty-two megabytes of frames
+            // against a main thread that has eight, so the fallback would be
+            // the overflow this thread exists to prevent.
+            Err(_) => Err(Halt { span: Span::default(), kind: HaltKind::NoStack, grinding: None }),
         }
     })
 }
