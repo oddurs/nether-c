@@ -2,8 +2,9 @@
 id: 126
 title: 'Spec: starvation is the name of two different things'
 type: spec
-status: unmarked
+status: buried
 milestone: calculus
+assignee: Oddur Sigurdsson
 depends_on:
 - 20
 created: 2026-09-12
@@ -55,7 +56,15 @@ everywhere else in the project.
 
 ## Acceptance criteria
 
-- [ ] One word, one meaning, in §6.4 and §9.9
-- [ ] `spec/10-glossary.md` has both
-- [ ] `CLAUDE.md`'s table has the new word if there is one
-- [ ] nether-core's `HaltKind` follows
+- [x] One word, one meaning, in §6.4 and §9.9
+- [x] `spec/10-glossary.md` has both
+- [x] `CLAUDE.md`'s table has the new word if there is one
+- [x] `nether-bury`'s `HaltKind` follows
+
+## 2026-09-12
+
+Settled as the item proposed: the fatal one is a collapse. What decided it was not taste but section 10, which defended the merged word on the ground that both stop a burial -- and section 6.4 says a starved expression is residualised and waits. The stated reason for the merge was false of the case it was covering for. Both rejected ways out are in section 90.2.
+
+## 2026-09-12
+
+HaltKind lives in nether-bury, not nether-core. The tests/starvation.rs file is now tests/collapse.rs, because it proves the fuel and collapse diagnostics and neither is starvation.

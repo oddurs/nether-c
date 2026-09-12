@@ -29,7 +29,7 @@ fn samples() -> Vec<(String, String)> {
         ("03-lexical.md", 26),
         ("05-types.md", 71),
         ("06-evaluation.md", 33),
-        ("90-rationale.md", 340),
+        ("90-rationale.md", 368),
     ];
     const BODIES: [(&str, usize); 4] = [
         ("02-calculus.md", 202),

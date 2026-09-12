@@ -197,8 +197,8 @@ impl Gen {
                 let lhs = self.expr(ambient, Want::Int, fuel);
                 let rhs = self.expr(ambient, Want::Int, fuel);
                 let depth = lhs.depth.join(rhs.depth);
-                // Never `/` or `%`: dividing by zero starves, and a starved
-                // burial proves nothing about depth.
+                // Never `/` or `%`: dividing by zero collapses, and a burial
+                // that caved in proves nothing about depth.
                 let op = [BinOp::Add, BinOp::Sub, BinOp::Mul, BinOp::BitXor][self.rng.below(4)];
                 Self::at(
                     ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) },

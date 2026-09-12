@@ -65,6 +65,7 @@ not the words the compiler uses, one of the two is wrong.
 | stratum, depth | effect, permission level |
 | descending | in progress |
 | starved | blocked |
+| collapsed | crashed, panicked, failed |
 | buried | done |
 | unrecorded | dropped, wontfix |
 

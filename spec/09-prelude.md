@@ -62,8 +62,8 @@ Refusal absent; denied; malformed;           // the six closed codes,
 Refusal unreachable; exhausted; conflict;    // bound as prelude constants
 
 Bool    given(Answer<T> a)             @0;   // did the world say yes?
-Refusal refusal(Answer<T> a)           @0;   // which no was it? starves if given
-T       must(Answer<T> a)              @0;   // the value. starves if refused
+Refusal refusal(Answer<T> a)           @0;   // which no was it? collapses if given
+T       must(Answer<T> a)              @0;   // the value. collapses if refused
 ```
 
 `given` and `refusal` are how a program handles a no. `must` is how it declares
@@ -113,7 +113,7 @@ Str         target()                   @2;   // the target triple
 `env` distinguishes two different mistakes. Reading a variable that was
 **declared and is not set** is a refusal: the world was asked and said no.
 Reading a variable that was **never declared** is not a refusal, it is a bug in
-the program, and it starves (§9.9).
+the program, and it collapses (§9.9).
 
 Neither returns empty. A build that silently behaves differently because a
 variable was absent is exactly the class of bug this language exists to make
@@ -200,22 +200,22 @@ This is not a concession to practicality. It follows from
 written down before the program sees it. A missing file is something the world
 said. Replay serves it back, and a program that handled it replays identically.
 
-### Starvation is a bug
+### A collapse is a bug
 
-An expression **starves** when it cannot produce a value and never will:
+An expression **collapses** when it cannot produce a value and never will:
 `must` on a refusal, `refusal` on a given answer, an out-of-range slice, `env`
 on a variable that was never declared.
 
-Starvation is not catchable. There is no `rescue`, no `try`, no recovery form,
-and there will not be one. A starved burial stops and reports the source span,
-because every way to starve is a mistake in the program rather than a fact
-about the world, and a mistake that can be caught is a mistake that will be
-ignored.
+A collapse is not catchable. There is no `rescue`, no `try`, no recovery form,
+and there will not be one. A burial that hits one caves in: it stops and
+reports the source span, because every way to collapse is a mistake in the
+program rather than a fact about the world, and a mistake that can be caught
+is a mistake that will be ignored.
 
-> Starvation on a *hole* is a third and different thing: an expression that
-> cannot be evaluated yet because the world has not been granted. That is
-> ordinary, it is what [§6.4](06-evaluation.md#64-starvation-and-fuel)
-> describes, and it resolves by exhumation rather than by handling.
+A collapse is not a *starvation*, which is what an expression does while it
+waits on a hole ([§6.4](06-evaluation.md#64-starvation-and-fuel)). That is
+ordinary: a starved expression is residualised and finishes later, at somebody
+else's exhumation. A collapsed one never finishes.
 
 ### What it costs
 

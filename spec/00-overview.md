@@ -115,7 +115,7 @@ of them cost is in [section 90](90-rationale.md).
 A fourth — what a prelude function does when it cannot answer — is settled in
 [§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them): a no
 from the world is an *answer* and gets a value; a mistake in the program is
-*starvation* and stops the burial.
+*collapse* and stops the burial.
 
 No design question in this draft is currently open. That is not a claim that
 none remain, only that none are known.

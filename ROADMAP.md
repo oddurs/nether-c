@@ -95,12 +95,11 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`#########·` 83% · 15 of 18 done · due 2027-01-15
+`#########·` 89% · 16 of 18 done · due 2027-01-15
 
 ### unmarked
 
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
-- [ ] [`0126`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0126-spec-starvation-is-the-name-of-two-different-things.md) Spec: starvation is the name of two different things <sup>spec · p1</sup>
 - [ ] [`0127`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0127-spec-section-5-3-says-two-different-things-about-shade-equality.md) Spec: section 5.3 says two different things about shade equality <sup>spec · p1</sup>
 
 ### buried
@@ -119,6 +118,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0122`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0122-spec-a-function-cannot-contain-a-descent-and-be-called.md) Spec: a function cannot contain a descent and be called <sup>spec · p0</sup>
 - [x] [`0124`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0124-spec-fuel-must-be-deterministic-and-a-step-is-undefined.md) Spec: fuel must be deterministic and a step is undefined <sup>spec · p0</sup>
 - [x] [`0125`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0125-spec-an-implementation-s-own-limits-are-not-mentioned.md) Spec: an implementation's own limits are not mentioned <sup>spec · p0</sup>
+- [x] [`0126`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0126-spec-starvation-is-the-name-of-two-different-things.md) Spec: starvation is the name of two different things <sup>spec · p1</sup>
 - [x] [`0129`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0129-spec-monotonicity-is-stated-the-wrong-way-round.md) Spec: monotonicity is stated the wrong way round <sup>spec · p0</sup>
 
 ## surface — The Surface
@@ -206,7 +206,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## after — After the Burial
 
-`##········` 11% · 1 of 9 done · due 2027-10-01
+`#·········` 10% · 1 of 10 done · due 2027-10-01
 
 ### unmarked
 
@@ -218,6 +218,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [ ] [`0106`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0106-a-public-store-and-what-it-costs-to-run.md) A public store, and what it costs to run <sup>chore · p2 · 6</sup>
 - [ ] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
+- [ ] [`0137`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0137-sample-tables-in-tests-are-keyed-by-line-number.md) Sample tables in tests are keyed by line number <sup>chore · p2</sup>
 
 ### buried
 

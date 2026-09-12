@@ -247,16 +247,16 @@ fn nothing_a_demand_does_not_reach_is_evaluated() {
 // ── what stops ──────────────────────────────────────────────────────────────
 
 #[test]
-fn dividing_by_zero_starves() {
+fn dividing_by_zero_collapses() {
     let unit = demanding(add(BinOp::Div, int(1), int(0), Type::Int));
     let halt = bury(&unit, 1000).expect_err("this cannot produce a value");
-    assert_eq!(halt.kind, HaltKind::Starved("this divides by zero"));
+    assert_eq!(halt.kind, HaltKind::Collapsed("this divides by zero"));
 }
 
 #[test]
-fn an_out_of_range_slice_starves() {
-    // §9.9 names this one. Starvation is not catchable and there is no rescue
-    // form: every way to starve is a mistake in the program.
+fn an_out_of_range_slice_collapses() {
+    // §9.9 names this one. A collapse is not catchable and there is no rescue
+    // form: every way to collapse is a mistake in the program.
     let s = |t: &str| pure(ExprKind::Literal(Literal::Str(t.into())), Type::Str);
     let sliced = call(
         prim(Prim::Slice, vec![Type::Bytes, Type::Int, Type::Int], Type::Bytes),
@@ -265,7 +265,7 @@ fn an_out_of_range_slice_starves() {
         Depth::PURE,
     );
     let halt = bury(&demanding(sliced), 1000).expect_err("there is no such slice");
-    assert_eq!(halt.kind, HaltKind::Starved("this slice is outside what it is slicing"));
+    assert_eq!(halt.kind, HaltKind::Collapsed("this slice is outside what it is slicing"));
 }
 
 #[test]

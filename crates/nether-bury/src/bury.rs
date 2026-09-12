@@ -101,10 +101,13 @@ pub struct Halt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HaltKind {
     /// An expression that cannot produce a value and never will. Not
-    /// catchable, and never will be: every way to starve is a mistake in the
-    /// program rather than a fact about the world.
+    /// catchable, and never will be: every way to collapse is a mistake in
+    /// the program rather than a fact about the world.
+    ///
+    /// Not to be confused with *starving*, which is what an expression does
+    /// while it waits on a hole — that is ordinary, and is not a halt at all.
     /// `spec/09-prelude.md` §9.9.
-    Starved(&'static str),
+    Collapsed(&'static str),
     /// The budget ran out. A diagnostic, not a crash.
     /// `spec/06-evaluation.md` §6.4.
     OutOfFuel {
@@ -161,11 +164,11 @@ impl Halt {
     #[must_use]
     pub fn diagnostic(&self) -> Diagnostic {
         let (headline, label, note) = match self.kind {
-            HaltKind::Starved(why) => (
+            HaltKind::Collapsed(why) => (
                 why.to_string(),
                 None,
                 Some(
-                    "starvation is not catchable, and there will be no recovery form. \
+                    "a collapse is not catchable, and there will be no recovery form. \
                      This is a mistake in the program rather than a fact about the world."
                         .to_string(),
                 ),
@@ -412,7 +415,7 @@ impl Burial<'_> {
     /// the answer to *why did this not stop*; the expression it happened to be
     /// inside is not.
     fn blame(&self, halt: Halt) -> Halt {
-        if matches!(halt.kind, HaltKind::Starved(_)) {
+        if matches!(halt.kind, HaltKind::Collapsed(_)) {
             return halt;
         }
         let looping = self
@@ -586,7 +589,7 @@ impl Burial<'_> {
         let b = self.expr(rhs, env)?;
         let folded = binary(op, &a, &b).map_err(|why| Halt {
             span: x.span,
-            kind: HaltKind::Starved(why),
+            kind: HaltKind::Collapsed(why),
             grinding: None,
         })?;
         Ok(if let Some(l) = folded {
@@ -689,7 +692,7 @@ impl Burial<'_> {
             Kind::Prim(p) => match prim(*p, &values) {
                 Ok(l) => l.map(|l| Self::known(l, x)),
                 Err(why) => {
-                    let kind = HaltKind::Starved(why);
+                    let kind = HaltKind::Collapsed(why);
                     return Err(Halt { span: x.span, kind, grinding: None });
                 }
             },

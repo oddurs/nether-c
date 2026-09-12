@@ -1,5 +1,5 @@
-//! The proof for *fuel and starvation diagnostics*: a program that would
-//! unroll forever fails in bounded time and names the loop, not the leaf.
+//! The proof for *fuel and collapse diagnostics*: a program that would unroll
+//! forever fails in bounded time and names the loop, not the leaf.
 //!
 //! And the arithmetic underneath it. §6.4 says what a step is, so the counts
 //! here are worked out by hand from the source rather than read off a run.
@@ -320,14 +320,14 @@ fn a_residue_costs_nothing_for_what_is_already_reduced() {
     assert_eq!(bury(&again, 1_000).unwrap().fuel_spent, 1);
 }
 
-// ── starvation, which is the other thing ────────────────────────────────────
+// ── collapse, which is the other thing ──────────────────────────────────────
 
 #[test]
-fn starvation_points_at_the_expression_and_offers_nothing() {
+fn a_collapse_points_at_the_expression_and_offers_nothing() {
     // §9.9: there is no rescue, no try, and there will not be one. The error
     // says so rather than suggesting a flag, because there is no flag.
     let halt = bury(&demanding(add(BinOp::Div, int(1), int(0), Type::Int)), 100).unwrap_err();
-    assert_eq!(halt.kind, HaltKind::Starved("this divides by zero"));
+    assert_eq!(halt.kind, HaltKind::Collapsed("this divides by zero"));
     assert_eq!(halt.grinding, None);
 
     let d = halt.diagnostic();
