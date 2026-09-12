@@ -864,3 +864,45 @@ fn a_grant_that_is_not_a_capability_is_still_a_usage_error() {
     assert_eq!(code(&out), 64, "{}", stderr(&out));
     assert!(stderr(&out).contains("no capability by that name"), "{}", stderr(&out));
 }
+
+#[test]
+fn a_rendered_call_reads_back_as_the_call_that_was_made() {
+    // A lamp renders a value for a person and text comes out as text — but a
+    // call is read back as the call. An empty `Bytes` used to vanish, and one
+    // holding a comma made a line that could not be read at all.
+    let dir = scratch("strata-renders");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+    let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
+    let span = Span { source, start: 0, end: 11 };
+
+    let asking = |call: Call| {
+        let hole = node(Node::Hole { call, stratum: 8, span });
+        node(Node::Trace {
+            residue: source,
+            holes: vec![hole],
+            witnesses: vec![],
+            deposits: vec![],
+            source,
+            fuel_spent: 1,
+            depth: 8,
+            unrecorded: false,
+        })
+    };
+
+    let empty = asking(Call {
+        function: "call_foreign".into(),
+        args: vec![put(Value::Str("dlopen".into())), put(Value::Bytes(Vec::new()))],
+    });
+    let out = nether(Some(&dir), &["strata", &empty.to_string()]);
+    assert!(stdout(&out).contains(r#"call_foreign("dlopen", b"")"#), "{}", stdout(&out));
+
+    // And one holding the delimiter itself.
+    let awkward = asking(Call {
+        function: "call_foreign".into(),
+        args: vec![put(Value::Str("x".into())), put(Value::Bytes(b"a, b)".to_vec()))],
+    });
+    let out = nether(Some(&dir), &["strata", &awkward.to_string()]);
+    assert!(stdout(&out).contains(r#"b"a, b)""#), "{}", stdout(&out));
+}

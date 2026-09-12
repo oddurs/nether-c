@@ -217,12 +217,29 @@ pub fn said(store: &Store, function: &str, args: &[Cairn]) -> String {
     let shown: Vec<String> = args
         .iter()
         .map(|a| match store.get(*a) {
-            Ok(Stored::Value(Value::Str(s))) => format!("{s:?}"),
-            Ok(Stored::Value(v)) => value(&v),
+            Ok(Stored::Value(v)) => as_written(&v),
             _ => a.short(),
         })
         .collect();
     format!("{function}({})", shown.join(", "))
+}
+
+/// An argument, the way a program would have written it.
+///
+/// Not [`value`]. A lamp renders a value for a person to read, and text comes
+/// out as text — but a call is read back as the call that was made, so its
+/// arguments keep the delimiters §03 gives them. Without that an empty `Bytes`
+/// vanished and one holding a comma made a line that could not be read at all.
+fn as_written(v: &Value) -> String {
+    match v {
+        Value::Str(s) => format!("{s:?}"),
+        Value::Bytes(b) => match core::str::from_utf8(b) {
+            Ok(s) => format!("b{s:?}"),
+            // No literal form, so say what is there rather than pretend.
+            Err(_) => format!("<{} bytes>", b.len()),
+        },
+        _ => value(v),
+    }
 }
 
 // ── backwards: where it came from ───────────────────────────────────────────
