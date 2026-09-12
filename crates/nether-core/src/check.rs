@@ -25,7 +25,7 @@ use core::fmt;
 use crate::depth::{Capability, Depth};
 use crate::ir::{Block, Expr, ExprKind, LocalId, Proj, Rite, Span, Stmt};
 use crate::prim::Prim;
-use crate::report::Diagnostic;
+use crate::report::{Cause, Diagnostic};
 use crate::ty::Type;
 use crate::unit::{Asserted, FuncDef, Unit};
 
@@ -99,6 +99,7 @@ impl Fault {
             span: self.span,
             headline: self.to_string(),
             label: self.label(),
+            cause: self.cause(),
             note: self.note(),
         }
     }
@@ -115,6 +116,21 @@ impl Fault {
             }
             _ => None,
         }
+    }
+
+    /// The other end of the error: the line the depth came from.
+    ///
+    /// Only an assertion gets one. The other two that carry blame say it on
+    /// the caret row, because for them the cause and the symptom are the same
+    /// expression; an annotation is about a number that came from somewhere
+    /// else, which is the whole reason it is hard to phrase.
+    fn cause(&self) -> Option<Cause> {
+        let blame = self.blame.as_ref()?;
+        let FaultKind::Asserted { derived, .. } = self.kind else { return None };
+        Some(Cause {
+            span: blame.span,
+            label: format!("`{}` reaches stratum {derived}", blame.what),
+        })
     }
 
     /// The line after the gap, which says what to do rather than what is wrong.
@@ -173,7 +189,8 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
     for g in &unit.globals {
         let derived = c.expr(&g.value, Depth::PURE);
         c.globals.push(derived);
-        c.asserted(g.span, derived, g.asserted);
+        let blame = c.blame(&g.value, derived);
+        c.asserted(g.span, derived, g.asserted, blame);
     }
     for f in &unit.funcs {
         c.func(f);
@@ -237,7 +254,26 @@ impl<'a> Checker<'a> {
                 return self.blame(&g.value, depth);
             }
         }
-        children(x).into_iter().find_map(|c| self.blame(c, depth))
+        if let Some(found) = children(x).into_iter().find_map(|c| self.blame(c, depth)) {
+            return Some(found);
+        }
+        // A descent is the answer only when nothing inside it is: `read` is
+        // what somebody wrote, and `descend disk` is where they said they were
+        // going.
+        if let ExprKind::Descend { capability, .. } = &x.kind {
+            if capability.stratum() == depth {
+                return Some(Blame { span: x.span, what: format!("descend {capability}") });
+            }
+        }
+        None
+    }
+
+    /// What made a block reach a depth.
+    fn blame_block(&self, block: &Block, depth: Depth) -> Option<Blame> {
+        let each = block.stmts.iter().map(|s| match s {
+            Stmt::Let { value, .. } | Stmt::Expr(value) => value,
+        });
+        each.chain(block.tail.as_deref()).find_map(|x| self.blame(x, depth))
     }
 
     fn name_of(&self, callee: &Expr) -> Option<String> {
@@ -254,17 +290,30 @@ impl<'a> Checker<'a> {
 
     /// One depth the rules gave, against the one the node states and the one
     /// the programmer wrote.
-    fn against(&mut self, span: Span, derived: Depth, stated: Depth, asserted: Asserted) {
+    fn against(
+        &mut self,
+        span: Span,
+        derived: Depth,
+        stated: Depth,
+        asserted: Asserted,
+        blame: Option<Blame>,
+    ) {
         if derived != stated {
             self.fault(span, FaultKind::Stated { derived, stated });
         }
-        self.asserted(span, derived, asserted);
+        self.asserted(span, derived, asserted, blame);
     }
 
-    fn asserted(&mut self, span: Span, derived: Depth, asserted: Option<Depth>) {
+    fn asserted(
+        &mut self,
+        span: Span,
+        derived: Depth,
+        asserted: Option<Depth>,
+        blame: Option<Blame>,
+    ) {
         if let Some(asserted) = asserted {
             if asserted != derived {
-                self.fault(span, FaultKind::Asserted { derived, asserted });
+                self.fault_blaming(span, FaultKind::Asserted { derived, asserted }, blame);
             }
         }
     }
@@ -275,14 +324,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn bind(&mut self, id: LocalId, depth: Depth, span: Span) {
+    fn bind(&mut self, id: LocalId, depth: Depth, span: Span, blame: Option<Blame>) {
         match self.locals.get_mut(id.0 as usize) {
             Some(slot) => *slot = Some(depth),
             None => self.malformed(span, "this binding names no local"),
         }
         if let Some(l) = self.func.and_then(|f| f.local(id)) {
             let (span, asserted) = (l.span, l.asserted);
-            self.asserted(span, depth, asserted);
+            self.asserted(span, depth, asserted, blame);
         }
     }
 
@@ -303,14 +352,16 @@ impl<'a> Checker<'a> {
         self.returns = Depth::PURE;
         self.needs = Some(Depth::PURE);
         for p in &f.params {
-            self.bind(*p, Depth::PURE, f.span);
+            self.bind(*p, Depth::PURE, f.span, None);
         }
 
         let ret_depth = self.block(&f.body, Depth::PURE).join(self.returns);
         let latent = self.needs.take().unwrap_or(Depth::PURE);
 
-        self.against(f.span, ret_depth, f.ret_depth, f.asserted_ret);
-        self.against(f.span, latent, f.latent, f.asserted_latent);
+        let returned = self.blame_block(&f.body, ret_depth);
+        self.against(f.span, ret_depth, f.ret_depth, f.asserted_ret, returned);
+        let asked = self.blame_block(&f.body, latent);
+        self.against(f.span, latent, f.latent, f.asserted_latent, asked);
         self.func = None;
     }
 
@@ -319,7 +370,8 @@ impl<'a> Checker<'a> {
             match s {
                 Stmt::Let { local, value } => {
                     let d = self.expr(value, ambient);
-                    self.bind(*local, d, value.span);
+                    let blame = self.blame(value, d);
+                    self.bind(*local, d, value.span, blame);
                 }
                 Stmt::Expr(x) => {
                     self.expr(x, ambient);
