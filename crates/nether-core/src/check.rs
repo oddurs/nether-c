@@ -276,8 +276,10 @@ impl<'a> Checker<'a> {
 
     /// What made a block reach a depth.
     fn blame_block(&self, block: &Block, depth: Depth) -> Option<Blame> {
-        let each = block.stmts.iter().map(|s| match s {
-            Stmt::Let { value, .. } | Stmt::Expr(value) => value,
+        let each = block.stmts.iter().filter_map(|s| match s {
+            Stmt::Let { value, .. } | Stmt::Expr(value) => Some(value),
+            // Nothing is evaluated, so nothing here reached a depth.
+            Stmt::Declare { .. } => None,
         });
         each.chain(block.tail.as_deref()).find_map(|x| self.blame(x, depth))
     }
@@ -382,6 +384,9 @@ impl<'a> Checker<'a> {
                 Stmt::Expr(x) => {
                     self.expr(x, ambient);
                 }
+                // A local with no value is pure until something is written to
+                // it, and `Assign` joins the depth of what it writes. §5.4.
+                Stmt::Declare { local } => self.bind(*local, Depth::PURE, Span::default(), None),
             }
         }
         block.tail.as_ref().map_or(Depth::PURE, |t| self.expr(t, ambient))
@@ -590,6 +595,8 @@ fn bound_to(block: &Block, id: LocalId) -> Option<&Expr> {
     for s in &block.stmts {
         match s {
             Stmt::Let { local, value } if *local == id => return Some(value),
+            // Nothing bound it; what it holds came from an assignment.
+            Stmt::Declare { .. } => {}
             Stmt::Let { value, .. } | Stmt::Expr(value) => {
                 if let Some(found) = children(value).into_iter().find_map(|c| match &c.kind {
                     ExprKind::Block(b) => bound_to(b, id),
@@ -639,8 +646,10 @@ fn children(x: &Expr) -> Vec<&Expr> {
             let mut out: Vec<&Expr> = b
                 .stmts
                 .iter()
-                .map(|s| match s {
-                    Stmt::Let { value, .. } | Stmt::Expr(value) => value,
+                .filter_map(|s| match s {
+                    Stmt::Let { value, .. } | Stmt::Expr(value) => Some(value),
+                    // No expression, so no child.
+                    Stmt::Declare { .. } => None,
                 })
                 .collect();
             out.extend(b.tail.as_deref());

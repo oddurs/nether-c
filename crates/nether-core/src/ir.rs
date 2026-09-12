@@ -197,6 +197,15 @@ pub enum Stmt {
         /// What it is bound to. Its depth is the binding's depth.
         value: Expr,
     },
+    /// A local with a type and no value yet.
+    ///
+    /// The only way to construct an aggregate: declare it, then write its
+    /// fields. Reading one before it has been written collapses — there is no
+    /// value there and there never was one. `spec/05-types.md` §5.4.
+    Declare {
+        /// What is declared.
+        local: LocalId,
+    },
     /// An expression evaluated for what it leaves behind.
     ///
     /// If its type is not `U0` it **deposits** that value into the trace,

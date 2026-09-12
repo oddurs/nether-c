@@ -2,7 +2,7 @@
 id: 153
 title: The parser and checker do not implement aggregate construction
 type: feature
-status: unmarked
+status: buried
 milestone: surface
 created: 2026-09-12
 updated: 2026-09-12
@@ -50,3 +50,21 @@ one is also waiting here.
 Reading an unassigned field must collapse, not produce a zero. 5.4 says there
 is no value there and there never was one, and a zero would be the
 implementation deciding what the program meant.
+
+## 2026-09-12
+
+Built the declaring and the assigning; split the freezing into 0154.
+
+let_decl's initialiser is optional at block level and required at unit level. A declaration with no value lowers to Stmt::Declare, which is its own IR form rather than a Let of nothing — the printer emits it back as one, which a residue needs since 6.5 makes a residue source.
+
+All three unreachable constructs now work:
+
+    $ nether bury loop.nc      # for (I64 i = 0; i < n; i += 1)
+    $ nether lamp <cairn>
+    10                          # 0+1+2+3+4
+
+and 5.4's own sample buries.
+
+What is NOT built is the freeze: naming a local has to stop it being assignable, and without that 'seal h; h.len = 4;' compiles, which makes the cairn a lie. That needs an escape analysis, and it is 0154 at p0.
+
+The sample's entry in the spec harness moved from Shape::Blocked to a new Shape::Unchecked — parses, and the checker ought to reject it and does not yet. Blocked already modelled 'the parser cannot do this and here is the item'; Unchecked is the same idea one stage later, so the harness keeps saying what is untrue rather than going quiet.

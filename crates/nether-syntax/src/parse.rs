@@ -297,7 +297,9 @@ impl Parser<'_> {
             return self.func(ty, name, from);
         }
         self.expect(Punct::Eq, "`(` for a function, or `=` for a binding")?;
-        let value = self.expr()?;
+        // Required at unit level: there is no statement above a global to
+        // assign one. §4.2.
+        let value = Some(self.expr()?);
         self.expect_semi("`;` after a binding");
         Ok(Item::Let(Let { ty, name, value, span: self.since(from) }))
     }
@@ -494,12 +496,9 @@ impl Parser<'_> {
 
     fn let_stmt(&mut self, from: Span) -> Parsed<Option<Stmt>> {
         let Some((ty, name)) = self.try_binding() else { return Ok(None) };
-        if !self.eat(Punct::Eq) {
-            // `Header h;` is not a production §04 has. Saying so where the
-            // `=` should be beats saying `expected an expression` at `h`.
-            return Err(self.complain("`=` after a binding"));
-        }
-        let value = self.expr()?;
+        // `Header h;` declares without binding, which is the only way to
+        // construct an aggregate. §4.2.
+        let value = if self.eat(Punct::Eq) { Some(self.expr()?) } else { None };
         self.expect_semi("`;` after a binding");
         Ok(Some(Stmt::Let(Let { ty, name, value, span: self.since(from) })))
     }

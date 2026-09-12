@@ -586,6 +586,7 @@ impl Seen {
                     self.mark("Stmt", "Expr");
                     self.expr(x);
                 }
+                Stmt::Declare { .. } => self.mark("Stmt", "Declare"),
             }
         }
         if let Some(t) = &blk.tail {

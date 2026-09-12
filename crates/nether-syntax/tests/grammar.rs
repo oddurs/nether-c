@@ -36,7 +36,9 @@ fn every_sample_in_the_specification_parses() {
     for (reference, shape) in SAMPLES {
         let body = &spec::body(reference);
         let result = match shape {
-            Shape::Unit | Shape::Illegal(_) | Shape::Blocked(_) => parses(body),
+            Shape::Unit | Shape::Illegal(_) | Shape::Blocked(_) | Shape::Unchecked(_) => {
+                parses(body)
+            }
             // A fragment of a body is a body with something round it.
             Shape::Statements => parses(&format!("U0 sample()\n{{\n{body}\n}}\n")),
         };
@@ -52,16 +54,14 @@ fn every_sample_in_the_specification_parses() {
 }
 
 #[test]
-fn the_one_sample_that_does_not_parse_says_so_once() {
-    // §5.4's `Header h;` is a declaration with no initialiser, which §4.2 does
-    // not have. One complaint, at the `;` where the `=` should be.
-    let (reference, _) = SAMPLES
-        .iter()
-        .find(|(_, s)| matches!(s, Shape::Blocked(_)))
-        .expect("the blocked sample went away");
-    let faults = parses(&spec::body(reference)).expect_err("this does not parse");
-    assert_eq!(faults.len(), 1, "{faults:?}");
-    assert_eq!(faults[0].kind, FaultKind::Expected("`=` after a binding"));
+fn every_sample_in_the_specification_parses_now() {
+    // There was one that did not: §5.4's `Header h;`, a declaration with no
+    // initialiser, which §4.2 did not have until 0116 settled it and 0153
+    // built it. Nothing is `Blocked` any more, and this says so rather than
+    // the absence quietly meaning nothing.
+    let blocked: Vec<&str> =
+        SAMPLES.iter().filter(|(_, s)| matches!(s, Shape::Blocked(_))).map(|(r, _)| *r).collect();
+    assert!(blocked.is_empty(), "these do not parse: {blocked:?}");
 }
 
 // ── one mistake, one message ────────────────────────────────────────────────
