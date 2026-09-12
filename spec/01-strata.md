@@ -133,10 +133,10 @@ enclosing scope, and it produces an error that names both numbers and the
 
 ```
 error: cannot look at a shade from stratum 5 at depth 0
-  --> stamp.nc:14:23
+  --> stamp.nc:14:21
    |
-14 |   I64   n       = len(look(reply));
-   |                       ^^^^^^^^^^^ this shade came from `get` at stratum 5
+14 | I64   n       = len(look(reply));
+   |                     ^^^^^^^^^^^ this shade came from `get` at stratum 5
    |
    = the value is here, but you are not. Wrap the look in `descend net { … }`.
 ```

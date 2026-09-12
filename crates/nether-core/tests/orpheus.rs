@@ -20,7 +20,7 @@ use nether_core::{
 // location the renderer computes is the location the specification prints.
 
 const FILLER: &str = "//\n";
-const LOOK_LINE: &str = "  I64   n       = len(look(reply));\n";
+const LOOK_LINE: &str = "I64   n       = len(look(reply));\n";
 const URL: &str = "https://example.invalid/index.json";
 
 fn source() -> String {

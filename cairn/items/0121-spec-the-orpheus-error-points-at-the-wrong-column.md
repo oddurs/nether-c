@@ -41,3 +41,7 @@ right to reproduce.
 
 - [x] §1.6's location line and caret row name the same column
 - [x] The site is rebaked
+
+## 2026-09-12
+
+Reopened once, for the last time: the error block was depicting a stamp.nc whose statements are indented by two, and section 1.6's own sample has them at unit level. The block now depicts a file that exists — tests/programs/stamp.nc in 0059 — so the three numbers in it are checked against a real file rather than against an imagined one.
