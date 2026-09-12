@@ -104,6 +104,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nether-world"
+version = "0.0.0"
+dependencies = [
+ "nether-core",
+ "nether-ledger",
+]
+
+[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

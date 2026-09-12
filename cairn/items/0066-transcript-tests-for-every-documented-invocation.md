@@ -27,3 +27,7 @@ STARVED behind 0061, which is starved on 0067 in The World.
 Most of the transcripts in the specification are exhume and lamp against a trace that exhume produced. Until a hole can be answered they cannot be executed, only pinned — which is what tests/transcripts already does with 63 of its 66 samples.
 
 One piece is available now and is worth doing when this unblocks: 0.7's transcript is bury then lamp, both of which work. Executing it needs the harness to set up a scratch store, write hello.nc, run bury, and carry the cairn from the first command into the second. That machinery is most of what every other transcript will need too.
+
+## 2026-09-12
+
+The piece this said was available now is done: 0158 gave the harness a scratch store, the specification's example programs, and a ledger already buried, and carries cairns across commands in a sample. Twelve samples execute. What is still waiting is the exhume half.
