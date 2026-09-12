@@ -2,8 +2,9 @@
 id: 161
 title: as_unit drops a demand rather than failing
 type: bug
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p3
@@ -30,4 +31,8 @@ It is the cheap kind of wrong: correct today, quiet if it stops being.
 
 ## Acceptance criteria
 
-- [ ] A length mismatch is a panic with a reason, not a truncation
+- [x] A length mismatch is a panic with a reason, not a truncation
+
+## 2026-09-12
+
+An assertion rather than a Result: a mismatch is a bug in this crate and not a program that can be reported on, so it is the same class as the panic that a burial which panicked is.

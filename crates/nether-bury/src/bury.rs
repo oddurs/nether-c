@@ -96,8 +96,22 @@ impl Residue {
     /// demands and never touches a `struct`, a function or a global, so
     /// carrying them across loses nothing and an unreduced call still has
     /// something to name.
+    ///
+    /// # Panics
+    ///
+    /// If this residue did not come from that unit. Burial produces exactly one
+    /// residual per demand, so a mismatch is a bug here rather than a program
+    /// that can be reported on — and zipping the two would drop a demand and
+    /// break the staging law with nothing said.
     #[must_use]
     pub fn as_unit(&self, buried: &Unit) -> Unit {
+        assert_eq!(
+            self.demands.len(),
+            buried.demands.len(),
+            "this residue has {} demands and the unit it is said to come from has {}",
+            self.demands.len(),
+            buried.demands.len()
+        );
         Unit {
             structs: buried.structs.clone(),
             funcs: buried.funcs.clone(),

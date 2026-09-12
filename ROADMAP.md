@@ -150,7 +150,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## rites — The Rites
 
-`########··` 74% · 20 of 27 done · due 2027-03-31
+`########··` 78% · 21 of 27 done · due 2027-03-31
 
 ### unmarked
 
@@ -158,7 +158,6 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [ ] [`0158`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0158-the-transcripts-execute-three-samples-and-four-rites-exist.md) The transcripts execute three samples and four rites exist <sup>chore · p1 · 0</sup>
 - [ ] [`0159`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0159-nothing-shows-a-trace-its-residue.md) Nothing shows a trace its residue <sup>feature · p2 · 1</sup>
 - [ ] [`0160`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0160-a-call-renders-its-bytes-arguments-unreadably.md) A call renders its bytes arguments unreadably <sup>bug · p2 · 1</sup>
-- [ ] [`0161`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0161-as-unit-drops-a-demand-rather-than-failing.md) as_unit drops a demand rather than failing <sup>bug · p3 · 0</sup>
 
 ### starved
 
@@ -187,6 +186,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0152`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0152-lamp-adds-a-newline-to-a-value-that-has-one.md) lamp adds a newline to a value that has one <sup>bug · p1 · 0</sup>
 - [x] [`0155`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0155-a-trace-does-not-record-what-happened.md) A trace does not record what happened <sup>bug · p0 · 0</sup>
 - [x] [`0156`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0156-bury-accepts-grant-and-ignores-it.md) bury accepts --grant and ignores it <sup>bug · p1 · 0</sup>
+- [x] [`0161`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0161-as-unit-drops-a-demand-rather-than-failing.md) as_unit drops a demand rather than failing <sup>bug · p3 · 0</sup>
 
 ## world — The World
 
