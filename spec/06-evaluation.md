@@ -216,16 +216,22 @@ answer, and buries the residue again.
 
 ```console
 $ nether bury build.nc
-buried   build.nc → 0380c8ae   depth 3   holes 1   4 nodes
-  hole ①  read("main.nc")              stratum 3  disk
+buried   build.nc → dd1289f4   depth 3   holes 1   4 nodes
+  hole ①  read("main.nc")                stratum 3  disk
 
-$ nether exhume 4c02ab7f --grant disk
+$ nether exhume dd1289f4 --grant disk
   ①  read("main.nc")  →  11,204 bytes  a1f0c93d
-sealed   4c02ab7f + a1f0c93d → 77de9b31   depth 3   holes 0
+sealed   dd1289f4 + a1f0c93d → 77de9b31   depth 3   holes 0
 ```
 
 The result is a new trace with a new cairn. The original trace still exists,
 unchanged, and still has its hole. Nothing in the ledger is ever revised.
+
+The new trace **names** the witnesses it recorded
+([§7.3](07-ledger.md#73-nodes)). It has to: a witness records the call it
+answered and not the hole it answered, so a witness nothing names is a witness
+nothing can find, and [§6.7](#67-replay) is re-burying with only the answers
+already recorded.
 
 A trace with no holes is **sealed**. A sealed trace has a value.
 

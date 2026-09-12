@@ -388,7 +388,8 @@ fn a_small_trace(what: &str) -> (PathBuf, Cairn, Cairn, Cairn) {
     let trace = node(Node::Trace {
         residue: hole,
         holes: vec![hole],
-        deposits: vec![witness, deposit],
+        witnesses: vec![witness],
+        deposits: vec![deposit],
         source: hole,
         fuel_spent: 903,
         depth: 3,
@@ -445,6 +446,7 @@ fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
     let trace = node(Node::Trace {
         residue: one,
         holes: vec![],
+        witnesses: vec![],
         deposits: roots,
         source: one,
         fuel_spent: 4,
@@ -559,7 +561,8 @@ fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (PathBuf,
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![],
-        deposits: vec![witness],
+        witnesses: vec![witness],
+        deposits: vec![],
         source,
         fuel_spent: 903,
         depth,
@@ -605,7 +608,8 @@ fn a_trace_that_reached_stratum_8_says_so_without_being_asked() {
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![],
-        deposits: vec![witness],
+        witnesses: vec![witness],
+        deposits: vec![],
         source,
         fuel_spent: 12,
         depth: 8,
@@ -623,8 +627,9 @@ fn a_trace_that_reached_stratum_8_says_so_without_being_asked() {
 
 #[test]
 fn a_hole_is_a_stratum_owed_and_not_a_stratum_reached() {
-    // §7.3 makes the difference: a witness holds the stratum that *was*
-    // reached, a hole the stratum a call *would* reach.
+    // §7.3.2. Both halves count toward `depth` — a trace is as deep as it goes
+    // in either direction — but only a witness has *happened*, and the report
+    // says which is which on the line rather than in the headline.
     let dir = scratch("strata-pending");
     let store = Store::open(&dir).expect("a store");
     let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
@@ -638,19 +643,36 @@ fn a_hole_is_a_stratum_owed_and_not_a_stratum_reached() {
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![hole],
+        witnesses: vec![],
         deposits: vec![],
         source,
         fuel_spent: 4,
-        depth: 0,
+        depth: 5,
         unrecorded: false,
     });
 
     let out = nether(Some(&dir), &["strata", &trace.to_string()]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     let text = stdout(&out);
-    assert!(text.starts_with("depth 0   pure\n"), "a hole is not a stratum reached:\n{text}");
-    assert!(text.contains("pending"), "{text}");
-    assert!(text.contains("holes reach 5 (net)"), "{text}");
+    assert!(text.starts_with("depth 5   net\n"), "{text}");
+    assert!(text.contains("pending"), "a hole is not a stratum reached:\n{text}");
+    assert!(text.contains("0 (pure) has happened"), "{text}");
+    // §1.7: a stratum-8 call that is still a hole has not reached stratum 8,
+    // so nothing here is marked and the trace is still replayable.
+    assert!(text.contains("replayable: yes"), "{text}");
+}
+
+/// The edge §6.5 removed and nothing replaced: a trace has to name what
+/// answered it, because a witness records the call and not the hole.
+#[test]
+fn a_trace_names_the_witnesses_it_recorded() {
+    let (dir, trace, _) = a_trace_of("strata-witness", 3, 3, false);
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.contains("read(\"main.nc\")"), "the witness is unreachable:\n{text}");
+    assert!(!text.contains("pending"), "a witness is not pending:\n{text}");
+    assert!(text.contains("3 (disk) has happened") || !text.contains("has happened"), "{text}");
 }
 
 #[test]
@@ -674,6 +696,7 @@ fn a_trace_that_never_went_anywhere_says_so() {
         .put(&Stored::Node(Node::Trace {
             residue: literal,
             holes: vec![],
+            witnesses: vec![],
             deposits: vec![literal],
             source: literal,
             fuel_spent: 1,
@@ -729,7 +752,8 @@ fn a_span_whose_source_is_gone_still_gives_the_offset() {
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![],
-        deposits: vec![witness],
+        witnesses: vec![witness],
+        deposits: vec![],
         source,
         fuel_spent: 2,
         depth: 3,
@@ -754,6 +778,7 @@ fn a_node_that_is_gone_is_a_lower_bound_and_says_so() {
         .put(&Stored::Node(Node::Trace {
             residue: gone,
             holes: vec![gone],
+            witnesses: vec![],
             deposits: vec![],
             source: gone,
             fuel_spent: 1,
@@ -798,7 +823,8 @@ fn two_answers_to_one_question_are_two_lines() {
     });
     let trace = node(Node::Trace {
         residue: source,
-        holes: vec![one, two],
+        holes: vec![],
+        witnesses: vec![one, two],
         deposits: vec![],
         source,
         fuel_spent: 4,

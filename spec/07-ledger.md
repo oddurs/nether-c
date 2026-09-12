@@ -79,7 +79,7 @@ testing first.
 
 ```
 cairn(v) = blake3( DOMAIN || encode(v) )
-DOMAIN   = b"netherc/cairn/v2\x00"
+DOMAIN   = b"netherc/cairn/v3\x00"
 ```
 
 A cairn is 32 bytes. Its text form is lowercase hexadecimal. Tools MAY display
@@ -102,12 +102,14 @@ Nothing is reinterpreted, so nothing is renamed.
 > [§90.2](90-rationale.md#902-rejected-alternatives) records what was given up
 > to narrow it.
 
-The domain is at `v2`. It moved from `v1` when `Trace` changed what it holds
-([§7.3.1](#731-node-encoding)), which is the bumping case and not the
-exempt one: a byte string that decoded to a `v1` trace decodes to a different
-`v2` trace, and the two are not the same value however similar they look.
-Nothing had been buried, so the bump cost nothing. That is the only reason it
-was affordable, and it is why the rule is worth having before it is not.
+The domain is at `v3`. It has moved twice, both times because `Trace` changed
+what it holds ([§7.3.1](#731-node-encoding)) — to `v2` when a residue stopped
+being nodes, and to `v3` when a trace began naming its witnesses. Both are the
+bumping case and not the exempt one: a byte string that decoded to a trace
+under one domain decodes to a different trace under the next, and the two are
+not the same value however similar they look. Nothing had been buried either
+time, so the bumps cost nothing. That is the only reason they were affordable,
+and it is why the rule is worth having before it is not.
 
 ## 7.3 Nodes
 
@@ -121,7 +123,7 @@ its cairn.
 | `Hole` | the fields listed in [§6.3](06-evaluation.md#63-holes) |
 | `Deposit` | a value cairn and the source span that deposited it |
 | `Witness` | a stratum, a call, the answer, and the span that asked |
-| `Trace` | the residue, the holes, the deposits, the source, the fuel spent, the depth reached, and the stratum-8 mark |
+| `Trace` | the residue, the holes, the witnesses, the deposits, the source, the fuel spent, the depth, and the stratum-8 mark |
 
 Nodes reference other nodes only by cairn. The graph is therefore acyclic by
 construction: a node cannot name a node that does not yet exist, and a node
@@ -139,7 +141,7 @@ tag `0x20`, then a kind byte, then the kind's payload.
 | `0x02` | `Hole` | `call`, one byte stratum, `span` |
 | `0x03` | `Deposit` | `cairn` of the value, `span` |
 | `0x04` | `Witness` | one byte stratum, `call`, `cairn` of the answer, `span` |
-| `0x05` | `Trace` | `cairn` of the residue source, `cairn-list` of holes, `cairn-list` of deposits, `cairn` of the source buried, `u64` fuel spent, one byte depth reached, one byte stratum-8 mark |
+| `0x05` | `Trace` | `cairn` of the residue source, `cairn-list` of holes, `cairn-list` of witnesses, `cairn-list` of deposits, `cairn` of the source buried, `u64` fuel spent, one byte depth, one byte stratum-8 mark |
 
 Three shapes appear inside more than one of them:
 
@@ -164,21 +166,35 @@ that has never seen that filesystem.
 
 ### 7.3.2 What a decoder cannot check
 
-A `Trace`'s `depth` is the greatest stratum of any `Witness` reachable from its
-roots, and its stratum-8 mark is set exactly when one of those witnesses is at
-stratum 8.
+A `Trace`'s `depth` is how deep it goes, counting both directions at once: the
+join of the depth of its residue and the greatest stratum of any `Witness` it
+names.
 
-*Reached* is the whole of it. A hole carries the stratum a call **would**
-reach, and a trace whose holes are at stratum 5 and whose witnesses are at 0 has
-depth 0: nothing has been done to the world yet. What exhuming it will cost is
-read off its holes, which is why no field records it — a number that can be
-derived is a number that can disagree.
+Both halves are needed and neither alone is enough. A stage-one burial has
+answered nothing, so its witnesses say 0 and its residue says how deep the
+program still reaches — which is why
+[§8.2](08-rites.md#82-bury)'s transcript reads `depth 3` over a program with one
+unanswered `read`. A sealed trace has no holes left, so its residue says 0 and
+its witnesses say how deep it went — which is why
+[§6.6](06-evaluation.md#66-exhumation)'s reads `depth 3   holes 0`. One rule,
+both transcripts.
+
+`opaque` is the case that rules out counting holes instead of the residue: a
+world-question inside an `opaque` barrier is never evaluated and never becomes a
+hole, and the expression is still at its stratum.
+
+The stratum-8 mark is the other half of §1.7 and is **not** the same test.
+It is set exactly when a `Witness` the trace names is at stratum 8 — *reached*,
+not owed. A trace whose only stratum-8 call is still a hole has depth 8 and is
+not marked, because nothing has happened off the record yet.
 
 Neither claim is checkable on `put`. A decoder sees one node, and both are
 facts about a graph that may not be wholly present. An implementation MUST NOT
 be required to enforce them there.
-[§8.6](08-rites.md#86-strata) is where they are caught, because `strata` is the
-rite that has the whole graph in hand.
+[§8.6](08-rites.md#86-strata) is where the witness half is caught, because
+`strata` is the rite that has the whole graph in hand. The residue half needs
+lowering the residue, which is burying it, and that is `bury`'s job rather than
+`strata`'s.
 
 ## 7.4 Provenance
 

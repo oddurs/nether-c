@@ -62,8 +62,8 @@ summary of what was written.
 
 ```console
 $ nether bury build.nc
-buried   build.nc → 0380c8ae   depth 3   holes 1   4 nodes
-  hole ①  read("main.nc")              stratum 3  disk
+buried   build.nc → dd1289f4   depth 3   holes 1   4 nodes
+  hole ①  read("main.nc")                stratum 3  disk
 ```
 
 With no `--grant`, burial holds no capabilities and every world-touching
@@ -116,7 +116,7 @@ a source has no other order: one trace's two sources were never written down in
 a sequence.
 
 ```console
-$ nether lamp 8f3a1c0e
+$ nether lamp fd996152
 Hello from the nether
 ```
 

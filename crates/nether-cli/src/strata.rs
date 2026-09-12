@@ -51,8 +51,8 @@ pub fn run(args: &[String]) -> ExitCode {
         return FAILED;
     };
 
-    // A trace names its holes and its deposits; the residue and the source it
-    // also names are `Bytes`, and a witness is not reachable through either.
+    // A trace names its holes, its witnesses and its deposits. The residue and
+    // the source it also names are `Bytes`.
     let found = survey(&store, &trace.nodes());
     let told = Reading { cairn, depth: *depth, unrecorded: *unrecorded, found };
     if wants_json {
@@ -189,11 +189,6 @@ impl Reading {
         self.found.reaches.iter().filter(|r| r.answered).map(|r| r.stratum).max().unwrap_or(0)
     }
 
-    /// The deepest stratum a hole still owes.
-    fn deepest_pending(&self) -> u8 {
-        self.found.reaches.iter().filter(|r| !r.answered).map(|r| r.stratum).max().unwrap_or(0)
-    }
-
     fn text(&self, store: &Store) -> String {
         use core::fmt::Write as _;
 
@@ -244,11 +239,13 @@ impl Reading {
                 "stratum 8 was reached. Nothing downstream of it is recorded, ever.".to_string(),
             );
         }
-        let pending = self.deepest_pending();
-        if pending > self.depth {
+        // §7.3.2: `depth` already counts what the holes still reach, so what is
+        // worth saying is how much of it has actually happened.
+        let answered = self.deepest_answered();
+        if answered < self.depth {
             notes.push(format!(
-                "holes reach {pending} ({}); exhuming this trace will take it there.",
-                stratum_name(pending)
+                "of that, {answered} ({}) has happened; the rest is what exhuming will cost.",
+                stratum_name(answered)
             ));
         }
         if self.found.missing > 0 {
