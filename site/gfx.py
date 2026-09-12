@@ -276,7 +276,7 @@ FONT: dict[str, list[str]] = {
     "8": [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."],
     "9": [".###.", "#...#", "#...#", ".####", "....#", "#...#", ".###."],
     ".": [".....", ".....", ".....", ".....", ".....", ".##..", ".##.."],
-    ",": [".....", ".....", ".....", ".....", ".##..", ".##..", "#....."[:5]],
+    ",": [".....", ".....", ".....", ".....", ".##..", ".##..", ".#..."],
     "-": [".....", ".....", ".....", "#####", ".....", ".....", "....."],
     "!": ["..#..", "..#..", "..#..", "..#..", "..#..", ".....", "..#.."],
     "?": [".###.", "#...#", "....#", "...#.", "..#..", ".....", "..#.."],
@@ -427,6 +427,218 @@ def counter(text: str) -> tuple[list[Frame], list[int]]:
     return frames, [55, 55]
 
 
+
+def sign_over_the_door() -> tuple[list[Frame], list[int]]:
+    """NETHER C, in blocks, with the depth ramp bleeding down through it.
+
+    The letters are lit from stratum 0 and stain toward stratum 8 as the
+    animation runs, which is the only thing the page is really about.
+    """
+    w, h, n = 396, 62, 9
+    frames = []
+    for step in range(n):
+        f = Frame(w, h, VOID)
+
+        # sediment behind, so the ground is not flat
+        for y in range(0, h, 5):
+            for x in range((y // 5) % 4, w, 4):
+                f.set(x, y, ASH)
+
+        title = "NETHER C"
+        scale = 4
+        x0 = (w - len(title) * 6 * scale) // 2
+        for i, ch in enumerate(title):
+            # Each letter sits one stratum deeper than the one before it, and
+            # the whole word descends as the animation runs.
+            band = min(8, i + step)
+            big_text(f, x0 + i * 6 * scale, 8, ch, DEPTH[band], scale)
+
+        f.rect(0, h - 5, w, 1, ASH)
+        for d in range(9):
+            f.rect(d * (w // 9), h - 4, (w // 9) + 1, 3, DEPTH[d])
+        frames.append(f)
+    return frames, [18] * n
+
+
+def descent_animated() -> tuple[list[Frame], list[int]]:
+    """A value falling through the strata, and never coming back.
+
+    It leaves the band it passed stained behind it. That is the monotonicity
+    law of spec 1.2 drawn rather than stated: no step lowers a depth, and
+    there is no `ascend`.
+    """
+    w, band = 120, 15
+    h = 9 * band + 2
+    frames = []
+    for step in range(11):
+        f = Frame(w, h, VOID)
+        here = min(step, 8)
+        for d in range(9):
+            y = 1 + d * band
+            lit = d <= here
+            colour = DEPTH[d] if lit else ASH
+            f.rect(1, y, w - 2, band - 1, colour)
+            # a dotted floor between strata
+            for x in range(1, w - 1, 3):
+                f.set(x + (d % 3), y + band - 2, VOID)
+            f.text(5, y + 4, str(d), VOID if lit else SMOKE)
+
+        # the thing that is falling
+        y = 1 + here * band
+        if step <= 8:
+            f.rect(w - 26, y + 4, 10, 7, VOID)
+            f.rect(w - 25, y + 5, 8, 5, BONE)
+        else:
+            # it stopped, and the trail above it stays lit for good
+            f.text(w - 38, y + 4, "HERE", VOID)
+
+        f.frame_box(0, 0, w, h, ASH, SMOKE)
+        frames.append(f)
+    return frames, [30] * 9 + [110, 110]
+
+
+def orpheus() -> tuple[list[Frame], list[int]]:
+    """seal, shade and look. The rule from spec 1.6, in four beats.
+
+    A value sits at stratum 5. Its name rises freely. A shade of it rises
+    opaque. Looking at that shade from depth 0 is refused.
+    """
+    w, h = 300, 96
+    top, bottom = 14, 74
+
+    def stage(beat: int) -> Frame:
+        f = Frame(w, h, VOID)
+        f.rect(0, top - 1, w, 1, ASH)
+        f.rect(0, bottom, w, 1, ASH)
+        f.text(4, top - 9, "DEPTH 0", SMOKE)
+        f.text(4, bottom + 4, "STRATUM 5", DEPTH[5])
+
+        # the value, down where it lives
+        f.rect(20, bottom - 14, 34, 12, DEPTH[5])
+        f.text(24, bottom - 11, "JSON", VOID)
+
+        captions = [
+            ("A VALUE AT STRATUM 5", SMOKE),
+            ("SEAL: THE NAME RISES", SULPHUR),
+            ("SHADE: IT RISES OPAQUE", ROT),
+            ("LOOK: NOT FROM UP HERE", SALMON),
+        ]
+        text, colour = captions[beat]
+        f.text((w - Frame.width_of(text)) // 2, 3, text, colour)
+
+        if beat >= 1:
+            # a cairn: pure, so it goes all the way up
+            f.rect(96, top + 2, 52, 10, SULPHUR)
+            f.text(100, top + 4, "8F3A1C", VOID)
+            for y in range(top + 14, bottom - 14, 6):
+                f.set(120, y, SULPHUR)
+        if beat >= 2:
+            # a shade: opaque, and it also rises
+            f.rect(196, top + 2, 44, 10, ROT)
+            f.text(202, top + 4, "SHADE", VOID)
+            for y in range(top + 14, bottom - 14, 6):
+                f.set(216, y, ROT)
+        if beat == 3:
+            # Looking into it from up here is refused. Strike the shade itself
+            # rather than the caption: the shade is what you cannot open.
+            for k in range(44):
+                f.set(196 + k, top + 2 + k * 10 // 44, SALMON)
+                f.set(196 + k, top + 11 - k * 10 // 44, SALMON)
+            refusal = "DESCEND FIRST"
+            f.text(218 - Frame.width_of(refusal) // 2, top + 18, refusal, SALMON)
+        return f
+
+    frames = [stage(b) for b in range(4)]
+    return frames, [110, 110, 110, 190]
+
+
+def hole_filled() -> tuple[list[Frame], list[int]]:
+    """Burial leaves a hole; exhumation fills it and renames the trace.
+
+    The cairn changing at the end is the point: answering a hole produces a
+    new trace rather than revising the old one (spec 6.6).
+    """
+    w, h = 300, 58
+    cells = [(18 + i * 34, 22) for i in range(7)]
+    hole_at = 4
+
+    def stage(beat: int) -> Frame:
+        f = Frame(w, h, VOID)
+        caption = [
+            "BURY: ONE QUESTION LEFT OVER",
+            "EXHUME --GRANT DISK",
+            "THE WORLD ANSWERS",
+            "SEALED, AND RENAMED",
+        ][beat]
+        f.text(6, 4, caption, [SMOKE, SULPHUR, ROT, LIME][beat])
+
+        for i, (x, y) in enumerate(cells):
+            if i == hole_at and beat == 0:
+                # a hole: an outline with nothing in it
+                f.frame_box(x, y, 26, 18, SALMON, SALMON)
+                f.text(x + 9, y + 6, "?", SALMON)
+            elif i == hole_at and beat == 1:
+                f.frame_box(x, y, 26, 18, SULPHUR, SULPHUR)
+                f.text(x + 9, y + 6, "?", SULPHUR)
+            elif i == hole_at:
+                f.rect(x, y, 26, 18, ROT if beat == 2 else LIME)
+                f.text(x + 4, y + 6, "11K", VOID)
+            else:
+                f.rect(x, y, 26, 18, DEPTH[i % 3])
+            if i:
+                f.rect(x - 8, y + 8, 8, 1, SMOKE)
+
+        name = "4C02AB7F" if beat < 3 else "77DE9B31"
+        f.text(w - Frame.width_of(name) - 6, h - 10, name, ICE if beat == 3 else SMOKE)
+        return f
+
+    return [stage(b) for b in range(4)], [150, 110, 110, 190]
+
+
+def rule_variant(kind: str) -> tuple[list[Frame], list[int]]:
+    """Dividers that are not all the same bar.
+
+    Eight identical scrolling rules down one page reads as wallpaper. Each of
+    these says something about the section it precedes.
+    """
+    w, h = 396, 9
+
+    if kind == "strata":
+        # Nine solid bands: the lattice itself, still.
+        f = Frame(w, h, VOID)
+        for d in range(9):
+            f.rect(d * (w // 9), 2, (w // 9) + 1, h - 4, DEPTH[d])
+        return [f], [0]
+
+    if kind == "descend":
+        # Arrowheads, pointing down, marching one way.
+        frames = []
+        for step in range(8):
+            f = Frame(w, h, VOID)
+            for x in range((step * 2) % 16, w, 16):
+                for k in range(4):
+                    f.rect(x + 3 - k, 2 + k, 1 + k * 2, 1, DEPTH[(x // 16) % 9])
+            frames.append(f)
+        return frames, [90] * 8
+
+    if kind == "cairn":
+        # A hash, drawn as a hash: stacked blocks, deterministic from nothing.
+        f = Frame(w, h, VOID)
+        state = 0x9E37
+        for x in range(0, w, 6):
+            state = (state * 1103515245 + 12345) & 0xFFFF
+            tall = state % 3
+            f.rect(x, 3 - tall, 4, 3 + tall * 2, SULPHUR if state % 5 else ICE)
+        return [f], [0]
+
+    # "quiet": a hairline with one interruption, for between prose sections.
+    f = Frame(w, h, VOID)
+    f.rect(0, 4, w, 1, ASH)
+    f.rect(w // 2 - 12, 3, 24, 3, VOID)
+    f.rect(w // 2 - 8, 4, 16, 1, SULPHUR)
+    return [f], [0]
+
+
 def og_card() -> Frame:
     """1200x630, drawn at 200x105 and scaled six times. Blocky on purpose."""
     W, H = 200, 105
@@ -464,6 +676,14 @@ GRAPHICS = {
     "badge-norun.gif": lambda: badge("THERE IS NO", "RUN", SALMON, LILAC),
     "badge-80col.gif": lambda: badge("80 COLUMNS", "AS GOD MEANT", BILE, BONE),
     "badge-decay.gif": lambda: badge("THE CORE ONLY", "DECAYS", ROT, BONE),
+    "sign.gif": sign_over_the_door,
+    "descending.gif": descent_animated,
+    "orpheus.gif": orpheus,
+    "hole.gif": hole_filled,
+    "rule-strata.gif": lambda: rule_variant("strata"),
+    "rule-descend.gif": lambda: rule_variant("descend"),
+    "rule-cairn.gif": lambda: rule_variant("cairn"),
+    "rule-quiet.gif": lambda: rule_variant("quiet"),
 }
 
 
