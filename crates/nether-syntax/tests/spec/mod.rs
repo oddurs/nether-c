@@ -30,6 +30,10 @@ pub enum Shape {
     /// it lands, the parser's proof fails until the entry is changed — which
     /// is the point of it being here.
     Blocked(&'static str),
+    /// A sample that parses and that the checker ought to reject and does not
+    /// yet, and the item that will make it. One stage later than `Blocked`
+    /// and the same idea: when the rule lands, the entry has to change.
+    Unchecked(&'static str),
 }
 
 /// Every sample in `spec/`, and what it is.
@@ -50,7 +54,7 @@ pub const SAMPLES: &[(&str, Shape)] = &[
     ("04-grammar.md § 4.7 The bare-expression statement #1", Shape::Statements),
     ("05-types.md § 5.1.1 Answers and refusals #1", Shape::Statements),
     ("05-types.md § 5.2 Aggregates #1", Shape::Unit),
-    ("05-types.md § 5.4 Mutation #1", Shape::Blocked("0116: a struct cannot be constructed")),
+    ("05-types.md § 5.4 Mutation #1", Shape::Unchecked("0154: naming a local freezes it")),
     ("06-evaluation.md § 6.2 Demand #1", Shape::Unit),
     ("09-prelude.md § 9.2 Depth 0 #1", Shape::Statements),
     ("90-rationale.md § One number on an arrow #1", Shape::Unit),

@@ -92,8 +92,12 @@ pub struct Let {
     pub ty: Type,
     /// Its name.
     pub name: Name,
-    /// What it is bound to.
-    pub value: Expr,
+    /// What it is bound to, where anything is.
+    ///
+    /// A block-level binding may go without: that is how an aggregate is
+    /// constructed, by declaring it and then writing its fields.
+    /// `spec/04-grammar.md` §4.2.
+    pub value: Option<Expr>,
     /// The whole declaration.
     pub span: Span,
 }

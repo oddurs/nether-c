@@ -131,6 +131,16 @@ fn stmt(s: &Stmt, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
             );
             format!("{}{t} {name} = {};\n", indent(at), expr(value, unit, f))
         }
+        // A declaration with no value, which is how an aggregate is built. It
+        // has to print back as one or a residue stops round-tripping. §6.5.
+        Stmt::Declare { local } => {
+            let def = f.and_then(|f| f.local(*local));
+            let (t, name) = def.map_or_else(
+                || ("U0".to_string(), format!("«local {}»", local.0)),
+                |d| (declared(&d.ty, d.asserted), d.name.clone()),
+            );
+            format!("{}{t} {name};\n", indent(at))
+        }
         // The forms that were statements before lowering folded them go back
         // to being statements, which is what makes the result parse.
         Stmt::Expr(x) => match &x.kind {

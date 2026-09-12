@@ -234,7 +234,12 @@ impl<'a> Lowering<'a> {
         for item in &unit.items {
             let ast::Item::Let(binding) = item else { continue };
             self.scopes.push(Vec::new());
-            let value = self.expr(&binding.value);
+            // A global always has one; the parser requires it (§4.2).
+            let Some(init) = binding.value.as_ref() else {
+                self.scopes.pop();
+                continue;
+            };
+            let value = self.expr(init);
             self.scopes.pop();
             let ty = self.binding_type(&binding.ty, &value);
             let id = ir::GlobalId(u32::try_from(out.len()).unwrap_or(0));
@@ -416,8 +421,9 @@ fn block_children(b: &ir::Block) -> Vec<&ir::Expr> {
     let mut out: Vec<&ir::Expr> = b
         .stmts
         .iter()
-        .map(|s| match s {
-            ir::Stmt::Let { value, .. } | ir::Stmt::Expr(value) => value,
+        .filter_map(|s| match s {
+            ir::Stmt::Let { value, .. } | ir::Stmt::Expr(value) => Some(value),
+            ir::Stmt::Declare { .. } => None,
         })
         .collect();
     out.extend(b.tail.as_deref());
@@ -449,7 +455,16 @@ impl Lowering<'_> {
     fn stmt(&mut self, s: &ast::Stmt, out: &mut Vec<ir::Stmt>) {
         match s {
             ast::Stmt::Let(binding) => {
-                let value = self.expr(&binding.value);
+                // No initialiser is how an aggregate is constructed: declare
+                // it, then write its fields. §4.2, §5.4.
+                let Some(init) = binding.value.as_ref() else {
+                    let ty = self.ty(&binding.ty);
+                    let asserted = Self::asserted(&binding.ty);
+                    let local = self.bind(&binding.name, ty, asserted, Depth::PURE, binding.span);
+                    out.push(ir::Stmt::Declare { local });
+                    return;
+                };
+                let value = self.expr(init);
                 let ty = self.binding_type(&binding.ty, &value);
                 let asserted = Self::asserted(&binding.ty);
                 let depth = value.depth;

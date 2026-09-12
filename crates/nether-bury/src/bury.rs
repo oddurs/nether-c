@@ -861,6 +861,10 @@ impl Burial<'_> {
                     }
                     if stuck { v } else { Self::unit() }
                 }
+                // Nothing to evaluate. The local stays empty until something
+                // is written to it, and reading it before that collapses,
+                // which `Place` handles. §5.4.
+                Stmt::Declare { .. } => Self::unit(),
                 Stmt::Expr(x) => {
                     let v = self.expr(x, env)?;
                     // §4.7: a value here is deposited, not discarded. `U0` has
