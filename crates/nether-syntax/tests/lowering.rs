@@ -14,6 +14,9 @@
 use nether_core::{Depth, ExprKind, Type, check};
 use nether_syntax::{Fault, lower, parse, print};
 
+mod spec;
+use spec::Shape;
+
 fn ir(src: &str) -> nether_core::Unit {
     let ast = parse(src.as_bytes()).unwrap_or_else(|f| panic!("does not parse: {f:?}"));
     lower(&ast).unwrap_or_else(|f: Vec<Fault>| panic!("does not lower: {f:?}"))
@@ -135,32 +138,15 @@ fn every_sample_in_the_specification_that_is_a_unit_survives_it() {
     }
 }
 
-/// The samples §04 parses as whole units. The parser's own proof classifies
-/// every sample in the specification; these are the ones it calls units.
+/// The samples §04 parses as whole units. What each sample is, is said once,
+/// in `tests/spec/mod.rs`.
 fn unit_samples() -> Vec<String> {
-    const UNITS: [(&str, usize); 8] = [
-        ("00-overview.md", 125),
-        ("01-strata.md", 52),
-        ("01-strata.md", 94),
-        ("02-calculus.md", 159),
-        ("03-lexical.md", 26),
-        ("05-types.md", 71),
-        ("06-evaluation.md", 33),
-        ("90-rationale.md", 392),
-    ];
-    UNITS
-        .iter()
-        .map(|(file, line)| {
-            let path = format!("{}/../../spec/{file}", env!("CARGO_MANIFEST_DIR"));
-            let text = std::fs::read_to_string(&path).expect("readable");
-            let lines: Vec<&str> = text.lines().collect();
-            let body: Vec<&str> =
-                lines[*line..].iter().take_while(|l| !l.starts_with("```")).copied().collect();
-            // The samples name things the specification does not define in the
-            // fence — `compile`, `other`, `src` — so they arrive with the
-            // declarations a unit would need.
-            format!("{}\n{}\n", PRELUDE_FOR_SAMPLES, body.join("\n"))
-        })
+    spec::of_shape(Shape::Unit)
+        .into_iter()
+        // The samples name things the specification does not define in the
+        // fence — `compile`, `other`, `src` — so they arrive with the
+        // declarations a unit would need.
+        .map(|(_, body)| format!("{PRELUDE_FOR_SAMPLES}\n{body}\n"))
         .collect()
 }
 

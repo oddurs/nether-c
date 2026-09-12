@@ -3,85 +3,18 @@
 //! cascade.
 //!
 //! The samples are found rather than listed. Every fenced `c` block under
-//! `spec/` is extracted and looked up in the table below, so a sample added to
-//! the specification fails this file until somebody says what it is — and what
-//! each one *is* has to be said, because the specification writes three
-//! different things in a `c` fence: whole units and fragments of a body. The
-//! third — §09's signature listings, which §04 has no production for — stopped
-//! being labelled as the language, which is what made that list two long
-//! instead of three.
+//! `spec/` is extracted and looked up in `tests/spec/mod.rs`, so a sample added
+//! to the specification fails this file until somebody says what it is — and
+//! what each one *is* has to be said, because the specification writes two
+//! different things in a `c` fence: whole units and fragments of a body.
 
 use std::collections::BTreeMap;
 
 use nether_syntax::ast::{Item, Unit};
 use nether_syntax::{Fault, FaultKind, parse};
 
-/// What a sample in the specification is.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Shape {
-    /// A whole compilation unit. §4.1.
-    Unit,
-    /// Statements, as they would be written inside a body.
-    Statements,
-    /// A sample §04 cannot parse, and the item that is about to fix it. When
-    /// it lands, this test fails until the entry is changed — which is the
-    /// point of it being here.
-    Blocked(&'static str),
-}
-
-/// Every sample in `spec/`, and what it is.
-const SAMPLES: &[(&str, Shape)] = &[
-    ("spec/00-overview.md:125", Shape::Unit),
-    ("spec/01-strata.md:52", Shape::Unit),
-    ("spec/01-strata.md:94", Shape::Unit),
-    ("spec/01-strata.md:114", Shape::Unit),
-    ("spec/02-calculus.md:159", Shape::Unit),
-    ("spec/02-calculus.md:202", Shape::Statements),
-    ("spec/03-lexical.md:26", Shape::Unit),
-    ("spec/04-grammar.md:155", Shape::Statements),
-    ("spec/05-types.md:52", Shape::Statements),
-    ("spec/05-types.md:71", Shape::Unit),
-    ("spec/05-types.md:116", Shape::Blocked("0116: a struct cannot be constructed")),
-    ("spec/06-evaluation.md:33", Shape::Unit),
-    ("spec/09-prelude.md:78", Shape::Statements),
-    ("spec/90-rationale.md:392", Shape::Unit),
-];
-
-/// Every fenced `c` block under `spec/`, keyed `file:line` the way the
-/// transcript manifest keys them.
-fn samples() -> BTreeMap<String, String> {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    let mut out = BTreeMap::new();
-    let mut files: Vec<_> = std::fs::read_dir(format!("{root}/spec"))
-        .expect("spec/ is there")
-        .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| p.extension().is_some_and(|e| e == "md"))
-        .collect();
-    files.sort();
-
-    for path in files {
-        let text = std::fs::read_to_string(&path).expect("readable");
-        let name = format!("spec/{}", path.file_name().unwrap().to_string_lossy());
-        let mut body: Vec<&str> = Vec::new();
-        let mut opened = 0usize;
-        for (i, line) in text.lines().enumerate() {
-            if line.starts_with("```") {
-                if opened > 0 {
-                    out.insert(format!("{name}:{opened}"), body.join("\n"));
-                    opened = 0;
-                } else if line.trim() == "```c" {
-                    opened = i + 1;
-                    body.clear();
-                }
-                continue;
-            }
-            if opened > 0 {
-                body.push(line);
-            }
-        }
-    }
-    out
-}
+mod spec;
+use spec::{SAMPLES, Shape};
 
 fn parses(src: &str) -> Result<Unit, Vec<Fault>> {
     parse(src.as_bytes())
@@ -91,18 +24,19 @@ fn parses(src: &str) -> Result<Unit, Vec<Fault>> {
 
 #[test]
 fn every_sample_in_the_specification_is_accounted_for() {
-    let found: std::collections::BTreeSet<String> = samples().into_keys().collect();
+    let found: std::collections::BTreeSet<String> =
+        spec::samples().into_iter().map(|s| s.key).collect();
     let listed: std::collections::BTreeSet<String> =
         SAMPLES.iter().map(|(r, _)| (*r).to_string()).collect();
-    assert_eq!(found, listed, "a sample in spec/ that this file does not know about");
+    assert_eq!(found, listed, "a sample in spec/ that spec/mod.rs does not know about");
 }
 
 #[test]
 fn every_sample_in_the_specification_parses() {
     for (reference, shape) in SAMPLES {
-        let body = &samples()[*reference];
+        let body = &spec::body(reference);
         let result = match shape {
-            Shape::Unit | Shape::Blocked(_) => parses(body),
+            Shape::Unit | Shape::Illegal(_) | Shape::Blocked(_) => parses(body),
             // A fragment of a body is a body with something round it.
             Shape::Statements => parses(&format!("U0 sample()\n{{\n{body}\n}}\n")),
         };
@@ -125,7 +59,7 @@ fn the_one_sample_that_does_not_parse_says_so_once() {
         .iter()
         .find(|(_, s)| matches!(s, Shape::Blocked(_)))
         .expect("the blocked sample went away");
-    let faults = parses(&samples()[*reference]).expect_err("this does not parse");
+    let faults = parses(&spec::body(reference)).expect_err("this does not parse");
     assert_eq!(faults.len(), 1, "{faults:?}");
     assert_eq!(faults[0].kind, FaultKind::Expected("`=` after a binding"));
 }
@@ -262,4 +196,46 @@ fn assignment_is_right_associative_and_the_binaries_are_not() {
     assert_eq!(shape("a = b = c"), shape("a = (b = c)"));
     assert_eq!(shape("1 - 2 - 3"), shape("(1 - 2) - 3"));
     assert_ne!(shape("1 - 2 - 3"), shape("1 - (2 - 3)"));
+}
+
+// ── the naming itself ───────────────────────────────────────────────────────
+
+/// 0137: inserting a paragraph into the specification moves no sample.
+///
+/// The table used to be keyed `file.md:line`, so editing prose cost an edit in
+/// three other files and said `no entry found for key` when somebody forgot.
+/// This writes a copy of `spec/` with a paragraph pushed in above every
+/// section heading and checks that every sample still has the name it had.
+#[test]
+fn a_paragraph_can_be_inserted_anywhere_and_no_sample_moves() {
+    let before: Vec<String> = spec::samples().into_iter().map(|s| s.key).collect();
+
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let copy = std::env::temp_dir().join(format!("nether-spec-{at}"));
+    std::fs::create_dir_all(&copy).expect("a scratch directory");
+    for entry in std::fs::read_dir(spec::spec_dir()).expect("spec/ is there") {
+        let path = entry.expect("readable").path();
+        if path.extension().is_none_or(|e| e != "md") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).expect("readable");
+        let pushed: Vec<String> = text
+            .lines()
+            .map(|l| {
+                if l.starts_with("## ") {
+                    format!("A paragraph somebody added.\n\n{l}")
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect();
+        std::fs::write(copy.join(path.file_name().unwrap()), pushed.join("\n")).expect("written");
+    }
+
+    let after: Vec<String> = spec::samples_in(&copy).into_iter().map(|s| s.key).collect();
+    std::fs::remove_dir_all(&copy).ok();
+    assert_eq!(before, after, "a sample changed name because prose moved");
+    assert_eq!(before.len(), SAMPLES.len(), "the copy lost or gained a sample");
 }

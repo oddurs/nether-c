@@ -21,6 +21,7 @@ that is neither checked nor pinned is an error.
 
 from __future__ import annotations
 
+import collections
 import hashlib
 import html
 import re
@@ -41,14 +42,21 @@ ELISION = "[...]"
 
 
 class Sample:
-    __slots__ = ("source", "line", "kind", "body")
+    __slots__ = ("source", "heading", "nth", "kind", "body")
 
-    def __init__(self, source: str, line: int, kind: str, body: str) -> None:
-        self.source, self.line, self.kind, self.body = source, line, kind, body
+    def __init__(self, source: str, heading: str, nth: int, kind: str, body: str) -> None:
+        self.source, self.heading, self.nth = source, heading, nth
+        self.kind, self.body = kind, body
 
     @property
     def ref(self) -> str:
-        return f"{self.source}:{self.line}"
+        """Named by the heading it is under, not by the line it starts on.
+
+        A line number moves whenever a paragraph is inserted above it, and then
+        every row of the manifest changes and a reviewer cannot tell which of
+        them changed for a reason. 0137.
+        """
+        return f"{self.source} § {self.heading} #{self.nth}"
 
     @property
     def digest(self) -> str:
@@ -66,31 +74,39 @@ LISTING = re.compile(
 
 def from_markdown(rel: str) -> list[Sample]:
     out, lines = [], (ROOT / rel).read_text(encoding="utf-8").split("\n")
-    i = 0
+    heading, seen, i = "(no heading)", collections.Counter(), 0
     while i < len(lines):
         m = FENCE.match(lines[i])
         if not m:
+            if lines[i].startswith("#"):
+                heading = lines[i].lstrip("#").strip()
             i += 1
             continue
-        kind, start, body = m.group(1) or "text", i + 1, []
+        kind, body = m.group(1) or "text", []
         i += 1
         while i < len(lines) and not lines[i].startswith("```"):
             body.append(lines[i])
             i += 1
         i += 1
-        out.append(Sample(rel, start, kind, "\n".join(body)))
+        seen[heading] += 1
+        out.append(Sample(rel, heading, seen[heading], kind, "\n".join(body)))
     return out
 
 
 def from_html(rel: str) -> list[Sample]:
     """The front page is hand-written HTML; its samples count too."""
     text = (ROOT / rel).read_text(encoding="utf-8")
-    out = []
+    headings = [(m.start(), re.sub(r"<[^>]+>", "", m.group(1)).strip())
+                for m in re.finditer(r"<h[1-6][^>]*>(.*?)</h[1-6]>", text, re.S)]
+    out, seen = [], collections.Counter()
     for m in LISTING.finditer(text):
         caption = (m.group(1) or "text").strip().lower()
         kind = {"shell": "console", "nether c": "c", "grammar": "ebnf"}.get(caption, caption)
         body = html.unescape(re.sub(r"<[^>]+>", "", m.group(2)))
-        out.append(Sample(rel, text[: m.start()].count("\n") + 1, kind, body))
+        above = [h for at, h in headings if at < m.start()]
+        heading = above[-1] if above else "(no heading)"
+        seen[heading] += 1
+        out.append(Sample(rel, heading, seen[heading], kind, body))
     return out
 
 
