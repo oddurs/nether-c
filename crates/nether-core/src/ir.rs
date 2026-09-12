@@ -68,6 +68,15 @@ pub enum Literal {
     Str(String),
     /// One of the six refusal codes, bound as prelude constants.
     Refusal(Refusal),
+    /// A content address. Not written in source — there is no syntax for one
+    /// and there should not be, since a cairn a programmer typed is a claim
+    /// about a value rather than the value's own name. `seal` produces these,
+    /// and burial writes one down when it can finish one.
+    ///
+    /// Held as its digest, so that the IR still knows nothing about how a
+    /// cairn is computed. That is the ledger's business and this crate does
+    /// not depend on it.
+    Cairn([u8; 32]),
 }
 
 /// A binary operator. Short-circuiting `&&` and `||` are not here: they are

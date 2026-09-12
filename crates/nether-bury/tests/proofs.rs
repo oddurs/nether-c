@@ -10,10 +10,12 @@
 
 use std::time::Instant;
 
+use nether_bury::{Halt, Residue};
 use nether_core::{
     BinOp, Block, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, Literal, LocalDef, LocalId, Span,
-    Stmt, Type, Unit, bury, check,
+    Stmt, Type, Unit, check,
 };
+use nether_ledger::Cairn;
 
 fn e(kind: ExprKind, ty: Type, depth: Depth) -> Expr {
     Expr { kind, ty, depth, span: Span::default() }
@@ -147,4 +149,14 @@ fn fib_of_thirty_burns_to_a_literal() {
     println!("    {took:>12.2?} wall clock");
     println!("    {left:>12} calls left in the residue");
     println!();
+}
+
+/// The cairn these units pretend to have been lowered from.
+fn source_cairn() -> Cairn {
+    Cairn::of_encoded(b"a source")
+}
+
+/// `bury`, with a source for the spans to belong to.
+fn bury(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
+    nether_bury::bury(unit, source_cairn(), fuel)
 }

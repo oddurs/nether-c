@@ -3,10 +3,12 @@
 //! Every unit here is checked before it is buried. A burial of something the
 //! calculus rejects proves nothing about burial.
 
+use nether_bury::{Halt, HaltKind, Residue};
 use nether_core::{
-    BinOp, Block, Capability, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, HaltKind,
-    Literal, LocalDef, LocalId, Prim, Residue, Rite, Span, Stmt, Type, Unit, bury, check,
+    BinOp, Block, Capability, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, Literal,
+    LocalDef, LocalId, Prim, Rite, Span, Stmt, Type, Unit, check,
 };
+use nether_ledger::Cairn;
 
 // ── building ────────────────────────────────────────────────────────────────
 
@@ -470,4 +472,14 @@ fn summing(n: i64, skip: bool) -> Unit {
         }],
         ..Unit::default()
     }
+}
+
+/// The cairn these units pretend to have been lowered from.
+fn source_cairn() -> Cairn {
+    Cairn::of_encoded(b"a source")
+}
+
+/// `bury`, with a source for the spans to belong to.
+fn bury(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
+    nether_bury::bury(unit, source_cairn(), fuel)
 }

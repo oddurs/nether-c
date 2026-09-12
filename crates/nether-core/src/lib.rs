@@ -22,7 +22,6 @@
 
 mod check;
 mod depth;
-mod eval;
 mod ir;
 mod prim;
 mod report;
@@ -31,12 +30,11 @@ mod unit;
 
 pub use check::{Blame, Fault, FaultKind, check};
 pub use depth::{Capability, Depth};
-pub use eval::{Grinding, Halt, HaltKind, MAX_FRAMES, Residue, bury};
 pub use ir::{
     BinOp, Block, Expr, ExprKind, FuncId, GlobalId, Literal, LocalId, Place, Proj, Rite, Span,
     Stmt, UnOp,
 };
 pub use prim::Prim;
-pub use report::{Diagnostic, report};
+pub use report::{Diagnostic, grouped, report};
 pub use ty::{Refusal, Type};
 pub use unit::{Asserted, Demand, Field, FuncDef, GlobalDef, LocalDef, StructDef, Unit};

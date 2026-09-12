@@ -27,12 +27,11 @@
 //!   be written down cannot be residualised. See the item *a struct cannot be
 //!   constructed*.
 
-use crate::depth::{Capability, Depth};
-use crate::ir::{BinOp, Block, Expr, ExprKind, FuncId, Literal, Place, Rite, Span, Stmt, UnOp};
-use crate::prim::Prim;
-use crate::report::{Diagnostic, grouped};
-use crate::ty::Type;
-use crate::unit::Unit;
+use nether_core::{
+    BinOp, Block, Capability, Depth, Diagnostic, Expr, ExprKind, FuncId, GlobalId, Literal, Place,
+    Prim, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
+};
+use nether_ledger::{Cairn, Node, Stored, Value};
 
 /// What a burial produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,10 +39,48 @@ pub struct Residue {
     /// One residual expression per demand, in source order. A demand that
     /// reduced all the way is a literal.
     pub demands: Vec<Expr>,
+    /// Everything burial named, in the order it named it — the values it
+    /// finished and the nodes it made about them. Nothing has been written
+    /// anywhere: writing to a store is stratum 1, and burial holds no
+    /// capability at all.
+    pub named: Vec<(Cairn, Stored)>,
+    /// The holes, in the order they were discovered — which §6.2 fixes, since
+    /// two burials of the same input produce the same trace including that
+    /// order.
+    pub holes: Vec<Cairn>,
     /// Evaluation steps spent. Deterministic for a given unit and budget.
     pub fuel_spent: u64,
     /// The deepest stratum anything in the residue still reaches.
     pub depth: Depth,
+}
+
+impl Residue {
+    /// Whatever this burial filed under that name.
+    #[must_use]
+    pub fn get(&self, cairn: Cairn) -> Option<&Stored> {
+        self.named.iter().find(|(c, _)| *c == cairn).map(|(_, s)| s)
+    }
+
+    /// The value of that name, if it named a value.
+    #[must_use]
+    pub fn value(&self, cairn: Cairn) -> Option<&Value> {
+        match self.get(cairn) {
+            Some(Stored::Value(v)) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// What the world is being asked, in order.
+    #[must_use]
+    pub fn questions(&self) -> Vec<&Node> {
+        self.holes
+            .iter()
+            .filter_map(|c| match self.get(*c) {
+                Some(Stored::Node(n)) => Some(n),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 /// Why a burial stopped without finishing.
@@ -174,27 +211,41 @@ impl Halt {
 ///
 /// Starvation and exhausted fuel, which are different things: the first is a
 /// mistake in the program and the second is a bound that was too small.
-pub fn bury(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
-    let run = || burrow(unit, fuel);
+/// Bury a unit with a budget of evaluation steps.
+///
+/// `source` names the bytes the unit was lowered from. Spans in the IR are
+/// offsets into it and become ledger spans here, because this is where a span
+/// stops being a fact about a file somebody has open and starts being a fact
+/// about a source that has a name. `spec/07-ledger.md` §7.3.
+///
+/// # Errors
+///
+/// Starvation and exhausted fuel, which are different things, and this
+/// implementation's own frame limit, which is a third.
+pub fn bury(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
+    let run = || burrow(unit, source, fuel);
     std::thread::scope(|s| {
         match std::thread::Builder::new().stack_size(STACK).spawn_scoped(s, run) {
             // A burial that panicked is a bug in this crate, and the caller
             // should see it as one.
             Ok(h) => h.join().unwrap_or_else(|p| std::panic::resume_unwind(p)),
             // Nothing left to spawn with. Better a shallower burial than none.
-            Err(_) => burrow(unit, fuel),
+            Err(_) => burrow(unit, source, fuel),
         }
     })
 }
 
-fn burrow(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
+fn burrow(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
     let mut b = Burial {
         unit,
+        source,
         left: fuel,
         spent: 0,
         globals: vec![None; unit.globals.len()],
         flow: None,
         grind: Vec::new(),
+        named: Vec::new(),
+        holes: Vec::new(),
     };
     let mut demands = Vec::with_capacity(unit.demands.len());
     // In source order, which §6.2 fixes: two burials of the same input produce
@@ -207,7 +258,7 @@ fn burrow(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
         demands.push(Burial::residual(v, &d.value));
     }
     let depth = demands.iter().fold(Depth::PURE, |acc, d| acc.join(d.depth));
-    Ok(Residue { demands, fuel_spent: b.spent, depth })
+    Ok(Residue { demands, named: b.named, holes: b.holes, fuel_spent: b.spent, depth })
 }
 
 /// A value, as burial holds one.
@@ -274,6 +325,8 @@ enum Flow {
 
 struct Burial<'a> {
     unit: &'a Unit,
+    /// The cairn of the bytes the unit was lowered from.
+    source: Cairn,
     left: u64,
     spent: u64,
     /// Unit-level bindings, evaluated the first time something reaches one.
@@ -284,6 +337,10 @@ struct Burial<'a> {
     /// the way out of an error, which is the point: when the budget runs out
     /// this is what evaluation was going round in.
     grind: Vec<Grind>,
+    /// Everything named so far.
+    named: Vec<(Cairn, Stored)>,
+    /// The holes, in the order they were found.
+    holes: Vec<Cairn>,
 }
 
 /// One open loop or call.
@@ -303,6 +360,51 @@ enum Open {
 type Env = Vec<Option<Val>>;
 
 impl Burial<'_> {
+    /// Write a node down and hand back its name.
+    ///
+    /// Nothing is written to a store. Writing to a store is stratum 1 and
+    /// burial holds no capability at all; these are the nodes a rite will
+    /// write when one is given the capability to.
+    fn remember(&mut self, what: Stored) -> Cairn {
+        let cairn = what.cairn();
+        if !self.named.iter().any(|(c, _)| *c == cairn) {
+            self.named.push((cairn, what));
+        }
+        cairn
+    }
+
+    /// A question for the world, named and written down.
+    ///
+    /// Two holes with identical calls in one trace MUST be the same hole,
+    /// which is what makes exhumation cheap: reading the same file twice is
+    /// one question, asked once. §6.3.
+    fn dig(&mut self, p: Prim, args: Vec<Value>, span: Span) -> Cairn {
+        // The arguments are named as values rather than wrapped in anything.
+        // A value has one name, and `seal` of the same value gives the same
+        // one, which is the whole point of addressing by content.
+        let args = args.into_iter().map(|v| self.remember(Stored::Value(v))).collect();
+        let call = nether_ledger::Call { function: p.name().to_string(), args };
+        let node = Node::Hole {
+            call,
+            stratum: p.latent().get(),
+            span: nether_ledger::Span {
+                source: self.source,
+                start: u64::from(span.start),
+                end: u64::from(span.end),
+            },
+            // Always empty, and not for want of trying. A hole is only formed
+            // once every argument is a finished value, so nothing a hole needs
+            // can still be waiting on another hole — within one burial there
+            // is nothing for this to hold. See the item on it.
+            depends: Vec::new(),
+        };
+        let cairn = self.remember(Stored::Node(node));
+        if !self.holes.contains(&cairn) {
+            self.holes.push(cairn);
+        }
+        cairn
+    }
+
     /// Where a halt should point, and what it was going round in.
     ///
     /// `burn` reports the leaf it was holding, which is almost never the
@@ -543,7 +645,7 @@ impl Burial<'_> {
     }
 
     /// A unit-level binding, evaluated once and only if something reaches it.
-    fn global(&mut self, id: crate::ir::GlobalId, x: &Expr) -> Result<Val, Halt> {
+    fn global(&mut self, id: GlobalId, x: &Expr) -> Result<Val, Halt> {
         if let Some(v) = self.globals.get(id.0 as usize).and_then(Clone::clone) {
             return Ok(v);
         }
@@ -569,6 +671,18 @@ impl Burial<'_> {
         let mut values = Vec::with_capacity(args.len());
         for a in args {
             values.push(self.expr(a, env)?);
+        }
+
+        // A question the world can answer immediately: a prelude function
+        // deeper than the surface, and every argument already a value. §6.3
+        // is explicit that `read(concat(dir, name))` leaves a hole holding the
+        // finished path and not one holding a `concat`.
+        if let Kind::Prim(p) = f.kind {
+            if p.latent() > Depth::PURE {
+                if let Some(args) = values.iter().map(as_value).collect::<Option<Vec<_>>>() {
+                    self.dig(p, args, x.span);
+                }
+            }
         }
 
         let folded = match &f.kind {
@@ -668,6 +782,11 @@ impl Burial<'_> {
             return Ok(Self::stuck(x));
         };
         let before = env.clone();
+        // Questions asked during an unrolling that is then abandoned are kept.
+        // The loop residualises whole, so burying the residue runs it again
+        // from the same state and asks the same things — they are questions
+        // the residue asks, and dropping them would hide from `nether bury`
+        // exactly the capability somebody needs to grant.
         loop {
             let v = self.expr(body, env)?;
             match self.flow.take() {
@@ -709,9 +828,26 @@ impl Burial<'_> {
         }
         let v = self.expr(operand, env)?;
         Ok(match rite {
-            // Naming a value is encoding it and hashing it, and that is the
-            // ledger, which this crate does not know about.
-            Rite::Seal => Self::stuck(x),
+            // A name is pure, whatever it names, and a value that is here can
+            // be named. One that is not stays the expression it was: sealing
+            // something the world has not answered yet is a question about a
+            // value that does not exist.
+            Rite::Seal => {
+                // §1.5: `seal` on a shade is legal and yields the cairn of the
+                // underlying value. Not the shade's own name — the shade is a
+                // wrapper, and sealing it is a claim about what is inside.
+                let named = match &v.kind {
+                    Kind::Shade(inner) => as_value(inner),
+                    _ => as_value(&v),
+                };
+                match named {
+                    Some(value) => {
+                        let cairn = self.remember(Stored::Value(value));
+                        Self::known(Literal::Cairn(*cairn.as_bytes()), x)
+                    }
+                    None => Self::stuck(x),
+                }
+            }
             Rite::Opaque => unreachable!("handled above"),
             Rite::Shade => {
                 if v.is_stuck() {
@@ -796,10 +932,39 @@ fn binary(op: BinOp, a: &Val, b: &Val) -> Result<Option<Literal>, &'static str> 
     Ok(match (&a.kind, &b.kind, op) {
         (Kind::Known(x), Kind::Known(y), BinOp::Eq) => Some(Literal::Bool(x == y)),
         (Kind::Known(x), Kind::Known(y), BinOp::Ne) => Some(Literal::Bool(x != y)),
-        (Kind::Shade(x), Kind::Shade(y), BinOp::Eq) => Some(Literal::Bool(x == y)),
-        (Kind::Shade(x), Kind::Shade(y), BinOp::Ne) => Some(Literal::Bool(x != y)),
+        // §5.3: two shades are equal when their underlying values are, which
+        // is a comparison of what is inside and not of the wrappers. Comparing
+        // shades does not count as looking at them, because it reveals only
+        // what `seal` already revealed.
+        (Kind::Shade(x), Kind::Shade(y), BinOp::Eq) => Some(Literal::Bool(x.kind == y.kind)),
+        (Kind::Shade(x), Kind::Shade(y), BinOp::Ne) => Some(Literal::Bool(x.kind != y.kind)),
         _ => None,
     })
+}
+
+/// The ledger value a burial value is, when it is one.
+///
+/// `Refusal` is not one, and that is not a decision made here: §5.1 gives it a
+/// canonical encoding and §7.1's frozen tag table has no tag for it. Until
+/// that is settled a refusal cannot be named, so `seal` of one residualises
+/// and a hole cannot take one as an argument.
+fn as_value(v: &Val) -> Option<Value> {
+    match &v.kind {
+        Kind::Known(Literal::Unit) => Some(Value::Unit),
+        Kind::Known(Literal::Bool(b)) => Some(Value::Bool(*b)),
+        Kind::Known(Literal::Int(n)) => Some(Value::Int(*n)),
+        Kind::Known(Literal::Bytes(b)) => Some(Value::Bytes(b.clone())),
+        Kind::Known(Literal::Str(s)) => Some(Value::Str(s.clone())),
+        Kind::Known(Literal::Cairn(c)) => Some(Value::Cairn(Cairn::from_bytes(*c))),
+        // Only the origin and the name survive, which is what a shade is.
+        Kind::Shade(inner) => {
+            let Type::Shade { origin, .. } = &v.ty else { return None };
+            as_value(inner).map(|held| Value::Shade { origin: origin.get(), value: held.cairn() })
+        }
+        // A refusal has no tag to be written under; a function and a prelude
+        // function have no written form at all.
+        Kind::Known(Literal::Refusal(_)) | Kind::Func(_) | Kind::Prim(_) | Kind::Stuck(_) => None,
+    }
 }
 
 /// A shift by something no shift can mean.

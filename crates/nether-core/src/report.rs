@@ -70,7 +70,7 @@ pub fn report(d: &Diagnostic, source: &str, path: &str) -> String {
 /// Six lines, because a program that reports 262144 unrollings is reporting a
 /// number nobody is going to read.
 #[must_use]
-pub(crate) fn grouped(n: u64) -> String {
+pub fn grouped(n: u64) -> String {
     let digits = n.to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
     for (i, c) in digits.char_indices() {
