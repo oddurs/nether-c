@@ -270,7 +270,6 @@ fn expr(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
             };
             format!("({word} {})", go(operand))
         }
-        ExprKind::SizeOf(t) => format!("sizeof({})", ty(t)),
     }
 }
 

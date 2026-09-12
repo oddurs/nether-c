@@ -109,7 +109,6 @@ I64 counted(Row window, Bool flag)
   }
   while (total > 100) { total -= 1; }
   b"nc";
-  sizeof(Header);
   Bool both = flag && (total == 0);
   Bool either = flag || (total != 0);
   if (both) { total = 1; } else if (either) { total = 2; } else { total = 3; }

@@ -625,11 +625,10 @@ impl Parser<'_> {
             self.expect(Punct::RParen, "`)` to close the group")?;
             return Ok(inner);
         }
-        if self.eat_keyword(Keyword::Sizeof) {
-            self.expect(Punct::LParen, "`(` after `sizeof`")?;
-            let ty = self.ty()?;
-            self.expect(Punct::RParen, "`)` after the type")?;
-            return Ok(Expr { kind: ExprKind::SizeOf(ty), span: self.since(from) });
+        if self.at_keyword(Keyword::Sizeof) {
+            let span = self.span();
+            self.faults.push(Fault { span, kind: FaultKind::Reserved("sizeof") });
+            return Err(Given);
         }
         if self.eat_keyword(Keyword::Descend) {
             let capability = self.capability()?;

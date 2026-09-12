@@ -212,8 +212,6 @@ pub enum ExprKind {
     Bool(bool),
     /// An identifier. What it names is lowering's question.
     Name(Name),
-    /// `sizeof(T)`
-    SizeOf(Type),
     /// `descend κ { … }`
     Descend {
         /// `κ`.

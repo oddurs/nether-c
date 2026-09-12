@@ -323,8 +323,6 @@ pub enum ExprKind {
         /// What it is applied to.
         operand: Box<Expr>,
     },
-    /// `sizeof(T)`.
-    SizeOf(Type),
 }
 
 #[cfg(test)]

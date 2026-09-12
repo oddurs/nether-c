@@ -31,7 +31,7 @@ spec/04-grammar.md § 4.1 Compilation unit #1	ebnf	pinned	d8137d228d3b4996
 spec/04-grammar.md § 4.2 Declarations #1	ebnf	pinned	c50348b7580e5439
 spec/04-grammar.md § 4.3 Types #1	ebnf	pinned	f3e5d72d58b38266
 spec/04-grammar.md § 4.4 Statements #1	ebnf	pinned	30a4f3e68261c45a
-spec/04-grammar.md § 4.5 Expressions #1	ebnf	pinned	e650c9b7d84d98fe
+spec/04-grammar.md § 4.5 Expressions #1	ebnf	pinned	88eb88666b0c5b62
 spec/04-grammar.md § 4.7 The bare-expression statement #1	c	pinned	4fae387bf70b6809
 spec/05-types.md § 5.1.1 Answers and refusals #1	text	pinned	1de4c44f9b08a8ce
 spec/05-types.md § 5.1.1 Answers and refusals #2	c	pinned	0c96fcfac5c029b7

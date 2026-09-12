@@ -559,10 +559,9 @@ impl Burial<'_> {
                 out
             }
 
-            // Neither has a value form to fold into. Indexing and projection
-            // need an aggregate, and nothing can build one; `sizeof` needs a
-            // size, and nothing has defined one.
-            ExprKind::Field { .. } | ExprKind::Index { .. } | ExprKind::SizeOf(_) => Self::stuck(x),
+            // Neither has a value form to fold into: indexing and projection
+            // need an aggregate, and nothing can build one. 0116.
+            ExprKind::Field { .. } | ExprKind::Index { .. } => Self::stuck(x),
         })
     }
 

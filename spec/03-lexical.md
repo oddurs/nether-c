@@ -58,6 +58,13 @@ if        else    while   for     return   break    continue
 struct    typedef sizeof  true    false
 ```
 
+`sizeof` is reserved and has no meaning. [§4.5](04-grammar.md#45-expressions)
+has no production for it and nothing in this specification says what it would
+evaluate to: there is no pointer type, no allocation and no memory layout, so
+there is nothing for it to measure. It stays reserved so that a program cannot
+bind the word to something that is not what a reader would assume, and writing
+one is an error that names `len`. [§90.2](90-rationale.md#902-rejected-alternatives).
+
 Type names in the prelude (`U0`, `I64`, `Bytes`, `Str`, `Cairn`, `Shade`,
 `Answer`, `Refusal`, `Bool`) are ordinary identifiers bound in the prelude
 scope, not keywords. A program MAY shadow them, and SHOULD NOT.
