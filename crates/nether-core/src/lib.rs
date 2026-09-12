@@ -20,12 +20,14 @@
 //! - It keeps only the forms with their own typing rule. The folds are listed
 //!   in [`ir`].
 
+mod check;
 mod depth;
 mod ir;
 mod prim;
 mod ty;
 mod unit;
 
+pub use check::{Fault, FaultKind, check};
 pub use depth::{Capability, Depth};
 pub use ir::{
     BinOp, Block, Expr, ExprKind, FuncId, GlobalId, Literal, LocalId, Place, Proj, Rite, Span,
