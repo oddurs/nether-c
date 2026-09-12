@@ -99,9 +99,9 @@ demand greet();
 
 ```console
 $ nether bury hello.nc
-buried   hello.nc → 8f3a1c0e   depth 0   holes 0   17 nodes
+buried   hello.nc → fd996152   depth 0   holes 0   4 nodes
 
-$ nether lamp 8f3a1c0e
+$ nether lamp fd996152
 Hello from the nether
 ```
 

@@ -129,11 +129,16 @@ Hello from the nether
 produced it, to their inputs, to the literals and holes at the bottom.
 
 ```console
-$ nether lamp a1f0c93d --provenance
-a1f0c93d  Bytes, 11204 bytes
-└─ witness  read("main.nc")            stratum 3   b2e7d410:1:15
-   └─ hole ①  answered by exhumation of 4c02ab7f at 2026-09-10T11:04:02Z
+$ nether lamp d3ea6558 --provenance
+d3ea6558  hole     read("main.nc")   stratum 3
+└─ trace    depth 3   residue f1221324   1 hole(s)   0 witness(es)   0 deposit(s)   11 steps
 ```
+
+That is the walk over the trace from [§8.2](#82-bury), which has a hole and no
+answers yet: the hole, and the trace waiting on it. Once
+[§8.3](#83-exhume) has recorded a witness the same walk reaches it, which is
+what [§7.4](07-ledger.md#74-provenance) means by the forward edge read
+backwards — a hole records no dependents and does not need to.
 
 `lamp` is a tool the operator carries, not a capability the program holds. A
 program cannot invoke it, cannot reach a terminal, and has no way to know
@@ -160,13 +165,14 @@ Blame for depth. Reports the deepest stratum a trace reached and the source
 span that took it there.
 
 ```console
-$ nether strata 77de9b31
+$ nether strata dd1289f4
 depth 3   disk
 
-  3  read("main.nc")          b2e7d410:1:15
+  3  read("main.nc")           7bced69b:10:35   pending
   0  everything else
 
   replayable: yes
+  of that, 0 (pure) has happened; the rest is what exhuming will cost.
 ```
 
 Holes are reported apart from witnesses, because they are not the same depth:
