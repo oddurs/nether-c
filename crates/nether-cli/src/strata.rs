@@ -45,13 +45,15 @@ pub fn run(args: &[String]) -> ExitCode {
             return FAILED;
         }
     };
-    let Stored::Node(Node::Trace { roots, depth, unrecorded, .. }) = &stored else {
+    let Stored::Node(trace @ Node::Trace { depth, unrecorded, .. }) = &stored else {
         eprintln!("nether: {} is {}, not a trace", cairn.short(), kind(&stored));
         eprintln!("        `nether lamp {}` shows what is there", cairn.short());
         return FAILED;
     };
 
-    let found = survey(&store, roots);
+    // A trace names its holes and its deposits; the residue and the source it
+    // also names are `Bytes`, and a witness is not reachable through either.
+    let found = survey(&store, &trace.nodes());
     let told = Reading { cairn, depth: *depth, unrecorded: *unrecorded, found };
     if wants_json {
         println!("{}", told.json(&store));

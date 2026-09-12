@@ -29,8 +29,8 @@
 use std::collections::{HashMap, HashSet};
 
 use nether_core::{
-    BinOp, Block, Capability, Depth, Diagnostic, Expr, ExprKind, FuncId, GlobalId, Literal, Place,
-    Prim, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
+    BinOp, Block, Capability, Demand, Depth, Diagnostic, Expr, ExprKind, FuncId, GlobalId, Literal,
+    Place, Prim, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
 };
 use nether_ledger::{Cairn, Node, Stored, Value};
 
@@ -76,6 +76,31 @@ impl Residue {
         match self.get(cairn) {
             Some(Stored::Value(v)) => Some(v),
             _ => None,
+        }
+    }
+
+    /// The residue as a program, ready to be printed.
+    ///
+    /// §6.5 requires that a residue can be written down as source and lowered
+    /// again to the same program; without that the staging law is unprovable,
+    /// because the second burial would not be burying the first one's residue.
+    ///
+    /// The declarations come from the unit that was buried. Burial reduces
+    /// demands and never touches a `struct`, a function or a global, so
+    /// carrying them across loses nothing and an unreduced call still has
+    /// something to name.
+    #[must_use]
+    pub fn as_unit(&self, buried: &Unit) -> Unit {
+        Unit {
+            structs: buried.structs.clone(),
+            funcs: buried.funcs.clone(),
+            globals: buried.globals.clone(),
+            demands: self
+                .demands
+                .iter()
+                .zip(&buried.demands)
+                .map(|(value, original)| Demand { value: value.clone(), span: original.span })
+                .collect(),
         }
     }
 
@@ -443,11 +468,6 @@ impl Burial<'_> {
                 start: u64::from(span.start),
                 end: u64::from(span.end),
             },
-            // Always empty, and not for want of trying. A hole is only formed
-            // once every argument is a finished value, so nothing a hole needs
-            // can still be waiting on another hole — within one burial there
-            // is nothing for this to hold. See the item on it.
-            depends: Vec::new(),
         };
         let cairn = self.remember(Stored::Node(node));
         self.asked.insert(call, cairn);

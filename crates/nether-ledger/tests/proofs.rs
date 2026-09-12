@@ -45,7 +45,7 @@ fn build(leaves: &[&[u8]]) -> Graph {
         let literal = Node::Literal(Value::Bytes((*bytes).to_vec()));
         let answer = literal.cairn();
         let witness = Node::Witness { stratum: 3, call: call.clone(), answer, span };
-        let hole = Node::Hole { call, stratum: 3, span, depends: vec![] };
+        let hole = Node::Hole { call, stratum: 3, span };
 
         level.push(witness.cairn());
         nodes.push(literal);

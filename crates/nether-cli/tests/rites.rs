@@ -233,7 +233,7 @@ fn a_small_trace(what: &str) -> (PathBuf, Cairn, Cairn, Cairn) {
     let span = Span { source, start: 15, end: 30 };
     let call = Call { function: "read".into(), args: vec![path] };
 
-    let hole = node(Node::Hole { call: call.clone(), stratum: 3, span, depends: Vec::new() });
+    let hole = node(Node::Hole { call: call.clone(), stratum: 3, span });
     let answer = put(Value::Bytes(b"the file's contents".to_vec()));
     let witness = node(Node::Witness { stratum: 3, call, answer, span });
 
@@ -241,7 +241,10 @@ fn a_small_trace(what: &str) -> (PathBuf, Cairn, Cairn, Cairn) {
     let deposit = node(Node::Deposit { value: greeting, span: Span { source, start: 3, end: 9 } });
 
     let trace = node(Node::Trace {
-        roots: vec![hole, witness, deposit],
+        residue: hole,
+        holes: vec![hole],
+        deposits: vec![witness, deposit],
+        source: hole,
         fuel_spent: 903,
         depth: 3,
         unrecorded: false,
@@ -292,7 +295,15 @@ fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
         at(one, 30, "one-b"),
         at(two, 40, "two-b"),
     ];
-    let trace = node(Node::Trace { roots, fuel_spent: 4, depth: 0, unrecorded: false });
+    let trace = node(Node::Trace {
+        residue: one,
+        holes: vec![],
+        deposits: roots,
+        source: one,
+        fuel_spent: 4,
+        depth: 0,
+        unrecorded: false,
+    });
 
     let out = nether(Some(&dir), &["lamp", &trace.to_string()]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
@@ -398,7 +409,15 @@ fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (PathBuf,
     let answer = put(Value::Bytes(b"int main(void) { return 0; }".to_vec()));
     let witness = node(Node::Witness { stratum, call, answer, span });
 
-    let trace = node(Node::Trace { roots: vec![witness], fuel_spent: 903, depth, unrecorded });
+    let trace = node(Node::Trace {
+        residue: source,
+        holes: vec![],
+        deposits: vec![witness],
+        source,
+        fuel_spent: 903,
+        depth,
+        unrecorded,
+    });
     (dir, trace, source)
 }
 
@@ -436,8 +455,15 @@ fn a_trace_that_reached_stratum_8_says_so_without_being_asked() {
     let call = Call { function: "call_foreign".into(), args: vec![symbol, args] };
     let answer = put(Value::Bytes(b"whatever it said".to_vec()));
     let witness = node(Node::Witness { stratum: 8, call, answer, span });
-    let trace =
-        node(Node::Trace { roots: vec![witness], fuel_spent: 12, depth: 8, unrecorded: true });
+    let trace = node(Node::Trace {
+        residue: source,
+        holes: vec![],
+        deposits: vec![witness],
+        source,
+        fuel_spent: 12,
+        depth: 8,
+        unrecorded: true,
+    });
 
     let out = nether(Some(&dir), &["strata", &trace.to_string()]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
@@ -461,8 +487,16 @@ fn a_hole_is_a_stratum_owed_and_not_a_stratum_reached() {
     let span = Span { source, start: 0, end: 11 };
     let url = put(Value::Str("https://example.invalid/x".into()));
     let call = Call { function: "get".into(), args: vec![url] };
-    let hole = node(Node::Hole { call, stratum: 5, span, depends: Vec::new() });
-    let trace = node(Node::Trace { roots: vec![hole], fuel_spent: 4, depth: 0, unrecorded: false });
+    let hole = node(Node::Hole { call, stratum: 5, span });
+    let trace = node(Node::Trace {
+        residue: source,
+        holes: vec![hole],
+        deposits: vec![],
+        source,
+        fuel_spent: 4,
+        depth: 0,
+        unrecorded: false,
+    });
 
     let out = nether(Some(&dir), &["strata", &trace.to_string()]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
@@ -491,7 +525,10 @@ fn a_trace_that_never_went_anywhere_says_so() {
     let literal = store.put(&Stored::Node(Node::Literal(Value::Int(7)))).expect("put");
     let trace = store
         .put(&Stored::Node(Node::Trace {
-            roots: vec![literal],
+            residue: literal,
+            holes: vec![],
+            deposits: vec![literal],
+            source: literal,
             fuel_spent: 1,
             depth: 0,
             unrecorded: false,
@@ -542,8 +579,15 @@ fn a_span_whose_source_is_gone_still_gives_the_offset() {
     let call = Call { function: "read".into(), args: vec![path] };
     let answer = put(Value::Bytes(b"x".to_vec()));
     let witness = node(Node::Witness { stratum: 3, call, answer, span });
-    let trace =
-        node(Node::Trace { roots: vec![witness], fuel_spent: 2, depth: 3, unrecorded: false });
+    let trace = node(Node::Trace {
+        residue: source,
+        holes: vec![],
+        deposits: vec![witness],
+        source,
+        fuel_spent: 2,
+        depth: 3,
+        unrecorded: false,
+    });
 
     let out = nether(Some(&dir), &["strata", &trace.to_string()]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
@@ -561,7 +605,10 @@ fn a_node_that_is_gone_is_a_lower_bound_and_says_so() {
     let gone = Value::Int(404).cairn();
     let trace = store
         .put(&Stored::Node(Node::Trace {
-            roots: vec![gone],
+            residue: gone,
+            holes: vec![gone],
+            deposits: vec![],
+            source: gone,
             fuel_spent: 1,
             depth: 0,
             unrecorded: false,
@@ -602,8 +649,15 @@ fn two_answers_to_one_question_are_two_lines() {
         answer: put(Value::Bytes(b"after".to_vec())),
         span,
     });
-    let trace =
-        node(Node::Trace { roots: vec![one, two], fuel_spent: 4, depth: 3, unrecorded: false });
+    let trace = node(Node::Trace {
+        residue: source,
+        holes: vec![one, two],
+        deposits: vec![],
+        source,
+        fuel_spent: 4,
+        depth: 3,
+        unrecorded: false,
+    });
 
     let out = nether(Some(&dir), &["strata", &trace.to_string()]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));

@@ -74,8 +74,6 @@ pub enum Node {
         stratum: u8,
         /// Where it was asked.
         span: Span,
-        /// What must exist for the call to be made at all.
-        depends: Vec<Cairn>,
     },
     /// A value a program left behind. Never printed; read afterwards with a lamp.
     Deposit {
@@ -99,8 +97,18 @@ pub enum Node {
     },
     /// A whole burial.
     Trace {
-        /// What was demanded.
-        roots: Vec<Cairn>,
+        /// The residue, as source, named like any other `Bytes`.
+        ///
+        /// A residue is a program and not a set of nodes: it holds branches
+        /// and loops and bindings, none of which is a thing that happened.
+        /// `spec/06-evaluation.md` §6.5.
+        residue: Cairn,
+        /// The holes, in the order they were discovered.
+        holes: Vec<Cairn>,
+        /// What the program deposited, in source order.
+        deposits: Vec<Cairn>,
+        /// The source this burial started from.
+        source: Cairn,
         /// How many evaluation steps it took.
         fuel_spent: u64,
         /// The deepest stratum reached.
@@ -142,11 +150,17 @@ impl Node {
     #[must_use]
     pub fn nodes(&self) -> Vec<Cairn> {
         match self {
-            Self::Trace { roots, .. } => roots.clone(),
-            Self::Hole { depends, .. } => depends.clone(),
-            Self::Literal(_) | Self::Apply { .. } | Self::Deposit { .. } | Self::Witness { .. } => {
-                Vec::new()
+            // The residue and the source are `Bytes` values, not nodes.
+            Self::Trace { holes, deposits, .. } => {
+                let mut out = holes.clone();
+                out.extend_from_slice(deposits);
+                out
             }
+            Self::Literal(_)
+            | Self::Apply { .. }
+            | Self::Hole { .. }
+            | Self::Deposit { .. }
+            | Self::Witness { .. } => Vec::new(),
         }
     }
 
@@ -165,10 +179,9 @@ impl Node {
                 out.push(*result);
                 out
             }
-            Self::Hole { call, span, depends, .. } => {
+            Self::Hole { call, span, .. } => {
                 let mut out = call.args.clone();
                 out.push(span.source);
-                out.extend_from_slice(depends);
                 out
             }
             Self::Deposit { value, span } => vec![*value, span.source],
@@ -178,7 +191,13 @@ impl Node {
                 out.push(span.source);
                 out
             }
-            Self::Trace { roots, .. } => roots.clone(),
+            Self::Trace { residue, holes, deposits, source, .. } => {
+                let mut out = vec![*residue];
+                out.extend_from_slice(holes);
+                out.extend_from_slice(deposits);
+                out.push(*source);
+                out
+            }
         }
     }
 }

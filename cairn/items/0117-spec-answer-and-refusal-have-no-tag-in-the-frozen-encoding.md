@@ -2,7 +2,7 @@
 id: 117
 title: 'Spec: Answer and Refusal have no tag in the frozen encoding'
 type: spec
-status: unmarked
+status: buried
 milestone: rites
 depends_on:
 - 21

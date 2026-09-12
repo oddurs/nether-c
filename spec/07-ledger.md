@@ -79,7 +79,7 @@ testing first.
 
 ```
 cairn(v) = blake3( DOMAIN || encode(v) )
-DOMAIN   = b"netherc/cairn/v1\x00"
+DOMAIN   = b"netherc/cairn/v2\x00"
 ```
 
 A cairn is 32 bytes. Its text form is lowercase hexadecimal. Tools MAY display
@@ -102,6 +102,13 @@ Nothing is reinterpreted, so nothing is renamed.
 > [§90.2](90-rationale.md#902-rejected-alternatives) records what was given up
 > to narrow it.
 
+The domain is at `v2`. It moved from `v1` when `Trace` changed what it holds
+([§7.3.1](#731-node-encoding)), which is the bumping case and not the
+exempt one: a byte string that decoded to a `v1` trace decodes to a different
+`v2` trace, and the two are not the same value however similar they look.
+Nothing had been buried, so the bump cost nothing. That is the only reason it
+was affordable, and it is why the rule is worth having before it is not.
+
 ## 7.3 Nodes
 
 A **node** is the unit the ledger stores. Every node is content-addressed by
@@ -114,7 +121,7 @@ its cairn.
 | `Hole` | the fields listed in [§6.3](06-evaluation.md#63-holes) |
 | `Deposit` | a value cairn and the source span that deposited it |
 | `Witness` | a stratum, a call, the answer, and the span that asked |
-| `Trace` | the roots, the fuel spent, the depth reached, and the stratum-8 mark |
+| `Trace` | the residue, the holes, the deposits, the source, the fuel spent, the depth reached, and the stratum-8 mark |
 
 Nodes reference other nodes only by cairn. The graph is therefore acyclic by
 construction: a node cannot name a node that does not yet exist, and a node
@@ -129,10 +136,10 @@ tag `0x20`, then a kind byte, then the kind's payload.
 | --- | --- | --- |
 | `0x00` | `Literal` | one `value` |
 | `0x01` | `Apply` | `cairn` of the function, `cairn-list` of arguments, `cairn` of the result |
-| `0x02` | `Hole` | `call`, one byte stratum, `span`, `cairn-list` of what it depends on |
+| `0x02` | `Hole` | `call`, one byte stratum, `span` |
 | `0x03` | `Deposit` | `cairn` of the value, `span` |
 | `0x04` | `Witness` | one byte stratum, `call`, `cairn` of the answer, `span` |
-| `0x05` | `Trace` | `cairn-list` of roots, `u64` fuel spent, one byte depth reached, one byte stratum-8 mark |
+| `0x05` | `Trace` | `cairn` of the residue source, `cairn-list` of holes, `cairn-list` of deposits, `cairn` of the source buried, `u64` fuel spent, one byte depth reached, one byte stratum-8 mark |
 
 Three shapes appear inside more than one of them:
 

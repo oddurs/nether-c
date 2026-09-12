@@ -8,7 +8,7 @@ use core::str::FromStr;
 /// Changing the encoding changes this, which changes every cairn that has ever
 /// existed. That is the correct and honest consequence: values encoded under
 /// different rules are not the same values. `spec/07-ledger.md` §7.2.
-const DOMAIN: &[u8] = b"netherc/cairn/v1\x00";
+const DOMAIN: &[u8] = b"netherc/cairn/v2\x00";
 
 /// The number of hexadecimal characters in the recommended short form.
 pub const SHORT_LEN: usize = 8;
