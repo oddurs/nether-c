@@ -2,8 +2,9 @@
 id: 160
 title: A call renders its bytes arguments unreadably
 type: bug
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p2
@@ -32,5 +33,9 @@ reader whether it is the call they were looking for.
 
 ## Acceptance criteria
 
-- [ ] `call_foreign("dlopen", b"")` renders as something that reads back
-- [ ] Bytes holding a delimiter do not produce a line that lies
+- [x] `call_foreign("dlopen", b"")` renders as something that reads back
+- [x] Bytes holding a delimiter do not produce a line that lies
+
+## 2026-09-12
+
+said now renders through as_written rather than value. A lamp renders a value for a person and text comes out as text, which is what a lamp is for; a call is read back as the call that was made, so its arguments keep the delimiters section 03 gives them. Bytes that are not UTF-8 have no literal form, so they say how many bytes rather than pretending.
