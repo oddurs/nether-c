@@ -203,6 +203,12 @@ An implementation MUST satisfy this. It is what makes descent incremental
 rather than a single all-or-nothing act, and it is the property `nether graft`
 relies on.
 
+> Earlier drafts of this section counted nine hundred nodes for a program with
+> one hole in it. That number was the residue being counted as nodes, which is
+> the reading [§6.5](#65-residue) rejects. A trace names its residue and does
+> not contain it, so the count is small: the transcripts in
+> [§8.2](08-rites.md#82-bury) are what an implementation actually prints.
+
 ## 6.6 Exhumation
 
 **Exhumation** grants a capability, answers the holes it can, records every
@@ -210,7 +216,7 @@ answer, and buries the residue again.
 
 ```console
 $ nether bury build.nc
-buried   build.nc → 4c02ab7f   depth 3   holes 1   903 nodes
+buried   build.nc → 0380c8ae   depth 3   holes 1   4 nodes
   hole ①  read("main.nc")              stratum 3  disk
 
 $ nether exhume 4c02ab7f --grant disk

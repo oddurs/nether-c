@@ -40,14 +40,14 @@ spec/05-types.md § 5.4 Mutation #1	c	pinned	b90bad42db5f84e0
 spec/06-evaluation.md § 6.1 Burial #1	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md § 6.2 Demand #1	c	pinned	32047b898ae2a1c0
 spec/06-evaluation.md § 6.4 Starvation and fuel #1	text	pinned	07c9e60510dab9cc
-spec/06-evaluation.md § 6.6 Exhumation #1	console	pinned	62a0ec6a54925078
+spec/06-evaluation.md § 6.6 Exhumation #1	console	pinned	1ec2963c84b384e1
 spec/06-evaluation.md § 6.7 Replay #1	console	pinned	de840300ab71ca8d
 spec/06-evaluation.md § 6.8 What burial prints #1	text	pinned	a39449193e40ee44
 spec/07-ledger.md § 7.2 Cairns #1	text	pinned	cd500d49d4cf886c
 spec/07-ledger.md § 7.5 The store #1	text	pinned	ebd628943dfe60de
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
 spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
-spec/08-rites.md § 8.2 `bury` #2	console	pinned	0ddcfcf30b077e13
+spec/08-rites.md § 8.2 `bury` #2	console	pinned	8c960c7798c60745
 spec/08-rites.md § 8.3 `exhume` #1	text	pinned	5865664799244749
 spec/08-rites.md § 8.4 `lamp` #1	text	pinned	2111624617db0431
 spec/08-rites.md § 8.4 `lamp` #2	console	pinned	53e8914cde7dd844
