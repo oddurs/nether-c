@@ -2,8 +2,9 @@
 id: 144
 title: lamp orders deposits by offset across two sources
 type: bug
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p2
@@ -30,5 +31,9 @@ say in §8.4 that this is what "source order" means when there is more than one.
 
 ## Acceptance criteria
 
-- [ ] Deposits from two sources are grouped by source
-- [ ] §8.4 says what order means across sources
+- [x] Deposits from two sources are grouped by source
+- [x] §8.4 says what order means across sources
+
+## 2026-09-12
+
+Grouped by the cairn of the source and ordered by offset within each. Which group comes first is the order the cairns sort in, because a source has no other order -- one trace's two sources were never written down in a sequence, so any answer here is arbitrary and the only thing that matters is that it is stable.

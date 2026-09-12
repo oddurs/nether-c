@@ -111,13 +111,16 @@ fn deposits(store: &Store, root: Cairn) -> Vec<String> {
         let Stored::Node(n) = &stored else { continue };
         if let Node::Deposit { value: held, span } = n {
             if let Ok(Stored::Value(v)) = store.get(*held) {
-                found.push((span.start, value(&v)));
+                found.push((*span.source.as_bytes(), span.start, value(&v)));
             }
         }
         stack.extend(n.references());
     }
-    found.sort_by_key(|(at, _)| *at);
-    found.into_iter().map(|(_, text)| text).collect()
+    // §8.4: grouped by source, then by offset within it. Sorting on the offset
+    // alone interleaved two sources by byte position, which is an order
+    // corresponding to nothing anybody wrote.
+    found.sort_by_key(|(source, at, _)| (*source, *at));
+    found.into_iter().map(|(_, _, text)| text).collect()
 }
 
 /// A value, as a person reads one.
