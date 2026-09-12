@@ -2,7 +2,7 @@
 id: 98
 title: The landing page, rewritten as doctrine
 type: feature
-status: marked
+status: buried
 milestone: sign
 created: 2026-09-11
 updated: 2026-09-12
@@ -43,10 +43,10 @@ is*, keep it.
 
 ## Acceptance criteria
 
-- [ ] Every claim on the page is still true and still checked by tests/transcripts
-- [ ] No sentence is strange without being about determinism, records or depth
-- [ ] tests/links and tests/contrast still pass
-- [ ] It reads aloud
+- [x] Every claim on the page is still true and still checked by tests/transcripts
+- [x] No sentence is strange without being about determinism, records or depth
+- [x] tests/links and tests/contrast still pass
+- [x] It reads aloud
 
 ## 2026-09-11
 
@@ -73,3 +73,7 @@ Four rules instead of one repeated eight times, and the new graphics carry three
 tests/links caught a bad anchor (#97-stratum-7--entropy, double hyphen). The rewrite also orphaned rule.gif and descent.gif, which are deleted with their generators.
 
 Median sentence is 10 words.
+
+## 2026-09-12
+
+Criteria verified by 0100 rather than asserted here. One claim was wrong and is corrected; the rest hold.

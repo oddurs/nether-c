@@ -426,8 +426,9 @@ on purpose and arguing for it in public, where somebody can disagree.</p>
 <h2>Where it actually is</h2>
 
 <p>The specification is written. The ledger is built: the canonical encoding is
-frozen, cairns are blake3 under a versioned domain separator, and the store
-holds a million nodes and hands them back byte for byte.</p>
+frozen, cairns are blake3 under a versioned domain separator, and a million
+nodes encode and decode byte for byte. The store keeps them, names them by
+content, and remembers what pointed at what.</p>
 
 <p>The compiler does not exist. There is one binary, and it refuses
 correctly:</p>

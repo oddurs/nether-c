@@ -2,10 +2,10 @@
 id: 99
 title: Graphics the doctrine needs
 type: feature
-status: marked
+status: buried
 milestone: sign
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-12
 priority: p2
 effort: m
 area: site/gfx.py
