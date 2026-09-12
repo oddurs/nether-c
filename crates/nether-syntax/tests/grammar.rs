@@ -6,8 +6,10 @@
 //! `spec/` is extracted and looked up in the table below, so a sample added to
 //! the specification fails this file until somebody says what it is — and what
 //! each one *is* has to be said, because the specification writes three
-//! different things in a `c` fence: whole units, fragments of a body, and the
-//! signature listings in §09 that no program ever writes.
+//! different things in a `c` fence: whole units and fragments of a body. The
+//! third — §09's signature listings, which §04 has no production for — stopped
+//! being labelled as the language, which is what made that list two long
+//! instead of three.
 
 use std::collections::BTreeMap;
 
@@ -21,10 +23,6 @@ enum Shape {
     Unit,
     /// Statements, as they would be written inside a body.
     Statements,
-    /// §09's way of listing what the prelude provides: a signature and a
-    /// semicolon where §04 requires a block. No program writes one, which is
-    /// why §04 has no production for it.
-    Signatures,
     /// A sample §04 cannot parse, and the item that is about to fix it. When
     /// it lands, this test fails until the entry is changed — which is the
     /// point of it being here.
@@ -45,14 +43,7 @@ const SAMPLES: &[(&str, Shape)] = &[
     ("spec/05-types.md:71", Shape::Unit),
     ("spec/05-types.md:113", Shape::Blocked("0116: a struct cannot be constructed")),
     ("spec/06-evaluation.md:33", Shape::Unit),
-    ("spec/09-prelude.md:37", Shape::Signatures),
-    ("spec/09-prelude.md:72", Shape::Statements),
-    ("spec/09-prelude.md:89", Shape::Signatures),
-    ("spec/09-prelude.md:101", Shape::Signatures),
-    ("spec/09-prelude.md:121", Shape::Signatures),
-    ("spec/09-prelude.md:137", Shape::Signatures),
-    ("spec/09-prelude.md:147", Shape::Signatures),
-    ("spec/09-prelude.md:165", Shape::Signatures),
+    ("spec/09-prelude.md:78", Shape::Statements),
     ("spec/90-rationale.md:340", Shape::Unit),
 ];
 
@@ -114,16 +105,6 @@ fn every_sample_in_the_specification_parses() {
             Shape::Unit | Shape::Blocked(_) => parses(body),
             // A fragment of a body is a body with something round it.
             Shape::Statements => parses(&format!("U0 sample()\n{{\n{body}\n}}\n")),
-            // A listing is not a program. What is checked is that it is not
-            // silently *almost* one: §04 requires a block and it has a `;`.
-            Shape::Signatures => {
-                let faults = parses(body).expect_err("§09's listings are not §04");
-                assert!(
-                    faults.iter().all(|f| matches!(f.kind, FaultKind::Expected(_))),
-                    "{reference}: {faults:?}"
-                );
-                continue;
-            }
         };
         match shape {
             Shape::Blocked(item) => {

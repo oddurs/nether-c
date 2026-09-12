@@ -2,8 +2,9 @@
 id: 132
 title: 'Spec: section 09 writes prelude listings in a fence that is not the language'
 type: spec
-status: unmarked
+status: buried
 milestone: after
+assignee: Oddur Sigurdsson
 depends_on:
 - 23
 created: 2026-09-12
@@ -51,5 +52,17 @@ the language has no use for one: a program cannot supply a body for `read`.
 
 ## Acceptance criteria
 
-- [ ] Every fenced `c` block in the specification is something §04 parses
-- [ ] §09 says what its listings are, if they are not that
+- [x] Every fenced `c` block in the specification is something §04 parses
+- [x] §09 says what its listings are, if they are not that
+
+## 2026-09-12
+
+Settled the cheap way, which is also the right way: the fence stops claiming to be the language. Seven blocks in section 09 are now tagged signatures, section 09 says in a sentence that a signature and a semicolon is a notation and not a program, and site/bake paints them the same and labels them differently — because they read like the language and are not it.
+
+## 2026-09-12
+
+The alternative was a production for a declaration with no body, which is a language feature the language has no use for: nothing a program can write would supply a body for read. A header file is a useful thing to read and not a thing to be able to write.
+
+## 2026-09-12
+
+The parser's proof got shorter for it. Every sample in the specification was sorted into three kinds and one of them was this notation; now there are two, and the classification says something about the grammar rather than about the markdown.
