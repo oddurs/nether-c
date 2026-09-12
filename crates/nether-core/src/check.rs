@@ -95,6 +95,16 @@ pub enum FaultKind {
     },
     /// The IR is not well-formed enough to have a judgement at all.
     Malformed(&'static str),
+    /// A local was assigned after its value had been named.
+    ///
+    /// Once a value has been used as a value — sealed, shaded, deposited,
+    /// returned, or passed as an argument — its cairn exists, and nothing can
+    /// change what a cairn names. `spec/05-types.md` §5.4.
+    Frozen {
+        /// Where it was named. The interesting place is almost never the
+        /// assignment; it is the line that gave the value a name.
+        named: Span,
+    },
 }
 
 impl Fault {
@@ -153,6 +163,9 @@ impl Fault {
             FaultKind::Asserted { derived, .. } => {
                 Some(format!("inference is not a coercion. Write `@{derived}`, or write nothing."))
             }
+            FaultKind::Frozen { .. } => Some(
+                "a value that has been named cannot change; make another one instead.".to_string(),
+            ),
             FaultKind::Stated { .. } | FaultKind::Malformed(_) => None,
         }
     }
@@ -173,6 +186,9 @@ impl fmt::Display for Fault {
             FaultKind::Asserted { derived, asserted } => {
                 write!(f, "annotated @{asserted}; inference gives {derived}")
             }
+            FaultKind::Frozen { .. } => {
+                f.write_str("this was named, and a name cannot change what it names")
+            }
             FaultKind::Malformed(why) => f.write_str(why),
         }
     }
@@ -186,6 +202,7 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
         faults: Vec::new(),
         globals: Vec::new(),
         locals: Vec::new(),
+        named: Vec::new(),
         func: None,
         returns: Depth::PURE,
         needs: None,
@@ -214,6 +231,16 @@ struct Checker<'a> {
     globals: Vec<Depth>,
     /// The current function's bindings. `None` until bound.
     locals: Vec<Option<Depth>>,
+    /// Where each local's value was named, once it has been.
+    ///
+    /// A local may be assigned until its value is used *as a value* — sealed,
+    /// shaded, deposited, returned, or passed as an argument. From then on its
+    /// cairn exists and nothing can change what a cairn names. §5.4.
+    ///
+    /// Arithmetic on a local does not name it: `t + 1` makes a different value
+    /// with a different cairn, and `t`'s own name never existed. That is why
+    /// `for (I64 i = 0; i < n; i += 1)` is legal.
+    named: Vec<Option<Span>>,
     /// The function being checked, for the spans of its bindings.
     func: Option<&'a FuncDef>,
     /// The deepest value any `return` has carried out of it so far.
@@ -357,6 +384,7 @@ impl<'a> Checker<'a> {
     fn func(&mut self, f: &'a FuncDef) {
         self.func = Some(f);
         self.locals = vec![None; f.locals.len()];
+        self.named = vec![None; f.locals.len()];
         self.returns = Depth::PURE;
         self.needs = Some(Depth::PURE);
         for p in &f.params {
@@ -383,6 +411,8 @@ impl<'a> Checker<'a> {
                 }
                 Stmt::Expr(x) => {
                     self.expr(x, ambient);
+                    // §4.7: a bare expression statement deposits its value.
+                    self.name_local(x);
                 }
                 // A local with no value is pure until something is written to
                 // it, and `Assign` joins the depth of what it writes. §5.4.
@@ -457,6 +487,11 @@ impl<'a> Checker<'a> {
             ExprKind::Call { callee, args } => {
                 let d_f = self.expr(callee, ambient);
                 let d_a = args.iter().fold(Depth::PURE, |acc, a| acc.join(self.expr(a, ambient)));
+                // Passing a local hands its value somewhere this function
+                // cannot see, which is naming it. §5.4.
+                for a in args {
+                    self.name_local(a);
+                }
                 let (latent, result_depth) =
                     if let Type::Fn { latent, result_depth, .. } = callee.ty {
                         (latent, result_depth)
@@ -506,6 +541,9 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Return(v) => {
                 let d = v.as_ref().map_or(Depth::PURE, |v| self.expr(v, ambient));
+                if let Some(v) = v.as_ref() {
+                    self.name_local(v);
+                }
                 self.returns = self.returns.join(d);
                 d
             }
@@ -521,6 +559,9 @@ impl<'a> Checker<'a> {
                     Proj::Index(i) => acc.join(self.expr(i, ambient)),
                     Proj::Field(_) => acc,
                 });
+                if let Some(Some(named)) = self.named.get(place.local.0 as usize).copied() {
+                    self.fault(x.span, FaultKind::Frozen { named });
+                }
                 match self.locals.get_mut(place.local.0 as usize) {
                     Some(slot) => {
                         let was = slot.unwrap_or(Depth::PURE);
@@ -538,9 +579,31 @@ impl<'a> Checker<'a> {
         derived
     }
 
+    /// Mark whatever local `x` reads as named, if it reads one directly.
+    ///
+    /// Only a direct read counts. `seal h` names `h`; `seal (h.len + 1)` names
+    /// nothing, because the value sealed is a fresh one that `h` never had a
+    /// name for. §5.4's list — sealed, shaded, deposited, returned, passed —
+    /// is exactly the set of places a local's own value escapes.
+    fn name_local(&mut self, x: &Expr) {
+        let ExprKind::Local(id) = &x.kind else { return };
+        if let Some(slot) = self.named.get_mut(id.0 as usize) {
+            // The first naming is the one worth reporting: it is where the
+            // value stopped being the program's to change.
+            if slot.is_none() {
+                *slot = Some(x.span);
+            }
+        }
+    }
+
     /// [SEAL], [SHADE], [LOOK] and [OPAQUE].
     fn rite(&mut self, x: &Expr, rite: Rite, operand: &Expr, ambient: Depth) -> Depth {
         let d = self.expr(operand, ambient);
+        // `seal` and `shade` take the value itself; `look` and `opaque` pass
+        // one through without giving it a name of its own.
+        if matches!(rite, Rite::Seal | Rite::Shade) {
+            self.name_local(operand);
+        }
         match rite {
             // A cairn is a name, and a name is pure whatever it names.
             Rite::Seal => Depth::PURE,

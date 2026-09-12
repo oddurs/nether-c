@@ -122,6 +122,19 @@ A **global** — a unit-level `let` — may not be assigned at all. There is no
 statement above it to do the assigning, and its initialiser is required
 ([§4.2](04-grammar.md#42-declarations)).
 
+A local is named where its value is read *directly*. Arithmetic on it is not:
+`t + 1` is a different value with a different cairn, and `t`'s own name never
+existed. That is what makes `for (I64 i = 0; i < n; i += 1)` legal, and it is
+why the rule is about naming rather than about reading.
+
+Watch the precedence. [§4.6](04-grammar.md#46-precedence) puts the rites above
+arithmetic, so `seal n + 1` is `(seal n) + 1` and does name `n`. `seal (n + 1)`
+does not.
+
+If any path through a block names a local, it is named for everything after
+that block. An implementation cannot know which arm will run, and the value is
+named on the one that does.
+
 An implementation SHOULD compile the assignments to in-place writes. No program
 can observe the difference, which is what makes it sound.
 
