@@ -5,11 +5,12 @@ README.md:184	console	checked	d838eaf97e53718b
 README.md:246	sh	pinned	7b99770b16361486
 README.md:256	sh	pinned	51e912b7cdf5fa39
 README.md:273	sh	pinned	fb434d19d5a7b7b8
-site/src/index.html:67	hello.nc	pinned	93bb6ae51420070b
-site/src/index.html:79	console	pinned	e183405459af89bf
-site/src/index.html:150	c	pinned	e886ea1965e6c654
-site/src/index.html:158	console	pinned	e0f82a96d80bcb09
-site/src/index.html:283	console	checked	d838eaf97e53718b
+site/src/index.html:89	hello.nc	pinned	93bb6ae51420070b
+site/src/index.html:101	console	pinned	e183405459af89bf
+site/src/index.html:185	c	pinned	9c06d713f8f79db4
+site/src/index.html:193	console	pinned	e0f82a96d80bcb09
+site/src/index.html:229	console	pinned	74a79e41374385f3
+site/src/index.html:386	console	checked	d838eaf97e53718b
 spec/00-overview.md:125	c	pinned	e34350c3cc044f96
 spec/00-overview.md:136	console	pinned	e183405459af89bf
 spec/01-strata.md:52	c	pinned	39d95c03c09e3f8c
