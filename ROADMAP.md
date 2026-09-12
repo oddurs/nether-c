@@ -123,13 +123,12 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`#######···` 62% · 8 of 13 done · due 2027-02-28
+`#######···` 69% · 9 of 13 done · due 2027-02-28
 
 ### unmarked
 
 - [ ] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
 - [ ] [`0123`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0123-spec-sizeof-has-no-answer.md) Spec: sizeof has no answer <sup>spec · p2</sup>
-- [ ] [`0131`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0131-spec-section-3-6-does-not-say-what-an-integer-literal-may-hold.md) Spec: section 3.6 does not say what an integer literal may hold <sup>spec · p1</sup>
 - [ ] [`0133`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0133-spec-a-shade-parameter-has-an-origin-nothing-can-infer.md) Spec: a shade parameter has an origin nothing can infer <sup>spec · p1</sup>
 - [ ] [`0134`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0134-spec-types-are-inferred-in-a-body-and-the-grammar-requires-one.md) Spec: types are inferred in a body and the grammar requires one <sup>spec · p1</sup>
 
@@ -143,6 +142,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0059`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0059-proof-the-three-sample-programs.md) Proof: the three sample programs <sup>chore · p0 · 3</sup>
 - [x] [`0118`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0118-spec-json-is-bound-in-the-prelude-scope-and-never-defined.md) Spec: Json is bound in the prelude scope and never defined <sup>spec · p2</sup>
 - [x] [`0130`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0130-decide-where-the-lexer-gets-unicode.md) Decide: where the lexer gets Unicode <sup>spec · p0</sup>
+- [x] [`0131`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0131-spec-section-3-6-does-not-say-what-an-integer-literal-may-hold.md) Spec: section 3.6 does not say what an integer literal may hold <sup>spec · p1</sup>
 
 ## rites — The Rites
 

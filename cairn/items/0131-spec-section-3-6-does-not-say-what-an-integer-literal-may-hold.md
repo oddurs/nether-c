@@ -2,8 +2,9 @@
 id: 131
 title: 'Spec: section 3.6 does not say what an integer literal may hold'
 type: spec
-status: unmarked
+status: buried
 milestone: surface
+assignee: Oddur Sigurdsson
 depends_on:
 - 17
 created: 2026-09-12
@@ -47,6 +48,14 @@ picking is not the lexer's job.
 
 ## Acceptance criteria
 
-- [ ] §3.6 says what each of the three spellings may hold
-- [ ] Every value of `I64` has a literal that denotes it
-- [ ] `spec/90-rationale.md` records the alternative, if the answer is not the obvious one
+- [x] §3.6 says what each of the three spellings may hold
+- [x] Every value of `I64` has a literal that denotes it
+- [x] `spec/90-rationale.md` records the alternative, if the answer is not the obvious one
+
+## 2026-09-12
+
+Settled the way the lexer already had it, because it is the only reading found that leaves every I64 writable. A decimal spells a magnitude and tops out at 2^63-1; a hexadecimal or binary spells a bit pattern and runs the whole width, which is what makes 0x8000000000000000 the way to write -2^63 in a language whose minus is an operator.
+
+## 2026-09-12
+
+Section 90.2 records the alternative: one range for all three, which leaves -2^63 unwritable, and the variant that lets a decimal reach 2^63 exactly, which makes a bare 9223372036854775808 in range as a literal and out of range as a value. Nothing else in the language makes that distinction.
