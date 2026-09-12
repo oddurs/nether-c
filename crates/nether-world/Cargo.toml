@@ -1,0 +1,17 @@
+[package]
+name = "nether-world"
+description = "The world, and the rule that an answer is written before it is returned"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The strata and their names, and the ledger an answer is written to. A
+# provider is the seam between the two and needs both.
+nether-core = { path = "../nether-core" }
+nether-ledger = { path = "../nether-ledger" }
+
+[lints]
+workspace = true
