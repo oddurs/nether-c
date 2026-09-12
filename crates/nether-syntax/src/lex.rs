@@ -45,6 +45,12 @@ pub enum FaultKind {
     Stray,
     /// The parser wanted something the source does not have there.
     Expected(&'static str),
+    /// Lowering could not find what a name refers to.
+    Unknown(&'static str),
+    /// Something was assigned to that is not a place. There is no pointer
+    /// type, so the only thing that can be written to is a local and a path
+    /// of fields and indices from it. `spec/05-types.md` §5.2.
+    NotAPlace,
 }
 
 impl fmt::Display for Fault {
@@ -61,6 +67,8 @@ impl fmt::Display for Fault {
             FaultKind::NotAStratum => "a depth is 0 to 8",
             FaultKind::Stray => "this starts nothing",
             FaultKind::Expected(what) => return write!(f, "expected {what}"),
+            FaultKind::Unknown(what) => return write!(f, "this does not name {what}"),
+            FaultKind::NotAPlace => "there is nowhere to write this",
         })
     }
 }
