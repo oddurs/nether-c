@@ -60,3 +60,15 @@ fn every_construct_a_burial_can_leave_survives() {
         residue_survives(src);
     }
 }
+
+/// A residue that did not come from that unit is a bug here, not a program to
+/// report on. Zipping the two would drop a demand and break the staging law
+/// with nothing said.
+#[test]
+#[should_panic(expected = "demands and the unit it is said to come from has")]
+fn a_residue_from_a_different_unit_is_refused() {
+    let one = unit("demand 1;\n");
+    let two = unit("demand 1;\ndemand 2;\n");
+    let r = bury(&one, Cairn::of_encoded(b"one"), 100).expect("this finishes");
+    let _ = r.as_unit(&two);
+}
