@@ -65,6 +65,17 @@ impl<'a> Recorder<'a> {
         self.source
     }
 
+    /// The ledger, for reading a call's arguments back.
+    ///
+    /// A `Call` holds its arguments by cairn (§7.3), so a provider that wants
+    /// the path it was asked about has to look it up. Reading is all this is
+    /// for: writing an answer goes through [`Recorder::record`], which is the
+    /// only thing that makes the proof.
+    #[must_use]
+    pub const fn store(&self) -> &Store {
+        self.store
+    }
+
     /// Write down what the world said, and hand back the proof.
     ///
     /// The answer is written first, then the witness that names it, then the

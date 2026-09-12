@@ -85,10 +85,15 @@ impl World {
         self
     }
 
-    /// Whether that capability has been granted.
+    /// Whether this world can reach that capability's stratum.
+    ///
+    /// By the lattice and not by the name. §1.1 makes the strata a total order
+    /// and [DESCEND] raises the ambient depth to the one granted, so a
+    /// `descend disk!` may `read`: stratum 3 is within stratum 4. A world
+    /// granted `disk!` therefore holds `disk` as well.
     #[must_use]
     pub fn holds(&self, capability: Capability) -> bool {
-        self.granted.iter().any(|p| p.capability() == capability)
+        self.depth() >= capability.stratum()
     }
 
     /// The deepest stratum anything granted here can reach.
