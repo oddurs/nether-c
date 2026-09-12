@@ -150,11 +150,12 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## rites — The Rites
 
-`#########·` 89% · 25 of 28 done · due 2027-03-31
+`#########·` 86% · 25 of 29 done · due 2027-03-31
 
 ### unmarked
 
 - [ ] [`0065`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0065-nether-graft.md) nether graft <sup>feature · p1 · 4</sup>
+- [ ] [`0163`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0163-fuel-spent-is-the-one-thing-stopping-replay.md) fuel_spent is the one thing stopping replay <sup>spec · p0 · 0</sup>
 
 ### starved
 

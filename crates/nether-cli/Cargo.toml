@@ -17,6 +17,7 @@ nether-core = { path = "../nether-core" }
 # bury, write.
 nether-syntax = { path = "../nether-syntax" }
 nether-bury = { path = "../nether-bury" }
+nether-world = { path = "../nether-world" }
 nether-ledger = { path = "../nether-ledger" }
 
 [lints]

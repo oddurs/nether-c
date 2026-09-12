@@ -5,6 +5,7 @@
 
 mod bury;
 mod cairn;
+mod exhume;
 mod json;
 mod lamp;
 mod strata;
@@ -93,7 +94,8 @@ fn main() -> ExitCode {
         Some("lamp") => lamp::run(&args[1..]),
         Some("strata") => strata::run(&args[1..]),
         Some("bury") => bury::run(&args[1..]),
-        Some("exhume" | "graft") => {
+        Some("exhume") => exhume::run(&args[1..]),
+        Some("graft") => {
             eprintln!("nether: not yet. The specification lands before the compiler does.");
             eprintln!("        See spec/00-overview.md, and `cairn next` for what is ready.");
             ExitCode::from(code::UNIMPLEMENTED)

@@ -201,10 +201,9 @@ fn verify_answers_in_json_too() {
 
 #[test]
 fn a_rite_that_is_not_built_yet_says_so_with_its_own_code() {
-    for rite in ["exhume", "graft"] {
-        let out = nether(None, &[rite]);
-        assert_eq!(code(&out), 69, "{rite}: §8.8 gives 69 to not implemented");
-    }
+    // One left. `bury`, `exhume`, `cairn`, `lamp` and `strata` are built.
+    let out = nether(None, &["graft"]);
+    assert_eq!(code(&out), 69, "§8.8 gives 69 to not implemented");
 }
 
 // ── bury ────────────────────────────────────────────────────────────────────
@@ -933,4 +932,127 @@ fn bury_says_where_the_residue_is() {
     // The one-line rendering names it too, so a provenance walk reaches it.
     let walked = nether(Some(&dir), &["lamp", field("cairn"), "--provenance"]);
     assert!(stdout(&walked).contains("residue "), "{}", stdout(&walked));
+}
+
+// ── §8.3 `exhume` ───────────────────────────────────────────────────────────
+
+/// A directory holding `build.nc` and the file it reads, with a ledger of its
+/// own. §6.6's example, as a person would have it on disk.
+fn a_build(what: &str) -> PathBuf {
+    let dir = scratch(what);
+    std::fs::copy(
+        format!("{}/../../tests/programs/build.nc", env!("CARGO_MANIFEST_DIR")),
+        dir.join("build.nc"),
+    )
+    .expect("build.nc");
+    std::fs::write(dir.join("main.nc"), b"int main(void) { return 0; }").expect("main.nc");
+    dir
+}
+
+/// Run a rite in that directory, with its ledger beside the work.
+fn there(dir: &Path, args: &[&str]) -> Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_nether"));
+    cmd.args(args).current_dir(dir).env("NETHER_STORE", dir.join(".nether"));
+    cmd.output().expect("the binary runs")
+}
+
+fn field(text: &str, name: &str) -> String {
+    text.split(&format!("\"{name}\":\""))
+        .nth(1)
+        .and_then(|r| r.split('"').next())
+        .unwrap_or_else(|| panic!("no {name} in:\n{text}"))
+        .to_owned()
+}
+
+#[test]
+fn exhuming_answers_a_hole_and_seals_the_trace() {
+    // §6.6: grants a capability, answers the holes it can, records every
+    // answer, and buries the residue again. The result is a new trace with a
+    // new cairn; the original still exists and still has its hole.
+    let dir = a_build("exhume");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+
+    let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let told = stdout(&out);
+    let sealed = field(&told, "sealed");
+    assert_ne!(sealed, buried, "exhuming revised the trace it was given");
+    assert!(told.contains("\"holes\":0"), "it did not seal:\n{told}");
+    // §7.3.2: a sealed trace has no holes left, so its depth is what its
+    // witnesses reached.
+    assert!(told.contains("\"depth\":3"), "{told}");
+
+    // The original is untouched. Nothing in the ledger is ever revised.
+    let before = there(&dir, &["strata", &buried]);
+    assert!(
+        stdout(&before).contains("pending"),
+        "the hole was filled in place:\n{}",
+        stdout(&before)
+    );
+
+    // And the answer is a witness now, not a question.
+    let after = there(&dir, &["strata", &sealed]);
+    assert!(stdout(&after).contains("read(\"main.nc\")"), "{}", stdout(&after));
+    assert!(!stdout(&after).contains("pending"), "a witness is pending:\n{}", stdout(&after));
+}
+
+#[test]
+fn a_hole_nothing_grants_stays_a_hole() {
+    // Exhumation is incremental rather than all or nothing: §6.6 says it
+    // answers "the holes it can".
+    let dir = a_build("exhume-ungranted");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+
+    let out = there(&dir, &["exhume", &buried, "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(stdout(&out).contains("\"holes\":1"), "{}", stdout(&out));
+}
+
+#[test]
+fn what_was_read_is_in_the_ledger_and_the_file_is_no_longer_needed() {
+    // The claim the language is for. §1.4 wrote the answer down before the
+    // program was told, so the trace holds it whatever happens to the disk.
+    let dir = a_build("exhume-outlives");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let sealed =
+        field(&stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--json"])), "sealed");
+
+    std::fs::remove_file(dir.join("main.nc")).expect("delete it");
+    std::fs::remove_file(dir.join("build.nc")).expect("delete it too");
+
+    // Everything the burial learned is still here.
+    let out = there(&dir, &["strata", &sealed]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(stdout(&out).contains("read(\"main.nc\")"), "{}", stdout(&out));
+    assert!(stdout(&out).starts_with("depth 3   disk"), "{}", stdout(&out));
+}
+
+#[test]
+fn a_grant_and_a_replay_are_mutually_exclusive() {
+    // §8.3, and §6.7: replay does not prefer the ledger over the world, it
+    // cannot reach the world. One holding a grant would be neither.
+    let dir = a_build("exhume-both");
+    let out = there(&dir, &["exhume", "abcd1234", "--replay", "--grant", "disk"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("mutually exclusive"), "{}", stderr(&out));
+}
+
+#[test]
+fn a_capability_that_is_not_built_says_which() {
+    let dir = a_build("exhume-unbuilt");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let out = there(&dir, &["exhume", &buried, "--grant", "net"]);
+    assert_eq!(code(&out), 69, "{}", stderr(&out));
+    assert!(stderr(&out).contains("not built yet"), "{}", stderr(&out));
+}
+
+#[test]
+fn exhuming_something_that_is_not_a_trace_says_so() {
+    let dir = a_build("exhume-not-a-trace");
+    // The source is in the ledger because burying put it there, and it is
+    // `Bytes` rather than a trace.
+    let source = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "source");
+    let out = there(&dir, &["exhume", &source, "--grant", "disk"]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert!(stderr(&out).contains("not a trace"), "{}", stderr(&out));
 }
