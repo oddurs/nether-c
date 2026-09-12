@@ -43,6 +43,8 @@ pub enum FaultKind {
     NotAStratum,
     /// A character that starts nothing.
     Stray,
+    /// The parser wanted something the source does not have there.
+    Expected(&'static str),
 }
 
 impl fmt::Display for Fault {
@@ -58,6 +60,7 @@ impl fmt::Display for Fault {
             FaultKind::NotAnI64 => "this does not fit in an I64",
             FaultKind::NotAStratum => "a depth is 0 to 8",
             FaultKind::Stray => "this starts nothing",
+            FaultKind::Expected(what) => return write!(f, "expected {what}"),
         })
     }
 }
