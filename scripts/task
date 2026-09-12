@@ -70,6 +70,8 @@ case "${1:-}" in
     "$0" site:check
     "$0" gfx:check
     "$0" decay
+    # Skipped when it is not installed, which is for a contributor who has
+    # not got it rather than for CI. CI installs it and lets the install fail.
     if command -v cairn >/dev/null 2>&1; then cairn check; fi
     ;;
   *)
