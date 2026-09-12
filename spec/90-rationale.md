@@ -246,6 +246,32 @@ The cost is expressiveness: a lattice cannot distinguish *reads the disk* from
 *reads the disk and the network* except by taking the deeper of the two. Nether
 C accepts a coarser answer in exchange for one people will actually use.
 
+### Ambient soundness: two ways to keep the simpler statement
+
+[§2.4](02-calculus.md#24-metatheory) once said `d ≤ δ` outright, which is
+shorter, easier to check and false: [DESCEND] carries a value out at the depth
+it reached, and `Bytes@3 src = descend disk { read("kernel.nc") };` is depth 3
+where δ is 0. Two ways to keep the shorter sentence were considered.
+
+**Let a descent forget.** Conclude `descend κ {e} : τ@δ` instead of `τ@d`. The
+invariant then holds by construction, and so does nothing else: it lowers the
+depth of a value, which [§1.2](01-strata.md#12-the-monotonicity-law) forbids
+outright, and it turns the one expression in the language whose purpose is to
+reach the world into the one expression that launders what it found.
+
+**Let a descent stain.** Keep δ raised for the remainder of the enclosing
+scope, so that anything holding a depth-3 value really is at ambient 3. The
+invariant holds, and the cost is that a capability's extent is no longer
+visible in the braces: a `descend disk` on line 4 silently grants the disk to
+line 90. This is the same re-staining already rejected for `look` earlier in
+this section, and it is no better here.
+
+What was kept instead is a longer true statement. The cost is that ambient
+soundness now has a term in it that a reader has to evaluate — `g(e)`, the
+deepest descent in the expression — where before it had two symbols. A rule
+that fits on one page is worth defending; a rule that fits on one page and is
+wrong is not.
+
 ### Floating point
 
 Excluded from [§3.6](03-lexical.md#36-literals) because IEEE 754 has

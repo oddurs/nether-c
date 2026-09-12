@@ -27,8 +27,12 @@ has type τ and depth d.*
 - **d** is the **value depth**: how far into the world this value's history
   reaches.
 
-The invariant `d ≤ δ` holds in every derivable judgement. An implementation
-MUST reject any program in which it does not.
+`d ≤ δ` is required where it is written, which is the premises of [APP] and
+[LOOK], and an implementation MUST reject any program in which either fails.
+It is not a property of every judgement: [DESCEND] is precisely the rule that
+concludes at the ambient depth it raised, so
+`descend disk { read(p) }` has depth 3 in a scope whose ambient depth is 0.
+What holds everywhere is [§2.4](#24-metatheory).
 
 Function types carry a **latent depth**, written `τ₁ --d--> τ₂`: the deepest
 stratum the function reaches when applied. In source syntax this is written as
@@ -141,12 +145,20 @@ Evaluation can only ever learn that something is deeper than it looked. This
 is what makes a depth printed in a trace trustworthy: it is a lower bound that
 has already been reached, not a prediction.
 
-> **Ambient soundness.** If `Γ ; δ ⊢ e : τ@d` then `d ≤ δ`.
+> **Ambient soundness.** If `Γ ; δ ⊢ e : τ@d` then `d ≤ max(δ, g(e))`, where
+> `g(e)` is the deepest `s(κ)` over the `descend κ` expressions in `e`, and 0
+> when there are none.
 
 A value can never be deeper than the capabilities that were held while it was
-made. This is the property that makes `nether strata` a blame tool rather than
-a guess: if a value is at depth 5, some enclosing `descend net` is responsible,
-and it can be found by construction.
+made — held at the point it was made, which is the ambient depth or a descent
+inside the expression that granted more. Nothing else in the system grants
+anything, which is what makes `nether strata` a blame tool rather than a
+guess: a value at depth 5 means some `descend net` is responsible, and it is
+either enclosing or written in the expression itself. Either way it can be
+found by construction.
+
+A judgement with `g(e) = 0` therefore does satisfy `d ≤ δ`, and that is most
+of them. The descent is the exception, and it is the only one.
 
 ## 2.5 Subsumption, and its deliberate absence
 
