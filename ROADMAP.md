@@ -95,11 +95,10 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`··········` 0% · 0 of 9 done · due 2027-01-15
+`##········` 11% · 1 of 9 done · due 2027-01-15
 
 ### unmarked
 
-- [ ] [`0046`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0046-nether-core-the-ir.md) nether-core: the IR <sup>feature · p0 · 0</sup>
 - [ ] [`0047`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0047-the-bidirectional-depth-checker.md) The bidirectional depth checker <sup>feature · p0 · 0</sup>
 - [ ] [`0048`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0048-normalization-by-evaluation.md) Normalization by evaluation <sup>feature · p0 · 0</sup>
 - [ ] [`0049`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0049-holes-and-residualization.md) Holes and residualization <sup>feature · p0 · 0</sup>
@@ -109,9 +108,13 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0053`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0053-proof-one-read-one-hole.md) Proof: one read, one hole <sup>chore · p0 · 3</sup>
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
 
+### buried
+
+- [x] [`0046`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0046-nether-core-the-ir.md) nether-core: the IR <sup>feature · p0 · 0</sup>
+
 ## surface — The Surface
 
-`··········` 0% · 0 of 6 done · due 2027-02-28
+`··········` 0% · 0 of 8 done · due 2027-02-28
 
 ### unmarked
 
@@ -121,10 +124,12 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0057`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0057-depth-inference.md) Depth inference <sup>feature · p0 · 0</sup>
 - [ ] [`0058`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0058-diagnostics-with-source-spans.md) Diagnostics with source spans <sup>feature · p1 · 0</sup>
 - [ ] [`0059`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0059-proof-the-three-sample-programs.md) Proof: the three sample programs <sup>chore · p0 · 3</sup>
+- [ ] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
+- [ ] [`0118`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0118-spec-json-is-bound-in-the-prelude-scope-and-never-defined.md) Spec: Json is bound in the prelude scope and never defined <sup>spec · p2</sup>
 
 ## rites — The Rites
 
-`··········` 0% · 0 of 7 done · due 2027-03-31
+`··········` 0% · 0 of 8 done · due 2027-03-31
 
 ### unmarked
 
@@ -135,6 +140,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0064`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0064-nether-strata.md) nether strata <sup>feature · p1 · 1</sup>
 - [ ] [`0065`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0065-nether-graft.md) nether graft <sup>feature · p1 · 4</sup>
 - [ ] [`0066`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0066-transcript-tests-for-every-documented-invocation.md) Transcript tests for every documented invocation <sup>chore · p0</sup>
+- [ ] [`0117`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0117-spec-answer-and-refusal-have-no-tag-in-the-frozen-encoding.md) Spec: Answer and Refusal have no tag in the frozen encoding <sup>spec · p0</sup>
 
 ## world — The World
 
