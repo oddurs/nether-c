@@ -107,9 +107,14 @@ cmd_pr() {
   "$root/scripts/task" check
   say "pushing $branch"
   git push -u origin "$branch"
+  # `--fill-first`, not `--fill`. With one commit they agree; with more than
+  # one, `--fill` titles the pull request after the *branch* — and a squash
+  # merge takes its subject from the title, so what lands on `main` is
+  # `fix/0164-the-attribution-ban` rather than a Conventional Commit. The
+  # commit-msg hook never sees it, because the server does the squash.
   say "opening pull request"
-  if [ "${1:-}" = "--draft" ]; then gh pr create --fill --draft --base "$base"
-  else gh pr create --fill --base "$base"; fi
+  if [ "${1:-}" = "--draft" ]; then gh pr create --fill-first --draft --base "$base"
+  else gh pr create --fill-first --base "$base"; fi
   gh pr view --json url --jq .url
 }
 

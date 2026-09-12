@@ -186,7 +186,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`#####·····` 50% · 4 of 8 done · due 2027-05-15
+`######····` 56% · 5 of 9 done · due 2027-05-15
 
 ### unmarked
 
@@ -201,6 +201,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0069`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0069-strata-3-and-4-the-disk.md) Strata 3 and 4: the disk <sup>feature · p0 · 4</sup>
 - [x] [`0073`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0073-replay-refuses-the-world.md) Replay refuses the world <sup>feature · p0 · 0</sup>
 - [x] [`0164`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0164-the-attribution-ban-is-not-enforced.md) The attribution ban is not enforced <sup>bug · p1 · 0</sup>
+- [x] [`0165`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0165-a-pull-request-title-is-not-a-conventional-commit.md) A pull request title is not a Conventional Commit <sup>bug · p2 · 0</sup>
 
 ## necropolis — The Necropolis
 
