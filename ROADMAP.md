@@ -123,11 +123,10 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`###·······` 27% · 3 of 11 done · due 2027-02-28
+`####······` 36% · 4 of 11 done · due 2027-02-28
 
 ### unmarked
 
-- [ ] [`0055`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0055-the-recursive-descent-parser.md) The recursive descent parser <sup>feature · p0 · 0</sup>
 - [ ] [`0056`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0056-lowering-ast-to-ir.md) Lowering: AST to IR <sup>feature · p0 · 0</sup>
 - [ ] [`0057`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0057-depth-inference.md) Depth inference <sup>feature · p0 · 0</sup>
 - [ ] [`0058`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0058-diagnostics-with-source-spans.md) Diagnostics with source spans <sup>feature · p1 · 0</sup>
@@ -139,6 +138,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 ### buried
 
 - [x] [`0054`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0054-nether-syntax-the-lexer.md) nether-syntax: the lexer <sup>feature · p0 · 0</sup>
+- [x] [`0055`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0055-the-recursive-descent-parser.md) The recursive descent parser <sup>feature · p0 · 0</sup>
 - [x] [`0118`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0118-spec-json-is-bound-in-the-prelude-scope-and-never-defined.md) Spec: Json is bound in the prelude scope and never defined <sup>spec · p2</sup>
 - [x] [`0130`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0130-decide-where-the-lexer-gets-unicode.md) Decide: where the lexer gets Unicode <sup>spec · p0</sup>
 
@@ -199,7 +199,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## after — After the Burial
 
-`··········` 0% · 0 of 8 done · due 2027-10-01
+`··········` 0% · 0 of 9 done · due 2027-10-01
 
 ### unmarked
 
@@ -211,4 +211,5 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [ ] [`0106`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0106-a-public-store-and-what-it-costs-to-run.md) A public store, and what it costs to run <sup>chore · p2 · 6</sup>
 - [ ] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
+- [ ] [`0132`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0132-spec-section-09-writes-prelude-listings-in-a-fence-that-is-not-the-language.md) Spec: section 09 writes prelude listings in a fence that is not the language <sup>spec · p2</sup>
 
