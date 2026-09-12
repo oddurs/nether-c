@@ -15,17 +15,16 @@
 //! require is touched — not as an optimisation but because evaluating it could
 //! reach the world and leave a witness the program never asked for (§6.2).
 //!
-//! Three things are deliberately not here yet.
+//! A world-question becomes a `Hole` node with a name, and `seal` becomes the
+//! cairn of what it named. Both of those are the ledger, which is why this
+//! crate depends on it — but nothing is written anywhere. Writing to a store is
+//! stratum 1 and burial holds no capability at all, so what comes back is the
+//! nodes a rite will write when one is given the capability to.
 //!
-//! - **Holes.** A world-question residualises as the expression that asked it
-//!   rather than as a `Hole` node. Giving it a name and a place in the ledger
-//!   is *Holes and residualisation*.
-//! - **`seal`.** Naming a value means encoding it and hashing it, which is the
-//!   ledger, and this crate does not depend on the ledger. It residualises.
-//! - **Aggregates.** No prelude function that builds an array or a struct is
-//!   folded, because there is no way to write one down and a value that cannot
-//!   be written down cannot be residualised. See the item *a struct cannot be
-//!   constructed*.
+//! One thing is deliberately not here yet. **Aggregates**: no prelude function
+//! that builds an array or a struct is folded, because there is no way to write
+//! one down and a value that cannot be written down cannot be residualised.
+//! 0116.
 
 use std::collections::{HashMap, HashSet};
 

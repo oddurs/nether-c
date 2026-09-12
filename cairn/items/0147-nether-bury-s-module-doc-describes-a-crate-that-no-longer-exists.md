@@ -2,8 +2,9 @@
 id: 147
 title: nether-bury's module doc describes a crate that no longer exists
 type: docs
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p2
@@ -39,4 +40,8 @@ reading.
 
 ## Acceptance criteria
 
-- [ ] Every claim in the module doc is true of the crate under it
+- [x] Every claim in the module doc is true of the crate under it
+
+## 2026-09-12
+
+Rewritten rather than deleted: what the three bullets were for is still worth saying, and the true version is that holes and seal are here, the ledger dependency is why, and nothing is written anywhere because writing is stratum 1 and burial holds no capability. Aggregates is the one that is still pending, and it has an item.
