@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""
+attribution — the work is published under the owner's name.
+
+`CLAUDE.md` bans attributing work to a tool, a model or an assistant: not in
+commits, trailers, pull requests, comments, docs or release notes. The
+commit-msg hook checks a message as it is written. This checks everything that
+is already here, because a rule enforced only at the door is a rule that was
+not enforced before the door was built.
+
+    tests/attribution/run          check the tree and this branch's commits
+
+What it does not check is what is not in the repository. Pull request bodies
+and comments live on a server and are somebody else's copy; the hook and this
+keep them honest at the source.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# A vendor or a model, anywhere — except `CLAUDE.md`, which is a filename this
+# repository cites constantly and is the very file stating the ban.
+NAMED = re.compile(
+    r"(?i)\b(?:claude(?!\.md\b)|anthropic|copilot|chatgpt|openai|gemini)\b"
+)
+
+# A trailer that hands the work to something else, whatever it names.
+TRAILER = re.compile(
+    r"(?im)^\s*(?:co-authored-by|assisted-by|generated-by|authored-by)\s*:",
+)
+
+# And the stock phrases, which name nothing and still do it.
+PHRASE = re.compile(
+    r"generated with|\bAI\b|\U0001F916"
+)
+
+# dependabot opens pull requests and GitHub writes its trailer. That is a bot
+# doing a bot's job under its own name, not this project's work handed away.
+ALLOWED_TRAILER = re.compile(r"(?i)dependabot|oddurs@users\.noreply\.github\.com")
+
+SKIP_DIRS = {".git", "target", ".worktrees", ".nether"}
+
+
+def offences(text: str, *, trailers: bool) -> list[str]:
+    found = [m.group(0) for m in NAMED.finditer(text)]
+    found += [m.group(0) for m in PHRASE.finditer(text)]
+    if trailers:
+        for line in text.splitlines():
+            if TRAILER.match(line) and not ALLOWED_TRAILER.search(line):
+                found.append(line.strip())
+    return found
+
+
+def files() -> list[Path]:
+    out = []
+    for path in ROOT.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in SKIP_DIRS for part in path.relative_to(ROOT).parts):
+            continue
+        out.append(path)
+    return sorted(out)
+
+
+def main() -> int:
+    bad: list[tuple[str, list[str]]] = []
+
+    for path in files():
+        rel = path.relative_to(ROOT)
+        # The ban's own statement and its enforcement have to name what they
+        # ban. Nothing else may.
+        if str(rel) in {"CLAUDE.md", "CONTRIBUTING.md", ".githooks/commit-msg",
+                        "tests/attribution/run"}:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if hits := offences(text, trailers=True):
+            bad.append((str(rel), hits))
+
+    # And the commits on this branch, which is what a reviewer is being asked
+    # to take.
+    base = subprocess.run(
+        ["git", "merge-base", "HEAD", "origin/main"],
+        cwd=ROOT, capture_output=True, text=True,
+    ).stdout.strip()
+    span = f"{base}..HEAD" if base else "HEAD~20..HEAD"
+    log = subprocess.run(
+        ["git", "log", "--format=%H%n%an <%ae>%n%B%n--%-%-", span],
+        cwd=ROOT, capture_output=True, text=True,
+    ).stdout
+    if hits := offences(log, trailers=True):
+        bad.append((f"commits in {span}", hits))
+
+    for where, hits in bad:
+        print(f"attribution: {where}", file=sys.stderr)
+        for hit in sorted(set(hits))[:5]:
+            print(f"  {hit}", file=sys.stderr)
+
+    if bad:
+        print("", file=sys.stderr)
+        print("The work is published under the owner's name. CLAUDE.md, NEVER.", file=sys.stderr)
+        return 1
+
+    print(f"attribution: {len(files())} file(s) and this branch's commits name no tool")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -27,6 +27,8 @@ case "${1:-}" in
     python3 tests/contrast/run
     # Nothing on the site may point at something that is not there.
     python3 tests/links/run
+    # The work is published under the owner's name.
+    python3 tests/attribution/run
     ;;
   build)
     cargo build --workspace
