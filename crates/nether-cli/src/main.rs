@@ -5,6 +5,7 @@
 
 mod cairn;
 mod json;
+mod lamp;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -43,6 +44,7 @@ nether — the Nether C rites
   bury <file.nc>     evaluate as far as the world allows; emit a trace
   exhume <cairn>     grant a stratum, answer holes, emit a deeper trace
   lamp <cairn>       carry light down: render a value, or its provenance
+                     `--provenance` walks backwards; `--depth <n>` bounds it
   cairn <path>       name a thing by its content; verify a name still holds
                      `--verify <cairn>` checks the ledger still holds it
   strata <cairn>     which stratum this reached, and the line that took it there
@@ -84,7 +86,8 @@ fn main() -> ExitCode {
             usage_error()
         }
         Some("cairn") => cairn::run(&args[1..]),
-        Some("bury" | "exhume" | "lamp" | "strata" | "graft") => {
+        Some("lamp") => lamp::run(&args[1..]),
+        Some("bury" | "exhume" | "strata" | "graft") => {
             eprintln!("nether: not yet. The specification lands before the compiler does.");
             eprintln!("        See spec/00-overview.md, and `cairn next` for what is ready.");
             ExitCode::from(code::UNIMPLEMENTED)
