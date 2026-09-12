@@ -146,12 +146,12 @@ single moment, and burial has no such moment — an expression may be evaluated
 now, residualised, and finished a week later by somebody else's exhumation.
 There is nothing to unwind to.
 
-**`rescue e else f`, catching starvation.** Superficially the most elegant
-option: a starved node is already a first-class thing in the trace, so expose
+**`rescue e else f`, catching a collapse.** Superficially the most elegant
+option: a collapsed node would be a first-class thing in the trace, so expose
 it and let a program handle it. Rejected for two reasons. It makes bugs
 catchable, and a bug that can be caught is a bug that will be ignored. Worse, it
 makes evaluation order observable — whether `rescue` fires depends on how far
-burial got before it starved, which is exactly the kind of dependence
+burial got before it collapsed, which is exactly the kind of dependence
 [§6.2](06-evaluation.md#62-demand) exists to forbid.
 
 **Nothing, and say so.** Declare failure a burial-level diagnostic and put
@@ -160,10 +160,38 @@ say *if this file is missing, generate it* is not a build system, and build
 systems are the case that motivates the whole design.
 
 What was chosen instead splits the question in two. A no from the world is an
-*answer* and gets a value; a mistake in the program is *starvation* and gets a
+*answer* and gets a value; a mistake in the program is a *collapse* and gets a
 stopped burial. The cost is a check at every world-touching call site, which is
 the bargain C has always offered and which this language is in no position to
 improve on.
+
+### One word for starving and for collapsing
+
+An earlier draft used **starve** for both: for an expression waiting on a hole
+([§6.4](06-evaluation.md#64-starvation-and-fuel)) and for one that can never
+produce a value at all
+([§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them)).
+[§10](10-glossary.md) defended the merge — "deliberately given one name
+because both stop a burial" — and that reason was not true of the first one.
+§6.4 says a starved expression is *residualised and waits*. It does not stop
+anything; it is the ordinary outcome, and it is what the whole language is for.
+
+Two other ways out were available.
+
+**Rename §6.4's instead**, and keep `starve` for the fatal case. Rejected
+because the word is already spent: `starved` means *waiting on something
+somebody else must supply* in this project's vocabulary table and in the
+roadmap's own item status, and a term that means one thing in the tooling and
+its opposite in the specification is worse than either.
+
+**Leave them merged and rely on context.** Rejected on contact with the
+implementation: `nether-bury` has to tell them apart to report either, one is
+a `Halt` and the other is not, and a reader of §9.9 who has not read §6.4
+comes away believing burial stops whenever anything waits.
+
+So the fatal one is a **collapse**. It reads in the register the rest of the
+language is written in — a burial that hits one caves in — and it leaves
+`starve` meaning the one thing it means everywhere else.
 
 ### Normalising text in the ledger
 

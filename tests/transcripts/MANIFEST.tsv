@@ -39,10 +39,10 @@ spec/05-types.md:71	c	pinned	bae6053b958ec44b
 spec/05-types.md:113	c	pinned	b90bad42db5f84e0
 spec/06-evaluation.md:14	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md:33	c	pinned	32047b898ae2a1c0
-spec/06-evaluation.md:121	text	pinned	07c9e60510dab9cc
-spec/06-evaluation.md:180	console	pinned	62a0ec6a54925078
-spec/06-evaluation.md:197	console	pinned	de840300ab71ca8d
-spec/06-evaluation.md:227	text	pinned	a39449193e40ee44
+spec/06-evaluation.md:125	text	pinned	07c9e60510dab9cc
+spec/06-evaluation.md:184	console	pinned	62a0ec6a54925078
+spec/06-evaluation.md:201	console	pinned	de840300ab71ca8d
+spec/06-evaluation.md:231	text	pinned	a39449193e40ee44
 spec/07-ledger.md:76	text	pinned	44a818ca5c7ac6dd
 spec/07-ledger.md:162	text	pinned	ebd628943dfe60de
 spec/08-rites.md:18	console	checked	eb5d09b394458e0f
@@ -56,7 +56,7 @@ spec/08-rites.md:125	text	pinned	a0f5b8eab441d74a
 spec/08-rites.md:134	text	pinned	f2bdddcccdc852aa
 spec/08-rites.md:141	console	pinned	576312e1308b3138
 spec/08-rites.md:158	text	pinned	f9ddf95151d63ade
-spec/09-prelude.md:43	signatures	pinned	fea9c3d457ee7e59
+spec/09-prelude.md:43	signatures	pinned	42165e84073d2ffe
 spec/09-prelude.md:78	c	pinned	67bb7c58077b7645
 spec/09-prelude.md:95	signatures	pinned	480f7d18349a56f5
 spec/09-prelude.md:107	signatures	pinned	ea824054bc313eff
@@ -64,4 +64,4 @@ spec/09-prelude.md:127	signatures	pinned	834d41e9dd803353
 spec/09-prelude.md:143	signatures	pinned	df4cca1bd2fc65e5
 spec/09-prelude.md:153	signatures	pinned	b3bc31d5c47581b4
 spec/09-prelude.md:171	signatures	pinned	b83338a5100b0081
-spec/90-rationale.md:340	c	pinned	f426e2ac55ce8205
+spec/90-rationale.md:368	c	pinned	f426e2ac55ce8205

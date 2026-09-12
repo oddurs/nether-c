@@ -93,6 +93,10 @@ An expression **starves** when it cannot be evaluated and cannot become a hole
 — because it depends, transitively, on a hole. Starvation is normal; a starved
 expression is residualised and waits.
 
+An expression that can never produce a value has not starved. It has
+**collapsed**, and a burial that hits one caves in rather than waiting
+([§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them)).
+
 Burial takes a **fuel budget**: a bound on the number of evaluation steps.
 
 A **step** is one evaluation of one expression node. It is charged when

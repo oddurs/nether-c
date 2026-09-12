@@ -28,6 +28,11 @@ encoding, under a versioned domain separator. Always at depth 0.
 Acquired by `descend`, lexically scoped, never ambient.
 [§9.1](09-prelude.md#91-capabilities)
 
+**Collapse** — what an expression does when it can never produce a value:
+`must` on a refusal, an out-of-range index. Not catchable, and a burial that
+hits one caves in.
+[§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them)
+
 **Demand** — a top-level statement naming an expression that must be
 evaluated. Nothing else is evaluated. There is no `main`.
 [§6.2](06-evaluation.md#62-demand)
@@ -114,12 +119,10 @@ is pure regardless of what it names. [§1.5](01-strata.md#15-seal)
 sealable, comparable, not observable.
 [§1.6](01-strata.md#16-shade-and-the-orpheus-rule)
 
-**Starve** — either of two things, deliberately given one name because both
-stop a burial. On a hole: unevaluable *yet*, pending exhumation
-([§6.4](06-evaluation.md#64-starvation-and-fuel)). Otherwise: unevaluable ever
-— `must` on a refusal, an out-of-range index — which is a bug in the program
-and is not catchable
-([§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them)).
+**Starve** — to be unevaluable *yet*, because of a transitive dependence on a
+hole. Ordinary: a starved expression is residualised and finishes at somebody
+else's exhumation. Unevaluable *ever* is a **collapse**.
+[§6.4](06-evaluation.md#64-starvation-and-fuel)
 
 **Stratum** — one of the nine depths, each with a grant, a cost and a witness
 obligation. [§1.1](01-strata.md#11-the-lattice)
