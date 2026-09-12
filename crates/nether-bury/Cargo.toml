@@ -1,0 +1,20 @@
+[package]
+name = "nether-bury"
+description = "Burial: partial evaluation, holes, and the residue"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The two halves burial joins. A program is a fact about a source file until
+# something names what it could not finish, and naming is the ledger.
+nether-core = { path = "../nether-core" }
+nether-ledger = { path = "../nether-ledger" }
+
+[dev-dependencies]
+nether-ledger = { path = "../nether-ledger" }
+
+[lints]
+workspace = true

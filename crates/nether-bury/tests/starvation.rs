@@ -4,10 +4,12 @@
 //! And the arithmetic underneath it. §6.4 says what a step is, so the counts
 //! here are worked out by hand from the source rather than read off a run.
 
+use nether_bury::{Grinding, Halt, HaltKind, MAX_FRAMES, Residue};
 use nether_core::{
-    BinOp, Block, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, GlobalId, Grinding,
-    HaltKind, Literal, LocalDef, LocalId, MAX_FRAMES, Rite, Span, Stmt, Type, Unit, bury, report,
+    BinOp, Block, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, GlobalId, Literal,
+    LocalDef, LocalId, Rite, Span, Stmt, Type, Unit, report,
 };
+use nether_ledger::Cairn;
 
 // ── the file the fuel error is about ────────────────────────────────────────
 
@@ -332,4 +334,14 @@ fn starvation_points_at_the_expression_and_offers_nothing() {
     assert_eq!(d.headline, "this divides by zero");
     assert!(d.note.is_some_and(|n| n.contains("not catchable")));
     assert_eq!(d.label, None);
+}
+
+/// The cairn these units pretend to have been lowered from.
+fn source_cairn() -> Cairn {
+    Cairn::of_encoded(b"a source")
+}
+
+/// `bury`, with a source for the spans to belong to.
+fn bury(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
+    nether_bury::bury(unit, source_cairn(), fuel)
 }

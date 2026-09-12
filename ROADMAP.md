@@ -95,21 +95,22 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`#######···` 69% · 11 of 16 done · due 2027-01-15
+`########··` 71% · 12 of 17 done · due 2027-01-15
 
 ### unmarked
 
-- [ ] [`0049`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0049-holes-and-residualization.md) Holes and residualization <sup>feature · p0 · 0</sup>
 - [ ] [`0052`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0052-property-test-depth-is-monotone.md) Property test: depth is monotone <sup>chore · p1 · 0</sup>
 - [ ] [`0053`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0053-proof-one-read-one-hole.md) Proof: one read, one hole <sup>chore · p0 · 3</sup>
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
 - [ ] [`0126`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0126-spec-starvation-is-the-name-of-two-different-things.md) Spec: starvation is the name of two different things <sup>spec · p1</sup>
+- [ ] [`0127`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0127-spec-section-5-3-says-two-different-things-about-shade-equality.md) Spec: section 5.3 says two different things about shade equality <sup>spec · p1</sup>
 
 ### buried
 
 - [x] [`0046`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0046-nether-core-the-ir.md) nether-core: the IR <sup>feature · p0 · 0</sup>
 - [x] [`0047`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0047-the-bidirectional-depth-checker.md) The bidirectional depth checker <sup>feature · p0 · 0</sup>
 - [x] [`0048`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0048-normalization-by-evaluation.md) Normalization by evaluation <sup>feature · p0 · 0</sup>
+- [x] [`0049`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0049-holes-and-residualization.md) Holes and residualization <sup>feature · p0 · 0</sup>
 - [x] [`0050`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0050-fuel-and-starvation-diagnostics.md) Fuel and starvation diagnostics <sup>feature · p0 · 0</sup>
 - [x] [`0051`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0051-seal-shade-and-look.md) seal, shade and look <sup>feature · p0 · 0</sup>
 - [x] [`0119`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0119-spec-ambient-soundness-is-stated-as-something-that-is-not-true.md) Spec: ambient soundness is stated as something that is not true <sup>spec · p0</sup>
@@ -140,7 +141,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## rites — The Rites
 
-`··········` 0% · 0 of 8 done · due 2027-03-31
+`··········` 0% · 0 of 9 done · due 2027-03-31
 
 ### unmarked
 
@@ -152,6 +153,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0065`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0065-nether-graft.md) nether graft <sup>feature · p1 · 4</sup>
 - [ ] [`0066`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0066-transcript-tests-for-every-documented-invocation.md) Transcript tests for every documented invocation <sup>chore · p0</sup>
 - [ ] [`0117`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0117-spec-answer-and-refusal-have-no-tag-in-the-frozen-encoding.md) Spec: Answer and Refusal have no tag in the frozen encoding <sup>spec · p0</sup>
+- [ ] [`0128`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0128-spec-a-residue-is-nodes-and-no-node-can-hold-a-branch.md) Spec: a residue is nodes, and no node can hold a branch <sup>spec · p0</sup>
 
 ## world — The World
 

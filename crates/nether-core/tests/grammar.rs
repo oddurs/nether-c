@@ -239,6 +239,9 @@ fn the_rites() -> Vec<Stmt> {
     let hidden = || local(4, Type::Shade { origin: Depth::NET, inner: Box::new(Type::Bytes) });
     let sealed =
         pure(ExprKind::Rite { rite: Rite::Seal, operand: Box::new(hidden()) }, Type::Cairn);
+    // What `seal` becomes once burial can finish it. There is no syntax for
+    // one, which is why it is here and not in the sample source above.
+    let named = pure(ExprKind::Literal(Literal::Cairn([0; 32])), Type::Cairn);
     let looked = e(
         ExprKind::Rite { rite: Rite::Look, operand: Box::new(hidden()) },
         Type::Bytes,
@@ -254,6 +257,7 @@ fn the_rites() -> Vec<Stmt> {
         Stmt::Let { local: LocalId(4), value: descent },
         Stmt::Let { local: LocalId(5), value: sealed },
         Stmt::Let { local: LocalId(6), value: barrier },
+        Stmt::Expr(named),
     ]
 }
 
@@ -556,6 +560,7 @@ impl Seen {
                 Literal::Bytes(_) => "Bytes",
                 Literal::Str(_) => "Str",
                 Literal::Refusal(_) => "Refusal",
+                Literal::Cairn(_) => "Cairn",
             },
         );
     }
@@ -780,6 +785,7 @@ const EVERY_FORM: &[&str] = &[
     "ExprKind::SizeOf",
     "ExprKind::Unary",
     "Literal::Bool",
+    "Literal::Cairn",
     "Literal::Bytes",
     "Literal::Int",
     "Literal::Refusal",
