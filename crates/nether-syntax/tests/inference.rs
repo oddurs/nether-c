@@ -18,54 +18,22 @@
 use nether_core::check;
 use nether_syntax::{lower, parse};
 
+mod spec;
+use spec::Shape;
+
 /// Every `c` sample under `spec/` that §04 parses, with what it needs around
-/// it. The classification is the parser's, in `tests/grammar.rs`.
+/// it. What each sample is, is said once, in `tests/spec/mod.rs`.
 fn samples() -> Vec<(String, String)> {
-    const UNITS: [(&str, usize); 8] = [
-        ("00-overview.md", 125),
-        ("01-strata.md", 52),
-        ("01-strata.md", 94),
-        ("02-calculus.md", 159),
-        ("03-lexical.md", 26),
-        ("05-types.md", 71),
-        ("06-evaluation.md", 33),
-        ("90-rationale.md", 392),
-    ];
-    const BODIES: [(&str, usize); 4] = [
-        ("02-calculus.md", 202),
-        ("04-grammar.md", 155),
-        ("05-types.md", 52),
-        ("09-prelude.md", 78),
-    ];
-
-    let body_of = |file: &str, line: usize| {
-        let path = format!("{}/../../spec/{file}", env!("CARGO_MANIFEST_DIR"));
-        let text = std::fs::read_to_string(&path).expect("readable");
-        let lines: Vec<&str> = text.lines().collect();
-        lines[line..]
-            .iter()
-            .take_while(|l| !l.starts_with("```"))
-            .copied()
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-
     let mut out = Vec::new();
-    for (file, line) in UNITS {
-        out.push((format!("{file}:{line}"), format!("{AROUND}\n{}\n", body_of(file, line))));
+    for (key, body) in spec::of_shape(Shape::Unit) {
+        out.push((key, format!("{AROUND}\n{body}\n")));
     }
-    for (file, line) in BODIES {
-        out.push((
-            format!("{file}:{line}"),
-            format!("{AROUND}\nU0 sample()\n{{\n{}\n}}\n", body_of(file, line)),
-        ));
+    for (key, body) in spec::of_shape(Shape::Statements) {
+        out.push((key, format!("{AROUND}\nU0 sample()\n{{\n{body}\n}}\n")));
     }
     out
 }
 
-/// What the samples assume exists around them. `compile` is not in the
-/// prelude — §9.2 says so — and the rest are names the fences use without
-/// declaring, because a fence is an excerpt.
 const AROUND: &str = r#"
 Bytes compile(Bytes s) { concat(b"obj:", s) }
 Bytes other = b"";

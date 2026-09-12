@@ -1,67 +1,67 @@
 # ref	kind	status	digest
-README.md:89	c	pinned	259c208a7e651d11
-README.md:100	console	pinned	e183405459af89bf
-README.md:184	console	checked	d838eaf97e53718b
-README.md:246	sh	pinned	7b99770b16361486
-README.md:256	sh	pinned	51e912b7cdf5fa39
-README.md:273	sh	pinned	fb434d19d5a7b7b8
-site/src/index.html:89	hello.nc	pinned	93bb6ae51420070b
-site/src/index.html:101	console	pinned	e183405459af89bf
-site/src/index.html:185	c	pinned	9c06d713f8f79db4
-site/src/index.html:193	console	pinned	e0f82a96d80bcb09
-site/src/index.html:229	console	pinned	74a79e41374385f3
-site/src/index.html:387	console	checked	d838eaf97e53718b
-spec/00-overview.md:125	c	pinned	e34350c3cc044f96
-spec/00-overview.md:136	console	pinned	e183405459af89bf
-spec/01-strata.md:52	c	pinned	39d95c03c09e3f8c
-spec/01-strata.md:94	c	pinned	32212f92be2604ee
-spec/01-strata.md:114	c	pinned	42acff8a32601370
-spec/01-strata.md:138	text	pinned	448359f29ad0b97f
-spec/02-calculus.md:16	text	pinned	0597a19f1d266527
-spec/02-calculus.md:52	text	pinned	d1e54373b8e0ddac
-spec/02-calculus.md:159	c	pinned	8f6164dc55253768
-spec/02-calculus.md:202	c	pinned	f59540d28b03c35e
-spec/03-lexical.md:26	c	pinned	583a67ed3002e592
-spec/03-lexical.md:36	text	pinned	a847859bb6afdffe
-spec/03-lexical.md:55	text	pinned	f6e139d170fc9105
-spec/03-lexical.md:67	text	pinned	f3d54dbae87a451e
-spec/03-lexical.md:87	text	pinned	e5fdf9832863d9cd
-spec/03-lexical.md:130	text	pinned	25fd164649674a25
-spec/04-grammar.md:15	ebnf	pinned	d8137d228d3b4996
-spec/04-grammar.md:32	ebnf	pinned	c50348b7580e5439
-spec/04-grammar.md:53	ebnf	pinned	f3e5d72d58b38266
-spec/04-grammar.md:67	ebnf	pinned	30a4f3e68261c45a
-spec/04-grammar.md:86	ebnf	pinned	e650c9b7d84d98fe
-spec/04-grammar.md:155	c	pinned	4fae387bf70b6809
-spec/05-types.md:37	text	pinned	1de4c44f9b08a8ce
-spec/05-types.md:52	c	pinned	0c96fcfac5c029b7
-spec/05-types.md:71	c	pinned	bae6053b958ec44b
-spec/05-types.md:116	c	pinned	b90bad42db5f84e0
-spec/06-evaluation.md:14	text	pinned	a825d7f02dc37188
-spec/06-evaluation.md:33	c	pinned	32047b898ae2a1c0
-spec/06-evaluation.md:125	text	pinned	07c9e60510dab9cc
-spec/06-evaluation.md:184	console	pinned	62a0ec6a54925078
-spec/06-evaluation.md:201	console	pinned	de840300ab71ca8d
-spec/06-evaluation.md:231	text	pinned	a39449193e40ee44
-spec/07-ledger.md:76	text	pinned	44a818ca5c7ac6dd
-spec/07-ledger.md:162	text	pinned	ebd628943dfe60de
-spec/08-rites.md:18	console	checked	eb5d09b394458e0f
-spec/08-rites.md:56	text	pinned	cad6f8fefca65ca5
-spec/08-rites.md:63	console	pinned	0ddcfcf30b077e13
-spec/08-rites.md:79	text	pinned	5865664799244749
-spec/08-rites.md:94	text	pinned	2111624617db0431
-spec/08-rites.md:102	console	pinned	53e8914cde7dd844
-spec/08-rites.md:110	console	pinned	f7b440fdca9a9a6a
-spec/08-rites.md:125	text	pinned	a0f5b8eab441d74a
-spec/08-rites.md:134	text	pinned	f2bdddcccdc852aa
-spec/08-rites.md:141	console	pinned	576312e1308b3138
-spec/08-rites.md:158	text	pinned	f9ddf95151d63ade
-spec/09-prelude.md:43	signatures	pinned	42165e84073d2ffe
-spec/09-prelude.md:78	c	pinned	67bb7c58077b7645
-spec/09-prelude.md:95	signatures	pinned	480f7d18349a56f5
-spec/09-prelude.md:107	signatures	pinned	ea824054bc313eff
-spec/09-prelude.md:127	signatures	pinned	834d41e9dd803353
-spec/09-prelude.md:143	signatures	pinned	df4cca1bd2fc65e5
-spec/09-prelude.md:153	signatures	pinned	b3bc31d5c47581b4
-spec/09-prelude.md:171	signatures	pinned	b83338a5100b0081
-spec/90-rationale.md:392	c	pinned	f426e2ac55ce8205
+README.md § THE FIRST PROGRAM #1	c	pinned	259c208a7e651d11
+README.md § THE FIRST PROGRAM #2	console	pinned	e183405459af89bf
+README.md § WHAT IS TRUE TODAY #1	console	checked	d838eaf97e53718b
+README.md § DEVELOPMENT #1	sh	pinned	7b99770b16361486
+README.md § DEVELOPMENT #2	sh	pinned	51e912b7cdf5fa39
+README.md § DEVELOPMENT #3	sh	pinned	fb434d19d5a7b7b8
+site/src/index.html § The first program #1	hello.nc	pinned	93bb6ae51420070b
+site/src/index.html § The first program #2	console	pinned	e183405459af89bf
+site/src/index.html § The Orpheus rule #1	c	pinned	9c06d713f8f79db4
+site/src/index.html § The Orpheus rule #2	console	pinned	e0f82a96d80bcb09
+site/src/index.html § What a hole is #1	console	pinned	74a79e41374385f3
+site/src/index.html § Where it actually is #1	console	checked	d838eaf97e53718b
+spec/00-overview.md § 0.7 A first program #1	c	pinned	e34350c3cc044f96
+spec/00-overview.md § 0.7 A first program #2	console	pinned	e183405459af89bf
+spec/01-strata.md § 1.3 Descent #1	c	pinned	39d95c03c09e3f8c
+spec/01-strata.md § 1.5 Seal #1	c	pinned	32212f92be2604ee
+spec/01-strata.md § 1.6 Shade, and the Orpheus rule #1	c	pinned	42acff8a32601370
+spec/01-strata.md § 1.6 Shade, and the Orpheus rule #2	text	pinned	448359f29ad0b97f
+spec/02-calculus.md § 2.1 Judgement form #1	text	pinned	0597a19f1d266527
+spec/02-calculus.md § 2.2 The rules #1	text	pinned	d1e54373b8e0ddac
+spec/02-calculus.md § 2.3 What each rule is doing #1	c	pinned	8f6164dc55253768
+spec/02-calculus.md § 2.4 Metatheory #1	c	pinned	f59540d28b03c35e
+spec/03-lexical.md § 3.2 Comments #1	c	pinned	583a67ed3002e592
+spec/03-lexical.md § 3.3 Identifiers #1	text	pinned	a847859bb6afdffe
+spec/03-lexical.md § 3.4 Keywords #1	text	pinned	f6e139d170fc9105
+spec/03-lexical.md § 3.5 Depth annotations #1	text	pinned	f3d54dbae87a451e
+spec/03-lexical.md § 3.6 Literals #1	text	pinned	e5fdf9832863d9cd
+spec/03-lexical.md § 3.7 Punctuation #1	text	pinned	25fd164649674a25
+spec/04-grammar.md § 4.1 Compilation unit #1	ebnf	pinned	d8137d228d3b4996
+spec/04-grammar.md § 4.2 Declarations #1	ebnf	pinned	c50348b7580e5439
+spec/04-grammar.md § 4.3 Types #1	ebnf	pinned	f3e5d72d58b38266
+spec/04-grammar.md § 4.4 Statements #1	ebnf	pinned	30a4f3e68261c45a
+spec/04-grammar.md § 4.5 Expressions #1	ebnf	pinned	e650c9b7d84d98fe
+spec/04-grammar.md § 4.7 The bare-expression statement #1	c	pinned	4fae387bf70b6809
+spec/05-types.md § 5.1.1 Answers and refusals #1	text	pinned	1de4c44f9b08a8ce
+spec/05-types.md § 5.1.1 Answers and refusals #2	c	pinned	0c96fcfac5c029b7
+spec/05-types.md § 5.2 Aggregates #1	c	pinned	bae6053b958ec44b
+spec/05-types.md § 5.4 Mutation #1	c	pinned	b90bad42db5f84e0
+spec/06-evaluation.md § 6.1 Burial #1	text	pinned	a825d7f02dc37188
+spec/06-evaluation.md § 6.2 Demand #1	c	pinned	32047b898ae2a1c0
+spec/06-evaluation.md § 6.4 Starvation and fuel #1	text	pinned	07c9e60510dab9cc
+spec/06-evaluation.md § 6.6 Exhumation #1	console	pinned	62a0ec6a54925078
+spec/06-evaluation.md § 6.7 Replay #1	console	pinned	de840300ab71ca8d
+spec/06-evaluation.md § 6.8 What burial prints #1	text	pinned	a39449193e40ee44
+spec/07-ledger.md § 7.2 Cairns #1	text	pinned	44a818ca5c7ac6dd
+spec/07-ledger.md § 7.5 The store #1	text	pinned	ebd628943dfe60de
+spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
+spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
+spec/08-rites.md § 8.2 `bury` #2	console	pinned	0ddcfcf30b077e13
+spec/08-rites.md § 8.3 `exhume` #1	text	pinned	5865664799244749
+spec/08-rites.md § 8.4 `lamp` #1	text	pinned	2111624617db0431
+spec/08-rites.md § 8.4 `lamp` #2	console	pinned	53e8914cde7dd844
+spec/08-rites.md § 8.4 `lamp` #3	console	pinned	f7b440fdca9a9a6a
+spec/08-rites.md § 8.5 `cairn` #1	text	pinned	a0f5b8eab441d74a
+spec/08-rites.md § 8.6 `strata` #1	text	pinned	f2bdddcccdc852aa
+spec/08-rites.md § 8.6 `strata` #2	console	pinned	576312e1308b3138
+spec/08-rites.md § 8.7 `graft` #1	text	pinned	f9ddf95151d63ade
+spec/09-prelude.md § 9.2 Depth 0 #1	signatures	pinned	42165e84073d2ffe
+spec/09-prelude.md § 9.2 Depth 0 #2	c	pinned	67bb7c58077b7645
+spec/09-prelude.md § 9.3 Stratum 1 — `store` #1	signatures	pinned	480f7d18349a56f5
+spec/09-prelude.md § 9.4 Stratum 2 — `env` #1	signatures	pinned	ea824054bc313eff
+spec/09-prelude.md § 9.5 Strata 3 and 4 — `disk`, `disk!` #1	signatures	pinned	834d41e9dd803353
+spec/09-prelude.md § 9.6 Strata 5 and 6 — `net`, `net!` #1	signatures	pinned	df4cca1bd2fc65e5
+spec/09-prelude.md § 9.7 Stratum 7 — `entropy` #1	signatures	pinned	b3bc31d5c47581b4
+spec/09-prelude.md § 9.8 Stratum 8 — `unrecorded` #1	signatures	pinned	b83338a5100b0081
+spec/90-rationale.md § One number on an arrow #1	c	pinned	f426e2ac55ce8205

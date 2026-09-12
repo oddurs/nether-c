@@ -13,6 +13,8 @@
 use nether_core::{check, report};
 use nether_syntax::{lower, parse};
 
+mod spec;
+
 fn root() -> String {
     format!("{}/../..", env!("CARGO_MANIFEST_DIR"))
 }
@@ -22,27 +24,21 @@ fn program(name: &str) -> String {
         .unwrap_or_else(|e| panic!("tests/programs/{name}: {e}"))
 }
 
-/// The fenced block that starts at `line` of a specification file.
-fn fence(file: &str, line: usize) -> String {
-    let text = std::fs::read_to_string(format!("{}/spec/{file}", root())).expect("readable");
-    text.lines().skip(line).take_while(|l| !l.starts_with("```")).collect::<Vec<_>>().join("\n")
-}
-
 /// Every program, and the sample it was lifted from.
-const PROGRAMS: [(&str, &str, usize); 3] = [
-    ("hello.nc", "00-overview.md", 125),
-    ("stamp.nc", "01-strata.md", 114),
-    ("build.nc", "06-evaluation.md", 33),
+const PROGRAMS: [(&str, &str); 3] = [
+    ("hello.nc", "00-overview.md § 0.7 A first program #1"),
+    ("stamp.nc", "01-strata.md § 1.6 Shade, and the Orpheus rule #1"),
+    ("build.nc", "06-evaluation.md § 6.2 Demand #1"),
 ];
 
 #[test]
 fn each_program_is_the_specification_s_sample_unchanged() {
-    for (name, file, line) in PROGRAMS {
+    for (name, reference) in PROGRAMS {
         let source = program(name);
-        let sample = fence(file, line);
+        let sample = spec::body(reference);
         assert!(
             source.contains(&sample),
-            "{name} is not spec/{file}:{line} verbatim.\n--- the sample ---\n{sample}\n\
+            "{name} is not {reference} verbatim.\n--- the sample ---\n{sample}\n\
              --- the file ---\n{source}"
         );
     }
