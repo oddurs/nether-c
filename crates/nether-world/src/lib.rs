@@ -11,8 +11,10 @@
 //! is [`Recorder::record`], which writes before it returns. A provider that
 //! forgot to record has nothing to return and does not compile.
 
+mod disk;
 mod provider;
 mod recorder;
 
-pub use provider::{Provider, World};
+pub use disk::Disk;
+pub use provider::{Provider, Unanswered, World};
 pub use recorder::{Recorded, Recorder};
