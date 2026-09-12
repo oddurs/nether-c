@@ -2,7 +2,7 @@
 id: 133
 title: 'Spec: a shade parameter has an origin nothing can infer'
 type: spec
-status: unmarked
+status: buried
 milestone: surface
 depends_on:
 - 19
@@ -60,7 +60,19 @@ which beats useful and wrong.
 
 ## Acceptance criteria
 
-- [ ] A shade parameter has an origin, and §4.3 says where it comes from
-- [ ] §1.6's example passes a shade to something that can be declared
-- [ ] `spec/90-rationale.md` records the alternative
-- [ ] nether-syntax follows
+- [x] A shade parameter has an origin, and §4.3 says where it comes from
+- [x] §1.6's example passes a shade to something that can be declared
+- [x] `spec/90-rationale.md` records the alternative
+- [x] nether-syntax follows
+
+## 2026-09-12
+
+Settled with the written origin, and with no new syntax — which is the part worth recording.
+
+A shade's origin IS the depth of the value it holds, and the depth annotation on a type already means 'this came from there'. A shade's argument is a type. So Shade<Bytes@5> is a shade of bytes from stratum 5, and Shade<Bytes@5>@0 is that shade held at depth 0, which is the ordinary case and the whole reason a shade is worth having. It already parsed; nothing in 4.3's EBNF changed.
+
+The rule splits by where the shade appears rather than by whether it is written. Where a shade is CONSTRUCTED, the origin is inferred and may not be written — 4.3's original reason stands there, since a programmer could claim an origin the value does not have. Where a shade is RECEIVED — a parameter, a field, a return type — it must be written, because there is nothing to infer it from and the claim is not believed: it is checked at every call site.
+
+The origin variable is rejected implicitly by this: it would be a second kind of polymorphism in a language with none, and it would have to reach the call site to make look checkable.
+
+Two shades of the same type with different origins are different types, because look on them is legal in different places. 5.5 says so now.

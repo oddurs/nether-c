@@ -164,7 +164,10 @@ ledger changing.
 and unification takes the maximum.
 
 `Shadeᵈ⟨T⟩` *is* a distinct type, because a shade's whole purpose is to be
-something you cannot use as a `T`.
+something you cannot use as a `T`. Its `d` is written as the depth on `T`
+([§4.3](04-grammar.md#43-types)) — `Shade<Bytes@5>` — and two shades of the
+same type with different origins are different types, because `look` on them
+is legal in different places.
 
 ## 5.6 Type inference
 
