@@ -125,7 +125,7 @@ def collect() -> list[Sample]:
 # moves to CHECKED the moment the rite exists — which is what this list is:
 # add the rite here on the day it is built.
 RUNNABLE = re.compile(
-    r"^nether\s+(run|--version|-V|--help|-h|bury|cairn|lamp|strata)\b"
+    r"^nether\s+(run|--version|-V|--help|-h|bury|cairn|lamp|strata|exhume)\b"
 )
 
 # The programs a transcript may refer to. Every checked sample runs in a
@@ -180,8 +180,12 @@ def matches(expected: str, actual: str) -> bool:
     return True
 
 
-def check(sample: Sample, exe: Path) -> tuple[bool, str, int]:
+def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, int]:
     """Run what the sample shows, in order, in a store of its own.
+
+    Everything earlier in the same document runs first, without being checked.
+    A reader reaches §6.7 having run §6.6, and a transcript that names a cairn
+    only exists because the command above it made one.
 
     Returns whether it matched, why not, and how many of its commands were
     skipped because their rite does not exist yet.
@@ -197,6 +201,14 @@ def check(sample: Sample, exe: Path) -> tuple[bool, str, int]:
                 [str(exe), "bury", program.name],
                 capture_output=True, text=True, cwd=work, env=env,
             )
+
+        for earlier in before:
+            for cmd, _ in parse_transcript(earlier.body):
+                if RUNNABLE.match(cmd):
+                    subprocess.run(
+                        [str(exe)] + cmd.split()[1:],
+                        capture_output=True, text=True, cwd=work, env=env,
+                    )
 
         for cmd, expected in parse_transcript(sample.body):
             if not RUNNABLE.match(cmd):
@@ -272,7 +284,9 @@ def main() -> int:
     failures = []
     for s in samples:
         if is_checkable(s):
-            ok, detail, skipped = check(s, exe)
+            before = [e for e in samples if e.source == s.source and e.kind == "console"]
+            before = before[: before.index(s)]
+            ok, detail, skipped = check(s, exe, before)
             checked += 1
             waiting += skipped
             if not ok:

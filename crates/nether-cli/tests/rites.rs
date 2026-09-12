@@ -390,7 +390,6 @@ fn a_small_trace(what: &str) -> (PathBuf, Cairn, Cairn, Cairn) {
         witnesses: vec![witness],
         deposits: vec![deposit],
         source: hole,
-        fuel_spent: 903,
         depth: 3,
         unrecorded: false,
     });
@@ -448,7 +447,6 @@ fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
         witnesses: vec![],
         deposits: roots,
         source: one,
-        fuel_spent: 4,
         depth: 0,
         unrecorded: false,
     });
@@ -563,7 +561,6 @@ fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (PathBuf,
         witnesses: vec![witness],
         deposits: vec![],
         source,
-        fuel_spent: 903,
         depth,
         unrecorded,
     });
@@ -610,7 +607,6 @@ fn a_trace_that_reached_stratum_8_says_so_without_being_asked() {
         witnesses: vec![witness],
         deposits: vec![],
         source,
-        fuel_spent: 12,
         depth: 8,
         unrecorded: true,
     });
@@ -645,7 +641,6 @@ fn a_hole_is_a_stratum_owed_and_not_a_stratum_reached() {
         witnesses: vec![],
         deposits: vec![],
         source,
-        fuel_spent: 4,
         depth: 5,
         unrecorded: false,
     });
@@ -698,7 +693,6 @@ fn a_trace_that_never_went_anywhere_says_so() {
             witnesses: vec![],
             deposits: vec![literal],
             source: literal,
-            fuel_spent: 1,
             depth: 0,
             unrecorded: false,
         }))
@@ -754,7 +748,6 @@ fn a_span_whose_source_is_gone_still_gives_the_offset() {
         witnesses: vec![witness],
         deposits: vec![],
         source,
-        fuel_spent: 2,
         depth: 3,
         unrecorded: false,
     });
@@ -780,7 +773,6 @@ fn a_node_that_is_gone_is_a_lower_bound_and_says_so() {
             witnesses: vec![],
             deposits: vec![],
             source: gone,
-            fuel_spent: 1,
             depth: 0,
             unrecorded: false,
         }))
@@ -826,7 +818,6 @@ fn two_answers_to_one_question_are_two_lines() {
         witnesses: vec![one, two],
         deposits: vec![],
         source,
-        fuel_spent: 4,
         depth: 3,
         unrecorded: false,
     });
@@ -884,7 +875,6 @@ fn a_rendered_call_reads_back_as_the_call_that_was_made() {
             witnesses: vec![],
             deposits: vec![],
             source,
-            fuel_spent: 1,
             depth: 8,
             unrecorded: false,
         })
@@ -1055,4 +1045,46 @@ fn exhuming_something_that_is_not_a_trace_says_so() {
     let out = there(&dir, &["exhume", &source, "--grant", "disk"]);
     assert_eq!(code(&out), 1, "{}", stderr(&out));
     assert!(stderr(&out).contains("not a trace"), "{}", stderr(&out));
+}
+
+#[test]
+fn replaying_a_sealed_trace_gives_it_back() {
+    // §6.7's replay law, and the reason 0163 took `fuel_spent` out of a trace:
+    // replay buries a residue that is already folded, which costs less than
+    // folding it did, so a trace holding that number could never be itself.
+    let dir = a_build("replay");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let sealed =
+        field(&stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--json"])), "sealed");
+
+    let out = there(&dir, &["exhume", &sealed, "--replay"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(stdout(&out), "identical.\n");
+}
+
+#[test]
+fn replay_refuses_rather_than_reaching_the_world() {
+    // §6.7: "it does not prefer the ledger over the world, it cannot reach the
+    // world." The file is right there and unread, and replay will not read it.
+    let dir = a_build("replay-refuses");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+
+    assert!(dir.join("main.nc").exists(), "the answer is available to anybody who looks");
+    let out = there(&dir, &["exhume", &buried, "--replay"]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert!(stderr(&out).contains("cannot reach the world"), "{}", stderr(&out));
+    assert!(stdout(&out).is_empty(), "it answered something");
+}
+
+#[test]
+fn a_trace_does_not_record_what_its_burial_spent() {
+    // §8.2. A rite reports it, because that is where it is a fact; the trace
+    // does not, because a trace that did could not be replayed (§6.7).
+    let dir = a_build("no-fuel");
+    let told = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    assert!(told.contains("\"fuel_spent\""), "the rite stopped reporting it:\n{told}");
+
+    let trace = field(&told, "cairn");
+    let shown = stdout(&there(&dir, &["lamp", &trace, "--provenance"]));
+    assert!(!shown.contains("steps"), "the trace still holds it:\n{shown}");
 }

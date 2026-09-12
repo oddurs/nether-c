@@ -150,9 +150,9 @@ could have kept her &mdash;
 <figure class="listing">
 <figcaption>shell</figcaption>
 <pre><code><span class="p">$</span> nether <span class="k">bury</span> hello.nc
-buried   hello.nc &rarr; <span class="h">fd996152</span>   depth 0   holes 0   4 nodes
+buried   hello.nc &rarr; <span class="h">efed9b2a</span>   depth 0   holes 0   4 nodes
 
-<span class="p">$</span> nether <span class="k">lamp</span> <span class="h">fd996152</span>
+<span class="p">$</span> nether <span class="k">lamp</span> <span class="h">efed9b2a</span>
 Hello from the nether</code></pre>
 </figure>
 
@@ -278,14 +278,14 @@ path.</p>
 <figure class="listing">
 <figcaption>shell</figcaption>
 <pre><code><span class="p">$</span> nether <span class="k">bury</span> build.nc
-buried   build.nc &rarr; <span class="h">dd1289f4</span>   depth 3   holes 1   4 nodes
+buried   build.nc &rarr; <span class="h">76c4b655</span>   depth 3   holes 1   4 nodes
   hole ①  read(<span class="s">"main.nc"</span>)                stratum 3  disk
 
-<span class="p">$</span> nether <span class="k">exhume</span> <span class="h">dd1289f4</span> --grant disk
-  ①  read(<span class="s">"main.nc"</span>)  &rarr;  11,204 bytes  <span class="h">a1f0c93d</span>
-sealed   <span class="h">dd1289f4</span> + <span class="h">a1f0c93d</span> &rarr; <span class="h">77de9b31</span>   depth 3   holes 0
+<span class="p">$</span> nether <span class="k">exhume</span> <span class="h">76c4b655</span> --grant disk
+  ①  read(<span class="s">"main.nc"</span>)  &rarr;  29 bytes  <span class="h">6940fecb</span>
+sealed   <span class="h">76c4b655</span> + <span class="h">6940fecb</span> &rarr; <span class="h">bb9ed429</span>   depth 3   holes 0
 
-<span class="p">$</span> nether <span class="k">exhume</span> <span class="h">77de9b31</span> --replay
+<span class="p">$</span> nether <span class="k">exhume</span> <span class="h">bb9ed429</span> --replay
 identical.</code></pre>
 </figure>
 

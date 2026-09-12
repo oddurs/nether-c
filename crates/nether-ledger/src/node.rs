@@ -115,9 +115,12 @@ pub enum Node {
         /// What the program deposited, in source order.
         deposits: Vec<Cairn>,
         /// The source this burial started from.
+        ///
+        /// What the burial *spent* is not here. §6.7 asks a sealed trace to
+        /// replay byte-identically, and replay buries a residue that is
+        /// already folded — a cheaper burial — so a trace holding that number
+        /// could never come back as itself. §8.2.
         source: Cairn,
-        /// How many evaluation steps it took.
-        fuel_spent: u64,
         /// The deepest stratum reached.
         depth: u8,
         /// Whether this trace reached stratum 8.

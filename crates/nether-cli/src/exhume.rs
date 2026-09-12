@@ -67,19 +67,6 @@ pub fn run(args: &[String]) -> ExitCode {
         return usage_error();
     }
 
-    // §6.7's replay law is unsatisfiable while a trace records how many steps
-    // it cost: replaying re-buries an already-folded residue, which is a
-    // cheaper burial, and every other field comes back the same. Measured in
-    // 0163, which takes the field out.
-    if replaying {
-        eprintln!("nether: `--replay` cannot reproduce a trace yet.");
-        eprintln!();
-        eprintln!("  A trace records `fuel_spent`, which is what the burial that made it");
-        eprintln!("  cost. Replaying buries an already-folded residue, which costs less, so");
-        eprintln!("  the trace that comes back differs in that field and no other. §6.7");
-        eprintln!("  wants byte-identical. 0163.");
-        return ExitCode::from(code::UNIMPLEMENTED);
-    }
     let store = match ledger() {
         Ok(store) => store,
         Err(e) => {
@@ -94,7 +81,7 @@ pub fn run(args: &[String]) -> ExitCode {
             return ExitCode::from(code::ABSENT);
         }
     };
-    dig_up(&store, cairn, &granted, wants_json)
+    dig_up(&store, cairn, &granted, replaying, wants_json)
 }
 
 /// Every hole a trace names, with the question it asks.
@@ -103,6 +90,20 @@ fn questions(store: &Store, holes: &[Cairn]) -> Vec<(Cairn, Call, u8)> {
         .iter()
         .filter_map(|h| match store.get(*h) {
             Ok(Stored::Node(Node::Hole { call, stratum, .. })) => Some((*h, call, stratum)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// What the trace already recorded. §6.7 serves this and nothing else.
+fn already(store: &Store, witnesses: &[Cairn]) -> Vec<(Call, Value)> {
+    witnesses
+        .iter()
+        .filter_map(|w| match store.get(*w) {
+            Ok(Stored::Node(Node::Witness { call, answer, .. })) => match store.get(answer) {
+                Ok(Stored::Value(v)) => Some((call, v)),
+                _ => None,
+            },
             _ => None,
         })
         .collect()
@@ -124,7 +125,13 @@ fn world_from(granted: &[Capability], root: &Path) -> Result<World, Capability> 
 }
 
 #[expect(clippy::too_many_lines, reason = "one pass, in the order §6.6 puts it")]
-fn dig_up(store: &Store, cairn: Cairn, granted: &[Capability], wants_json: bool) -> ExitCode {
+fn dig_up(
+    store: &Store,
+    cairn: Cairn,
+    granted: &[Capability],
+    replaying: bool,
+    wants_json: bool,
+) -> ExitCode {
     let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, source, .. })) = store.get(cairn)
     else {
         eprintln!("nether: {} is not a trace", cairn.short());
@@ -161,31 +168,48 @@ fn dig_up(store: &Store, cairn: Cairn, granted: &[Capability], wants_json: bool)
     let mut said: Vec<(Call, Cairn)> = Vec::new();
     let mut recorded: Vec<Cairn> = witnesses.clone();
 
-    let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let world = match world_from(granted, &root) {
-        Ok(world) => world,
-        Err(cap) => {
-            eprintln!("nether: `{cap}` is in §9.1 and is not built yet.");
-            eprintln!("        disk and disk! are; the rest are 0068, 0070, 0071 and 0072.");
-            return ExitCode::from(code::UNIMPLEMENTED);
-        }
-    };
-    let into = Recorder::new(store, source);
-    for (hole, call, _) in questions(store, &holes) {
-        let Ok(Stored::Node(Node::Hole { span, .. })) = store.get(hole) else { continue };
-        match world.ask(&call, span, &into) {
-            // A hole nothing granted answers stays a hole, which is what
-            // makes exhumation incremental rather than all or nothing.
-            Err(nether_world::Unanswered::Ungranted { .. }) => {}
-            Err(e) => {
-                eprintln!("nether: {e}");
+    if replaying {
+        // §6.7: only the ledger. There is no `World` in this branch to reach
+        // the world with — which is the difference between preferring the
+        // ledger and being unable to leave it.
+        let have = already(store, &witnesses);
+        for (_, call, _) in questions(store, &holes) {
+            if !have.iter().any(|(c, _)| *c == call) {
+                eprintln!("nether: nothing recorded answers `{}`", call.function);
+                eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
                 return FAILED;
             }
-            Ok(answer) => {
-                let Ok(Stored::Value(value)) = store.get(answer.answer()) else { continue };
-                said.push((call.clone(), answer.answer()));
-                recorded.push(answer.witness());
-                answers = answers.and(call, value);
+        }
+        for (call, value) in have {
+            answers = answers.and(call, value);
+        }
+    } else {
+        let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let world = match world_from(granted, &root) {
+            Ok(world) => world,
+            Err(cap) => {
+                eprintln!("nether: `{cap}` is in §9.1 and is not built yet.");
+                eprintln!("        disk and disk! are; the rest are 0068, 0070, 0071 and 0072.");
+                return ExitCode::from(code::UNIMPLEMENTED);
+            }
+        };
+        let into = Recorder::new(store, source);
+        for (hole, call, _) in questions(store, &holes) {
+            let Ok(Stored::Node(Node::Hole { span, .. })) = store.get(hole) else { continue };
+            match world.ask(&call, span, &into) {
+                // A hole nothing granted answers stays a hole, which is what
+                // makes exhumation incremental rather than all or nothing.
+                Err(nether_world::Unanswered::Ungranted { .. }) => {}
+                Err(e) => {
+                    eprintln!("nether: {e}");
+                    return FAILED;
+                }
+                Ok(answer) => {
+                    let Ok(Stored::Value(value)) = store.get(answer.answer()) else { continue };
+                    said.push((call.clone(), answer.answer()));
+                    recorded.push(answer.witness());
+                    answers = answers.and(call, value);
+                }
             }
         }
     }
@@ -232,7 +256,6 @@ fn dig_up(store: &Store, cairn: Cairn, granted: &[Capability], wants_json: bool)
         witnesses: recorded,
         deposits: residue.deposits.clone(),
         source,
-        fuel_spent: residue.fuel_spent,
         depth: deepest,
     };
     let next = match store.put(&Stored::Node(deeper)) {
@@ -242,6 +265,17 @@ fn dig_up(store: &Store, cairn: Cairn, granted: &[Capability], wants_json: bool)
             return FAILED;
         }
     };
+
+    // §6.7's replay law: replaying a sealed trace produces the same cairn.
+    if replaying {
+        if next == cairn {
+            println!("identical.");
+            return ExitCode::SUCCESS;
+        }
+        eprintln!("nether: replay produced {} and not {}", next.short(), cairn.short());
+        eprintln!("        §6.7 calls that a bug in the implementation.");
+        return ExitCode::from(code::MALFORMED);
+    }
 
     let told = Sealed { was: cairn, now: next, said, depth: deepest, holes: residue.holes.len() };
     if wants_json {

@@ -79,7 +79,7 @@ testing first.
 
 ```
 cairn(v) = blake3( DOMAIN || encode(v) )
-DOMAIN   = b"netherc/cairn/v3\x00"
+DOMAIN   = b"netherc/cairn/v4\x00"
 ```
 
 A cairn is 32 bytes. Its text form is lowercase hexadecimal. Tools MAY display
@@ -102,14 +102,15 @@ Nothing is reinterpreted, so nothing is renamed.
 > [§90.2](90-rationale.md#902-rejected-alternatives) records what was given up
 > to narrow it.
 
-The domain is at `v3`. It has moved twice, both times because `Trace` changed
-what it holds ([§7.3.1](#731-node-encoding)) — to `v2` when a residue stopped
-being nodes, and to `v3` when a trace began naming its witnesses. Both are the
-bumping case and not the exempt one: a byte string that decoded to a trace
-under one domain decodes to a different trace under the next, and the two are
-not the same value however similar they look. Nothing had been buried either
-time, so the bumps cost nothing. That is the only reason they were affordable,
-and it is why the rule is worth having before it is not.
+The domain is at `v4`. It has moved three times, every time because `Trace`
+changed what it holds ([§7.3.1](#731-node-encoding)): to `v2` when a residue
+stopped being nodes, to `v3` when a trace began naming its witnesses, and to
+`v4` when it stopped recording what the burial spent. Each is the bumping case
+and not the exempt one — a byte string that decoded to a trace under one domain
+decodes to a different trace under the next, and the two are not the same value
+however similar they look. Nothing had been buried any of those times, so the
+bumps cost nothing. That is the only reason they were affordable, and it is why
+the rule is worth having before it is not.
 
 ## 7.3 Nodes
 
@@ -123,7 +124,7 @@ its cairn.
 | `Hole` | the fields listed in [§6.3](06-evaluation.md#63-holes) |
 | `Deposit` | a value cairn and the source span that deposited it |
 | `Witness` | a stratum, a call, the answer, and the span that asked |
-| `Trace` | the residue, the holes, the witnesses, the deposits, the source, the fuel spent, the depth, and the stratum-8 mark |
+| `Trace` | the residue, the holes, the witnesses, the deposits, the source, the depth, and the stratum-8 mark |
 
 Nodes reference other nodes only by cairn. The graph is therefore acyclic by
 construction: a node cannot name a node that does not yet exist, and a node
@@ -141,7 +142,7 @@ tag `0x20`, then a kind byte, then the kind's payload.
 | `0x02` | `Hole` | `call`, one byte stratum, `span` |
 | `0x03` | `Deposit` | `cairn` of the value, `span` |
 | `0x04` | `Witness` | one byte stratum, `call`, `cairn` of the answer, `span` |
-| `0x05` | `Trace` | `cairn` of the residue source, `cairn-list` of holes, `cairn-list` of witnesses, `cairn-list` of deposits, `cairn` of the source buried, `u64` fuel spent, one byte depth, one byte stratum-8 mark |
+| `0x05` | `Trace` | `cairn` of the residue source, `cairn-list` of holes, `cairn-list` of witnesses, `cairn-list` of deposits, `cairn` of the source buried, one byte depth, one byte stratum-8 mark |
 
 Three shapes appear inside more than one of them:
 

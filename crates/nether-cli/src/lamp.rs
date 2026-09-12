@@ -201,9 +201,7 @@ fn node(store: &Store, n: &Node) -> String {
             Ok(Stored::Value(v)) => format!("deposit  {}   at {}", value(&v), span.start),
             _ => format!("deposit  {}", v.short()),
         },
-        Node::Trace {
-            residue, holes, witnesses, deposits, fuel_spent, depth, unrecorded, ..
-        } => {
+        Node::Trace { residue, holes, witnesses, deposits, depth, unrecorded, .. } => {
             let mark = if *unrecorded { "   UNRECORDED" } else { "" };
             // The residue is named here because nothing else names it, and
             // §6.5's MUST is about being able to read it back.
@@ -213,10 +211,7 @@ fn node(store: &Store, n: &Node) -> String {
                 witnesses.len(),
                 deposits.len()
             );
-            format!(
-                "trace    depth {depth}   residue {}   {held}   {fuel_spent} steps{mark}",
-                residue.short()
-            )
+            format!("trace    depth {depth}   residue {}   {held}{mark}", residue.short())
         }
     }
 }

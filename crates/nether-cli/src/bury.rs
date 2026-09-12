@@ -205,7 +205,6 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
         witnesses,
         deposits: residue.deposits.clone(),
         source: source_cairn,
-        fuel_spent: residue.fuel_spent,
         // §7.3.2: the join of what the residue still reaches and what a
         // witness reached. Nothing has been answered, so it is the first.
         depth: residue.depth.get(),
@@ -253,6 +252,8 @@ struct Buried {
     depth: u8,
     holes: Vec<Cairn>,
     nodes: usize,
+    /// What this burial spent. §8.2: reported by the rite, and not recorded in
+    /// the trace, because a trace holding it could not be replayed (§6.7).
     fuel_spent: u64,
 }
 
@@ -296,12 +297,15 @@ impl Buried {
                 _ => format!("{{\"cairn\":\"{h}\"}}"),
             })
             .collect();
-        format!(
-            "{{\"buried\":{},\"cairn\":\"{}\",\"residue\":\"{}\",\"source\":\"{}\",             \"depth\":{},\"nodes\":{},\"fuel_spent\":{},\"holes\":[{}]}}",
+        let named = format!(
+            "\"buried\":{},\"cairn\":\"{}\",\"residue\":\"{}\",\"source\":\"{}\"",
             json::string(&self.path),
             self.cairn,
             self.residue,
-            self.source,
+            self.source
+        );
+        format!(
+            "{{{named},\"depth\":{},\"nodes\":{},\"fuel_spent\":{},\"holes\":[{}]}}",
             self.depth,
             self.nodes,
             self.fuel_spent,

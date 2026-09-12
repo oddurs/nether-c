@@ -89,7 +89,6 @@ fn corpus() -> Vec<Vec<u8>> {
             witnesses: vec![c],
             deposits: vec![c],
             source: c,
-            fuel_spent: 12,
             depth: 3,
             unrecorded: true,
         },

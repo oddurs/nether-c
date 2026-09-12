@@ -2,8 +2,9 @@
 id: 163
 title: fuel_spent is the one thing stopping replay
 type: spec
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p0
@@ -60,7 +61,15 @@ The domain goes v3 to v4.
 
 ## Acceptance criteria
 
-- [ ] Replaying a sealed trace produces a trace with the same cairn
-- [ ] §7.3 and §8.2 agree about what a trace records
-- [ ] `bury` and `exhume` still report what they spent
-- [ ] §7.2's domain is bumped
+- [x] Replaying a sealed trace produces a trace with the same cairn
+- [x] §7.3 and §8.2 agree about what a trace records
+- [x] `bury` and `exhume` still report what they spent
+- [x] §7.2's domain is bumped
+
+## 2026-09-12
+
+Replay reproduces now: exhume bb9ed429 --replay prints identical. Section 6.6's and section 6.7's transcripts are executed rather than pinned, so the specification's own exhume and replay examples run.
+
+## 2026-09-12
+
+The harness gained the other half it needed: everything earlier in the same document runs first, unchecked. A reader reaches section 6.7 having run section 6.6, and a transcript that names a cairn only exists because the command above it made one. tests/programs gained main.nc, which is what build.nc reads.

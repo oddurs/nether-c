@@ -216,12 +216,12 @@ answer, and buries the residue again.
 
 ```console
 $ nether bury build.nc
-buried   build.nc → dd1289f4   depth 3   holes 1   4 nodes
+buried   build.nc → 76c4b655   depth 3   holes 1   4 nodes
   hole ①  read("main.nc")                stratum 3  disk
 
-$ nether exhume dd1289f4 --grant disk
-  ①  read("main.nc")  →  11,204 bytes  a1f0c93d
-sealed   dd1289f4 + a1f0c93d → 77de9b31   depth 3   holes 0
+$ nether exhume 76c4b655 --grant disk
+  ①  read("main.nc")  →  29 bytes  6940fecb
+sealed   76c4b655 + 6940fecb → bb9ed429   depth 3   holes 0
 ```
 
 The result is a new trace with a new cairn. The original trace still exists,
@@ -238,7 +238,7 @@ A trace with no holes is **sealed**. A sealed trace has a value.
 ## 6.7 Replay
 
 ```console
-$ nether exhume 77de9b31 --replay
+$ nether exhume bb9ed429 --replay
 identical.
 ```
 
@@ -248,6 +248,11 @@ does not prefer the ledger over the world, it cannot reach the world.
 
 > **Replay law.** Replaying a sealed trace produces a trace with the same
 > cairn, unless the original trace is marked as having reached stratum 8.
+
+This is why a trace does not record what its burial spent
+([§8.2](08-rites.md#82-bury)). Replay buries a residue that is already folded,
+which costs less than folding it did, so a trace holding that number could
+never come back as itself.
 
 "Identical" means byte-identical under the canonical encoding of
 [section 07](07-ledger.md) — not merely equal in value. A trace that replays to
