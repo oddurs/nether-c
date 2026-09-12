@@ -125,13 +125,11 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`########··` 80% · 12 of 15 done · due 2027-02-28
+`##########` 94% · 15 of 16 done · due 2027-02-28
 
 ### unmarked
 
-- [ ] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
-- [ ] [`0133`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0133-spec-a-shade-parameter-has-an-origin-nothing-can-infer.md) Spec: a shade parameter has an origin nothing can infer <sup>spec · p1</sup>
-- [ ] [`0134`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0134-spec-types-are-inferred-in-a-body-and-the-grammar-requires-one.md) Spec: types are inferred in a body and the grammar requires one <sup>spec · p1</sup>
+- [ ] [`0153`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0153-the-parser-and-checker-do-not-implement-aggregate-construction.md) The parser and checker do not implement aggregate construction <sup>feature · p0 · 0</sup>
 
 ### buried
 
@@ -141,24 +139,28 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0057`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0057-depth-inference.md) Depth inference <sup>feature · p0 · 0</sup>
 - [x] [`0058`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0058-diagnostics-with-source-spans.md) Diagnostics with source spans <sup>feature · p1 · 0</sup>
 - [x] [`0059`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0059-proof-the-three-sample-programs.md) Proof: the three sample programs <sup>chore · p0 · 3</sup>
+- [x] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
 - [x] [`0118`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0118-spec-json-is-bound-in-the-prelude-scope-and-never-defined.md) Spec: Json is bound in the prelude scope and never defined <sup>spec · p2</sup>
 - [x] [`0123`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0123-spec-sizeof-has-no-answer.md) Spec: sizeof has no answer <sup>spec · p2</sup>
 - [x] [`0130`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0130-decide-where-the-lexer-gets-unicode.md) Decide: where the lexer gets Unicode <sup>spec · p0</sup>
 - [x] [`0131`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0131-spec-section-3-6-does-not-say-what-an-integer-literal-may-hold.md) Spec: section 3.6 does not say what an integer literal may hold <sup>spec · p1</sup>
+- [x] [`0133`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0133-spec-a-shade-parameter-has-an-origin-nothing-can-infer.md) Spec: a shade parameter has an origin nothing can infer <sup>spec · p1</sup>
+- [x] [`0134`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0134-spec-types-are-inferred-in-a-body-and-the-grammar-requires-one.md) Spec: types are inferred in a body and the grammar requires one <sup>spec · p1</sup>
 - [x] [`0141`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0141-nothing-bounds-recursion-outside-burial.md) Nothing bounds recursion outside burial <sup>bug · p1 · 0</sup>
 - [x] [`0143`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0143-a-span-that-lands-mid-character-panics-the-reporter.md) A span that lands mid-character panics the reporter <sup>bug · p2 · 0</sup>
 
 ## rites — The Rites
 
-`########··` 76% · 16 of 21 done · due 2027-03-31
+`#########·` 86% · 18 of 21 done · due 2027-03-31
 
 ### unmarked
 
-- [ ] [`0061`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0061-nether-exhume.md) nether exhume <sup>feature · p0 · 5</sup>
 - [ ] [`0065`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0065-nether-graft.md) nether graft <sup>feature · p1 · 4</sup>
+
+### starved
+
+- [ ] [`0061`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0061-nether-exhume.md) nether exhume <sup>feature · p0 · 5</sup>
 - [ ] [`0066`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0066-transcript-tests-for-every-documented-invocation.md) Transcript tests for every documented invocation <sup>chore · p0</sup>
-- [ ] [`0150`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0150-spec-a-budget-cannot-change-a-trace-so-8-2-asks-for-the-impossible.md) Spec: a budget cannot change a trace, so 8.2 asks for the impossible <sup>spec · p1</sup>
-- [ ] [`0152`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0152-lamp-adds-a-newline-to-a-value-that-has-one.md) lamp adds a newline to a value that has one <sup>bug · p1 · 0</sup>
 
 ### buried
 
@@ -177,7 +179,9 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0146`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0146-naming-a-value-is-quadratic-in-what-burial-has-named.md) Naming a value is quadratic in what burial has named <sup>chore · p2 · 0</sup>
 - [x] [`0147`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0147-nether-bury-s-module-doc-describes-a-crate-that-no-longer-exists.md) nether-bury's module doc describes a crate that no longer exists <sup>docs · p2 · 0</sup>
 - [x] [`0149`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0149-burial-does-not-deposit.md) Burial does not deposit <sup>bug · p1 · 0</sup>
+- [x] [`0150`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0150-spec-a-budget-cannot-change-a-trace-so-8-2-asks-for-the-impossible.md) Spec: a budget cannot change a trace, so 8.2 asks for the impossible <sup>spec · p1</sup>
 - [x] [`0151`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0151-hello-nc-demands-a-function-and-never-calls-it.md) hello.nc demands a function and never calls it <sup>bug · p0 · 0</sup>
+- [x] [`0152`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0152-lamp-adds-a-newline-to-a-value-that-has-one.md) lamp adds a newline to a value that has one <sup>bug · p1 · 0</sup>
 
 ## world — The World
 
