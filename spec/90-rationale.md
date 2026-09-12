@@ -263,6 +263,27 @@ It also removes a dependency — full NFC is a megabyte of Unicode tables — bu
 that is a consequence of the decision, not the reason for it. Had the argument
 gone the other way, the tables would have been the right thing to add.
 
+### Recording the fuel budget in the trace
+
+§8.2 used to require that the budget be reported *in the trace*, "because a
+trace buried under a different budget is a different trace". It is not, and it
+cannot be: running out of fuel produces a halt rather than a trace, so a budget
+either lets the burial finish — in which case it changed nothing — or there is
+no trace to have changed.
+
+The rejected alternative was to add the budget to `Node::Trace` anyway and
+justify it differently: that a trace should record the conditions it was made
+under even where they did not bind. There is a real argument for it. If a later
+burial of the same residue under a smaller budget halts where the first did
+not, somebody will want to know what the first one was allowed.
+
+It was rejected because the cost is concrete and the benefit is speculative.
+Adding a field to `Trace` changes what an existing tag means, which bumps the
+domain separator ([§7.2](07-ledger.md#72-cairns)) and renames every value ever
+stored. Paying that to record a number that provably did not affect the result
+is the wrong trade, and if the diagnostic case turns out to matter it can be
+served by the rite's own output rather than by the artifact.
+
 ### Calling a nullary function without parentheses
 
 HolyC does not need them: `Dir;` calls `Dir`. The first program in this
