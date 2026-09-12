@@ -39,7 +39,7 @@ pub struct Span {
 ///
 /// The arguments are already buried. `read(concat(dir, name))` is a call to
 /// `read` with the finished path, not a call containing a `concat`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Call {
     /// The prelude function's name. Never empty.
     pub function: String,

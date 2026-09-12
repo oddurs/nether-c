@@ -2,8 +2,9 @@
 id: 138
 title: 'bury: a hole''s identity is its span, not its call'
 type: bug
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p0
@@ -53,6 +54,14 @@ a hole one `span` and calls it "the source location that asked".
 
 ## Acceptance criteria
 
-- [ ] Two identical calls at two source positions are one hole
-- [ ] A test that would have failed before this
-- [ ] §6.3 says which span a shared hole keeps
+- [x] Two identical calls at two source positions are one hole
+- [x] A test that would have failed before this
+- [x] §6.3 says which span a shared hole keeps
+
+## 2026-09-12
+
+Interning is now on the call, which is what section 6.3 says identity is, so the rule is the type: a HashMap<Call, Cairn>. Call gains Hash for it.
+
+## 2026-09-12
+
+Section 6.3 now says the hole keeps the span of the first place that asked, in the order section 6.2 fixes, so which place that is stays a fact about the program.

@@ -27,6 +27,8 @@
 //!   be written down cannot be residualised. See the item *a struct cannot be
 //!   constructed*.
 
+use std::collections::HashMap;
+
 use nether_core::{
     BinOp, Block, Capability, Depth, Diagnostic, Expr, ExprKind, FuncId, GlobalId, Literal, Place,
     Prim, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
@@ -253,6 +255,7 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
         grind: Vec::new(),
         named: Vec::new(),
         holes: Vec::new(),
+        asked: HashMap::new(),
     };
     let mut demands = Vec::with_capacity(unit.demands.len());
     // In source order, which §6.2 fixes: two burials of the same input produce
@@ -348,6 +351,12 @@ struct Burial<'a> {
     named: Vec<(Cairn, Stored)>,
     /// The holes, in the order they were found.
     holes: Vec<Cairn>,
+    /// The holes already dug, by the question each one asks.
+    ///
+    /// §6.3 makes the `call` the identity and not the node. A node carries the
+    /// span of the place that asked, so interning on the node would make the
+    /// same question asked from two places into two questions.
+    asked: HashMap<nether_ledger::Call, Cairn>,
 }
 
 /// One open loop or call.
@@ -391,8 +400,14 @@ impl Burial<'_> {
         // one, which is the whole point of addressing by content.
         let args = args.into_iter().map(|v| self.remember(Stored::Value(v))).collect();
         let call = nether_ledger::Call { function: p.name().to_string(), args };
+        // §6.3: two holes with identical calls in one trace MUST be the same
+        // hole. The second place to ask is not a second question, so it gets
+        // the hole the first one made — span and all.
+        if let Some(dug) = self.asked.get(&call) {
+            return *dug;
+        }
         let node = Node::Hole {
-            call,
+            call: call.clone(),
             stratum: p.latent().get(),
             span: nether_ledger::Span {
                 source: self.source,
@@ -406,9 +421,8 @@ impl Burial<'_> {
             depends: Vec::new(),
         };
         let cairn = self.remember(Stored::Node(node));
-        if !self.holes.contains(&cairn) {
-            self.holes.push(cairn);
-        }
+        self.asked.insert(call, cairn);
+        self.holes.push(cairn);
         cairn
     }
 
