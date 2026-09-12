@@ -269,6 +269,43 @@ fn a_lamp_on_a_trace_shows_what_the_program_left_behind() {
 }
 
 #[test]
+fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
+    // §8.4: "source order" is by offset within one source, and a trace may
+    // hold more than one. Sorting on the offset alone put the second file's
+    // first deposit between the first file's two, which is an order
+    // corresponding to nothing anybody wrote.
+    let dir = scratch("lamp-two-sources");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let one = put(Value::Bytes(b"the first file".to_vec()));
+    let two = put(Value::Bytes(b"the second file".to_vec()));
+    let at = |source, start: u64, text: &str| {
+        let v = put(Value::Str(text.into()));
+        node(Node::Deposit { value: v, span: Span { source, start, end: start + 1 } })
+    };
+    // Offsets chosen so that sorting on them alone interleaves the two.
+    let roots = vec![
+        at(one, 10, "one-a"),
+        at(two, 20, "two-a"),
+        at(one, 30, "one-b"),
+        at(two, 40, "two-b"),
+    ];
+    let trace = node(Node::Trace { roots, fuel_spent: 4, depth: 0, unrecorded: false });
+
+    let out = nether(Some(&dir), &["lamp", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    let lines: Vec<&str> = text.lines().collect();
+
+    let first =
+        if one.to_string() < two.to_string() { ["one-a", "one-b"] } else { ["two-a", "two-b"] };
+    let second = if first[0] == "one-a" { ["two-a", "two-b"] } else { ["one-a", "one-b"] };
+    assert_eq!(lines, [first[0], first[1], second[0], second[1]], "{lines:?}");
+}
+
+#[test]
 fn a_lamp_on_a_node_says_what_kind_of_node_it_is() {
     let (dir, trace, _, _) = a_small_trace("lamp-node");
     let out = nether(Some(&dir), &["lamp", &trace.to_string(), "--json"]);
