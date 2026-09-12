@@ -131,14 +131,23 @@ def paint_console(src: str) -> str:
 
 
 def paint(src: str, lang: str) -> str:
-    if lang in ("c", "nc"):
+    if lang in ("c", "nc", "signatures"):
         return paint_nc(src)
     if lang in ("console", "sh", "shell"):
         return paint_console(src)
     return esc(src)
 
 
-LANG_LABEL = {"c": "nether c", "console": "shell", "ebnf": "grammar", "": ""}
+LANG_LABEL = {
+    "c": "nether c",
+    # A signature and a semicolon: a notation §09 lists the prelude in, and
+    # not something §04 parses. Painted the same way and labelled differently,
+    # because it reads like the language and is not it.
+    "signatures": "prelude signatures",
+    "console": "shell",
+    "ebnf": "grammar",
+    "": "",
+}
 
 
 # ── block parser ───────────────────────────────────────────────────────────

@@ -35,7 +35,7 @@ fn samples() -> Vec<(String, String)> {
         ("02-calculus.md", 202),
         ("04-grammar.md", 155),
         ("05-types.md", 52),
-        ("09-prelude.md", 72),
+        ("09-prelude.md", 78),
     ];
 
     let body_of = |file: &str, line: usize| {

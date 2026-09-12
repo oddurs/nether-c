@@ -13,6 +13,12 @@ so nothing here may be deeper than it must.
 The prelude is deliberately small. It should be readable in full in ten
 minutes.
 
+The listings below are a notation and not a program. A signature and a
+semicolon is not something [section 04](04-grammar.md) parses — `func_decl`
+wants a block — and there is no production for one because nothing a program
+can write would supply a body for `read`. They are here the way a header file
+is here: to be read.
+
 ## 9.1 Capabilities
 
 These are the names `descend` accepts. An implementation MUST NOT define
@@ -34,7 +40,7 @@ rest of the language: this one does not take back.
 
 ## 9.2 Depth 0
 
-```c
+```signatures
 I64   min(I64 a, I64 b)                @0;
 I64   max(I64 a, I64 b)                @0;
 I64   abs(I64 x)                       @0;
@@ -86,7 +92,7 @@ program supplies for itself.
 
 ## 9.3 Stratum 1 — `store`
 
-```c
+```signatures
 Answer<Bytes> fetch_node(Cairn c)      @1;   // Refused absent
 Bool          has_node(Cairn c)        @1;
 ```
@@ -98,7 +104,7 @@ which is why it is only one stratum down.
 
 ## 9.4 Stratum 2 — `env`
 
-```c
+```signatures
 Answer<Str> env(Str name)              @2;   // Refused absent
 I64         clock()                    @2;   // the pinned build time
 Str         target()                   @2;   // the target triple
@@ -118,7 +124,7 @@ records the declared set and every value read from it.
 
 ## 9.5 Strata 3 and 4 — `disk`, `disk!`
 
-```c
+```signatures
 Answer<Bytes> read(Str path)           @3;   // absent, denied
 Answer<Str[]> list(Str path)           @3;   // absent, denied
 Bool          exists(Str path)         @3;
@@ -134,7 +140,7 @@ cannot later reproduce on its own.
 
 ## 9.6 Strata 5 and 6 — `net`, `net!`
 
-```c
+```signatures
 Answer<Bytes> get(Str url)             @5;   // unreachable, denied, absent
 Answer<Bytes> post(Str url, Bytes b)   @6;   // unreachable, denied, conflict
 ```
@@ -144,7 +150,7 @@ serves the recorded response and MUST NOT open a socket.
 
 ## 9.7 Stratum 7 — `entropy`
 
-```c
+```signatures
 Bytes draw(I64 n)                      @7;
 ```
 
@@ -162,7 +168,7 @@ different trace. See [§6.7](06-evaluation.md#67-replay).
 
 ## 9.8 Stratum 8 — `unrecorded`
 
-```c
+```signatures
 Answer<Bytes> call_foreign(Str sym, Bytes args) @8;
 ```
 
