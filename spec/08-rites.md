@@ -44,6 +44,8 @@ Every rite:
 - writes human-readable output to stdout and diagnostics to stderr;
 - treats a cairn argument as a full cairn or an unambiguous hexadecimal
   prefix, and MUST fail on an ambiguous prefix rather than choosing;
+- names a source position by the cairn of the source and not by a path,
+  because that is all a span holds ([§7.3](07-ledger.md#73-nodes));
 - exits with a code from §8.8.
 
 No rite writes to the ledger except `bury`, `exhume` and `graft`, and each of
@@ -108,7 +110,7 @@ produced it, to their inputs, to the literals and holes at the bottom.
 ```console
 $ nether lamp a1f0c93d --provenance
 a1f0c93d  Bytes, 11204 bytes
-└─ witness  read("main.nc")            stratum 3   build.nc:1:15
+└─ witness  read("main.nc")            stratum 3   b2e7d410:1:15
    └─ hole ①  answered by exhumation of 4c02ab7f at 2026-09-10T11:04:02Z
 ```
 
@@ -140,7 +142,7 @@ span that took it there.
 $ nether strata 77de9b31
 depth 3   disk
 
-  3  read("main.nc")          build.nc:1:15
+  3  read("main.nc")          b2e7d410:1:15
   0  everything else
 
   replayable: yes

@@ -7,8 +7,9 @@ milestone: rites
 depends_on:
 - 22
 - 47
+- 135
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-12
 priority: p1
 effort: m
 area: crates/nether-cli
