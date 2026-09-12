@@ -246,6 +246,31 @@ The cost is expressiveness: a lattice cannot distinguish *reads the disk* from
 *reads the disk and the network* except by taking the deeper of the two. Nether
 C accepts a coarser answer in exchange for one people will actually use.
 
+### Pretending an implementation has no limits
+
+[§6.4](06-evaluation.md#64-starvation-and-fuel) said exhausting fuel was a
+diagnostic and not a crash, and left it there. Fuel bounds steps, so a
+recursion that never returns overflows whatever stack the implementation is
+using long before the budget runs out, and a stack overflow is a crash. The
+guarantee was true of the case it named and silent about the case that
+actually happens.
+
+**Bound depth with fuel.** Charge more of the budget per frame, so that a deep
+program exhausts sooner. Rejected because it changes a constant and not a
+shape: for any per-frame charge there is a budget large enough to reach any
+depth, and picking one small enough to be safe makes fuel useless as a bound
+on work.
+
+**Say nothing and let implementations differ.** Rejected because §6.4 already
+promises no crash, so saying nothing is not neutral — it is a promise no
+recursive evaluator can keep.
+
+**What it cost.** An admission: two implementations with different limits can
+disagree about whether a program buries at all. The reproducibility claims in
+this document survive because none of them was ever about that. They are about
+what a trace *is* once it exists, and the sentence that says so is now written
+down beside the admission rather than assumed.
+
 ### One number on an arrow
 
 An arrow carried a single depth, and [ABS] took it from the body's value
