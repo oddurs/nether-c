@@ -46,6 +46,7 @@ pub const SAMPLES: &[(&str, Shape)] = &[
     ("02-calculus.md § 2.3 What each rule is doing #1", Shape::Unit),
     ("02-calculus.md § 2.4 Metatheory #1", Shape::Statements),
     ("03-lexical.md § 3.2 Comments #1", Shape::Unit),
+    ("04-grammar.md § 4.3 Types #1", Shape::Unit),
     ("04-grammar.md § 4.7 The bare-expression statement #1", Shape::Statements),
     ("05-types.md § 5.1.1 Answers and refusals #1", Shape::Statements),
     ("05-types.md § 5.2 Aggregates #1", Shape::Unit),

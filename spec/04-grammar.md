@@ -66,10 +66,34 @@ type_atom     := identifier
                | identifier "<" type { "," type } ">" ;
 ```
 
-`Shade<Bytes>@0` is a shade of `Bytes` at value depth 0. The origin depth of a
-shade is part of its type but is not written in source syntax; it is always
-inferred, because writing it would let a programmer claim an origin the value
-does not have.
+`Shade<Bytes>@0` is a shade of `Bytes` at value depth 0. The two depths on a
+shade are different things and it is worth being careful: the one after the
+`>` is how deep the *shade* is, and the one inside is how deep the value it
+holds came from.
+
+A shade's **origin** is the depth written on its type argument.
+`Shade<Bytes@5>` is a shade of bytes that came from stratum 5, and
+`Shade<Bytes@5>@0` is that shade held at depth 0, which is the ordinary case
+and what makes a shade worth having.
+
+Where a shade is constructed, the origin is **inferred and may not be
+written**: `shade e` takes its origin from the depth of `e`, and letting a
+programmer write one there would let them claim an origin the value does not
+have.
+
+Where a shade is **received** — a parameter, a struct field, a return type —
+the origin MUST be written. There is nothing to infer it from, and the claim is
+not believed: it is checked at every call site, which is the opposite of the
+situation the rule above guards against.
+
+```c
+// Takes a shade from stratum 5. Its name may be carried anywhere; opening it
+// needs `descend net`, wherever the caller is.
+Cairn keep(Shade<Bytes@5> s) @0 { seal s }
+```
+
+That is the whole of it. No new syntax: the depth annotation on a type already
+means "this value came from there", and a shade's argument is a type.
 
 ## 4.4 Statements
 
