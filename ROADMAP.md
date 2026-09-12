@@ -95,11 +95,13 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`##########` 94% · 17 of 18 done · due 2027-01-15
+`#########·` 85% · 17 of 20 done · due 2027-01-15
 
 ### unmarked
 
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
+- [ ] [`0139`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0139-the-decay-rule-can-be-nullified-by-one-line.md) The Decay Rule can be nullified by one line <sup>bug · p0 · 0</sup>
+- [ ] [`0140`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0140-ci-skips-cairn-check-when-the-install-fails.md) CI skips cairn check when the install fails <sup>bug · p0 · 0</sup>
 
 ### buried
 
@@ -123,13 +125,15 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`########··` 77% · 10 of 13 done · due 2027-02-28
+`#######···` 67% · 10 of 15 done · due 2027-02-28
 
 ### unmarked
 
 - [ ] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
 - [ ] [`0133`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0133-spec-a-shade-parameter-has-an-origin-nothing-can-infer.md) Spec: a shade parameter has an origin nothing can infer <sup>spec · p1</sup>
 - [ ] [`0134`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0134-spec-types-are-inferred-in-a-body-and-the-grammar-requires-one.md) Spec: types are inferred in a body and the grammar requires one <sup>spec · p1</sup>
+- [ ] [`0141`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0141-nothing-bounds-recursion-outside-burial.md) Nothing bounds recursion outside burial <sup>bug · p1 · 0</sup>
+- [ ] [`0143`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0143-a-span-that-lands-mid-character-panics-the-reporter.md) A span that lands mid-character panics the reporter <sup>bug · p2 · 0</sup>
 
 ### buried
 
@@ -146,7 +150,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## rites — The Rites
 
-`#####·····` 45% · 5 of 11 done · due 2027-03-31
+`###·······` 29% · 5 of 17 done · due 2027-03-31
 
 ### unmarked
 
@@ -156,6 +160,12 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0066`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0066-transcript-tests-for-every-documented-invocation.md) Transcript tests for every documented invocation <sup>chore · p0</sup>
 - [ ] [`0117`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0117-spec-answer-and-refusal-have-no-tag-in-the-frozen-encoding.md) Spec: Answer and Refusal have no tag in the frozen encoding <sup>spec · p0</sup>
 - [ ] [`0128`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0128-spec-a-residue-is-nodes-and-no-node-can-hold-a-branch.md) Spec: a residue is nodes, and no node can hold a branch <sup>spec · p0</sup>
+- [ ] [`0138`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0138-bury-a-hole-s-identity-is-its-span-not-its-call.md) bury: a hole's identity is its span, not its call <sup>bug · p0 · 0</sup>
+- [ ] [`0142`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0142-nether-strata-says-two-things-it-cannot-know.md) nether strata says two things it cannot know <sup>bug · p1 · 1</sup>
+- [ ] [`0144`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0144-lamp-orders-deposits-by-offset-across-two-sources.md) lamp orders deposits by offset across two sources <sup>bug · p2 · 1</sup>
+- [ ] [`0145`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0145-say-whether-the-store-is-durable-or-only-consistent.md) Say whether the store is durable or only consistent <sup>spec · p2 · 0</sup>
+- [ ] [`0146`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0146-naming-a-value-is-quadratic-in-what-burial-has-named.md) Naming a value is quadratic in what burial has named <sup>chore · p2 · 0</sup>
+- [ ] [`0147`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0147-nether-bury-s-module-doc-describes-a-crate-that-no-longer-exists.md) nether-bury's module doc describes a crate that no longer exists <sup>docs · p2 · 0</sup>
 
 ### buried
 
@@ -206,7 +216,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## after — After the Burial
 
-`##········` 20% · 2 of 10 done · due 2027-10-01
+`##········` 18% · 2 of 11 done · due 2027-10-01
 
 ### unmarked
 
@@ -218,6 +228,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [ ] [`0106`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0106-a-public-store-and-what-it-costs-to-run.md) A public store, and what it costs to run <sup>chore · p2 · 6</sup>
 - [ ] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
+- [ ] [`0148`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0148-hygiene-found-by-the-review.md) Hygiene found by the review <sup>chore · p3 · 0</sup>
 
 ### buried
 
