@@ -45,3 +45,7 @@ right to reproduce.
 ## 2026-09-12
 
 Reopened once, for the last time: the error block was depicting a stamp.nc whose statements are indented by two, and section 1.6's own sample has them at unit level. The block now depicts a file that exists — tests/programs/stamp.nc in 0059 — so the three numbers in it are checked against a real file rather than against an imagined one.
+
+## 2026-09-12
+
+Third and last correction, and the reason is the same each time: the error block was a drawing rather than a depiction. A diagnostic prints the whole source line, so a didactic comment on the line the carets underline is a comment the error has to print. Moving it up one line keeps the note for the reader and leaves the error block showing a line a compiler would actually produce.

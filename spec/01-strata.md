@@ -112,7 +112,8 @@ value.
 Shade<Bytes> reply = descend net { shade must(get("https://example.invalid/index.json")) };
 
 Cairn witness = seal reply;       // legal: Cairn@0
-I64   n       = len(look(reply)); // ILLEGAL here — see below
+// ILLEGAL here — see below
+I64   n       = len(look(reply));
 ```
 
 `shade e`, where `e : T@d`, produces a value of type `Shade<T>` at depth 0.
