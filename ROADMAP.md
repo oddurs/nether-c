@@ -95,11 +95,9 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`##########` 95% · 19 of 20 done · due 2027-01-15
+`##########` 100% · 19 of 19 done · due 2027-01-15
 
-### unmarked
-
-- [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
+Buried. The IR, the bidirectional depth checker, normalization by evaluation, holes and residualization, fuel and starvation diagnostics, seal/shade/look, the generative monotonicity test, and the stage one proof.
 
 ### buried
 
@@ -125,11 +123,9 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`##########` 94% · 15 of 16 done · due 2027-02-28
+`##########` 100% · 17 of 17 done · due 2027-02-28
 
-### unmarked
-
-- [ ] [`0153`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0153-the-parser-and-checker-do-not-implement-aggregate-construction.md) The parser and checker do not implement aggregate construction <sup>feature · p0 · 0</sup>
+Buried. The lexer, the recursive descent parser, lowering, depth inference, diagnostics that name the cause, and the three sample programs — plus four specification holes the implementation found and closed.
 
 ### buried
 
@@ -148,6 +144,8 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0134`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0134-spec-types-are-inferred-in-a-body-and-the-grammar-requires-one.md) Spec: types are inferred in a body and the grammar requires one <sup>spec · p1</sup>
 - [x] [`0141`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0141-nothing-bounds-recursion-outside-burial.md) Nothing bounds recursion outside burial <sup>bug · p1 · 0</sup>
 - [x] [`0143`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0143-a-span-that-lands-mid-character-panics-the-reporter.md) A span that lands mid-character panics the reporter <sup>bug · p2 · 0</sup>
+- [x] [`0153`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0153-the-parser-and-checker-do-not-implement-aggregate-construction.md) The parser and checker do not implement aggregate construction <sup>feature · p0 · 0</sup>
+- [x] [`0154`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0154-naming-a-local-freezes-it.md) Naming a local freezes it <sup>feature · p0 · 0</sup>
 
 ## rites — The Rites
 
@@ -224,7 +222,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## after — After the Burial
 
-`###·······` 27% · 3 of 11 done · due 2027-10-01
+`###·······` 25% · 3 of 12 done · due 2027-10-01
 
 ### unmarked
 
@@ -236,6 +234,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [ ] [`0106`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0106-a-public-store-and-what-it-costs-to-run.md) A public store, and what it costs to run <sup>chore · p2 · 6</sup>
 - [ ] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
+- [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
 
 ### buried
 
