@@ -263,6 +263,30 @@ It also removes a dependency — full NFC is a megabyte of Unicode tables — bu
 that is a consequence of the decision, not the reason for it. Had the argument
 gone the other way, the tables would have been the right thing to add.
 
+### Calling a nullary function without parentheses
+
+HolyC does not need them: `Dir;` calls `Dir`. The first program in this
+specification was written as `demand greet;` for a year on the strength of that
+memory, and it does not call anything — [§4.5](04-grammar.md#45-expressions)
+requires `call_suffix`, so a bare identifier is the function itself. The body
+never ran and nothing was deposited, and nobody noticed because nothing could
+run at all.
+
+The tempting fix is the grammar: let a bare identifier of function type call
+itself. It was rejected because it reintroduces exactly the ambiguity the rest
+of the language spent its budget removing. `greet` would mean the function in
+one position and its result in another, and the reader would have to know the
+type to know which — in a language whose whole proposition is that a value's
+type tells you what it cost.
+
+It would also make `seal greet` ambiguous in a way that matters: the cairn of a
+function and the cairn of what it returns are different names for different
+things, and there would be no way to write the first one.
+
+What it costs is two characters and a small loss of the homage. HolyC's
+parenthesis-free call is one of its most characteristic gestures and this is a
+place where Nether C simply does not follow it.
+
 ### A residue as nodes
 
 [§6.5](06-evaluation.md#65-residue) used to say the residue was "every node

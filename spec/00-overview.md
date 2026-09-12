@@ -130,7 +130,7 @@ U0 greet()
   "Hello from the nether\n";   // deposited, not printed
 }
 
-demand greet;
+demand greet();
 ```
 
 ```console
