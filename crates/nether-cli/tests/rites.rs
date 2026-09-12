@@ -230,6 +230,30 @@ fn burying_reports_depth_holes_and_nodes() {
     assert!(said.contains("disk"), "{said}");
 }
 
+/// The whole of §0.7, run: bury, then lamp, then the greeting.
+///
+/// Two commands, which is the language's central bargain and the largest tax
+/// it charges. This is the first program anybody reads and it is the end-to-end
+/// proof that there is something here at all.
+#[test]
+fn the_first_program_in_the_specification_works() {
+    let dir = scratch("hello-end-to-end");
+    let src = dir.join("hello.nc");
+    std::fs::write(&src, include_str!("../../../tests/programs/hello.nc")).expect("write");
+
+    let buried = nether(Some(&dir), &["bury", src.to_str().expect("utf8")]);
+    assert_eq!(code(&buried), 0, "{}", stderr(&buried));
+    let cairn =
+        stdout(&buried).split_whitespace().nth(3).expect("the summary names the trace").to_owned();
+
+    let shown = nether(Some(&dir), &["lamp", &cairn]);
+    assert_eq!(code(&shown), 0, "{}", stderr(&shown));
+    // The greeting, exactly. `lamp` adds one newline of its own to a value
+    // that already ends in one, which is filed separately — so this asserts
+    // the bytes rather than the framing.
+    assert_eq!(stdout(&shown).trim_end(), "Hello from the nether", "{}", stdout(&shown));
+}
+
 /// A program that needs nothing from the world leaves no holes.
 #[test]
 fn a_pure_program_buries_to_depth_zero_with_no_holes() {

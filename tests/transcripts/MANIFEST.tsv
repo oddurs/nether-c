@@ -1,17 +1,17 @@
 # ref	kind	status	digest
-README.md § THE FIRST PROGRAM #1	c	pinned	259c208a7e651d11
+README.md § THE FIRST PROGRAM #1	c	pinned	9bc96e7b7ae86373
 README.md § THE FIRST PROGRAM #2	console	pinned	e183405459af89bf
 README.md § WHAT IS TRUE TODAY #1	console	checked	d838eaf97e53718b
 README.md § DEVELOPMENT #1	sh	pinned	7b99770b16361486
 README.md § DEVELOPMENT #2	sh	pinned	51e912b7cdf5fa39
 README.md § DEVELOPMENT #3	sh	pinned	fb434d19d5a7b7b8
-site/src/index.html § The first program #1	hello.nc	pinned	93bb6ae51420070b
+site/src/index.html § The first program #1	hello.nc	pinned	11d370eae3fd608a
 site/src/index.html § The first program #2	console	pinned	e183405459af89bf
 site/src/index.html § The Orpheus rule #1	c	pinned	9c06d713f8f79db4
 site/src/index.html § The Orpheus rule #2	console	pinned	e0f82a96d80bcb09
 site/src/index.html § What a hole is #1	console	pinned	74a79e41374385f3
 site/src/index.html § Where it actually is #1	console	checked	d838eaf97e53718b
-spec/00-overview.md § 0.7 A first program #1	c	pinned	e34350c3cc044f96
+spec/00-overview.md § 0.7 A first program #1	c	pinned	d92d2096e7e25092
 spec/00-overview.md § 0.7 A first program #2	console	pinned	e183405459af89bf
 spec/01-strata.md § 1.3 Descent #1	c	pinned	39d95c03c09e3f8c
 spec/01-strata.md § 1.5 Seal #1	c	pinned	32212f92be2604ee
