@@ -31,7 +31,7 @@ fn fence(file: &str, line: usize) -> String {
 /// Every program, and the sample it was lifted from.
 const PROGRAMS: [(&str, &str, usize); 3] = [
     ("hello.nc", "00-overview.md", 125),
-    ("stamp.nc", "01-strata.md", 111),
+    ("stamp.nc", "01-strata.md", 114),
     ("build.nc", "06-evaluation.md", 33),
 ];
 

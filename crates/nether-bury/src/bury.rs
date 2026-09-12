@@ -845,14 +845,11 @@ impl Burial<'_> {
             // something the world has not answered yet is a question about a
             // value that does not exist.
             Rite::Seal => {
-                // §1.5: `seal` on a shade is legal and yields the cairn of the
-                // underlying value. Not the shade's own name — the shade is a
-                // wrapper, and sealing it is a claim about what is inside.
-                let named = match &v.kind {
-                    Kind::Shade(inner) => as_value(inner),
-                    _ => as_value(&v),
-                };
-                match named {
+                // §1.5: `seal` on a shade names the shade. §7.1 puts the
+                // stratum it came out of in its encoding, so `seal shade e` is
+                // not `seal e` — reaching through an opaque thing for a name
+                // would be a hole in it.
+                match as_value(&v) {
                     Some(value) => {
                         let cairn = self.remember(Stored::Value(value));
                         Self::known(Literal::Cairn(*cairn.as_bytes()), x)
@@ -956,12 +953,18 @@ fn binary(op: BinOp, a: &Val, b: &Val) -> Result<Option<Literal>, &'static str> 
     Ok(match (&a.kind, &b.kind, op) {
         (Kind::Known(x), Kind::Known(y), BinOp::Eq) => Some(Literal::Bool(x == y)),
         (Kind::Known(x), Kind::Known(y), BinOp::Ne) => Some(Literal::Bool(x != y)),
-        // §5.3: two shades are equal when their underlying values are, which
-        // is a comparison of what is inside and not of the wrappers. Comparing
-        // shades does not count as looking at them, because it reveals only
-        // what `seal` already revealed.
-        (Kind::Shade(x), Kind::Shade(y), BinOp::Eq) => Some(Literal::Bool(x.kind == y.kind)),
-        (Kind::Shade(x), Kind::Shade(y), BinOp::Ne) => Some(Literal::Bool(x.kind != y.kind)),
+        // §5.3 compares canonical encodings, and §7.1 puts a shade's origin
+        // stratum in its own. So two shades are equal when they came out of
+        // the same stratum holding the same value. Comparing them still does
+        // not count as looking at them: it reveals only what `seal` on each
+        // would reveal anyway.
+        (Kind::Shade(x), Kind::Shade(y), BinOp::Eq | BinOp::Ne) => {
+            let (Type::Shade { origin: dx, .. }, Type::Shade { origin: dy, .. }) = (&a.ty, &b.ty)
+            else {
+                return Ok(None);
+            };
+            Some(Literal::Bool(matches!(op, BinOp::Eq) == (dx == dy && x.kind == y.kind)))
+        }
         _ => None,
     })
 }

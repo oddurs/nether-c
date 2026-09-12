@@ -193,6 +193,30 @@ So the fatal one is a **collapse**. It reads in the register the rest of the
 language is written in — a burial that hits one caves in — and it leaves
 `starve` meaning the one thing it means everywhere else.
 
+### A shade's origin: in the value, or only in the type
+
+[§5.3](05-types.md#53-equality) once said both things at once. Equality is
+structural — two values are equal exactly when their encodings are — and then,
+one paragraph later, that two shades are equal when their *underlying* values
+are. [§7.1](07-ledger.md#71-canonical-encoding) encodes a shade as an origin
+byte and the cairn of what it holds, so a shade of the same bytes from stratum
+3 and from stratum 5 were unequal by the first rule and equal by the second.
+
+The other way out was to drop the origin byte, making `Shadeᵈ⟨T⟩` encode
+exactly as the cairn of what it holds and leaving the origin a fact the type
+carries. Rejected, and not only because [§7.1](07-ledger.md#71-canonical-encoding)
+is frozen. [§1.6](01-strata.md#16-shade-and-the-orpheus-rule) says a shade MAY
+be stored, and the only place a Nether C value is stored is the ledger. A shade
+read back out of the ledger with no origin has lost the one thing that makes
+the Orpheus rule checkable, and `look` on it could not be typed at all. The
+origin is not metadata about the shade; it is half of what a shade is.
+
+What that costs is the sentence in [§1.5](01-strata.md#15-seal): `seal` on a
+shade no longer reaches through to the value inside. It names the shade. That
+is the tighter rule anyway — a shade is opaque, and reaching through an opaque
+thing for a name was a small hole in it — and it takes nothing away, because
+`seal e` is legal at any depth and can simply be written before the `shade`.
+
 ### Normalising text in the ledger
 
 An earlier draft had the ledger encode `Str` over its NFC form, so that two

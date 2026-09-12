@@ -2,8 +2,9 @@
 id: 127
 title: 'Spec: section 5.3 says two different things about shade equality'
 type: spec
-status: unmarked
+status: buried
 milestone: calculus
+assignee: Oddur Sigurdsson
 depends_on:
 - 19
 created: 2026-09-12
@@ -53,7 +54,19 @@ Whether a shade's origin is part of its identity.
 
 ## Acceptance criteria
 
-- [ ] §5.3 states one rule
-- [ ] §7.1's `Shade` encoding agrees with it
-- [ ] §1.5's sentence about sealing a shade agrees with it
-- [ ] `nether-ledger` and `nether-bury` follow
+- [x] §5.3 states one rule
+- [x] §7.1's `Shade` encoding agrees with it
+- [x] §1.5's sentence about sealing a shade agrees with it
+- [x] `nether-ledger` and `nether-bury` follow
+
+## 2026-09-12
+
+Settled the way the frozen encoding was already pointing: a shade's origin is part of what it is. What decided it was not that section 7.1 is frozen but that section 1.6 says a shade may be stored, and the only place a Nether C value is stored is the ledger -- a shade read back with no origin has lost the thing that makes the Orpheus rule checkable, and look on it could not be typed.
+
+## 2026-09-12
+
+The cost is section 1.5: seal on a shade no longer reaches through to the value inside, it names the shade. That is the tighter rule and it takes nothing away, since seal is legal at any depth and can be written before the shade.
+
+## 2026-09-12
+
+The cross-stratum case cannot be proved in burial: the checker will not let a stage-one burial hold a finished deep value, so a shade folded at burial time always has origin 0. The proof lives in nether-ledger's encoding tests, where the claim is about encoding anyway.

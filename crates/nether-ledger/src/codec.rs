@@ -570,6 +570,23 @@ mod tests {
         assert!(matches!(decode(&[tag::NODE]), Err(DecodeError::Truncated { .. })));
     }
 
+    /// §5.3 compares values by cairn, and a shade's origin is in its encoding.
+    ///
+    /// So the same bytes carried up out of two different strata are two values
+    /// and not one. The alternative — dropping the origin byte — would mean a
+    /// shade read back out of the ledger had lost the one thing that makes the
+    /// Orpheus rule checkable. §90.2.
+    #[test]
+    fn a_shades_origin_is_part_of_its_name() {
+        let inside = Cairn::of_encoded(b"the same bytes");
+        let from_disk = Value::Shade { origin: 3, value: inside };
+        let from_net = Value::Shade { origin: 5, value: inside };
+        assert_ne!(from_disk.cairn(), from_net.cairn());
+        // And neither is the name of what it holds: `seal` on a shade names
+        // the shade. §1.5.
+        assert_ne!(from_disk.cairn(), inside);
+    }
+
     #[test]
     fn rejects_non_canonical_bools() {
         assert_eq!(decode(&[tag::BOOL, 0x02]), Err(DecodeError::BadBool(0x02)));

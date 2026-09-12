@@ -96,9 +96,12 @@ An implementation MUST compare by cairn. This makes deep equality a 32-byte
 comparison, which is the main practical payoff of content addressing and is
 worth stating as a requirement rather than leaving as an optimisation.
 
-`Shade` is comparable: two shades are equal when their underlying values are.
-Comparing shades does not count as looking at them, because it reveals only
-what `seal` already revealed.
+`Shade` is comparable, and the rule above is the whole of it. A shade's origin
+stratum is part of its type and of its encoding
+([§7.1](07-ledger.md#71-canonical-encoding)), so two shades are equal when they
+came out of the same stratum holding the same value. Comparing them does not
+count as looking at them, because it reveals only what `seal` on each would
+reveal anyway.
 
 ## 5.4 Mutation
 

@@ -103,8 +103,11 @@ file's contents hash to `a1f0c93d` tells you nothing about the file that you
 could not have computed yourself given the same bytes; it is a claim *about*
 the deep value, not the deep value.
 
-`seal` on a shade (§1.6) is legal and yields the cairn of the underlying
-value.
+`seal` on a shade (§1.6) is legal and names the shade. A shade carries the
+stratum it came out of, and [§7.1](07-ledger.md#71-canonical-encoding) encodes
+that alongside what it holds, so `seal shade e` is not `seal e`. The cairn of
+what is inside is had by sealing it before shading it, which costs nothing and
+needs no capability.
 
 ## 1.6 Shade, and the Orpheus rule
 
