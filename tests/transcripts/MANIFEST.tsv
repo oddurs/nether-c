@@ -39,9 +39,9 @@ spec/05-types.md:113	c	pinned	b90bad42db5f84e0
 spec/06-evaluation.md:14	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md:33	c	pinned	32047b898ae2a1c0
 spec/06-evaluation.md:121	text	pinned	07c9e60510dab9cc
-spec/06-evaluation.md:165	console	pinned	62a0ec6a54925078
-spec/06-evaluation.md:182	console	pinned	de840300ab71ca8d
-spec/06-evaluation.md:212	text	pinned	a39449193e40ee44
+spec/06-evaluation.md:180	console	pinned	62a0ec6a54925078
+spec/06-evaluation.md:197	console	pinned	de840300ab71ca8d
+spec/06-evaluation.md:227	text	pinned	a39449193e40ee44
 spec/07-ledger.md:76	text	pinned	44a818ca5c7ac6dd
 spec/07-ledger.md:162	text	pinned	ebd628943dfe60de
 spec/08-rites.md:18	console	checked	eb5d09b394458e0f
@@ -63,4 +63,4 @@ spec/09-prelude.md:121	c	pinned	834d41e9dd803353
 spec/09-prelude.md:137	c	pinned	df4cca1bd2fc65e5
 spec/09-prelude.md:147	c	pinned	b3bc31d5c47581b4
 spec/09-prelude.md:165	c	pinned	b83338a5100b0081
-spec/90-rationale.md:254	c	pinned	f426e2ac55ce8205
+spec/90-rationale.md:279	c	pinned	f426e2ac55ce8205

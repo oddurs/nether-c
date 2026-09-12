@@ -128,6 +128,21 @@ error: burial ran out of fuel after 1,000,000 steps
    = raise the budget with --fuel, or place an `opaque` barrier at line 29
 ```
 
+Burial has one other bound, and it is the implementation's own. Fuel is a
+bound on work; it is not a bound on space, and no single budget is both — a
+program can spend a million steps a thousand frames deep or a million steps
+two frames deep. So an implementation has limits of its own: how deep a chain
+of calls it can hold, how large a value it can address.
+
+Reaching one MUST be reported the way exhausted fuel is — naming the limit,
+its value, and where it was reached — and MUST NOT be a crash. An
+implementation MUST state its limits.
+
+Two implementations with different limits may therefore disagree about whether
+a given program buries at all. They MUST NOT disagree about the result when
+both of them finish, and that is the sentence the reproducibility claims in
+this document actually rest on.
+
 `opaque e` evaluates to `e` but is never burned through: burial residualises
 it whole. It is how a programmer says *do not evaluate through this, even
 though you could* — for a loop that would unroll into a gigabyte, or a
