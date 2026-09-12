@@ -246,6 +246,26 @@ The cost is expressiveness: a lattice cannot distinguish *reads the disk* from
 *reads the disk and the network* except by taking the deeper of the two. Nether
 C accepts a coarser answer in exchange for one people will actually use.
 
+### [APP]: the premise on all three terms
+
+[APP] once required `max(dƒ, d_f, d_a) ≤ δ`, which reads well — *everything
+about this application is within what you hold* — and forbids
+[§6.2](06-evaluation.md#62-demand)'s own example, where `compile(src)` is
+applied to a depth-3 value at ambient 0 and the comment beside it says the
+call is pure and merely starves. [§9.2](09-prelude.md#92-depth-0) does the
+same with `given(a)`, and [§2.5](02-calculus.md#25-subsumption-and-its-deliberate-absence)
+says in prose that a shallow value combines with a deep one without coercion.
+
+The stricter premise is not unsound; it is unusable. Under it a value carried
+out of a descent can be sealed, shaded and compared, and cannot be passed to
+`len`, so every use of a deep value has to happen inside the descent that
+produced it and staging buys nothing. That is close to deleting
+[§1.3](01-strata.md#13-descent)'s one-way-out property.
+
+What replaced it is the narrowest premise that still stops the thing
+capabilities exist to stop: `dƒ ≤ δ`. A capability is required to reach a
+stratum, and the latent depth is the only term that reaches one.
+
 ### Ambient soundness: two ways to keep the simpler statement
 
 [§2.4](02-calculus.md#24-metatheory) once said `d ≤ δ` outright, which is

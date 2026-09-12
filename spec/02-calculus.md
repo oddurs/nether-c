@@ -56,7 +56,7 @@ a trailing annotation on the signature (`Bytes read(Str path) @3`).
 
 
               Γ ; δ ⊢ f : (τ₁ --dƒ--> τ₂)@d_f      Γ ; δ ⊢ a : τ₁@d_a
-              max(dƒ, d_f, d_a) ≤ δ
+              dƒ ≤ δ
   [APP]     ──────────────────────────────────────────────────────────
               Γ ; δ ⊢ f a : τ₂ @ max(dƒ, d_f, d_a)
 
@@ -113,6 +113,14 @@ depth `dƒ` (how deep it goes when run), the depth of the function value itself
 `d_f` (a function fetched over the network is a deep value even before it is
 called), and the depth of the argument. Forgetting the middle one is the
 classic soundness hole in effect systems that carry effects only on arrows.
+
+Only one of the three is a premise. A capability is what it takes to *reach* a
+stratum, and `dƒ` is the only term that reaches anything: it is what the
+function touches when it runs. `d_a` and `d_f` are facts about where those
+values have already been, and whoever took them there held the capability at
+the time. Applying `len` to a depth-3 `Bytes` reaches nothing, which is why
+[PRIM] has no ambient premise either and why §2.5 can say that a shallow value
+combines with a deep one without coercion.
 
 **[ABS]** is where latency is introduced: the body's depth becomes the arrow's
 latent depth, and the closure itself is pure. Building a function that will
