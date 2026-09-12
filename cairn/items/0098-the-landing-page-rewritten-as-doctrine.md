@@ -5,7 +5,7 @@ type: feature
 status: marked
 milestone: sign
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-12
 priority: p1
 effort: l
 area: site/src/index.html
@@ -57,3 +57,19 @@ The vocabulary is the one in spec/10-glossary.md and nowhere else: bury, exhume,
 The material is what has been built: the nine strata and their core-sample colours, the six rites and the missing seventh, the complemented VGA palette and the fourteen-of-sixteen fact, the lamp that gives back the temple's own colours, the 80-column grid, the DOS title bars, and site/gfx.py which can draw anything the page needs. Nothing is fetched and nothing new is imported.
 
 Every claim stays anchored: a passage that asserts something about the language links to the spec section that makes it normative. That is what keeps this a manifesto about a real design rather than a mood board.
+
+## 2026-09-12
+
+Rewritten. The doctrine grew from nine lines to nine passages, each ending in the spec section that makes it normative — 14 anchored links, all resolving, checked by tests/links.
+
+One doctrine entry changed rather than grew: the Decay Rule came out (it is a fact about the project, not the language) and 'a refusal is an answer, a mistake is not' went in, which 9.9 settled after the page was last written. Decay moved to its own plaque under the specification section.
+
+Stopped apologising for the two-command hello world. The plaque now says what it buys: there is no code path from a running program to your terminal, so a leak is not discouraged, it is absent. You cannot get that by being careful.
+
+The palette section got the room the item asked for — fourteen of sixteen, stated as the strange arithmetic it is, with ROT and BILE named as the two colours that could not be derived from anything.
+
+Four rules instead of one repeated eight times, and the new graphics carry three sections that were previously prose alone.
+
+tests/links caught a bad anchor (#97-stratum-7--entropy, double hyphen). The rewrite also orphaned rule.gif and descent.gif, which are deleted with their generators.
+
+Median sentence is 10 words.

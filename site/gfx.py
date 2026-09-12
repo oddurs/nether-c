@@ -308,21 +308,6 @@ def bg_tile() -> tuple[list[Frame], list[int]]:
     return [f], [0]
 
 
-def rule_bar() -> tuple[list[Frame], list[int]]:
-    """A divider that descends. Nine bands, scrolling."""
-    w, h, n = 396, 9, 12
-    frames = []
-    for step in range(n):
-        f = Frame(w, h, VOID)
-        for x in range(w):
-            band = ((x + step * 3) // 4) % 9
-            f.rect(x, 1, 1, h - 2, DEPTH[band])
-        f.rect(0, 0, w, 1, ASH)
-        f.rect(0, h - 1, w, 1, ASH)
-        frames.append(f)
-    return frames, [8] * n
-
-
 def lamp() -> tuple[list[Frame], list[int]]:
     """A lamp, guttering. Carry it down or see nothing."""
     frames = []
@@ -386,26 +371,6 @@ def badge(top: str, bottom: str, ink: int, glow: int) -> tuple[list[Frame], list
         f.text((88 - Frame.width_of(bottom)) // 2, 20, bottom, SMOKE)
         frames.append(f)
     return frames, [70, 70]
-
-
-def descent() -> tuple[list[Frame], list[int]]:
-    """Nine strata, and something going down through them."""
-    w, h, band = 52, 9 * 16 + 2, 16
-    frames = []
-    for step in range(9):
-        f = Frame(w, h, VOID)
-        for d in range(9):
-            y = 1 + d * band
-            f.rect(1, y, w - 2, band - 1, DEPTH[d])
-            for x in range(1, w - 1, 3):
-                f.set(x + (d % 3), y + band - 2, VOID)
-            f.text(4, y + 4, str(d), VOID)
-            if d == step:
-                f.rect(w - 12, y + 5, 8, 5, VOID)
-                f.rect(w - 11, y + 6, 6, 3, BONE)
-        f.frame_box(0, 0, w, h, ASH, SMOKE)
-        frames.append(f)
-    return frames, [42] * 9
 
 
 def counter(text: str) -> tuple[list[Frame], list[int]]:
@@ -665,10 +630,8 @@ def og_card() -> Frame:
 
 GRAPHICS = {
     "bg.gif": bg_tile,
-    "rule.gif": rule_bar,
     "lamp.gif": lamp,
     "excavation.gif": excavation,
-    "descent.gif": descent,
     "cairn.gif": lambda: counter("8F3A1C0E"),
     "badge-unlit.gif": lambda: badge("BEST VIEWED", "UNLIT", SULPHUR, BONE),
     "badge-handmade.gif": lambda: badge("MADE BY HAND", "NO LIBRARIES", LIME, BONE),
