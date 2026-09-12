@@ -146,7 +146,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## rites — The Rites
 
-`###·······` 22% · 2 of 9 done · due 2027-03-31
+`###·······` 30% · 3 of 10 done · due 2027-03-31
 
 ### unmarked
 
@@ -162,6 +162,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 - [x] [`0062`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0062-nether-lamp-and-provenance.md) nether lamp, and --provenance <sup>feature · p0 · 1</sup>
 - [x] [`0063`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0063-nether-cairn.md) nether cairn <sup>feature · p1 · 1</sup>
+- [x] [`0135`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0135-spec-the-rites-print-a-path-a-span-cannot-hold.md) Spec: the rites print a path a span cannot hold <sup>spec · p1</sup>
 
 ## world — The World
 
