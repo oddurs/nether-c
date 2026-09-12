@@ -12,4 +12,8 @@
 .idea/
 .vscode/
 
+# a ledger is written where the work is, and is never part of it. §7.6 gives a
+# store no garbage collection, so one that gets committed only ever grows.
+.nether/
+
 # nothing generated belongs here except the site, which is committed on purpose

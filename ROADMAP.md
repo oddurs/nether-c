@@ -150,7 +150,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## rites — The Rites
 
-`#########·` 89% · 24 of 27 done · due 2027-03-31
+`#########·` 89% · 25 of 28 done · due 2027-03-31
 
 ### unmarked
 
@@ -187,6 +187,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0159`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0159-nothing-shows-a-trace-its-residue.md) Nothing shows a trace its residue <sup>feature · p2 · 1</sup>
 - [x] [`0160`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0160-a-call-renders-its-bytes-arguments-unreadably.md) A call renders its bytes arguments unreadably <sup>bug · p2 · 1</sup>
 - [x] [`0161`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0161-as-unit-drops-a-demand-rather-than-failing.md) as_unit drops a demand rather than failing <sup>bug · p3 · 0</sup>
+- [x] [`0162`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0162-a-ledger-was-committed-to-the-repository.md) A ledger was committed to the repository <sup>chore · p2 · 0</sup>
 
 ## world — The World
 
