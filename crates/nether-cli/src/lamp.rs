@@ -7,7 +7,7 @@
 
 use std::process::ExitCode;
 
-use nether_ledger::{Cairn, Node, Store, Stored, Value};
+use nether_ledger::{AnswerOf, Cairn, Node, Refusal, Store, Stored, Value};
 
 use crate::{FAILED, code, json, ledger, usage_error};
 
@@ -149,6 +149,27 @@ pub fn value(v: &Value) -> String {
             let inside: Vec<String> = items.iter().map(value).collect();
             format!("[{}]", inside.join(", "))
         }
+        // A refusal reads as the word, not as its code. Which no it was is
+        // what a person wants; the code is for the encoding.
+        Value::Refusal(r) => refusal(*r).to_string(),
+        // An answer says which it is, because "absent" and a value that
+        // happens to be the string "absent" must not read the same.
+        Value::Answer(a) => match a.as_ref() {
+            AnswerOf::Given(v) => format!("given {}", value(v)),
+            AnswerOf::Refused(r) => format!("refused: {}", refusal(*r)),
+        },
+    }
+}
+
+/// The word for a refusal. `spec/05-types.md` §5.1.1.
+const fn refusal(r: Refusal) -> &'static str {
+    match r {
+        Refusal::Absent => "absent",
+        Refusal::Denied => "denied",
+        Refusal::Malformed => "malformed",
+        Refusal::Unreachable => "unreachable",
+        Refusal::Exhausted => "exhausted",
+        Refusal::Conflict => "conflict",
     }
 }
 

@@ -9,7 +9,7 @@ use core::fmt;
 
 use crate::cairn::Cairn;
 use crate::node::{Call, Node, Span, kind};
-use crate::value::{MAX_STRATUM, Value, tag};
+use crate::value::{AnswerOf, MAX_REFUSAL, MAX_STRATUM, Refusal, Value, tag};
 
 /// How deeply values may nest before a decoder gives up.
 ///
@@ -62,6 +62,17 @@ impl Value {
                     item.encode_into(out);
                 }
             }
+            Self::Answer(answer) => match answer.as_ref() {
+                AnswerOf::Given(value) => {
+                    out.push(0x00);
+                    value.encode_into(out);
+                }
+                AnswerOf::Refused(refusal) => {
+                    out.push(0x01);
+                    out.push(*refusal as u8);
+                }
+            },
+            Self::Refusal(refusal) => out.push(*refusal as u8),
         }
     }
 }
@@ -180,6 +191,10 @@ pub enum DecodeError {
     },
     /// A node where a value was expected, or the reverse.
     WrongShape,
+    /// An `Answer` discriminant other than `0x00` given or `0x01` refused.
+    BadAnswer(u8),
+    /// A refusal code outside the closed set of six.
+    NoSuchRefusal(u8),
 }
 
 impl fmt::Display for DecodeError {
@@ -205,6 +220,10 @@ impl fmt::Display for DecodeError {
                 write!(f, "span ends at {end}, before it starts at {start}")
             }
             Self::WrongShape => f.write_str("a node where a value was expected, or the reverse"),
+            Self::BadAnswer(b) => {
+                write!(f, "an Answer is given (0x00) or refused (0x01), this is {b:#04x}")
+            }
+            Self::NoSuchRefusal(c) => write!(f, "no refusal {c}; the highest is {MAX_REFUSAL}"),
         }
     }
 }
@@ -368,6 +387,11 @@ impl Reader<'_> {
         Ok(Call { function, args: self.cairns()? })
     }
 
+    fn refusal(&mut self) -> Result<Refusal, DecodeError> {
+        let code = self.byte()?;
+        Refusal::from_code(code).ok_or(DecodeError::NoSuchRefusal(code))
+    }
+
     fn stratum(&mut self) -> Result<u8, DecodeError> {
         let s = self.byte()?;
         if s > MAX_STRATUM {
@@ -463,6 +487,12 @@ impl Reader<'_> {
                 }
                 Ok(Value::Array(items))
             }
+            tag::ANSWER => match self.byte()? {
+                0x00 => Ok(Value::Answer(Box::new(AnswerOf::Given(self.value(depth + 1)?)))),
+                0x01 => Ok(Value::Answer(Box::new(AnswerOf::Refused(self.refusal()?)))),
+                other => Err(DecodeError::BadAnswer(other)),
+            },
+            tag::REFUSAL => Ok(Value::Refusal(self.refusal()?)),
             tag::NODE => Err(DecodeError::WrongShape),
             other => Err(DecodeError::UnknownTag(other)),
         }
@@ -473,7 +503,7 @@ impl Reader<'_> {
 mod tests {
     use super::{DecodeError, MAX_DEPTH, decode};
     use crate::cairn::Cairn;
-    use crate::value::{Value, tag};
+    use crate::value::{AnswerOf, MAX_REFUSAL, Refusal, Value, tag};
 
     fn sample() -> Vec<Value> {
         let c = Cairn::of_encoded(b"named");
@@ -494,6 +524,12 @@ mod tests {
             Value::Shade { origin: 8, value: c },
             Value::Array(vec![]),
             Value::Array(vec![Value::Int(1), Value::Unit]),
+            Value::Refusal(Refusal::Absent),
+            Value::Refusal(Refusal::Conflict),
+            Value::Answer(Box::new(AnswerOf::Given(Value::Int(11_204)))),
+            Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b"main.nc".to_vec())))),
+            Value::Answer(Box::new(AnswerOf::Refused(Refusal::Absent))),
+            Value::Answer(Box::new(AnswerOf::Refused(Refusal::Unreachable))),
             Value::Struct { name: "Header".to_owned(), fields: vec![] },
             Value::Struct {
                 name: "Header".to_owned(),
@@ -556,10 +592,52 @@ mod tests {
 
     // ── rejection, clause by clause ─────────────────────────────────────────
 
+    /// Every refusal the specification names has a distinct encoding, and the
+    /// order they encode in is the order §5.1.1 lists them.
+    #[test]
+    fn the_refusal_set_is_closed_and_ordered() {
+        let all = [
+            Refusal::Absent,
+            Refusal::Denied,
+            Refusal::Malformed,
+            Refusal::Unreachable,
+            Refusal::Exhausted,
+            Refusal::Conflict,
+        ];
+        for (code, refusal) in all.iter().enumerate() {
+            let code = u8::try_from(code).unwrap();
+            assert_eq!(*refusal as u8, code, "{refusal:?} is not code {code}");
+            assert_eq!(Refusal::from_code(code), Some(*refusal));
+        }
+        assert_eq!(MAX_REFUSAL, 5);
+        assert_eq!(Refusal::from_code(6), None);
+    }
+
+    /// A refusal and the answer that carries it are different values.
+    #[test]
+    fn a_refusal_is_not_the_answer_that_holds_it() {
+        let bare = Value::Refusal(Refusal::Absent);
+        let held = Value::Answer(Box::new(AnswerOf::Refused(Refusal::Absent)));
+        assert_ne!(bare.cairn(), held.cairn());
+    }
+
+    #[test]
+    fn rejects_answers_that_are_neither_given_nor_refused() {
+        for bad in [0x02, 0xff] {
+            assert_eq!(decode(&[tag::ANSWER, bad]), Err(DecodeError::BadAnswer(bad)));
+        }
+    }
+
+    #[test]
+    fn rejects_refusals_outside_the_closed_set() {
+        assert_eq!(decode(&[tag::REFUSAL, 6]), Err(DecodeError::NoSuchRefusal(6)));
+        assert_eq!(decode(&[tag::ANSWER, 0x01, 9]), Err(DecodeError::NoSuchRefusal(9)));
+    }
+
     #[test]
     fn rejects_unknown_tags() {
         assert_eq!(decode(&[0xff]), Err(DecodeError::UnknownTag(0xff)));
-        assert_eq!(decode(&[0x07]), Err(DecodeError::UnknownTag(0x07)));
+        assert_eq!(decode(&[0x09]), Err(DecodeError::UnknownTag(0x09)));
     }
 
     /// `0x20` is dispatched as a node rather than rejected as a tag, so a bare

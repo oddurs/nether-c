@@ -263,6 +263,29 @@ It also removes a dependency — full NFC is a megabyte of Unicode tables — bu
 that is a consequence of the decision, not the reason for it. Had the argument
 gone the other way, the tables would have been the right thing to add.
 
+### Bumping the domain for any change at all
+
+[§7.2](07-ledger.md#72-cairns) used to say that changing the encoding changed
+the domain separator, full stop. Taken literally that made the format unable to
+grow: assigning a tag that had never meant anything would have renamed every
+value ever stored, including all the ones the new tag has no bearing on.
+
+The rule now distinguishes two things. Changing what an existing tag *means*
+bumps the domain, because a byte string that decoded to one value now decodes
+to another and calling both by the same name is a lie. Assigning a tag that was
+previously rejected as unknown does not, because no byte string changes
+meaning — the ones that decoded still decode identically, and the ones that
+were refused are simply refused less often.
+
+What this gives up is a very simple sentence. "Any change bumps the domain" can
+be checked by looking at a diff; "any change to what an existing tag means"
+needs somebody to think about which kind of change they made. That is a real
+cost and it is paid by whoever reviews the next format change.
+
+It was taken because the alternative was worse in a way that only shows up
+later. A format that cannot add a tag without discarding history is a format
+that will be forked rather than extended, and then there are two.
+
 ### Writing our own cryptography
 
 The repository has no third-party dependencies. Not in Rust, not in the site,
