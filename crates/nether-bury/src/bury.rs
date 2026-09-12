@@ -700,10 +700,19 @@ impl Burial<'_> {
             return Ok(v);
         }
 
+        // Derived from what is left, not from what was there. An argument that
+        // reduced to something shallower makes the call shallower with it, and
+        // a residue that states the depth it had before reducing is a residue
+        // the calculus rejects. §2.4: a depth is a bound, and reduction can
+        // tighten it.
         let callee = Box::new(Self::residual(f, callee));
+        let result_depth = match callee.ty {
+            Type::Fn { result_depth, .. } => result_depth,
+            _ => Depth::PURE,
+        };
         let args: Vec<Expr> =
             values.into_iter().zip(args).map(|(v, a)| Self::residual(v, a)).collect();
-        let depth = args.iter().fold(x.depth, |acc, a| acc.join(a.depth));
+        let depth = args.iter().fold(result_depth.join(callee.depth), |acc, a| acc.join(a.depth));
         Ok(Self::rebuild(ExprKind::Call { callee, args }, x, depth))
     }
 
@@ -849,12 +858,20 @@ impl Burial<'_> {
                 }
             }
             Rite::Opaque => unreachable!("handled above"),
+            // The origin is whatever the operand turned out to be, which is
+            // not always what it was: an arm that was not taken can make an
+            // operand shallower than its type said. A shade whose origin came
+            // from before the reduction claims an origin its value never had.
             Rite::Shade => {
+                let origin = v.depth;
+                let ty = Type::Shade { origin, inner: Box::new(v.ty.clone()) };
                 if v.is_stuck() {
                     let operand = Box::new(Self::residual(v, operand));
-                    Self::rebuild(ExprKind::Rite { rite, operand }, x, Depth::PURE)
+                    let kind = ExprKind::Rite { rite, operand };
+                    let e = Expr { kind, ty: ty.clone(), depth: Depth::PURE, span: x.span };
+                    Val { kind: Kind::Stuck(Box::new(e)), ty, depth: Depth::PURE }
                 } else {
-                    Val { kind: Kind::Shade(Box::new(v)), ty: x.ty.clone(), depth: Depth::PURE }
+                    Val { kind: Kind::Shade(Box::new(v)), ty, depth: Depth::PURE }
                 }
             }
             Rite::Look => {
@@ -862,7 +879,11 @@ impl Burial<'_> {
                     *inner
                 } else {
                     let operand = Box::new(Self::residual(v, operand));
-                    let depth = x.depth;
+                    let origin = match &operand.ty {
+                        Type::Shade { origin, .. } => *origin,
+                        _ => Depth::PURE,
+                    };
+                    let depth = origin.join(operand.depth);
                     Self::rebuild(ExprKind::Rite { rite, operand }, x, depth)
                 }
             }

@@ -34,7 +34,7 @@ case "${1:-}" in
   fuzz)
     # The soak. The short pass runs in `test` on every commit; this is the one
     # you leave going. NETHER_FUZZ_ROUNDS sets the length.
-    cargo test --release -p nether-ledger --test fuzz -- --ignored --nocapture
+    cargo test --release --workspace --test fuzz --test monotone -- --ignored --nocapture
     ;;
   proofs)
     # The size demonstrations. Not part of `check`: they are evidence for a
