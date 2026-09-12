@@ -51,6 +51,10 @@ pub struct Residue {
     /// Evaluation steps spent. Deterministic for a given unit and budget.
     pub fuel_spent: u64,
     /// The deepest stratum anything in the residue still reaches.
+    ///
+    /// Not `Trace`'s `depth`, which is the deepest stratum a witness *reached*
+    /// — `spec/07-ledger.md` §7.3.2. A residue that has been answered nothing
+    /// still reaches deep; a trace that has done nothing has not.
     pub depth: Depth,
 }
 

@@ -2,8 +2,9 @@
 id: 136
 title: 'Spec: a trace that under-reports its own depth is not called malformed'
 type: spec
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p2
@@ -35,11 +36,31 @@ So it is probably a rule about *writing* a trace — §6.5 — rather than about
 what a node may hold. `nether strata` already reports it, and exits 65 for it,
 because it is the one rite that has the whole graph in hand.
 
-## What this must decide
+## Where the claim went
 
-Where the claim lives: §7.3 with a note that it is not checkable on `put`,
-§6.5 as a rule about burial, or §8.6 as a thing only `strata` is in a position
-to notice.
+§7.3.2, "What a decoder cannot check", beside the list of what a decoder must.
+Two claims live there: a `Trace`'s `depth` is the greatest stratum of any
+`Witness` reachable from its roots, and its stratum-8 mark is set exactly when
+one of those witnesses is at 8. Neither is checkable on `put`, and the section
+says so rather than leaving an implementer to discover it.
+
+Not §6.5, which is about producing a residue and is still moving under 0128.
+Not §8.6, because a rite is where a claim is *caught* and not where it is made.
+
+## What it turned up
+
+`nether-bury`'s `Residue::depth` and `Node::Trace`'s `depth` are two different
+quantities with the same name. The residue's is "the deepest stratum anything
+in the residue still reaches" — what is owed. The trace's is what was reached.
+A burial that has answered nothing has a residue reaching stratum 5 and a trace
+at depth 0, and nothing yet maps one to the other, so the trap is still
+unsprung. Both are now documented against each other, and 0128 is told.
+
+## Acceptance criteria
+
+- [x] §7.3 says what a `Trace`'s `depth` means, once
+- [x] It says which of its claims a decoder cannot check, and why
+- [x] §8.6 says that holes are reported apart from witnesses
 
 ## 2026-09-12
 

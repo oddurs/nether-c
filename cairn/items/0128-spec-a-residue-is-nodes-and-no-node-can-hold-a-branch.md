@@ -82,3 +82,7 @@ Three, and this is the one the work since has made available: the residue is sou
 ## 2026-09-12
 
 What three still needs is a Trace node that can hold it. Trace is roots, fuel_spent, depth, unrecorded — and a burial has a residue, a set of holes, a set of deposits and the source it came from, which is four kinds of thing and one ordered list to put them in. Whichever reading wins, Node::Trace's payload has to change, and that is a frozen-section change with a domain bump behind it. That is why this is filed rather than settled.
+
+## 2026-09-12
+
+Watch out when wiring the residue to the ledger: nether-bury's Residue::depth is the deepest stratum anything in the residue still reaches -- what is owed -- and Node::Trace's depth is the deepest stratum a witness reached. A burial that has answered nothing has a residue at 5 and a trace at 0. See section 7.3.2, added by 0136.
