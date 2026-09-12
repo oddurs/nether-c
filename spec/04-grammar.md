@@ -57,7 +57,7 @@ type_atom     := identifier
                | identifier "<" type { "," type } ">" ;
 ```
 
-`Shade<Json>@0` is a shade of `Json` at value depth 0. The origin depth of a
+`Shade<Bytes>@0` is a shade of `Bytes` at value depth 0. The origin depth of a
 shade is part of its type but is not written in source syntax; it is always
 inferred, because writing it would let a programmer claim an origin the value
 does not have.

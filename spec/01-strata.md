@@ -109,10 +109,10 @@ value.
 ## 1.6 Shade, and the Orpheus rule
 
 ```c
-Shade<Json> reply = descend net { shade fetch("https://example.invalid/index.json") };
+Shade<Bytes> reply = descend net { shade must(get("https://example.invalid/index.json")) };
 
-Cairn witness = seal reply;      // legal: Cairn@0
-I64   n       = look(reply).len; // ILLEGAL here — see below
+Cairn witness = seal reply;       // legal: Cairn@0
+I64   n       = len(look(reply)); // ILLEGAL here — see below
 ```
 
 `shade e`, where `e : T@d`, produces a value of type `Shade<T>` at depth 0.
@@ -133,10 +133,10 @@ enclosing scope, and it produces an error that names both numbers and the
 
 ```
 error: cannot look at a shade from stratum 5 at depth 0
-  --> stamp.nc:14:19
+  --> stamp.nc:14:23
    |
-14 |   I64   n       = look(reply).len;
-   |                   ^^^^^^^^^^^ this shade came from `fetch` at stratum 5
+14 |   I64   n       = len(look(reply));
+   |                       ^^^^^^^^^^^ this shade came from `get` at stratum 5
    |
    = the value is here, but you are not. Wrap the look in `descend net { … }`.
 ```
