@@ -531,11 +531,33 @@ impl<'a> Checker<'a> {
             ExprKind::Index { base, index } => {
                 self.expr(base, ambient).join(self.expr(index, ambient))
             }
-            ExprKind::Select { cond, then, otherwise } => self
-                .expr(cond, ambient)
-                .join(self.expr(then, ambient))
-                .join(self.expr(otherwise, ambient)),
+            // §5.4: the arms are exclusive, so neither precedes the other and
+            // a naming on one does not freeze the other. Each is walked from
+            // where the block started; what they name is joined afterwards,
+            // because it is named for everything *after* the block.
+            ExprKind::Select { cond, then, otherwise } => {
+                let d_cond = self.expr(cond, ambient);
+                let before = self.named.clone();
+                let d_then = self.expr(then, ambient);
+                let from_then = core::mem::replace(&mut self.named, before);
+                let d_else = self.expr(otherwise, ambient);
+                for (slot, was) in self.named.iter_mut().zip(&from_then) {
+                    *slot = slot.or(*was);
+                }
+                d_cond.join(d_then).join(d_else)
+            }
+            // §5.4: a loop body runs again, so a naming anywhere in it precedes
+            // an assignment anywhere in it — including one written above it.
+            // Walked once for what it names, with the complaints thrown away,
+            // and then walked for real.
             ExprKind::Loop { body, step } => {
+                let mark = self.faults.len();
+                self.expr(body, ambient);
+                if let Some(s) = step.as_ref() {
+                    self.expr(s, ambient);
+                }
+                self.faults.truncate(mark);
+
                 let d = self.expr(body, ambient);
                 step.as_ref().map_or(d, |s| d.join(self.expr(s, ambient)))
             }

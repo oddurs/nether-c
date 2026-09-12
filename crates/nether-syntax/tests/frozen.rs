@@ -130,3 +130,42 @@ fn the_blame_is_the_first_naming() {
     // The first `seal n`, not the second.
     assert!(at < src.rfind("seal").expect("two seals"), "blamed the later naming");
 }
+
+// ── which paths precede which ───────────────────────────────────────────────
+
+/// §5.4: "If any path through a block names a local, it is named for
+/// everything **after** that block."
+///
+/// Two arms of an `if` are exclusive, so neither precedes the other. Before
+/// this, naming on the then-arm froze the else-arm, which refused a safe
+/// program — and did it only when the `seal` was written first, so two
+/// programs that differ by the order of two arms disagreed.
+#[test]
+fn one_arm_naming_a_local_does_not_freeze_the_other() {
+    clean("U0 g(Bool c) @0 { I64 n; n = 1; if (c) { seal n; } else { n = 2; } }\n");
+    clean("U0 g(Bool c) @0 { I64 n; n = 1; if (c) { n = 2; } else { seal n; } }\n");
+}
+
+/// And it is named for everything after the block, whichever arm did it.
+#[test]
+fn either_arm_naming_a_local_freezes_what_comes_after() {
+    frozen("U0 g(Bool c) @0 { I64 n; n = 1; if (c) { seal n; } else { } n = 2; }\n");
+    frozen("U0 g(Bool c) @0 { I64 n; n = 1; if (c) { } else { seal n; } n = 2; }\n");
+}
+
+/// A loop body runs again, so a naming anywhere in it precedes an assignment
+/// anywhere in it — including one written above it. Without this a program
+/// could seal a value on one turn and change it on the next, which is the
+/// whole thing §5.4 exists to stop.
+#[test]
+fn a_loop_body_precedes_itself() {
+    frozen("U0 g(Bool c) @0 { I64 n; n = 1; while (c) { n = 2; seal n; } }\n");
+    frozen("U0 g(Bool c) @0 { I64 n; n = 1; while (c) { seal n; n = 2; } }\n");
+}
+
+/// The counter still advances. Its step assigns a local that arithmetic never
+/// named, which is what §5.4's naming-rather-than-reading rule is for.
+#[test]
+fn a_for_loop_still_advances_its_counter() {
+    clean("U0 g(I64 n) @0 { I64 t; t = 0; for (I64 i = 0; i < n; i += 1) { t += i; } }\n");
+}
