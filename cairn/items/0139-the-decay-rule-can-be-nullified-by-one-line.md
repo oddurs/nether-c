@@ -2,8 +2,9 @@
 id: 139
 title: The Decay Rule can be nullified by one line
 type: bug
-status: unmarked
+status: buried
 milestone: calculus
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p0
@@ -47,6 +48,14 @@ because a rule with teeth needs a test that bites.
 
 ## Acceptance criteria
 
-- [ ] A `#[cfg(test)]` above real code does not stop that code being counted
-- [ ] `tests/decay/run` covers a test module that is not last
-- [ ] The count over `crates/` does not change
+- [x] A `#[cfg(test)]` above real code does not stop that code being counted
+- [x] `tests/decay/run` covers a test module that is not last
+- [x] The count over `crates/` does not change
+
+## 2026-09-12
+
+The counter matches braces on text with strings, character literals and comments stripped, so a brace inside a string does not unbalance it. The line predicate is unchanged on purpose: the cleaned text is for finding braces, not for deciding what a line is, so a line that is only the middle of a string literal still counts. The count over crates is identical to the old one, 5598, which is what says the change is about where tests are and nothing else.
+
+## 2026-09-12
+
+Took the unquoted find loop with it, since it was the loop being rewritten. Noted on 0148.

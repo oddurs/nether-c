@@ -95,12 +95,11 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`#########·` 85% · 17 of 20 done · due 2027-01-15
+`#########·` 90% · 18 of 20 done · due 2027-01-15
 
 ### unmarked
 
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
-- [ ] [`0139`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0139-the-decay-rule-can-be-nullified-by-one-line.md) The Decay Rule can be nullified by one line <sup>bug · p0 · 0</sup>
 - [ ] [`0140`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0140-ci-skips-cairn-check-when-the-install-fails.md) CI skips cairn check when the install fails <sup>bug · p0 · 0</sup>
 
 ### buried
@@ -122,6 +121,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0126`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0126-spec-starvation-is-the-name-of-two-different-things.md) Spec: starvation is the name of two different things <sup>spec · p1</sup>
 - [x] [`0127`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0127-spec-section-5-3-says-two-different-things-about-shade-equality.md) Spec: section 5.3 says two different things about shade equality <sup>spec · p1</sup>
 - [x] [`0129`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0129-spec-monotonicity-is-stated-the-wrong-way-round.md) Spec: monotonicity is stated the wrong way round <sup>spec · p0</sup>
+- [x] [`0139`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0139-the-decay-rule-can-be-nullified-by-one-line.md) The Decay Rule can be nullified by one line <sup>bug · p0 · 0</sup>
 
 ## surface — The Surface
 

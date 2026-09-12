@@ -26,13 +26,14 @@ fn one() {}
 fn two() {}
 """
 
-# Tests are not the trusted core. Everything from the first `#[cfg(test)]` to
-# the end of the file is excluded, so adding tests must not move the number.
+# Tests are not the trusted core, so adding them must not move the number.
+# The module holds a brace inside a string literal, because a counter that
+# matches braces has to know the difference.
 TESTS = """\
 #[cfg(test)]
 mod tests {
     #[test]
-    fn a() {}
+    fn a() { assert_eq!("}", "}"); }
     #[test]
     fn b() {}
     #[test]
@@ -92,6 +93,25 @@ def main() -> int:
         (src / "lib.rs").write_text(BODY + TESTS, encoding="utf-8")
         r = run(src, at)
         expect("adding tests does not grow the core", r.returncode == 0, r.stderr)
+
+        # A `#[cfg(test)]` that is not last. Deleting from the first marker to
+        # the end of the file made one attribute at the top of a file remove
+        # the file from the count, which turned the rule off.
+        (src / "lib.rs").write_text(TESTS + BODY, encoding="utf-8")
+        seal2 = tmp / "sealed2"
+        r = run(src, seal2)
+        expect("a test module that is not last hides nothing",
+               r.returncode == 0 and int(seal2.read_text().strip()) == actual,
+               f"{seal2.read_text().strip() if seal2.exists() else 'nothing'}, wanted {actual}")
+
+        head, tail = BODY.split("fn two() {}\n")
+        (src / "lib.rs").write_text(head + TESTS + "fn two() {}\n" + tail, encoding="utf-8")
+        seal3 = tmp / "sealed3"
+        r = run(src, seal3)
+        expect("nor one in the middle",
+               r.returncode == 0 and int(seal3.read_text().strip()) == actual,
+               f"{seal3.read_text().strip() if seal3.exists() else 'nothing'}, wanted {actual}")
+
         (src / "lib.rs").write_text(BODY, encoding="utf-8")
 
         high = tmp / "high"
