@@ -183,14 +183,24 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
         }
     };
 
+    // Burial holds no capability, so nothing was answered and there are no
+    // witnesses. §6.6: exhumation is what records one.
+    let witnesses: Vec<Cairn> = Vec::new();
+
     let trace = Node::Trace {
         residue: residue_cairn,
         holes: residue.holes.clone(),
+        // §1.7: marked when something *reached* stratum 8, which a hole at 8
+        // has not. Derived rather than written down, so that it stays true the
+        // day `exhume` starts answering one.
+        unrecorded: witnesses.iter().any(|w| reached_the_bottom(&store, *w)),
+        witnesses,
         deposits: residue.deposits.clone(),
         source: source_cairn,
         fuel_spent: residue.fuel_spent,
+        // §7.3.2: the join of what the residue still reaches and what a
+        // witness reached. Nothing has been answered, so it is the first.
         depth: residue.depth.get(),
-        unrecorded: false,
     };
     let trace_cairn = match store.put(&Stored::Node(trace)) {
         Ok(cairn) => cairn,
@@ -214,6 +224,11 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
         print!("{}", told.text(&store));
     }
     ExitCode::SUCCESS
+}
+
+/// Whether that witness is one §1.7 marks a trace for.
+fn reached_the_bottom(store: &Store, witness: Cairn) -> bool {
+    matches!(store.get(witness), Ok(Stored::Node(Node::Witness { stratum: 8, .. })))
 }
 
 /// The summary §8.2 requires: what was written, never what the program said.

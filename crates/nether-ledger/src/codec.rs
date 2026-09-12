@@ -111,9 +111,19 @@ impl Node {
                 out.extend_from_slice(answer.as_bytes());
                 put_span(&mut out, span);
             }
-            Self::Trace { residue, holes, deposits, source, fuel_spent, depth, unrecorded } => {
+            Self::Trace {
+                residue,
+                holes,
+                witnesses,
+                deposits,
+                source,
+                fuel_spent,
+                depth,
+                unrecorded,
+            } => {
                 out.extend_from_slice(residue.as_bytes());
                 put_cairns(&mut out, holes);
+                put_cairns(&mut out, witnesses);
                 put_cairns(&mut out, deposits);
                 out.extend_from_slice(source.as_bytes());
                 out.extend_from_slice(&fuel_spent.to_be_bytes());
@@ -423,6 +433,7 @@ impl Reader<'_> {
             kind::TRACE => {
                 let residue = self.cairn()?;
                 let holes = self.cairns()?;
+                let witnesses = self.cairns()?;
                 let deposits = self.cairns()?;
                 let source = self.cairn()?;
                 let fuel_spent =
@@ -433,7 +444,16 @@ impl Reader<'_> {
                     0x01 => true,
                     other => return Err(DecodeError::BadMark(other)),
                 };
-                Ok(Node::Trace { residue, holes, deposits, source, fuel_spent, depth, unrecorded })
+                Ok(Node::Trace {
+                    residue,
+                    holes,
+                    witnesses,
+                    deposits,
+                    source,
+                    fuel_spent,
+                    depth,
+                    unrecorded,
+                })
             }
             other => Err(DecodeError::UnknownKind(other)),
         }
@@ -799,6 +819,7 @@ mod node_tests {
             Node::Trace {
                 residue: c(b"residue"),
                 holes: vec![c(b"hole")],
+                witnesses: vec![c(b"witness")],
                 deposits: vec![c(b"obj")],
                 source: c(b"build.nc"),
                 fuel_spent: 903,
@@ -808,6 +829,7 @@ mod node_tests {
             Node::Trace {
                 residue: c(b"residue"),
                 holes: vec![],
+                witnesses: vec![],
                 deposits: vec![],
                 source: c(b"x.nc"),
                 fuel_spent: 0,
@@ -922,9 +944,11 @@ mod node_tests {
 
     #[test]
     fn rejects_marks_that_are_not_a_bit() {
-        // residue, no holes, no deposits, source, fuel, depth, then the mark.
+        // residue, no holes, no witnesses, no deposits, source, fuel, depth,
+        // then the mark.
         let mut bytes = vec![tag::NODE, kind::TRACE];
         bytes.extend_from_slice(c(b"residue").as_bytes());
+        bytes.extend_from_slice(&0u64.to_be_bytes());
         bytes.extend_from_slice(&0u64.to_be_bytes());
         bytes.extend_from_slice(&0u64.to_be_bytes());
         bytes.extend_from_slice(c(b"source").as_bytes());

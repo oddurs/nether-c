@@ -2,8 +2,9 @@
 id: 155
 title: A trace does not record what happened
 type: bug
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-12
 updated: 2026-09-12
 priority: p0
@@ -96,9 +97,21 @@ it.
 
 ## Acceptance criteria
 
-- [ ] A `Trace` names its witnesses, and `Node::nodes()` reaches them
-- [ ] §7.3.2 states one depth rule, and §8.2's and §6.6's transcripts satisfy it
-- [ ] The stratum-8 mark is derived from what reached stratum 8
-- [ ] `strata`'s malformed check can fire on a trace a burial could produce
-- [ ] No fixture puts a `Witness` in `deposits`
-- [ ] §7.2's domain is bumped
+- [x] A `Trace` names its witnesses, and `Node::nodes()` reaches them
+- [x] §7.3.2 states one depth rule, and §8.2's and §6.6's transcripts satisfy it
+- [x] The stratum-8 mark is derived from what reached stratum 8
+- [x] `strata`'s malformed check can fire on a trace a burial could produce
+- [x] No fixture puts a `Witness` in `deposits`
+- [x] §7.2's domain is bumped
+
+## 2026-09-12
+
+The depth rule is the join of the residue's depth and the greatest stratum of any witness the trace names. Counting holes instead of the residue does not work: an opaque barrier keeps a world-question from ever becoming a hole and the expression is still at its stratum.
+
+## 2026-09-12
+
+The stratum-8 mark is a different test from the depth, and section 7.3.2 now says so: depth counts what is owed as well as what happened, the mark counts only what happened. A trace whose only stratum-8 call is still a hole has depth 8 and is not marked, and strata now says replayable yes with a note explaining that none of the depth has happened yet.
+
+## 2026-09-12
+
+The domain bump invalidated every cairn the specification prints. Two of them were already wrong -- section 00 claimed hello.nc buries to 17 nodes and it is 4, which has been false since the residue stopped being nodes and went unnoticed because the transcript is pinned. That is 0158.

@@ -105,6 +105,13 @@ pub enum Node {
         residue: Cairn,
         /// The holes, in the order they were discovered.
         holes: Vec<Cairn>,
+        /// The witnesses, in the order the world answered.
+        ///
+        /// What a burial was told. A trace names them because nothing else
+        /// can: a witness records no forward edge to the hole it answered, so
+        /// without this a recorded answer is unreachable — and replay is
+        /// re-burying with only the recorded answers. §6.6, §6.7.
+        witnesses: Vec<Cairn>,
         /// What the program deposited, in source order.
         deposits: Vec<Cairn>,
         /// The source this burial started from.
@@ -151,8 +158,9 @@ impl Node {
     pub fn nodes(&self) -> Vec<Cairn> {
         match self {
             // The residue and the source are `Bytes` values, not nodes.
-            Self::Trace { holes, deposits, .. } => {
+            Self::Trace { holes, witnesses, deposits, .. } => {
                 let mut out = holes.clone();
+                out.extend_from_slice(witnesses);
                 out.extend_from_slice(deposits);
                 out
             }
@@ -191,9 +199,10 @@ impl Node {
                 out.push(span.source);
                 out
             }
-            Self::Trace { residue, holes, deposits, source, .. } => {
+            Self::Trace { residue, holes, witnesses, deposits, source, .. } => {
                 let mut out = vec![*residue];
                 out.extend_from_slice(holes);
+                out.extend_from_slice(witnesses);
                 out.extend_from_slice(deposits);
                 out.push(*source);
                 out
