@@ -1088,3 +1088,20 @@ fn a_trace_does_not_record_what_its_burial_spent() {
     let shown = stdout(&there(&dir, &["lamp", &trace, "--provenance"]));
     assert!(!shown.contains("steps"), "the trace still holds it:\n{shown}");
 }
+
+#[test]
+fn replay_succeeds_with_the_source_deleted() {
+    // 0073's proof, and the claim the whole language rests on: everything the
+    // world said is in the ledger, so a replay needs nothing from the world.
+    let dir = a_build("replay-deleted");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let sealed =
+        field(&stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--json"])), "sealed");
+
+    std::fs::remove_file(dir.join("main.nc")).expect("delete what it read");
+    std::fs::remove_file(dir.join("build.nc")).expect("delete the program too");
+
+    let out = there(&dir, &["exhume", &sealed, "--replay"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(stdout(&out), "identical.\n");
+}
