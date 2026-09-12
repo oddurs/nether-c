@@ -98,6 +98,16 @@ fi
 
 ceiling=$(tr -dc '0-9' < "$ceiling_file")
 
+# A ceiling that is not a number is not a ceiling. Without this the comparisons
+# below fail with "integer expression expected" and the script goes on to
+# report success, so an empty file turns the rule off and says nothing — which
+# is how one reached `main`.
+if [ -z "$ceiling" ]; then
+  echo "decay: $ceiling_file holds no number, so there is no ceiling." >&2
+  echo "       The core is $count lines. Write that, or write the number you meant." >&2
+  exit 1
+fi
+
 if [ "$count" -gt "$ceiling" ]; then
   echo "decay: the trusted core grew." >&2
   echo "       ceiling  $ceiling lines  ($ceiling_file)" >&2

@@ -47,6 +47,13 @@ pub enum FaultKind {
     Expected(&'static str),
     /// Lowering could not find what a name refers to.
     Unknown(&'static str),
+    /// A source larger than [`crate::MAX_SOURCE`].
+    ///
+    /// A span is a pair of `u32` offsets, so a longer source has bytes no
+    /// diagnostic could point at. §6.4 requires an implementation to state a
+    /// limit like this one and to report reaching it, and clamping every span
+    /// to the same number is neither.
+    TooBig,
     /// A word §3.4 reserves and §04 gives no production. There is one:
     /// `sizeof`, which had no answer. `spec/90-rationale.md` §90.2.
     Reserved(&'static str),
@@ -77,6 +84,9 @@ impl fmt::Display for Fault {
             FaultKind::Unknown(what) => return write!(f, "this does not name {what}"),
             FaultKind::Reserved(word) => {
                 return write!(f, "`{word}` is reserved and has no meaning");
+            }
+            FaultKind::TooBig => {
+                return write!(f, "a source is at most {} bytes", crate::MAX_SOURCE);
             }
             FaultKind::TooDeep => return write!(f, "nested more than {} deep", crate::MAX_NESTING),
             FaultKind::NotAPlace => "there is nowhere to write this",
@@ -124,12 +134,23 @@ impl Fault {
 /// The first thing the source is not. A broken token stream is not worth
 /// continuing past: everything after the first fault is a guess.
 pub fn lex(source: &[u8]) -> Result<Vec<Token>, Fault> {
+    if source.len() > MAX_SOURCE {
+        return Err(Fault { span: at(0), kind: FaultKind::TooBig });
+    }
     let text = core::str::from_utf8(source)
         .map_err(|e| Fault { span: at(e.valid_up_to()), kind: FaultKind::NotUtf8 })?;
     Scanner { text, at: 0, out: Vec::new() }.run()
 }
 
+/// The largest source this can put a span on.
+///
+/// A `Span` is a pair of `u32` offsets, so this is what one can address.
+/// `lex` refuses anything longer, which is what makes every conversion below
+/// exact rather than clamped.
+pub const MAX_SOURCE: usize = u32::MAX as usize;
+
 fn at(offset: usize) -> Span {
+    // Exact: `lex` refused anything `MAX_SOURCE` could not address.
     let n = u32::try_from(offset).unwrap_or(u32::MAX);
     Span { start: n, end: n }
 }

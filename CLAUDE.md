@@ -105,7 +105,7 @@ Everything automated goes through `scripts/task`. CI, the git hooks and
 `scripts/agent` know only these verbs:
 
 ```
-scripts/task fmt fmt:check lint test build site site:check gfx gfx:check decay check
+scripts/task fmt fmt:check lint test build proofs fuzz site site:check gfx gfx:check decay check
 ```
 
 Need a new capability? Add a verb here. Do not put a toolchain command in a

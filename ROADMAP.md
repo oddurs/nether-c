@@ -216,7 +216,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## after — After the Burial
 
-`##········` 18% · 2 of 11 done · due 2027-10-01
+`###·······` 27% · 3 of 11 done · due 2027-10-01
 
 ### unmarked
 
@@ -228,10 +228,10 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [ ] [`0106`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0106-a-public-store-and-what-it-costs-to-run.md) A public store, and what it costs to run <sup>chore · p2 · 6</sup>
 - [ ] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
-- [ ] [`0148`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0148-hygiene-found-by-the-review.md) Hygiene found by the review <sup>chore · p3 · 0</sup>
 
 ### buried
 
 - [x] [`0132`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0132-spec-section-09-writes-prelude-listings-in-a-fence-that-is-not-the-language.md) Spec: section 09 writes prelude listings in a fence that is not the language <sup>spec · p2</sup>
 - [x] [`0137`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0137-sample-tables-in-tests-are-keyed-by-line-number.md) Sample tables in tests are keyed by line number <sup>chore · p2</sup>
+- [x] [`0148`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0148-hygiene-found-by-the-review.md) Hygiene found by the review <sup>chore · p3 · 0</sup>
 
