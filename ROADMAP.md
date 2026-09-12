@@ -14,6 +14,8 @@ Statuses are the language's own: work is `descending` while it is underway,
 
 `##########` 100% · 3 of 3 done · due 2026-09-30
 
+Buried. The front page declares rather than explains: nine doctrine passages, each ending at the spec section that makes it normative, fourteen anchored links.
+
 ### buried
 
 - [x] [`0098`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0098-the-landing-page-rewritten-as-doctrine.md) The landing page, rewritten as doctrine <sup>feature · p1</sup>
