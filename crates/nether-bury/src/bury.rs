@@ -30,7 +30,7 @@ use std::collections::{HashMap, HashSet};
 
 use nether_core::{
     BinOp, Block, Capability, Demand, Depth, Diagnostic, Expr, ExprKind, FuncId, GlobalId, Literal,
-    Place, Prim, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
+    Place, Prim, Refusal as RefusalCode, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
 };
 use nether_ledger::{Cairn, Node, Stored, Value};
 
@@ -285,6 +285,46 @@ impl Halt {
 ///
 /// Starvation and exhausted fuel, which are different things: the first is a
 /// mistake in the program and the second is a bound that was too small.
+/// What the world has already said, for a burial that is not the first.
+///
+/// Burial never asks. An answer is in here because a rite that held a grant
+/// got it and wrote it to the ledger before this ran — which is §1.4's order,
+/// kept by putting the asking somewhere burial cannot reach. Given one, a
+/// world-question folds to what was said instead of becoming a hole. §6.6.
+#[derive(Debug, Clone, Default)]
+pub struct Answers(std::collections::HashMap<nether_ledger::Call, Value>);
+
+impl Answers {
+    /// Nothing has been answered. Every world-question becomes a hole.
+    #[must_use]
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// What the world said to that question, as it was written down.
+    #[must_use]
+    pub fn and(mut self, asked: nether_ledger::Call, said: Value) -> Self {
+        self.0.insert(asked, said);
+        self
+    }
+
+    fn get(&self, asked: &nether_ledger::Call) -> Option<&Value> {
+        self.0.get(asked)
+    }
+
+    /// How many questions have been answered.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Whether nothing has.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 /// Bury a unit with a budget of evaluation steps.
 ///
 /// `source` names the bytes the unit was lowered from. Spans in the IR are
@@ -297,7 +337,25 @@ impl Halt {
 /// Starvation and exhausted fuel, which are different things, and this
 /// implementation's own frame limit, which is a third.
 pub fn bury(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
-    let run = || burrow(unit, source, fuel);
+    bury_with(unit, source, fuel, &Answers::none())
+}
+
+/// Bury a unit that the world has already answered some of.
+///
+/// The first burial of a program is [`bury`], which is this with nothing
+/// answered. §6.6's exhumation is this with what a grant got, and §6.5's
+/// staging law is the claim that the two routes agree.
+///
+/// # Errors
+///
+/// As [`bury`].
+pub fn bury_with(
+    unit: &Unit,
+    source: Cairn,
+    fuel: u64,
+    answers: &Answers,
+) -> Result<Residue, Halt> {
+    let run = || burrow(unit, source, fuel, answers);
     std::thread::scope(|s| {
         match std::thread::Builder::new().stack_size(STACK).spawn_scoped(s, run) {
             // A burial that panicked is a bug in this crate, and the caller
@@ -312,7 +370,7 @@ pub fn bury(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
     })
 }
 
-fn burrow(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
+fn burrow(unit: &Unit, source: Cairn, fuel: u64, answers: &Answers) -> Result<Residue, Halt> {
     let mut b = Burial {
         unit,
         source,
@@ -321,6 +379,7 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64) -> Result<Residue, Halt> {
         globals: vec![None; unit.globals.len()],
         flow: None,
         grind: Vec::new(),
+        answers,
         named: Vec::new(),
         known: HashSet::new(),
         holes: Vec::new(),
@@ -362,6 +421,15 @@ enum Kind {
     Known(Literal),
     /// A value carried up out of a deeper stratum, still held.
     Shade(Box<Val>),
+    /// What the world said: §5.1.1's `Given T`.
+    ///
+    /// There is no literal for an answer — §04 has no syntax to write one down
+    /// — so this never becomes a residual. An answer that `must`, `given` or
+    /// `refusal` consumes folds through; one that is bound stays the question
+    /// it was and remains a hole for a later burial.
+    Answered(Box<Val>),
+    /// And §5.1.1's `Refused`, which is an answer like any other. §9.9.
+    Refused(RefusalCode),
     /// A function, as a value.
     Func(FuncId),
     /// A prelude function, as a value.
@@ -412,6 +480,8 @@ enum Flow {
 
 struct Burial<'a> {
     unit: &'a Unit,
+    /// What the world already said. See [`Answers`].
+    answers: &'a Answers,
     /// The cairn of the bytes the unit was lowered from.
     source: Cairn,
     left: u64,
@@ -578,6 +648,51 @@ impl Burial<'_> {
         Ok(())
     }
 
+    /// `given`, `refusal` and `must`, which are how §9.9 says a program
+    /// handles a no.
+    ///
+    /// Two of them collapse rather than answer, and §9.9 is explicit that this
+    /// is not catchable: "every way to collapse is a mistake in the program
+    /// rather than a fact about the world".
+    fn inspect(p: Prim, values: &[Val], x: &Expr) -> Result<Option<Val>, Halt> {
+        let collapse =
+            |why| Err(Halt { span: x.span, kind: HaltKind::Collapsed(why), grinding: None });
+        let Some(answer) = values.first() else { return Ok(None) };
+        Ok(match (p, &answer.kind) {
+            (Prim::Must, Kind::Answered(v)) => Some((**v).clone()),
+            (Prim::Must, Kind::Refused(_)) => return collapse("this answer was refused"),
+            (Prim::Given, Kind::Answered(_)) => Some(Self::known(Literal::Bool(true), x)),
+            (Prim::Given, Kind::Refused(_)) => Some(Self::known(Literal::Bool(false), x)),
+            (Prim::Refusal, Kind::Refused(r)) => Some(Self::known(Literal::Refusal(*r), x)),
+            (Prim::Refusal, Kind::Answered(_)) => return collapse("this answer was given"),
+            _ => None,
+        })
+    }
+
+    /// What the world said, folded into the expression that asked.
+    ///
+    /// Only a literal can be folded: an aggregate has no way to be written
+    /// down (0116), so an answer that is one residualises as the call it was
+    /// and stays a hole for a later burial. §6.5 keeps that sound — a residue
+    /// is a program, and this one still asks.
+    fn answered(said: &Value, x: &Expr) -> Val {
+        let Value::Answer(a) = said else { return Self::stuck(x) };
+        let kind = match a.as_ref() {
+            nether_ledger::AnswerOf::Refused(r) => Kind::Refused(code(*r)),
+            nether_ledger::AnswerOf::Given(v) => match literal(v) {
+                Some(l) => Kind::Answered(Box::new(Val {
+                    kind: Kind::Known(l),
+                    ty: x.ty.clone(),
+                    depth: x.depth,
+                })),
+                // An answer with no literal form — an array of names from
+                // `list`, say — cannot be folded and stays the question. 0116.
+                None => return Self::stuck(x),
+            },
+        };
+        Val { kind, ty: x.ty.clone(), depth: x.depth }
+    }
+
     fn known(kind: Literal, x: &Expr) -> Val {
         Val { kind: Kind::Known(kind), ty: x.ty.clone(), depth: Depth::PURE }
     }
@@ -613,7 +728,14 @@ impl Burial<'_> {
                     span,
                 }
             }
-            Kind::Stuck(e) => *e,
+            // §04 has no syntax for an answer, so one that was not consumed
+            // is the question it came from and stays a hole for a later
+            // burial. That is sound by §6.5: a residue is a program, and this
+            // one still asks.
+            Kind::Answered(_) | Kind::Refused(_) | Kind::Stuck(_) => match v.kind {
+                Kind::Stuck(e) => *e,
+                _ => original.clone(),
+            },
         }
     }
 
@@ -795,11 +917,33 @@ impl Burial<'_> {
         // deeper than the surface, and every argument already a value. §6.3
         // is explicit that `read(concat(dir, name))` leaves a hole holding the
         // finished path and not one holding a `concat`.
+        // A question the world has already answered folds to what it said.
+        // Burial holds no capability and never asks: an answer is here because
+        // a rite with a grant got it and wrote it down first (§1.4, §6.6).
         if let Kind::Prim(p) = f.kind {
             if p.latent() > Depth::PURE {
                 if let Some(args) = values.iter().map(as_value).collect::<Option<Vec<_>>>() {
+                    let asked = nether_ledger::Call {
+                        function: p.name().to_string(),
+                        args: args
+                            .iter()
+                            .map(|v| self.remember(Stored::Value(v.clone())))
+                            .collect(),
+                    };
+                    if let Some(said) = self.answers.get(&asked).cloned() {
+                        self.remember(Stored::Value(said.clone()));
+                        return Ok(Self::answered(&said, x));
+                    }
                     self.dig(p, args, x.span);
                 }
+            }
+        }
+
+        // §9.2's three ways to look at an answer. Here rather than in `prim`
+        // because what `must` gives back is a value and not a literal.
+        if let Kind::Prim(p) = f.kind {
+            if let Some(v) = Self::inspect(p, &values, x)? {
+                return Ok(v);
             }
         }
 
@@ -1120,10 +1264,62 @@ fn as_value(v: &Val) -> Option<Value> {
             let Type::Shade { origin, .. } = &v.ty else { return None };
             as_value(inner).map(|held| Value::Shade { origin: origin.get(), value: held.cairn() })
         }
-        // A refusal has no tag to be written under; a function and a prelude
-        // function have no written form at all.
-        Kind::Known(Literal::Refusal(_)) | Kind::Func(_) | Kind::Prim(_) | Kind::Stuck(_) => None,
+        // §5.1.1 gives a refusal and an answer each a tag, so both are values
+        // the ledger can hold.
+        Kind::Known(Literal::Refusal(r)) => Some(Value::Refusal(ledger_code(*r))),
+        Kind::Refused(r) => {
+            Some(Value::Answer(Box::new(nether_ledger::AnswerOf::Refused(ledger_code(*r)))))
+        }
+        Kind::Answered(inner) => as_value(inner)
+            .map(|held| Value::Answer(Box::new(nether_ledger::AnswerOf::Given(held)))),
+        // A function and a prelude function have no written form at all.
+        Kind::Func(_) | Kind::Prim(_) | Kind::Stuck(_) => None,
     }
+}
+
+/// §5.1.1's six, from the ledger's spelling to the calculus's.
+///
+/// Two enumerations of one closed set, because `nether-core` does not depend on
+/// the ledger and must not. The order is §5.1.1's and both say so.
+fn code(r: nether_ledger::Refusal) -> RefusalCode {
+    match r {
+        nether_ledger::Refusal::Absent => RefusalCode::Absent,
+        nether_ledger::Refusal::Denied => RefusalCode::Denied,
+        nether_ledger::Refusal::Malformed => RefusalCode::Malformed,
+        nether_ledger::Refusal::Unreachable => RefusalCode::Unreachable,
+        nether_ledger::Refusal::Exhausted => RefusalCode::Exhausted,
+        nether_ledger::Refusal::Conflict => RefusalCode::Conflict,
+    }
+}
+
+/// And back the other way.
+fn ledger_code(r: RefusalCode) -> nether_ledger::Refusal {
+    match r {
+        RefusalCode::Absent => nether_ledger::Refusal::Absent,
+        RefusalCode::Denied => nether_ledger::Refusal::Denied,
+        RefusalCode::Malformed => nether_ledger::Refusal::Malformed,
+        RefusalCode::Unreachable => nether_ledger::Refusal::Unreachable,
+        RefusalCode::Exhausted => nether_ledger::Refusal::Exhausted,
+        RefusalCode::Conflict => nether_ledger::Refusal::Conflict,
+    }
+}
+
+/// A value the world said, as a literal, when it has a form.
+fn literal(v: &Value) -> Option<Literal> {
+    Some(match v {
+        Value::Unit => Literal::Unit,
+        Value::Bool(b) => Literal::Bool(*b),
+        Value::Int(n) => Literal::Int(*n),
+        Value::Bytes(b) => Literal::Bytes(b.clone()),
+        Value::Str(s) => Literal::Str(s.clone()),
+        Value::Cairn(c) => Literal::Cairn(*c.as_bytes()),
+        Value::Refusal(r) => Literal::Refusal(code(*r)),
+        // §04 has no syntax for an aggregate, a shade or an answer, so none of
+        // them can be a literal. 0116.
+        Value::Struct { .. } | Value::Array(_) | Value::Shade { .. } | Value::Answer(_) => {
+            return None;
+        }
+    })
 }
 
 /// A shift by something no shift can mean.

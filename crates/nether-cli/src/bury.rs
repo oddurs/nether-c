@@ -311,11 +311,26 @@ impl Buried {
 }
 
 /// ①..⑳, and a plain number after that.
-fn circled(n: usize) -> String {
+pub fn circled(n: usize) -> String {
     if (1..=20).contains(&n) {
         char::from_u32(0x245F + u32::try_from(n).unwrap_or(0))
             .map_or_else(|| n.to_string(), |c| c.to_string())
     } else {
         n.to_string()
+    }
+}
+
+/// How big an answer is, the way §6.6 writes it.
+///
+/// Bytes get counted, because "11,204 bytes" is what a reader wants from a
+/// file; anything else is rendered, because it is small enough to read.
+pub fn measure(v: &Value) -> String {
+    match v {
+        Value::Answer(a) => match a.as_ref() {
+            nether_ledger::AnswerOf::Given(v) => measure(v),
+            nether_ledger::AnswerOf::Refused(_) => crate::lamp::value(v),
+        },
+        Value::Bytes(b) => format!("{} bytes", nether_core::grouped(b.len() as u64)),
+        other => crate::lamp::value(other),
     }
 }

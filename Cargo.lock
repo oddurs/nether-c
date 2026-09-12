@@ -81,6 +81,7 @@ dependencies = [
  "nether-core",
  "nether-ledger",
  "nether-syntax",
+ "nether-world",
 ]
 
 [[package]]
