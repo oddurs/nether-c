@@ -3,6 +3,7 @@
 //! `spec/08-rites.md`. Six verbs and one refusal, and the refusal is the one
 //! behaviour the language will never change.
 
+mod bury;
 mod cairn;
 mod json;
 mod lamp;
@@ -21,6 +22,7 @@ mod code {
     pub const MALFORMED: u8 = 65;
     pub const ABSENT: u8 = 66;
     pub const UNIMPLEMENTED: u8 = 69;
+    pub const FUEL: u8 = 75;
 }
 
 /// The codes as this program hands them back.
@@ -90,7 +92,8 @@ fn main() -> ExitCode {
         Some("cairn") => cairn::run(&args[1..]),
         Some("lamp") => lamp::run(&args[1..]),
         Some("strata") => strata::run(&args[1..]),
-        Some("bury" | "exhume" | "graft") => {
+        Some("bury") => bury::run(&args[1..]),
+        Some("exhume" | "graft") => {
             eprintln!("nether: not yet. The specification lands before the compiler does.");
             eprintln!("        See spec/00-overview.md, and `cairn next` for what is ready.");
             ExitCode::from(code::UNIMPLEMENTED)

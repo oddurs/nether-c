@@ -62,7 +62,7 @@ summary of what was written.
 
 ```console
 $ nether bury build.nc
-buried   build.nc → 4c02ab7f   depth 3   holes 1   903 nodes
+buried   build.nc → 0380c8ae   depth 3   holes 1   4 nodes
   hole ①  read("main.nc")              stratum 3  disk
 ```
 

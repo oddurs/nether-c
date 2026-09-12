@@ -2,7 +2,7 @@
 id: 128
 title: 'Spec: a residue is nodes, and no node can hold a branch'
 type: spec
-status: unmarked
+status: buried
 milestone: rites
 depends_on:
 - 21

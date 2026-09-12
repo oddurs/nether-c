@@ -201,10 +201,102 @@ fn verify_answers_in_json_too() {
 
 #[test]
 fn a_rite_that_is_not_built_yet_says_so_with_its_own_code() {
-    for rite in ["bury", "exhume", "graft"] {
+    for rite in ["exhume", "graft"] {
         let out = nether(None, &[rite]);
         assert_eq!(code(&out), 69, "{rite}: §8.8 gives 69 to not implemented");
     }
+}
+
+// ── bury ────────────────────────────────────────────────────────────────────
+
+/// §8.2's own transcript, against the program the specification shows.
+#[test]
+fn burying_reports_depth_holes_and_nodes() {
+    let dir = scratch("bury-build");
+    let src = dir.join("build.nc");
+    std::fs::write(&src, include_str!("../../../tests/programs/build.nc")).expect("write");
+
+    let out = nether(Some(&dir), &["bury", src.to_str().expect("utf8")]);
+    assert_eq!(code(&out), 0, "{}", stdout(&out));
+    let said = stdout(&out);
+
+    assert!(said.starts_with("buried   "), "{said}");
+    assert!(said.contains("depth 3"), "{said}");
+    assert!(said.contains("holes 1"), "{said}");
+    assert!(said.contains(" nodes"), "{said}");
+    // §8.2 shows the hole beneath the summary, with what was asked and where.
+    assert!(said.contains("read(\"main.nc\")"), "{said}");
+    assert!(said.contains("stratum 3"), "{said}");
+    assert!(said.contains("disk"), "{said}");
+}
+
+/// A program that needs nothing from the world leaves no holes.
+#[test]
+fn a_pure_program_buries_to_depth_zero_with_no_holes() {
+    let dir = scratch("bury-hello");
+    let src = dir.join("hello.nc");
+    std::fs::write(&src, include_str!("../../../tests/programs/hello.nc")).expect("write");
+
+    let out = nether(Some(&dir), &["bury", src.to_str().expect("utf8")]);
+    assert_eq!(code(&out), 0, "{}", stdout(&out));
+    assert!(stdout(&out).contains("depth 0   holes 0"), "{}", stdout(&out));
+}
+
+/// Exactly one trace, however many nodes it took, and it is a trace.
+#[test]
+fn burying_writes_exactly_one_trace() {
+    let dir = scratch("bury-one-trace");
+    let src = dir.join("hello.nc");
+    std::fs::write(&src, include_str!("../../../tests/programs/hello.nc")).expect("write");
+
+    let out = nether(Some(&dir), &["bury", src.to_str().expect("utf8")]);
+    let cairn =
+        stdout(&out).split_whitespace().nth(3).expect("the summary names the trace").to_owned();
+
+    // `lamp` without `--provenance` shows what a program deposited, and burial
+    // does not deposit yet, so ask for the node itself.
+    let shown = nether(Some(&dir), &["lamp", &cairn, "--provenance"]);
+    assert_eq!(code(&shown), 0, "{}", stderr(&shown));
+    assert!(stdout(&shown).contains("trace"), "{}", stdout(&shown));
+}
+
+/// A budget that never bound cannot have changed anything.
+///
+/// §8.2 claims the opposite — "a trace buried under a different budget is a
+/// different trace" — and that claim cannot hold: running out of fuel produces
+/// a halt and no trace at all, so a budget either lets a burial finish or
+/// there is nothing to compare. Filed; this asserts what is true today.
+#[test]
+fn a_budget_that_did_not_bind_did_not_change_the_trace() {
+    let dir = scratch("bury-fuel");
+    let src = dir.join("build.nc");
+    std::fs::write(&src, include_str!("../../../tests/programs/build.nc")).expect("write");
+    let path = src.to_str().expect("utf8");
+
+    let plenty = stdout(&nether(Some(&dir), &["bury", path, "--fuel", "1000000"]));
+    let fewer = stdout(&nether(Some(&dir), &["bury", path, "--fuel", "999999"]));
+    assert_eq!(plenty, fewer, "a budget neither burial reached changed the trace");
+}
+
+/// §6.4: running out of fuel is a diagnostic, and §8.8 gives it its own code.
+#[test]
+fn running_out_of_fuel_is_a_diagnostic_and_not_a_crash() {
+    let dir = scratch("bury-starved");
+    let src = dir.join("build.nc");
+    std::fs::write(&src, include_str!("../../../tests/programs/build.nc")).expect("write");
+
+    let out = nether(Some(&dir), &["bury", src.to_str().expect("utf8"), "--fuel", "1"]);
+    assert_eq!(code(&out), 75, "{}", stderr(&out));
+}
+
+#[test]
+fn a_source_that_does_not_parse_is_malformed() {
+    let dir = scratch("bury-garbage");
+    let src = dir.join("bad.nc");
+    std::fs::write(&src, "demand ;;;\n").expect("write");
+
+    let out = nether(Some(&dir), &["bury", src.to_str().expect("utf8")]);
+    assert_eq!(code(&out), 65, "{}", stderr(&out));
 }
 
 #[test]
