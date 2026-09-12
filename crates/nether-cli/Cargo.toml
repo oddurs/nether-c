@@ -11,5 +11,11 @@ repository.workspace = true
 name = "nether"
 path = "src/main.rs"
 
+[dependencies]
+nether-ledger = { path = "../nether-ledger" }
+
+[dev-dependencies]
+nether-ledger = { path = "../nether-ledger" }
+
 [lints]
 workspace = true

@@ -75,6 +75,9 @@ dependencies = [
 [[package]]
 name = "nether-cli"
 version = "0.0.0"
+dependencies = [
+ "nether-ledger",
+]
 
 [[package]]
 name = "nether-core"

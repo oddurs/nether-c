@@ -1,12 +1,41 @@
 //! The rites.
 //!
-//! Nothing here compiles Nether C yet — the specification comes first, and the
-//! specification is not finished. What this binary does today is refuse
-//! correctly, which is the one behaviour the language will never change.
+//! `spec/08-rites.md`. Six verbs and one refusal, and the refusal is the one
+//! behaviour the language will never change.
 
+mod cairn;
+mod json;
+
+use std::path::PathBuf;
 use std::process::ExitCode;
 
+use nether_ledger::Store;
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// §8.8's exit codes, by the names the table gives them.
+mod code {
+    pub const USAGE_ERROR: u8 = 64;
+    pub const ABSENT: u8 = 66;
+    pub const UNIMPLEMENTED: u8 = 69;
+}
+
+/// The codes as this program hands them back.
+const FAILED: ExitCode = ExitCode::FAILURE;
+fn usage_error() -> ExitCode {
+    ExitCode::from(code::USAGE_ERROR)
+}
+
+/// Where the ledger is.
+///
+/// `$NETHER_STORE`, or `.nether` beside the work. §07 does not say, and does
+/// not need to: where a store sits changes nothing about what is in it, and a
+/// trace means the same thing wherever it was written.
+fn ledger() -> Result<Store, std::io::Error> {
+    let root =
+        std::env::var_os("NETHER_STORE").map_or_else(|| PathBuf::from(".nether"), PathBuf::from);
+    Store::open(root)
+}
 
 const USAGE: &str = "\
 nether — the Nether C rites
@@ -15,10 +44,13 @@ nether — the Nether C rites
   exhume <cairn>     grant a stratum, answer holes, emit a deeper trace
   lamp <cairn>       carry light down: render a value, or its provenance
   cairn <path>       name a thing by its content; verify a name still holds
+                     `--verify <cairn>` checks the ledger still holds it
   strata <cairn>     which stratum this reached, and the line that took it there
   graft <cairn>      substitute a subtrace and re-bury only what changed
 
 There is no `nether run`.
+
+The ledger is $NETHER_STORE, or .nether beside the work.
 ";
 
 /// The refusal. Stated once, here, so it is a rule rather than a joke.
@@ -49,17 +81,18 @@ fn main() -> ExitCode {
         }
         Some("run") => {
             eprint!("{NO_RUN}");
-            ExitCode::from(64)
+            usage_error()
         }
-        Some("bury" | "exhume" | "lamp" | "cairn" | "strata" | "graft") => {
+        Some("cairn") => cairn::run(&args[1..]),
+        Some("bury" | "exhume" | "lamp" | "strata" | "graft") => {
             eprintln!("nether: not yet. The specification lands before the compiler does.");
             eprintln!("        See spec/00-overview.md, and `cairn next` for what is ready.");
-            ExitCode::from(69)
+            ExitCode::from(code::UNIMPLEMENTED)
         }
         Some(other) => {
             eprintln!("nether: unknown rite `{other}`");
             eprint!("{USAGE}");
-            ExitCode::from(64)
+            usage_error()
         }
     }
 }
