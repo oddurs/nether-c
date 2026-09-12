@@ -32,6 +32,21 @@ pub struct Fault {
     pub span: Span,
     /// What is wrong.
     pub kind: FaultKind,
+    /// What made the value as deep as it is, when that is a different place
+    /// from the fault and worth pointing at.
+    pub blame: Option<Blame>,
+}
+
+/// The call that took a value to the stratum it is at.
+///
+/// §2.4 promises this is findable by construction: a value at depth 5 means
+/// some `descend net` is responsible. This is the call inside it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Blame {
+    /// Where the call is.
+    pub span: Span,
+    /// What it called.
+    pub what: String,
 }
 
 /// What kind of thing is wrong.
@@ -134,7 +149,42 @@ struct Checker<'a> {
 
 impl<'a> Checker<'a> {
     fn fault(&mut self, span: Span, kind: FaultKind) {
-        self.faults.push(Fault { span, kind });
+        self.faults.push(Fault { span, kind, blame: None });
+    }
+
+    fn fault_blaming(&mut self, span: Span, kind: FaultKind, blame: Option<Blame>) {
+        self.faults.push(Fault { span, kind, blame });
+    }
+
+    /// The call that took `x` to `depth`, named.
+    ///
+    /// Only ever walked on the way to an error, so it may be as slow as it
+    /// likes. A local is followed back to what bound it, which is how the
+    /// `look` in §1.6 ends up blaming a `get` three lines above it.
+    fn blame(&self, x: &Expr, depth: Depth) -> Option<Blame> {
+        if let ExprKind::Call { callee, .. } = &x.kind {
+            if let Type::Fn { latent, .. } = callee.ty {
+                if latent == depth {
+                    if let Some(what) = self.name_of(callee) {
+                        return Some(Blame { span: x.span, what });
+                    }
+                }
+            }
+        }
+        if let ExprKind::Local(id) = x.kind {
+            if let Some(bound_to) = self.func.and_then(|f| bound_to(&f.body, id)) {
+                return self.blame(bound_to, depth);
+            }
+        }
+        children(x).into_iter().find_map(|c| self.blame(c, depth))
+    }
+
+    fn name_of(&self, callee: &Expr) -> Option<String> {
+        match &callee.kind {
+            ExprKind::Prim(p) => Some(p.name().to_string()),
+            ExprKind::Func(id) => self.unit.func(*id).map(|f| f.name.clone()),
+            _ => None,
+        }
     }
 
     fn malformed(&mut self, span: Span, why: &'static str) {
@@ -273,7 +323,9 @@ impl<'a> Checker<'a> {
                     Depth::PURE
                 };
                 if latent > ambient {
-                    self.fault(x.span, FaultKind::Ungranted { needed: latent, ambient });
+                    let blame = self.name_of(callee).map(|what| Blame { span: x.span, what });
+                    let kind = FaultKind::Ungranted { needed: latent, ambient };
+                    self.fault_blaming(x.span, kind, blame);
                 }
                 latent.join(d_f).join(d_a)
             }
@@ -353,7 +405,8 @@ impl<'a> Checker<'a> {
             Rite::Look => {
                 if let Type::Shade { origin, .. } = operand.ty {
                     if origin > ambient {
-                        self.fault(x.span, FaultKind::Orpheus { origin, ambient });
+                        let blame = self.blame(operand, origin);
+                        self.fault_blaming(x.span, FaultKind::Orpheus { origin, ambient }, blame);
                     }
                     // Deep for two independent reasons: where the value came
                     // from, and where the shade itself came from.
@@ -376,6 +429,83 @@ impl<'a> Checker<'a> {
             Type::Fn { latent, .. } if *latent == p.latent() => {}
             Type::Fn { .. } => self.malformed(x.span, "this prelude function has another stratum"),
             _ => self.malformed(x.span, "a prelude function is a function"),
+        }
+    }
+}
+
+/// What bound this local, if anything in this block did.
+fn bound_to(block: &Block, id: LocalId) -> Option<&Expr> {
+    for s in &block.stmts {
+        match s {
+            Stmt::Let { local, value } if *local == id => return Some(value),
+            Stmt::Let { value, .. } | Stmt::Expr(value) => {
+                if let Some(found) = children(value).into_iter().find_map(|c| match &c.kind {
+                    ExprKind::Block(b) => bound_to(b, id),
+                    _ => None,
+                }) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    block.tail.as_deref().and_then(|t| match &t.kind {
+        ExprKind::Block(b) => bound_to(b, id),
+        _ => None,
+    })
+}
+
+/// The subexpressions of an expression, in evaluation order.
+fn children(x: &Expr) -> Vec<&Expr> {
+    match &x.kind {
+        ExprKind::Literal(_)
+        | ExprKind::Local(_)
+        | ExprKind::Global(_)
+        | ExprKind::Func(_)
+        | ExprKind::Prim(_)
+        | ExprKind::Break
+        | ExprKind::Continue
+        | ExprKind::SizeOf(_) => Vec::new(),
+        ExprKind::Call { callee, args } => {
+            let mut out = vec![&**callee];
+            out.extend(args);
+            out
+        }
+        ExprKind::Unary { operand, .. }
+        | ExprKind::Rite { operand, .. }
+        | ExprKind::Descend { body: operand, .. }
+        | ExprKind::Field { base: operand, .. } => vec![operand],
+        ExprKind::Binary { lhs, rhs, .. } | ExprKind::Index { base: lhs, index: rhs } => {
+            vec![lhs, rhs]
+        }
+        ExprKind::Select { cond, then, otherwise } => vec![cond, then, otherwise],
+        ExprKind::Loop { body, step } => {
+            let mut out = vec![&**body];
+            out.extend(step.as_deref());
+            out
+        }
+        ExprKind::Return(v) => v.as_deref().into_iter().collect(),
+        ExprKind::Block(b) => {
+            let mut out: Vec<&Expr> = b
+                .stmts
+                .iter()
+                .map(|s| match s {
+                    Stmt::Let { value, .. } | Stmt::Expr(value) => value,
+                })
+                .collect();
+            out.extend(b.tail.as_deref());
+            out
+        }
+        ExprKind::Assign { place, value } => {
+            let mut out: Vec<&Expr> = place
+                .path
+                .iter()
+                .filter_map(|p| match p {
+                    Proj::Index(i) => Some(&**i),
+                    Proj::Field(_) => None,
+                })
+                .collect();
+            out.push(value);
+            out
         }
     }
 }

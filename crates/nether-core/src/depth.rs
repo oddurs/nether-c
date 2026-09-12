@@ -141,6 +141,12 @@ impl Capability {
         }
     }
 
+    /// The capability that grants this stratum, if any. Nothing grants 0.
+    #[must_use]
+    pub fn at(stratum: Depth) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.stratum() == stratum)
+    }
+
     /// The capability of that name, if there is one.
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
