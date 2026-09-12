@@ -10,7 +10,7 @@
 
 use core::fmt;
 
-use crate::depth::{Capability, Depth};
+use crate::depth::Depth;
 
 /// A prelude function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -162,15 +162,6 @@ impl Prim {
         self.signature().1
     }
 
-    /// The capability a call to this must be inside, if any.
-    ///
-    /// Derived rather than stored: the capabilities are exactly the strata
-    /// below 0, so a second table could only ever disagree with the first.
-    #[must_use]
-    pub fn capability(self) -> Option<Capability> {
-        Capability::ALL.into_iter().find(|c| c.stratum() == self.latent())
-    }
-
     /// The prelude function of that name, if there is one.
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
@@ -209,17 +200,18 @@ mod tests {
 
     #[test]
     fn a_pure_prim_needs_no_capability() {
-        assert_eq!(Prim::Concat.capability(), None);
-        assert_eq!(Prim::Read.capability(), Some(Capability::Disk));
-        assert_eq!(Prim::Write.capability(), Some(Capability::DiskWrite));
-        assert_eq!(Prim::CallForeign.capability(), Some(Capability::Unrecorded));
+        use crate::depth::Capability;
+        assert_eq!(Capability::at(Prim::Concat.latent()), None);
+        assert_eq!(Capability::at(Prim::Read.latent()), Some(Capability::Disk));
+        assert_eq!(Capability::at(Prim::CallForeign.latent()), Some(Capability::Unrecorded));
     }
 
     #[test]
     fn every_capability_is_reachable_by_some_prim() {
+        use crate::depth::Capability;
         for c in Capability::ALL {
             assert!(
-                Prim::ALL.iter().any(|p| p.capability() == Some(c)),
+                Prim::ALL.iter().any(|p| p.latent() == c.stratum()),
                 "nothing in the prelude reaches `{c}`, so descending into it is pointless"
             );
         }

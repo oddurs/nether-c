@@ -36,7 +36,10 @@ fn answer_bytes() -> Type {
 }
 
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
-    pure(ExprKind::Prim(p), Type::Fn { params, latent: p.latent(), result: Box::new(result) })
+    pure(
+        ExprKind::Prim(p),
+        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+    )
 }
 
 fn call(callee: Expr, args: Vec<Expr>, result: Type, depth: Depth) -> Expr {
@@ -81,7 +84,7 @@ fn demanding(value: Expr) -> Unit {
     Unit { demands: vec![Demand { value, span: Span::default() }], ..Unit::default() }
 }
 
-/// A unit with one function `U0 f() @latent { stmts; tail }`.
+/// A unit with one function `T@ret_depth f() @latent { stmts; tail }`.
 fn in_a_function(
     locals: Vec<LocalDef>,
     stmts: Vec<Stmt>,
@@ -89,13 +92,16 @@ fn in_a_function(
     latent: Depth,
 ) -> Unit {
     let ret = tail.as_ref().map_or(Type::Unit, |t| t.ty.clone());
+    let ret_depth = tail.as_ref().map_or(Depth::PURE, |t| t.depth);
     Unit {
         funcs: vec![FuncDef {
             name: "f".into(),
             params: Vec::new(),
             ret,
+            ret_depth,
+            asserted_ret: None,
             latent,
-            asserted: None,
+            asserted_latent: None,
             locals,
             body: Block { stmts, tail: tail.map(Box::new), span: Span::default() },
             span: Span::default(),
@@ -135,7 +141,7 @@ fn var_reads_back_the_depth_it_was_bound_at() {
         vec![binding("src", Type::Bytes)],
         vec![Stmt::Let { local: LocalId(0), value: bound }],
         Some(local(0, Type::Bytes, Depth::DISK)),
-        Depth::DISK,
+        Depth::PURE,
     );
     clean(&unit);
 }
@@ -193,7 +199,12 @@ fn app_joins_the_depth_of_the_function_value_itself() {
     // a shade whose origin is 0. The only way to hold one is to write it into
     // the IR by hand, which the unit below does and the checker says so — the
     // unbound local is the price of reaching the term at all.
-    let arrow = Type::Fn { params: Vec::new(), latent: Depth::PURE, result: Box::new(Type::Int) };
+    let arrow = Type::Fn {
+        params: Vec::new(),
+        latent: Depth::PURE,
+        result: Box::new(Type::Int),
+        result_depth: Depth::PURE,
+    };
     let deep_callee = local(0, arrow, Depth::NET);
     let unit = in_a_function(
         vec![binding("f", Type::Int)],
@@ -201,7 +212,7 @@ fn app_joins_the_depth_of_the_function_value_itself() {
         // The application is stated pure. A pure arrow it is; a pure
         // application it is not.
         Some(call(deep_callee, Vec::new(), Type::Int, Depth::PURE)),
-        Depth::NET,
+        Depth::PURE,
     );
     assert!(
         kinds(&unit).contains(&FaultKind::Stated { derived: Depth::NET, stated: Depth::PURE }),
@@ -209,27 +220,79 @@ fn app_joins_the_depth_of_the_function_value_itself() {
     );
 }
 
-/// [ABS] — the body's depth becomes the arrow's latent depth, and the closure
-/// itself is pure.
+/// [ABS] — two depths come out of it, and the closure itself is pure.
 #[test]
-fn abs_makes_a_pure_closure_with_a_latent_depth() {
+fn abs_gives_an_arrow_both_of_its_depths() {
+    // `Bytes@3 load() @0 { descend disk { must(read("k")) } }`. It descends for
+    // itself, so it asks its caller for nothing and still hands back something
+    // deep.
     let unit = in_a_function(
         Vec::new(),
         Vec::new(),
         Some(descend(Capability::Disk, must(read("k")))),
-        Depth::DISK,
+        Depth::PURE,
     );
     clean(&unit);
 
-    // A reference to it is `(…)@0`: building a function that will touch the
-    // disk does not touch the disk.
-    let mut with_demand = unit;
-    let arrow = Type::Fn { params: Vec::new(), latent: Depth::DISK, result: Box::new(Type::Bytes) };
-    with_demand.demands.push(Demand {
+    let arrow = Type::Fn {
+        params: Vec::new(),
+        latent: Depth::PURE,
+        result: Box::new(Type::Bytes),
+        result_depth: Depth::DISK,
+    };
+    let mut called = unit;
+    // Callable at the surface, which is the whole of 0122: the expression and
+    // a name for the expression are legal in the same places.
+    called.demands.push(Demand {
+        value: call(
+            pure(ExprKind::Func(nether_core::FuncId(0)), arrow.clone()),
+            Vec::new(),
+            Type::Bytes,
+            Depth::DISK,
+        ),
+        span: Span::default(),
+    });
+    // And a reference to it is `(…)@0`: building a function that will touch
+    // the disk does not touch the disk.
+    called.demands.push(Demand {
         value: pure(ExprKind::Func(nether_core::FuncId(0)), arrow),
         span: Span::default(),
     });
-    clean(&with_demand);
+    clean(&called);
+}
+
+/// [ABS] — a body that calls a prelude function bare asks for that stratum
+/// instead, and its callers descend.
+#[test]
+fn abs_asks_for_what_the_body_did_not_descend_for() {
+    let unit = in_a_function(Vec::new(), Vec::new(), Some(must(read("k"))), Depth::DISK);
+    clean(&unit);
+
+    let arrow = Type::Fn {
+        params: Vec::new(),
+        latent: Depth::DISK,
+        result: Box::new(Type::Bytes),
+        result_depth: Depth::DISK,
+    };
+    let calling = |descended: bool| {
+        let mut u = unit.clone();
+        let called = call(
+            pure(ExprKind::Func(nether_core::FuncId(0)), arrow.clone()),
+            Vec::new(),
+            Type::Bytes,
+            Depth::DISK,
+        );
+        u.demands.push(Demand {
+            value: if descended { descend(Capability::Disk, called) } else { called },
+            span: Span::default(),
+        });
+        u
+    };
+    clean(&calling(true));
+    assert_eq!(
+        kinds(&calling(false)),
+        vec![FaultKind::Ungranted { needed: Depth::DISK, ambient: Depth::PURE }]
+    );
 }
 
 /// [DESCEND] — the only rule that raises δ, and only inside its own premise.
@@ -312,7 +375,7 @@ fn look_is_legal_only_where_the_depth_is_already_held() {
         vec![binding("reply", shade_ty.clone())],
         vec![Stmt::Let { local: LocalId(0), value: make.clone() }],
         Some(looked_up_here),
-        Depth::NET,
+        Depth::PURE,
     );
     assert_eq!(
         kinds(&surfaced),
@@ -328,7 +391,7 @@ fn look_is_legal_only_where_the_depth_is_already_held() {
         vec![binding("reply", shade_ty)],
         vec![Stmt::Let { local: LocalId(0), value: make }],
         Some(looked_down_there),
-        Depth::NET,
+        Depth::PURE,
     ));
 }
 
@@ -353,7 +416,7 @@ fn look_inherits_the_depth_of_the_shade_value_as_well() {
             ),
         }],
         Some(looked),
-        Depth::DISK,
+        Depth::PURE,
     );
     // `shade` is pure, so the binding is at 0, not 3: the descent around it
     // changes nothing. Stating 3 on the `look` is therefore wrong by one.
@@ -481,7 +544,7 @@ const RULES: &[(&str, &str)] = &[
     ("LIT", "lit_is_pure_and_that_is_why_pure_code_disappears"),
     ("PRIM", "prim_takes_the_maximum_of_its_parts"),
     ("APP", "app_takes_the_latent_depth_and_the_arguments"),
-    ("ABS", "abs_makes_a_pure_closure_with_a_latent_depth"),
+    ("ABS", "abs_gives_an_arrow_both_of_its_depths"),
     ("DESCEND", "descend_raises_the_ambient_only_inside_its_own_body"),
     ("SEAL", "seal_is_pure_whatever_it_names"),
     ("SHADE", "shade_carries_the_origin_it_actually_had"),

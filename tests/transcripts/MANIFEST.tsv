@@ -18,7 +18,8 @@ spec/01-strata.md:94	c	pinned	32212f92be2604ee
 spec/01-strata.md:111	c	pinned	18096e7d992faa36
 spec/01-strata.md:134	text	pinned	ea7b5648c199b072
 spec/02-calculus.md:16	text	pinned	0597a19f1d266527
-spec/02-calculus.md:43	text	pinned	68532f9a9c090bb5
+spec/02-calculus.md:52	text	pinned	d1e54373b8e0ddac
+spec/02-calculus.md:150	c	pinned	8f6164dc55253768
 spec/03-lexical.md:26	c	pinned	583a67ed3002e592
 spec/03-lexical.md:36	text	pinned	a847859bb6afdffe
 spec/03-lexical.md:55	text	pinned	f6e139d170fc9105
@@ -62,3 +63,4 @@ spec/09-prelude.md:121	c	pinned	834d41e9dd803353
 spec/09-prelude.md:137	c	pinned	df4cca1bd2fc65e5
 spec/09-prelude.md:147	c	pinned	b3bc31d5c47581b4
 spec/09-prelude.md:165	c	pinned	b83338a5100b0081
+spec/90-rationale.md:254	c	pinned	f426e2ac55ce8205

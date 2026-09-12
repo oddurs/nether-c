@@ -81,7 +81,10 @@ fn answer_bytes() -> Type {
 }
 
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
-    pure(ExprKind::Prim(p), Type::Fn { params, latent: p.latent(), result: Box::new(result) })
+    pure(
+        ExprKind::Prim(p),
+        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+    )
 }
 
 /// `read(path)` — at depth 3, which is where it leaves a hole.
@@ -366,8 +369,10 @@ fn head_len() -> FuncDef {
         name: "head_len".into(),
         params: vec![LocalId(0)],
         ret: Type::Int,
+        ret_depth: Depth::PURE,
+        asserted_ret: None,
         latent: Depth::PURE,
-        asserted: Some(Depth::PURE),
+        asserted_latent: Some(Depth::PURE),
         locals: vec![LocalDef {
             name: "h".into(),
             ty: Type::Struct("Header".into()),
@@ -405,8 +410,10 @@ fn load() -> FuncDef {
         name: "load".into(),
         params: vec![LocalId(0), LocalId(1)],
         ret: answer_bytes(),
+        ret_depth: Depth::DISK,
+        asserted_ret: None,
         latent: Depth::DISK,
-        asserted: Some(Depth::DISK),
+        asserted_latent: Some(Depth::DISK),
         locals,
         body: load_body(),
         span: span(),
@@ -426,6 +433,7 @@ fn sample() -> Unit {
                     params: vec![Type::Str, row()],
                     latent: Depth::DISK,
                     result: Box::new(answer_bytes()),
+                    result_depth: Depth::DISK,
                 },
             )),
             args: vec![

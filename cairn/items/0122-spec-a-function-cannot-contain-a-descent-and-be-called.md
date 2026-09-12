@@ -2,8 +2,9 @@
 id: 122
 title: 'Spec: a function cannot contain a descent and be called'
 type: spec
-status: unmarked
+status: buried
 milestone: calculus
+assignee: Oddur Sigurdsson
 depends_on:
 - 13
 created: 2026-09-12
@@ -87,9 +88,21 @@ The alternatives, both of which need recording either way:
 
 ## Acceptance criteria
 
-- [ ] §2.2 says what a latent depth is, and it is what a caller must hold
-- [ ] Where the depth of a call's result comes from is stated
-- [ ] §2.1's prose and [ABS] say the same thing
-- [ ] A worked example of a function that descends and is called from the surface
-- [ ] The rejected alternatives in §90.2
-- [ ] nether-core's checker follows
+- [x] §2.2 says what a latent depth is, and it is what a caller must hold
+- [x] Where the depth of a call's result comes from is stated
+- [x] §2.1's prose and [ABS] say the same thing
+- [x] A worked example of a function that descends and is called from the surface
+- [x] The rejected alternatives in §90.2
+- [x] nether-core's checker follows
+
+## 2026-09-12
+
+Settled with two numbers on an arrow rather than three or one. df is what a caller must already hold; d_r rides on the return type and is what comes back. APP's premise is df and APP's maximum is d_r, d_f, d_a — the latent depth is no longer in the maximum, because a function that hands back nothing hands back nothing however deep it went.
+
+## 2026-09-12
+
+The inference rule: df is the least ambient depth at which the body checks. Only APP's premise contributes to it. LOOK's does not, deliberately — section 1.6 says the Orpheus check is local and does not stain the enclosing scope, and a latent depth inferred from a look would be exactly that staining, one scope out. So a look that is too shallow is an error where it is written, and a bare prelude call is a question for the caller.
+
+## 2026-09-12
+
+What it cost is in section 90.2: a signature is no longer a complete account of what a function touches. U0 stamp() can write to the disk and say nothing in its type, because it descends for itself and returns U0. What a program did is a question for the trace, which records every stratum reached with a witness; what a program needs from you is the question the type answers.

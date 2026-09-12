@@ -246,6 +246,51 @@ The cost is expressiveness: a lattice cannot distinguish *reads the disk* from
 *reads the disk and the network* except by taking the deeper of the two. Nether
 C accepts a coarser answer in exchange for one people will actually use.
 
+### One number on an arrow
+
+An arrow carried a single depth, and [ABS] took it from the body's value
+depth. The consequence was that a descent could be written and not named:
+
+```c
+Bytes load(Str p) { descend disk { must(read(p)) } }
+
+Bytes src = load("kernel.nc");   // rejected: dƒ was 3, δ was 0
+```
+
+while [§1.3](01-strata.md#13-descent) opens by accepting the identical
+expression written out at the same ambient depth. There was no way to put a
+descent behind a name, and the same rule failed in the other direction too: a
+function whose deep work was deposited rather than returned had a body of
+value depth 0, and so claimed a latent depth of 0 while touching the disk.
+
+The decisive objection is about burial rather than taste. Burial reduces
+applications, so under that rule an application could be rejected where its own
+inlining was accepted, and the residue of a burial is supposed to be a program
+that checks. Two ways to keep the single number were considered.
+
+**Let the latent depth be what the body reaches, and let a descent inside a
+body not relieve the caller.** A signature then reads as an audit: `U0 stamp()
+@4` says it writes to the disk, and that is worth something. But a `descend`
+inside a function bounds nothing under this rule, so every caller up the chain
+holds what the leaf reached, and a program that reads one file writes `descend
+disk` at every level between the two. Encapsulating a capability becomes
+impossible, which is most of what a capability is for.
+
+**Carry three numbers** — what it asks of the caller, what it hands back, and
+what it reaches — the third purely so a signature stays an audit. Rejected
+because the audit answer is already recorded somewhere better: a trace lists
+every stratum actually reached, with a witness for each, and
+`nether strata` reads it. A number in a signature that no rule consumes is a
+comment with a syntax.
+
+**What it cost.** The chosen design has two numbers and a signature is no
+longer a complete account of what a function touches: `U0 stamp()` can write
+to the disk and say nothing about it in its type, because it descends for
+itself and hands back `U0`. What a program did is a question for the trace,
+and what a program *needs from you* is the question the type answers. That
+split is defensible and it is still a real loss for anyone reading signatures
+to decide whether to call something.
+
 ### [APP]: the premise on all three terms
 
 [APP] once required `max(dƒ, d_f, d_a) ≤ δ`, which reads well — *everything

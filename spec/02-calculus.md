@@ -34,9 +34,18 @@ concludes at the ambient depth it raised, so
 `descend disk { read(p) }` has depth 3 in a scope whose ambient depth is 0.
 What holds everywhere is [§2.4](#24-metatheory).
 
-Function types carry a **latent depth**, written `τ₁ --d--> τ₂`: the deepest
-stratum the function reaches when applied. In source syntax this is written as
-a trailing annotation on the signature (`Bytes read(Str path) @3`).
+Function types carry two depths, written `τ₁ --dƒ--> τ₂@d_r`.
+
+- **dƒ** is the **latent depth**: what a caller must already hold to apply it.
+  In source syntax it is the trailing annotation on the signature
+  (`Bytes read(Str path) @3`).
+- **d_r** is the depth of what comes back. It rides on the return type, where
+  it is written at all (`Bytes@3 load(Str path)`), and like every other depth
+  it is inferred unless written.
+
+Both are needed, because they are different numbers. A function that does its
+own descending asks its caller for nothing and still hands back something
+deep.
 
 ## 2.2 The rules
 
@@ -55,15 +64,15 @@ a trailing annotation on the signature (`Bytes read(Str path) @3`).
               Γ ; δ ⊢ ⊕(e₁..eₙ) : τ@max(d₁..dₙ)
 
 
-              Γ ; δ ⊢ f : (τ₁ --dƒ--> τ₂)@d_f      Γ ; δ ⊢ a : τ₁@d_a
+              Γ ; δ ⊢ f : (τ₁ --dƒ--> τ₂@d_r)@d_f      Γ ; δ ⊢ a : τ₁@d_a
               dƒ ≤ δ
-  [APP]     ──────────────────────────────────────────────────────────
-              Γ ; δ ⊢ f a : τ₂ @ max(dƒ, d_f, d_a)
+  [APP]     ────────────────────────────────────────────────────────────
+              Γ ; δ ⊢ f a : τ₂ @ max(d_r, d_f, d_a)
 
 
-              Γ, x : τ₁@d₁ ; δ ⊢ b : τ₂@d₂
-  [ABS]     ──────────────────────────────────────────
-              Γ ; δ ⊢ λx.b : (τ₁ --d₂--> τ₂)@0
+              Γ, x : τ₁@0 ; dƒ ⊢ b : τ₂@d₂       dƒ least
+  [ABS]     ──────────────────────────────────────────────────
+              Γ ; δ ⊢ λx.b : (τ₁ --dƒ--> τ₂@d₂)@0
 
 
               Γ ; max(δ, s(κ)) ⊢ e : τ@d
@@ -108,26 +117,54 @@ by [PRIM] anything built only from literals is at depth 0, and by
 [section 06](06-evaluation.md) anything at depth 0 is fully evaluated before
 the artifact exists.
 
-**[APP]** takes the maximum of three things, not two: the function's latent
-depth `dƒ` (how deep it goes when run), the depth of the function value itself
-`d_f` (a function fetched over the network is a deep value even before it is
-called), and the depth of the argument. Forgetting the middle one is the
-classic soundness hole in effect systems that carry effects only on arrows.
+**[APP]** takes the maximum of three things, not two: the depth of what the
+function hands back `d_r`, the depth of the function value itself `d_f` (a
+function fetched over the network is a deep value even before it is called),
+and the depth of the argument. Forgetting the middle one is the classic
+soundness hole in effect systems that carry effects only on arrows.
 
-Only one of the three is a premise. A capability is what it takes to *reach* a
-stratum, and `dƒ` is the only term that reaches anything: it is what the
-function touches when it runs. `d_a` and `d_f` are facts about where those
-values have already been, and whoever took them there held the capability at
-the time. Applying `len` to a depth-3 `Bytes` reaches nothing, which is why
-[PRIM] has no ambient premise either and why §2.5 can say that a shallow value
-combines with a deep one without coercion.
+The latent depth is the premise and not one of the three. A capability is what
+it takes to *reach* a stratum, and `dƒ` is what the function needs its caller
+to have reached already. The other three are facts about where values have
+been, and whoever took them there held the capability at the time: applying
+`len` to a depth-3 `Bytes` reaches nothing. That is why [PRIM] has no ambient
+premise either, and why §2.5 can say a shallow value combines with a deep one
+without coercion.
 
-**[ABS]** is where latency is introduced: the body's depth becomes the arrow's
-latent depth, and the closure itself is pure. Building a function that will
-touch the disk does not touch the disk.
+**[ABS]** is where both numbers come from, and the closure itself is pure:
+building a function that will touch the disk does not touch the disk.
+
+The body is checked at `dƒ` rather than at the ambient depth of wherever the
+function happened to be written, and `dƒ` is the *least* depth at which the
+body checks — what the function asks of whoever calls it. A body containing
+its own `descend` asks for nothing, because the descent supplies the depth
+from inside; a body that calls a prelude function bare asks for that stratum,
+which is how `Answer<Bytes> read(Str path) @3` works and why it is written
+that way in [section 09](09-prelude.md). Both are ordinary, and the choice
+between them is the choice of who holds the capability.
+
+The body's own value depth `d₂` is what comes back, separately. Parameters are
+bound at depth 0: a parameter's real depth arrives at the call site, and [APP]
+joins it there.
+
+```c
+Bytes load(Str p)      { descend disk { must(read(p)) } }  // --0--> Bytes@3
+Answer<Bytes> raw(Str p) @3 { read(p) }                    // --3--> Answer<Bytes>@3
+
+Bytes@3 a = load("kernel.nc");                   // legal at δ 0
+Bytes@3 b = descend disk { must(raw("kernel.nc")) };
+```
+
+`load` descends for itself and is callable anywhere. `raw` does not, so it
+asks, and its callers descend instead. Neither launders anything: both hand
+back a `Bytes@3`, and nothing anywhere lowers a depth.
 
 **[DESCEND]** is the only rule that raises δ, and it raises it only inside its
 own premise. Nothing lowers δ. Nothing lowers `d`.
+
+[ABS] does not raise δ; it starts a new one. A function body is checked once,
+against its own signature, and not once for every place the function is
+called.
 
 **[SEAL]** is the first escape: a name is pure regardless of what it names.
 See [§1.5](01-strata.md#15-seal) for why this is sound.
@@ -154,16 +191,18 @@ is what makes a depth printed in a trace trustworthy: it is a lower bound that
 has already been reached, not a prediction.
 
 > **Ambient soundness.** If `Γ ; δ ⊢ e : τ@d` then `d ≤ max(δ, g(e))`, where
-> `g(e)` is the deepest `s(κ)` over the `descend κ` expressions in `e`, and 0
-> when there are none.
+> `g(e)` is the deepest `s(κ)` over the `descend κ` expressions in `e` and,
+> transitively, in the body of everything `e` applies — and 0 when there are
+> none.
 
 A value can never be deeper than the capabilities that were held while it was
 made — held at the point it was made, which is the ambient depth or a descent
 inside the expression that granted more. Nothing else in the system grants
 anything, which is what makes `nether strata` a blame tool rather than a
 guess: a value at depth 5 means some `descend net` is responsible, and it is
-either enclosing or written in the expression itself. Either way it can be
-found by construction.
+either enclosing, or written in the expression, or written in the body of
+something the expression calls. Either way it can be found by construction,
+by following the calls.
 
 A judgement with `g(e) = 0` therefore does satisfy `d ≤ δ`, and that is most
 of them. The descent is the exception, and it is the only one.

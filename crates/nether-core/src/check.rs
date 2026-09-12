@@ -5,7 +5,10 @@
 //! calculus does not produce is a fault rather than a fact.
 //!
 //! Two premises are enforced, because they are the two the specification
-//! writes down: [APP]'s `dƒ ≤ δ` and [LOOK]'s `d ≤ δ`. The
+//! writes down: [APP]'s `dƒ ≤ δ` and [LOOK]'s `d ≤ δ`. Inside a function body
+//! the first is not a fault but a question for the caller — it is where a
+//! latent depth comes from — while the second stays local, because §1.6 says
+//! the Orpheus check does not propagate. The
 //! ambient bound is otherwise a theorem rather than a check (§2.4) — a descent
 //! concludes at the depth it reached, which is the whole reason it exists.
 //!
@@ -23,7 +26,7 @@ use crate::depth::Depth;
 use crate::ir::{Block, Expr, ExprKind, LocalId, Proj, Rite, Span, Stmt};
 use crate::prim::Prim;
 use crate::ty::Type;
-use crate::unit::{FuncDef, Unit};
+use crate::unit::{Asserted, FuncDef, Unit};
 
 /// Something the calculus does not derive.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -117,6 +120,7 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
         locals: Vec::new(),
         func: None,
         returns: Depth::PURE,
+        needs: None,
     };
     // A unit-level binding may name one declared before it and not one
     // declared after, so declaration order is checking order.
@@ -145,6 +149,12 @@ struct Checker<'a> {
     func: Option<&'a FuncDef>,
     /// The deepest value any `return` has carried out of it so far.
     returns: Depth,
+    /// While inside a function body: the deepest stratum an application in it
+    /// has asked for and not been given. That is the function's latent depth,
+    /// and it is a question for its callers rather than a fault here.
+    ///
+    /// `None` at the top level of a file, where there is nobody to ask.
+    needs: Option<Depth>,
 }
 
 impl<'a> Checker<'a> {
@@ -176,6 +186,11 @@ impl<'a> Checker<'a> {
                 return self.blame(bound_to, depth);
             }
         }
+        if let ExprKind::Global(id) = x.kind {
+            if let Some(g) = self.unit.global(id) {
+                return self.blame(&g.value, depth);
+            }
+        }
         children(x).into_iter().find_map(|c| self.blame(c, depth))
     }
 
@@ -189,6 +204,15 @@ impl<'a> Checker<'a> {
 
     fn malformed(&mut self, span: Span, why: &'static str) {
         self.fault(span, FaultKind::Malformed(why));
+    }
+
+    /// One depth the rules gave, against the one the node states and the one
+    /// the programmer wrote.
+    fn against(&mut self, span: Span, derived: Depth, stated: Depth, asserted: Asserted) {
+        if derived != stated {
+            self.fault(span, FaultKind::Stated { derived, stated });
+        }
+        self.asserted(span, derived, asserted);
     }
 
     fn asserted(&mut self, span: Span, derived: Depth, asserted: Option<Depth>) {
@@ -216,22 +240,31 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// [ABS]. The body is checked with the parameters at depth 0, and the
-    /// arrow's latent depth is what the body reached — including through every
-    /// `return`, which is the other way a value leaves.
+    /// [ABS], which produces both of an arrow's depths.
+    ///
+    /// The body is checked with the parameters at depth 0 — a parameter's real
+    /// depth arrives at the call site and [APP] joins it there. What comes
+    /// back is the body's value depth, including through every `return`, which
+    /// is the other way a value leaves. What the function asks of its caller
+    /// is whatever an application in it needed and did not have.
+    ///
+    /// The ambient depth it is checked at does not matter, because the ambient
+    /// depth gates premises and nothing else: no derived depth depends on it.
+    /// So the body is walked once, at 0, collecting what it asks for.
     fn func(&mut self, f: &'a FuncDef) {
         self.func = Some(f);
         self.locals = vec![None; f.locals.len()];
         self.returns = Depth::PURE;
+        self.needs = Some(Depth::PURE);
         for p in &f.params {
             self.bind(*p, Depth::PURE, f.span);
         }
 
-        let latent = self.block(&f.body, Depth::PURE).join(self.returns);
-        if latent != f.latent {
-            self.fault(f.span, FaultKind::Stated { derived: latent, stated: f.latent });
-        }
-        self.asserted(f.span, latent, f.asserted);
+        let ret_depth = self.block(&f.body, Depth::PURE).join(self.returns);
+        let latent = self.needs.take().unwrap_or(Depth::PURE);
+
+        self.against(f.span, ret_depth, f.ret_depth, f.asserted_ret);
+        self.against(f.span, latent, f.latent, f.asserted_latent);
         self.func = None;
     }
 
@@ -292,6 +325,7 @@ impl<'a> Checker<'a> {
                                 .collect(),
                             latent: f.latent,
                             result: Box::new(f.ret.clone()),
+                            result_depth: f.ret_depth,
                         };
                         self.expect_ty(x, &want, "this is not the signature of that function");
                     }
@@ -316,18 +350,26 @@ impl<'a> Checker<'a> {
             ExprKind::Call { callee, args } => {
                 let d_f = self.expr(callee, ambient);
                 let d_a = args.iter().fold(Depth::PURE, |acc, a| acc.join(self.expr(a, ambient)));
-                let latent = if let Type::Fn { latent, .. } = callee.ty {
-                    latent
-                } else {
-                    self.malformed(callee.span, "this is applied and is not a function");
-                    Depth::PURE
-                };
+                let (latent, result_depth) =
+                    if let Type::Fn { latent, result_depth, .. } = callee.ty {
+                        (latent, result_depth)
+                    } else {
+                        self.malformed(callee.span, "this is applied and is not a function");
+                        (Depth::PURE, Depth::PURE)
+                    };
                 if latent > ambient {
-                    let blame = self.name_of(callee).map(|what| Blame { span: x.span, what });
-                    let kind = FaultKind::Ungranted { needed: latent, ambient };
-                    self.fault_blaming(x.span, kind, blame);
+                    // Inside a function body this is not a fault: it is what
+                    // the function asks of whoever calls it. At the top level
+                    // of a file there is nobody to ask.
+                    if let Some(needs) = self.needs {
+                        self.needs = Some(needs.join(latent));
+                    } else {
+                        let blame = self.name_of(callee).map(|what| Blame { span: x.span, what });
+                        let kind = FaultKind::Ungranted { needed: latent, ambient };
+                        self.fault_blaming(x.span, kind, blame);
+                    }
                 }
-                latent.join(d_f).join(d_a)
+                result_depth.join(d_f).join(d_a)
             }
 
             // [DESCEND]. The only rule that raises δ, and only inside its own
@@ -404,6 +446,11 @@ impl<'a> Checker<'a> {
             }
             Rite::Look => {
                 if let Type::Shade { origin, .. } = operand.ty {
+                    // Unlike [APP]'s premise this does not become a question
+                    // for the caller. §1.6: the check is local, it does not
+                    // propagate, and it does not stain the enclosing scope —
+                    // and a latent depth inferred from a `look` would be that
+                    // staining, one scope out.
                     if origin > ambient {
                         let blame = self.blame(operand, origin);
                         self.fault_blaming(x.span, FaultKind::Orpheus { origin, ambient }, blame);
@@ -425,8 +472,11 @@ impl<'a> Checker<'a> {
     /// depth is checked: three of the thirty are polymorphic in `T`, and the
     /// IR's types deliberately have no variables.
     fn prim(&mut self, x: &Expr, p: Prim) {
+        // Every prelude function hands back what it went and got, so its two
+        // depths are the same one. Nothing else in the language has to be.
         match &x.ty {
-            Type::Fn { latent, .. } if *latent == p.latent() => {}
+            Type::Fn { latent, result_depth, .. }
+                if *latent == p.latent() && *result_depth == p.latent() => {}
             Type::Fn { .. } => self.malformed(x.span, "this prelude function has another stratum"),
             _ => self.malformed(x.span, "a prelude function is a function"),
         }

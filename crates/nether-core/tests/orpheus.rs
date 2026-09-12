@@ -52,7 +52,10 @@ fn shade_of_bytes(origin: Depth) -> Type {
 }
 
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
-    pure(ExprKind::Prim(p), Type::Fn { params, latent: p.latent(), result: Box::new(result) })
+    pure(
+        ExprKind::Prim(p),
+        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+    )
 }
 
 fn call(callee: Expr, args: Vec<Expr>, result: Type, depth: Depth) -> Expr {
@@ -122,8 +125,10 @@ fn stamp(stmts: Vec<Stmt>, locals: Vec<LocalDef>, latent: Depth) -> Unit {
             name: "stamp".into(),
             params: Vec::new(),
             ret: Type::Unit,
+            ret_depth: Depth::PURE,
+            asserted_ret: None,
             latent,
-            asserted: None,
+            asserted_latent: None,
             locals: all,
             body: Block { stmts: body, tail: None, span: Span::default() },
             span: Span::default(),
@@ -227,8 +232,10 @@ fn a_shade_may_be_stored_passed_compared_and_sealed() {
         name: "keep".into(),
         params: vec![LocalId(0)],
         ret: Type::Unit,
+        ret_depth: Depth::PURE,
+        asserted_ret: None,
         latent: Depth::PURE,
-        asserted: None,
+        asserted_latent: None,
         locals: vec![LocalDef {
             name: "s".into(),
             ty: shade_of_bytes(Depth::NET),
@@ -244,6 +251,7 @@ fn a_shade_may_be_stored_passed_compared_and_sealed() {
             params: vec![shade_of_bytes(Depth::NET)],
             latent: Depth::PURE,
             result: Box::new(Type::Unit),
+            result_depth: Depth::PURE,
         },
     );
     unit.funcs[0].body.stmts.push(Stmt::Expr(call(
@@ -289,8 +297,11 @@ fn deeper_than_the_origin_is_fine() {
 #[test]
 fn it_does_not_stain_the_enclosing_scope() {
     // A legal look inside a descent leaves the ambient depth where it found
-    // it. The `read` that follows is still ungranted, and would not be if the
-    // descent had re-stained the scope. `spec/90-rationale.md` §90.2.
+    // it. The `read` after it still has to be paid for, and the function ends
+    // up asking its caller for `disk` — stratum 3, not stratum 5. Had the
+    // descent re-stained the scope, the `read` would have been sitting inside
+    // stratum 5 and the function would ask for nothing at all.
+    // `spec/90-rationale.md` §90.2.
     let legal = descend(Capability::Net, the_look());
     let after = call(
         prim(Prim::Read, vec![Type::Str], answer_bytes()),
@@ -298,10 +309,16 @@ fn it_does_not_stain_the_enclosing_scope() {
         answer_bytes(),
         Depth::DISK,
     );
-    let unit = stamp(vec![the_statement(legal), Stmt::Expr(after)], Vec::new(), Depth::PURE);
+    let stmts = vec![the_statement(legal), Stmt::Expr(after)];
+
+    let asks_for_disk = stamp(stmts.clone(), Vec::new(), Depth::DISK);
+    let faults = check(&asks_for_disk);
+    assert!(faults.is_empty(), "{faults:?}");
+
+    let asks_for_nothing = stamp(stmts, Vec::new(), Depth::PURE);
     assert_eq!(
-        check(&unit).into_iter().map(|f| f.kind).collect::<Vec<_>>(),
-        vec![FaultKind::Ungranted { needed: Depth::DISK, ambient: Depth::PURE }]
+        check(&asks_for_nothing).into_iter().map(|f| f.kind).collect::<Vec<_>>(),
+        vec![FaultKind::Stated { derived: Depth::DISK, stated: Depth::PURE }]
     );
 }
 
