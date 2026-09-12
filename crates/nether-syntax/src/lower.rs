@@ -376,8 +376,7 @@ fn children(x: &ir::Expr) -> Vec<&ir::Expr> {
         | K::Func(_)
         | K::Prim(_)
         | K::Break
-        | K::Continue
-        | K::SizeOf(_) => Vec::new(),
+        | K::Continue => Vec::new(),
         K::Call { callee, args } => {
             let mut out = vec![&**callee];
             out.extend(args);
@@ -648,10 +647,6 @@ impl Lowering<'_> {
                 span,
             ),
             ast::ExprKind::Name(name) => self.name(name, &[]),
-            ast::ExprKind::SizeOf(t) => {
-                let t = self.ty(t);
-                Self::at(ir::ExprKind::SizeOf(t), ir::Type::Int, Depth::PURE, span)
-            }
             ast::ExprKind::Block(b) => {
                 let block = self.block(b);
                 Self::as_expr(block, span)

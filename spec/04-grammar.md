@@ -119,7 +119,6 @@ primary       := int_literal
                | bytes_literal
                | bool_literal
                | identifier
-               | "sizeof" "(" type ")"
                | descend_expr
                | block
                | "(" expr ")" ;

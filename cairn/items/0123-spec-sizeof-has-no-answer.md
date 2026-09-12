@@ -2,8 +2,9 @@
 id: 123
 title: 'Spec: sizeof has no answer'
 type: spec
-status: unmarked
+status: buried
 milestone: surface
+assignee: Oddur Sigurdsson
 depends_on:
 - 19
 created: 2026-09-12
@@ -49,6 +50,14 @@ question people would reach for it to ask.
 
 ## Acceptance criteria
 
-- [ ] `sizeof` has a stated value, or it is gone from §4.5
-- [ ] If it stays, `spec/90-rationale.md` says why a language with no pointers has one
-- [ ] nether-core follows
+- [x] `sizeof` has a stated value, or it is gone from §4.5
+- [x] `spec/90-rationale.md` says why a language with no pointers has none
+- [x] nether-core follows
+
+## 2026-09-12
+
+Settled the third way, as the item expected: there is no sizeof. Both ways to give it a value were worse -- the length of the canonical encoding is a fact about a value and not a type, and a fixed size per type means inventing a memory layout the language otherwise does not have. len answers the question people reach for it to ask.
+
+## 2026-09-12
+
+The word stays reserved in section 3.4 and the parser refuses it with a note naming len, on the same argument as section 8.0's refusal of run: a C programmer will write it, and an error that teaches beats a program that binds the word to something of its own.

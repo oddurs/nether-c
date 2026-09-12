@@ -42,7 +42,6 @@ use nether_core::{
 //     }
 //     b"nc";                              // deposits
 //     while (true) { break; }
-//     sizeof(Header);
 //     Shade<Bytes> hidden = descend net { shade must(get("https://example.invalid")) };
 //     Cairn id = seal hidden;
 //     Bytes body = opaque look hidden;
@@ -335,7 +334,6 @@ fn load_body() -> Block {
         Type::Unit,
     )));
 
-    stmts.push(Stmt::Expr(pure(ExprKind::SizeOf(Type::Struct("Header".into())), Type::Int)));
     stmts.push(Stmt::Expr(every_binop()));
     stmts.extend(the_rites());
     stmts.push(the_answer_check());
@@ -671,7 +669,6 @@ impl Seen {
                 );
                 self.expr(operand);
             }
-            ExprKind::SizeOf(t) => self.ty(t),
         }
     }
 
@@ -719,7 +716,6 @@ fn form_of(kind: &ExprKind) -> &'static str {
         ExprKind::Return(_) => "Return",
         ExprKind::Descend { .. } => "Descend",
         ExprKind::Rite { .. } => "Rite",
-        ExprKind::SizeOf(_) => "SizeOf",
     }
 }
 
@@ -782,7 +778,6 @@ const EVERY_FORM: &[&str] = &[
     "ExprKind::Return",
     "ExprKind::Rite",
     "ExprKind::Select",
-    "ExprKind::SizeOf",
     "ExprKind::Unary",
     "Literal::Bool",
     "Literal::Cairn",
@@ -872,7 +867,7 @@ const COVERAGE: &[(&str, &str)] = &[
     ("index_suffix", "ExprKind::Index"),
     ("field_suffix", "ExprKind::Field"),
     ("args", "ExprKind::Call's args"),
-    ("primary", "ExprKind::Literal, Local, Global, Func, Prim, SizeOf, Block"),
+    ("primary", "ExprKind::Literal, Local, Global, Func, Prim, Block"),
     ("descend_expr", "ExprKind::Descend"),
 ];
 

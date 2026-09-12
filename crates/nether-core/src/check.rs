@@ -384,12 +384,10 @@ impl<'a> Checker<'a> {
     #[expect(clippy::too_many_lines, reason = "eleven rules, and an arm for each")]
     fn expr(&mut self, x: &Expr, ambient: Depth) -> Depth {
         let derived = match &x.kind {
-            // [LIT], and the forms that carry nothing out. `sizeof` is a
-            // constant of its type; `break` and `continue` hand no value to
-            // anybody. This is why pure code disappears at burial.
-            ExprKind::Literal(_) | ExprKind::SizeOf(_) | ExprKind::Break | ExprKind::Continue => {
-                Depth::PURE
-            }
+            // [LIT], and the forms that carry nothing out: `break` and
+            // `continue` hand no value to anybody. This is why pure code
+            // disappears at burial.
+            ExprKind::Literal(_) | ExprKind::Break | ExprKind::Continue => Depth::PURE,
 
             // [VAR].
             ExprKind::Local(id) => {
@@ -611,8 +609,7 @@ fn children(x: &Expr) -> Vec<&Expr> {
         | ExprKind::Func(_)
         | ExprKind::Prim(_)
         | ExprKind::Break
-        | ExprKind::Continue
-        | ExprKind::SizeOf(_) => Vec::new(),
+        | ExprKind::Continue => Vec::new(),
         ExprKind::Call { callee, args } => {
             let mut out = vec![&**callee];
             out.extend(args);

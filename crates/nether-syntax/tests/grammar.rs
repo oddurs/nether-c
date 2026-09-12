@@ -239,3 +239,22 @@ fn a_paragraph_can_be_inserted_anywhere_and_no_sample_moves() {
     assert_eq!(before, after, "a sample changed name because prose moved");
     assert_eq!(before.len(), SAMPLES.len(), "the copy lost or gained a sample");
 }
+
+// ── the one reserved word with nothing behind it ────────────────────────────
+
+/// §3.4 reserves `sizeof` and §4.5 has no production for it, so writing one is
+/// an error — and the error says what to write instead.
+///
+/// It stays a keyword rather than becoming an ordinary identifier because a C
+/// programmer will type it, and a program that had bound the word to something
+/// of its own would be the worse outcome. 0123, and §90.2.
+#[test]
+fn sizeof_is_reserved_and_refused_and_names_len() {
+    let faults = parses("I64 n = sizeof(I64);\n").expect_err("`sizeof` has no meaning");
+    assert_eq!(faults.len(), 1, "{faults:?}");
+    assert_eq!(faults[0].kind, FaultKind::Reserved("sizeof"));
+
+    let d = faults[0].diagnostic();
+    assert_eq!(d.headline, "`sizeof` is reserved and has no meaning");
+    assert!(d.note.is_some_and(|n| n.contains("`len`")), "it does not say what to write instead");
+}

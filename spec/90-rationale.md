@@ -217,6 +217,31 @@ is the tighter rule anyway — a shade is opaque, and reaching through an opaque
 thing for a name was a small hole in it — and it takes nothing away, because
 `seal e` is legal at any depth and can simply be written before the `shade`.
 
+### `sizeof`, which had no answer
+
+[§4.5](04-grammar.md#45-expressions) carried `"sizeof" "(" type ")"` as a
+production from the first draft, inherited from C along with the rest of the
+surface, and nothing anywhere said what it evaluated to. Burial residualised
+it, which was the only honest thing left to do with a form that has no value.
+
+Two ways to give it one were available.
+
+**The length of the canonical encoding.** Precise, and a different question
+from the one `sizeof` is asked: [§7.1](07-ledger.md#71-canonical-encoding)
+gives `Bytes` a length prefix and then the bytes, so the answer depends on the
+value and not on the type. `sizeof(Bytes)` would have no answer even then, and
+`sizeof` *of a value* is a different operator wearing the same name.
+
+**A fixed size per type.** That means inventing a memory layout, and the whole
+of the C reason for `sizeof` — how much memory to ask for — does not exist
+here. There is no pointer type, no array decay and no allocation. A layout
+invented only so that one operator can report it is a fact about nothing.
+
+So there is no `sizeof`. `len` answers the question people reach for it to
+ask. The word stays reserved ([§3.4](03-lexical.md#34-keywords)) because a C
+programmer will write it, and an error that names `len` is worth more than a
+program that binds `sizeof` to something of its own.
+
 ### Normalising text in the ledger
 
 An earlier draft had the ledger encode `Str` over its NFC form, so that two
