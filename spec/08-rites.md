@@ -71,8 +71,16 @@ expression becomes a hole. This is the default because it is the only default
 that cannot surprise anyone.
 
 `--fuel` sets the budget of [§6.4](06-evaluation.md#64-starvation-and-fuel).
-Its default MUST be finite and MUST be reported in the trace, because a trace
-buried under a different budget is a different trace.
+Its default MUST be finite, and the rite MUST report what it was when asked.
+
+It is **not** recorded in the trace, because it cannot have affected one.
+Running out of fuel produces a halt and no trace at all
+([§6.4](06-evaluation.md#64-starvation-and-fuel)), so a budget has exactly two
+outcomes: the burial finished, or there is nothing to record it in. A budget
+that did not bind left no mark, and a budget that bound left no trace.
+
+What a trace does record is `fuel_spent`, which is a fact about the burial that
+happened rather than about the room it was given.
 
 ## 8.3 `exhume`
 

@@ -2,7 +2,7 @@
 id: 150
 title: 'Spec: a budget cannot change a trace, so 8.2 asks for the impossible'
 type: spec
-status: unmarked
+status: buried
 milestone: rites
 created: 2026-09-12
 updated: 2026-09-12
@@ -56,6 +56,14 @@ cairn.
 
 ## Acceptance criteria
 
-- [ ] §8.2 and `Node::Trace` agree
-- [ ] The rejected option is recorded in spec/90-rationale.md
-- [ ] The test in `crates/nether-cli/tests/rites.rs` asserts whichever it is
+- [x] §8.2 and `Node::Trace` agree
+- [x] The rejected option is recorded in spec/90-rationale.md
+- [x] The test in `crates/nether-cli/tests/rites.rs` asserts whichever it is
+
+## 2026-09-12
+
+Settled the second way: 8.2 drops the claim.
+
+A budget has exactly two outcomes — the burial finished, or there is no trace. It can never change WHICH trace you get, so requiring it to be recorded in one was asking for something that carries no information. 8.2 now says the rite reports it when asked, and that what a trace records is fuel_spent: a fact about the burial that happened rather than about the room it was given.
+
+The rejected option is in 90.2 with its real argument, which is diagnostic: if a later burial of the same residue under a smaller budget halts where the first did not, somebody will want to know what the first was allowed. It lost because adding a field to Node::Trace changes what an existing tag means, which bumps the domain and renames every value ever stored — too much to pay for a number that provably did not affect the result. If the diagnostic case matters it belongs in the rite's output, not the artifact.

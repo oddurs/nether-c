@@ -316,10 +316,9 @@ fn burying_writes_exactly_one_trace() {
 
 /// A budget that never bound cannot have changed anything.
 ///
-/// §8.2 claims the opposite — "a trace buried under a different budget is a
-/// different trace" — and that claim cannot hold: running out of fuel produces
-/// a halt and no trace at all, so a budget either lets a burial finish or
-/// there is nothing to compare. Filed; this asserts what is true today.
+/// §8.2 said the opposite until 0150. It cannot hold: running out of fuel
+/// produces a halt and no trace at all, so a budget either lets a burial
+/// finish — changing nothing — or there is no trace to have changed.
 #[test]
 fn a_budget_that_did_not_bind_did_not_change_the_trace() {
     let dir = scratch("bury-fuel");
