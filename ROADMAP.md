@@ -95,7 +95,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`##········` 11% · 1 of 9 done · due 2027-01-15
+`##········` 20% · 2 of 10 done · due 2027-01-15
 
 ### unmarked
 
@@ -111,6 +111,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 ### buried
 
 - [x] [`0046`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0046-nether-core-the-ir.md) nether-core: the IR <sup>feature · p0 · 0</sup>
+- [x] [`0119`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0119-spec-ambient-soundness-is-stated-as-something-that-is-not-true.md) Spec: ambient soundness is stated as something that is not true <sup>spec · p0</sup>
 
 ## surface — The Surface
 
