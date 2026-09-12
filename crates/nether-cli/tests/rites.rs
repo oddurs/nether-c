@@ -201,7 +201,7 @@ fn verify_answers_in_json_too() {
 
 #[test]
 fn a_rite_that_is_not_built_yet_says_so_with_its_own_code() {
-    for rite in ["bury", "exhume", "lamp", "strata", "graft"] {
+    for rite in ["bury", "exhume", "strata", "graft"] {
         let out = nether(None, &[rite]);
         assert_eq!(code(&out), 69, "{rite}: §8.8 gives 69 to not implemented");
     }
@@ -214,4 +214,127 @@ fn an_unknown_rite_is_a_usage_error_and_prints_the_six() {
     for rite in ["bury", "exhume", "lamp", "cairn", "strata", "graft"] {
         assert!(stderr(&out).contains(rite), "the usage does not mention `{rite}`");
     }
+}
+
+// ── §8.4 `lamp` ─────────────────────────────────────────────────────────────
+
+use nether_ledger::{Call, Node, Span};
+
+/// A store holding `build.nc`'s shape: a hole asking for a file, the witness
+/// that answered it, the bytes that came back, and a deposit of a greeting.
+fn a_small_trace(what: &str) -> (PathBuf, Cairn, Cairn, Cairn) {
+    let dir = scratch(what);
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = put(Value::Bytes(b"demand greet;\n".to_vec()));
+    let path = put(Value::Str("main.nc".into()));
+    let span = Span { source, start: 15, end: 30 };
+    let call = Call { function: "read".into(), args: vec![path] };
+
+    let hole = node(Node::Hole { call: call.clone(), stratum: 3, span, depends: Vec::new() });
+    let answer = put(Value::Bytes(b"the file's contents".to_vec()));
+    let witness = node(Node::Witness { stratum: 3, call, answer, span });
+
+    let greeting = put(Value::Str("Hello from the nether".into()));
+    let deposit = node(Node::Deposit { value: greeting, span: Span { source, start: 3, end: 9 } });
+
+    let trace = node(Node::Trace {
+        roots: vec![hole, witness, deposit],
+        fuel_spent: 903,
+        depth: 3,
+        unrecorded: false,
+    });
+    (dir, trace, answer, greeting)
+}
+
+#[test]
+fn a_lamp_shows_text_as_text() {
+    // §8.4's example: the whole of what a lamp is for.
+    let (dir, _, _, greeting) = a_small_trace("lamp-text");
+    let out = nether(Some(&dir), &["lamp", &greeting.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(stdout(&out), "Hello from the nether\n");
+}
+
+#[test]
+fn a_lamp_on_a_trace_shows_what_the_program_left_behind() {
+    // Not printed when it was made — nothing in Nether C is printed. Read
+    // afterwards, by somebody who decided to go and look.
+    let (dir, trace, _, _) = a_small_trace("lamp-trace");
+    let out = nether(Some(&dir), &["lamp", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(stdout(&out), "Hello from the nether\n");
+}
+
+#[test]
+fn a_lamp_on_a_node_says_what_kind_of_node_it_is() {
+    let (dir, trace, _, _) = a_small_trace("lamp-node");
+    let out = nether(Some(&dir), &["lamp", &trace.to_string(), "--json"]);
+    let text = stdout(&out);
+    assert_eq!(text.lines().count(), 1, "{text}");
+    assert!(text.contains("Hello from the nether"), "{text}");
+}
+
+#[test]
+fn provenance_walks_backwards_to_what_produced_a_value() {
+    // §7.4: provenance is the forward edge read backwards. The bytes were
+    // produced by a witness, and the witness answered a call.
+    let (dir, _, answer, _) = a_small_trace("lamp-provenance");
+    let out = nether(Some(&dir), &["lamp", &answer.to_string(), "--provenance"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+
+    assert!(text.starts_with(&answer.short()), "{text}");
+    assert!(text.contains("witness"), "the witness is not named:\n{text}");
+    assert!(text.contains("read(\"main.nc\")"), "the call is not rendered:\n{text}");
+    assert!(text.contains("stratum 3"), "{text}");
+    assert!(text.contains("trace"), "the trace above it is not reached:\n{text}");
+    assert!(text.contains("└─") || text.contains("├─"), "it is not a tree:\n{text}");
+}
+
+#[test]
+fn a_provenance_walk_stops_where_it_is_told_to() {
+    let (dir, _, answer, _) = a_small_trace("lamp-depth");
+    let shallow =
+        nether(Some(&dir), &["lamp", &answer.to_string(), "--provenance", "--depth", "1"]);
+    let deep = nether(Some(&dir), &["lamp", &answer.to_string(), "--provenance", "--depth", "8"]);
+    assert!(
+        stdout(&shallow).lines().count() < stdout(&deep).lines().count(),
+        "depth 1:\n{}\ndepth 8:\n{}",
+        stdout(&shallow),
+        stdout(&deep)
+    );
+}
+
+#[test]
+fn a_lamp_on_a_name_that_is_not_there_is_absent() {
+    let (dir, _, _, _) = a_small_trace("lamp-absent");
+    let missing = Value::Int(9999).cairn();
+    let out = nether(Some(&dir), &["lamp", &missing.to_string()]);
+    assert_eq!(code(&out), 66, "{}", stderr(&out));
+}
+
+#[test]
+fn a_lamp_with_no_cairn_says_which_cairn() {
+    let out = nether(None, &["lamp"]);
+    assert_eq!(code(&out), 64);
+    assert!(stderr(&out).contains("which cairn?"), "{}", stderr(&out));
+}
+
+#[test]
+fn a_shade_shows_its_origin_and_its_name_and_no_more() {
+    // §1.6: a shade may be stored, copied, passed, compared and sealed. What
+    // the lamp shows is what the value holds, which is a stratum and a name.
+    let dir = scratch("lamp-shade");
+    let store = Store::open(&dir).expect("a store");
+    let inside = store.put(&Stored::Value(Value::Str("secret".into()))).expect("put");
+    let shade = store.put(&Stored::Value(Value::Shade { origin: 5, value: inside })).expect("put");
+
+    let out = nether(Some(&dir), &["lamp", &shade.to_string()]);
+    let text = stdout(&out);
+    assert!(text.contains("stratum 5"), "{text}");
+    assert!(text.contains(&inside.short()), "{text}");
+    assert!(!text.contains("secret"), "the lamp opened the shade:\n{text}");
 }

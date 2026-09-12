@@ -146,13 +146,12 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## rites — The Rites
 
-`##········` 11% · 1 of 9 done · due 2027-03-31
+`###·······` 22% · 2 of 9 done · due 2027-03-31
 
 ### unmarked
 
 - [ ] [`0060`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0060-nether-bury.md) nether bury <sup>feature · p0 · 4</sup>
 - [ ] [`0061`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0061-nether-exhume.md) nether exhume <sup>feature · p0 · 5</sup>
-- [ ] [`0062`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0062-nether-lamp-and-provenance.md) nether lamp, and --provenance <sup>feature · p0 · 1</sup>
 - [ ] [`0064`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0064-nether-strata.md) nether strata <sup>feature · p1 · 1</sup>
 - [ ] [`0065`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0065-nether-graft.md) nether graft <sup>feature · p1 · 4</sup>
 - [ ] [`0066`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0066-transcript-tests-for-every-documented-invocation.md) Transcript tests for every documented invocation <sup>chore · p0</sup>
@@ -161,6 +160,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ### buried
 
+- [x] [`0062`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0062-nether-lamp-and-provenance.md) nether lamp, and --provenance <sup>feature · p0 · 1</sup>
 - [x] [`0063`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0063-nether-cairn.md) nether cairn <sup>feature · p1 · 1</sup>
 
 ## world — The World
