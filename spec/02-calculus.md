@@ -117,6 +117,15 @@ by [PRIM] anything built only from literals is at depth 0, and by
 [section 06](06-evaluation.md) anything at depth 0 is fully evaluated before
 the artifact exists.
 
+**[PRIM]** ranges over every primitive operation, and a conditional is one of
+them: `if`, `while`, `&&` and `||` take their condition and their arms as
+operands, and the maximum is over all of them. The condition belongs in that
+maximum because which arm was taken is itself something the condition knew —
+`if (secret) { 0 } else { 1 }` tells you about `secret` whichever arm runs.
+
+The arms are why [PRIM] is the one rule whose depth is a bound rather than a
+fact, and §2.4 is about that.
+
 **[APP]** takes the maximum of three things, not two: the depth of what the
 function hands back `d_r`, the depth of the function value itself `d_f` (a
 function fetched over the network is a deep value even before it is called),
@@ -183,12 +192,36 @@ itself fetched over the network is deep for two independent reasons.
 Two properties an implementation MUST preserve. Both are stated here and
 tested generatively by the roadmap item *Property test: depth is monotone*.
 
-> **Monotonicity.** If `Γ ; δ ⊢ e : τ@d` and `e ⟶ e′`, then
-> `Γ ; δ ⊢ e′ : τ@d′` with `d′ ≥ d` — never less.
+> **Soundness of the bound.** If `Γ ; δ ⊢ e : τ@d` and `e ⟶ e′` with
+> `Γ ; δ ⊢ e′ : τ@d′`, then `d′ ≤ d` — never more.
 
-Evaluation can only ever learn that something is deeper than it looked. This
-is what makes a depth printed in a trace trustworthy: it is a lower bound that
-has already been reached, not a prediction.
+A depth in a type is an **upper bound** on how far into the world the value's
+history reaches. Evaluation can only ever find out that something was
+shallower than it looked:
+
+```c
+if (true) { 1 } else { must(descend disk { read("k") }) }
+```
+
+has depth 3 by [PRIM] and reduces to `1`, which is at depth 0. Nothing was
+lowered — the depth 3 was a bound over an arm that was never taken, and burial
+found out which arm it was.
+
+The other direction is the one that matters. A type claiming depth 3 for a
+value that turns out to be pure is conservative and harmless. A type claiming
+depth 0 for a value that reached the disk is a value escaping at a depth its
+type did not admit, and that is the single thing the lattice exists to
+prevent.
+
+This is not [§1.2](01-strata.md#12-the-monotonicity-law), which says something
+else: that no *operation* takes a deep value and hands back a shallow one.
+There is no `ascend`. Picking an arm takes no deep value anywhere, because the
+deep value was never produced.
+
+The depth in a **trace** is a third number and an exact one: what evaluation
+actually reached, recorded with a witness for each stratum
+([§1.4](01-strata.md#14-what-the-trace-records)). A bound is what a type
+offers before anything runs; a trace says what happened.
 
 > **Ambient soundness.** If `Γ ; δ ⊢ e : τ@d` then `d ≤ max(δ, g(e))`, where
 > `g(e)` is the deepest `s(κ)` over the `descend κ` expressions in `e` and,

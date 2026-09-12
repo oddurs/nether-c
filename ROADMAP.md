@@ -95,7 +95,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`########··` 76% · 13 of 17 done · due 2027-01-15
+`########··` 78% · 14 of 18 done · due 2027-01-15
 
 ### unmarked
 
@@ -119,6 +119,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0122`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0122-spec-a-function-cannot-contain-a-descent-and-be-called.md) Spec: a function cannot contain a descent and be called <sup>spec · p0</sup>
 - [x] [`0124`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0124-spec-fuel-must-be-deterministic-and-a-step-is-undefined.md) Spec: fuel must be deterministic and a step is undefined <sup>spec · p0</sup>
 - [x] [`0125`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0125-spec-an-implementation-s-own-limits-are-not-mentioned.md) Spec: an implementation's own limits are not mentioned <sup>spec · p0</sup>
+- [x] [`0129`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0129-spec-monotonicity-is-stated-the-wrong-way-round.md) Spec: monotonicity is stated the wrong way round <sup>spec · p0</sup>
 
 ## surface — The Surface
 

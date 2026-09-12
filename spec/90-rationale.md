@@ -246,6 +246,35 @@ The cost is expressiveness: a lattice cannot distinguish *reads the disk* from
 *reads the disk and the network* except by taking the deeper of the two. Nether
 C accepts a coarser answer in exchange for one people will actually use.
 
+### Monotonicity, pointing the other way
+
+[§2.4](02-calculus.md#24-metatheory) once required `d′ ≥ d` and explained it
+as *evaluation can only ever learn that something is deeper than it looked*.
+It reads well and no implementation can satisfy it. A conditional's depth is
+the maximum over its arms, and reducing it takes one arm and discards the
+other, so a branch whose deep arm is not taken reduces to something shallower
+than its own type says. The generative test in 0052 found it in forty-seven
+programs.
+
+**Keep `≥` and make the arms not count.** Give a conditional the depth of its
+condition only, so reduction never lowers anything. Rejected outright: the arm
+that is taken carries its own depth into the result, and a rule that drops it
+hands back a disk-derived value typed as pure. That is laundering, and it is
+the one thing the lattice is for.
+
+**Keep `≥` and make reduction preserve the bound.** Have burial stamp the
+unreduced expression's depth onto whatever the branch reduces to, so `1`
+becomes `1@3`. The law holds and the language stops working: pure code that
+happens to sit beside a deep arm no longer disappears at burial, and
+everything downstream of it inherits a depth nothing ever reached.
+
+**What it cost.** The shorter, more quotable sentence. `d′ ≤ d` is the
+direction that carries the guarantee — a value never escapes at a depth its
+type did not admit — and it costs the intuition that a depth is something
+already reached. It is a bound, and the number that *was* reached lives in the
+trace, which is now said explicitly in §2.4 because the two were being read as
+one.
+
 ### Pretending an implementation has no limits
 
 [§6.4](06-evaluation.md#64-starvation-and-fuel) said exhausting fuel was a
