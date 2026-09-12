@@ -123,7 +123,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`##········` 11% · 1 of 9 done · due 2027-02-28
+`##········` 20% · 2 of 10 done · due 2027-02-28
 
 ### unmarked
 
@@ -139,6 +139,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 ### buried
 
 - [x] [`0118`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0118-spec-json-is-bound-in-the-prelude-scope-and-never-defined.md) Spec: Json is bound in the prelude scope and never defined <sup>spec · p2</sup>
+- [x] [`0130`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0130-decide-where-the-lexer-gets-unicode.md) Decide: where the lexer gets Unicode <sup>spec · p0</sup>
 
 ## rites — The Rites
 

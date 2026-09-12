@@ -212,13 +212,45 @@ until it costs something:
 > Write your own encoders, parsers, renderers and formats. Do not write your
 > own cryptography.
 
-`blake3` is a permitted dependency. It is expected to be the only one for a
-long time, and every addition after it needs its own entry in this section.
+`blake3` is a permitted dependency. Every addition after it needs its own
+entry in this section.
 
 This is also consistent with the Decay Rule rather than in tension with it. The
 ceiling counts the lines this project is responsible for, and three hundred
 lines of hand-rolled hashing would be three hundred lines of exactly the code
 nobody should be reviewing here.
+
+### Unicode, and the line the rule is actually drawn on
+
+[§3.3](03-lexical.md#33-identifiers) needs two things Unicode is the authority
+for: which code points start and continue an identifier, and NFC. Working out
+how many lines the part actually needed would be, as the rule requires: the
+`XID` properties are about seven hundred ranges, and NFC is two thousand
+decomposition mappings, nine hundred combining classes and an exclusion list.
+Two hundred lines of algorithm and forty-five hundred lines of data.
+
+The failure mode is blake3's. Two identifiers that should compare equal and do
+not are a program that resolves one name to two bindings, quietly, and §3.3
+already says so in as many words.
+
+The Decay Rule settles the rest. `.decay-ceiling` counts the code every
+guarantee rests on, and four and a half thousand lines of UCD is not that
+code: it is not ours, we would not read it, and it changes once a year when
+Unicode publishes. Putting it in the count would mean every future commit
+measuring itself against a number that is mostly somebody else's data.
+Generating it at build time moves the lines and not the problem.
+
+So `unicode-ident` and `unicode-normalization` are permitted, the language
+pins **Unicode 16.0**, and the rule the three of them share is worth stating
+because "no dependencies" was never quite it:
+
+> A dependency is admissible when what it holds is data, or a construction,
+> that somebody else is the authority for. It is inadmissible when what it
+> holds is behaviour this project could write and should understand.
+
+`blake3` is the first kind. Unicode is the first kind. A markdown renderer, a
+GIF encoder, an argument parser and a web framework are the second kind, which
+is why this repository has written four of those and imported none.
 
 ### Fuel and `opaque` as command-line concerns
 
