@@ -30,6 +30,8 @@ the tag and by lengths inside it.
 | `0x04` | `Str` | `u64` length, then exactly that many bytes of well-formed UTF-8 |
 | `0x05` | `Cairn` | thirty-two bytes |
 | `0x06` | `Shade` | one byte origin stratum, then the thirty-two byte cairn of the value |
+| `0x07` | `Answer` | one byte, `0x00` given or `0x01` refused, then the value or the refusal |
+| `0x08` | `Refusal` | one byte, `0x00`..`0x05`, in the order [§5.1.1](05-types.md#511-answers-and-refusals) lists them |
 | `0x10` | `Struct` | `u64` name length, the name in UTF-8, `u64` field count, then the fields |
 | `0x11` | `Array` | `u64` element count, then the elements |
 | `0x20` | `Node` | see [§7.3](#73-nodes) |
@@ -62,6 +64,8 @@ decoder MUST reject:
 - a `Bool` payload other than `0x00` or `0x01`;
 - a `Str` payload that is not well-formed UTF-8;
 - a `Shade` origin byte greater than `8`;
+- an `Answer` discriminant other than `0x00` or `0x01`;
+- a `Refusal` code greater than `0x05`;
 - a `Struct` whose name is empty, or whose name is not well-formed UTF-8;
 - any length or count that exceeds the bytes remaining;
 - trailing bytes after a complete value.
@@ -83,9 +87,20 @@ a prefix; the first 8 hexadecimal characters are the RECOMMENDED short form,
 and any tool that accepts a short form MUST reject an ambiguous one rather
 than picking a match.
 
-The domain separator is versioned. Changing the encoding changes the domain,
-which changes every cairn, which is the correct and honest consequence: values
-encoded under different rules are not the same values.
+The domain separator is versioned. **Changing what an existing tag means
+changes the domain**, which changes every cairn, which is the correct and
+honest consequence: values encoded under different rules are not the same
+values.
+
+Adding a tag that was previously unassigned does not. A decoder under `v1`
+rejected `0x07` as unknown and still does not accept anything it accepted
+before; every byte string that had a meaning keeps exactly the meaning it had.
+Nothing is reinterpreted, so nothing is renamed.
+
+> This is the narrower rule, and it is narrower because the broad one made the
+> format unable to grow without discarding everything ever written under it.
+> [§90.2](90-rationale.md#902-rejected-alternatives) records what was given up
+> to narrow it.
 
 ## 7.3 Nodes
 

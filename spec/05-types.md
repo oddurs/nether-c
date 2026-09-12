@@ -17,8 +17,8 @@ status: draft
 | `Str` | any well-formed UTF-8 string | as `Bytes`, over the bytes as given |
 | `Cairn` | a content address | 32 bytes |
 | `Shadeᵈ⟨T⟩` | an opaque `T` from depth `d` | the cairn of the underlying value |
-| `Answer⟨T⟩` | what the world said: a `T`, or a refusal | tag byte, then the `T` or the `Refusal` |
-| `Refusal` | one of six codes, and nothing else | one byte |
+| `Answer⟨T⟩` | what the world said: a `T`, or a refusal | `0x07`: one discriminant byte, then the `T` or the `Refusal` |
+| `Refusal` | one of six codes, and nothing else | `0x08`: one byte, in the order §5.1.1 lists them |
 
 `I64` is the only integer type. There is no unsigned type, no `char`, no
 integer promotion and no implicit narrowing. Arithmetic wraps; an
@@ -46,7 +46,9 @@ Refusal    ::=  absent       the thing is not there
 ```
 
 The set of refusal codes is **closed** and fixed by this specification. An
-implementation MUST NOT add to it. The six names are bound in the prelude scope
+implementation MUST NOT add to it. They encode as `0x00` through `0x05`, in
+the order written above, and that order is part of the format: see
+[§7.1](07-ledger.md#71-canonical-encoding). The six names are bound in the prelude scope
 and compare by equality:
 
 ```c
