@@ -12,13 +12,13 @@ Statuses are the language's own: work is `descending` while it is underway,
 
 ## sign — The Sign
 
-`··········` 0% · 0 of 3 done · due 2026-09-30
+`##########` 100% · 3 of 3 done · due 2026-09-30
 
-### marked
+### buried
 
-- [ ] [`0098`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0098-the-landing-page-rewritten-as-doctrine.md) The landing page, rewritten as doctrine <sup>feature · p1</sup>
-- [ ] [`0099`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0099-graphics-the-doctrine-needs.md) Graphics the doctrine needs <sup>feature · p2</sup>
-- [ ] [`0100`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0100-read-the-sign-back-is-it-still-true.md) Read the sign back: is it still true? <sup>chore · p1</sup>
+- [x] [`0098`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0098-the-landing-page-rewritten-as-doctrine.md) The landing page, rewritten as doctrine <sup>feature · p1</sup>
+- [x] [`0099`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0099-graphics-the-doctrine-needs.md) Graphics the doctrine needs <sup>feature · p2</sup>
+- [x] [`0100`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0100-read-the-sign-back-is-it-still-true.md) Read the sign back: is it still true? <sup>chore · p1</sup>
 
 ## codex — The Codex
 
