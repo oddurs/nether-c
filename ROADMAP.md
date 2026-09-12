@@ -123,13 +123,9 @@ Buried. The IR, the bidirectional depth checker, normalization by evaluation, ho
 
 ## surface — The Surface
 
-`##########` 94% · 17 of 18 done · due 2027-02-28
+`##########` 100% · 18 of 18 done · due 2027-02-28
 
 Buried. The lexer, the recursive descent parser, lowering, depth inference, diagnostics that name the cause, and the three sample programs — plus four specification holes the implementation found and closed.
-
-### unmarked
-
-- [ ] [`0157`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0157-freezing-a-local-depends-on-which-arm-you-write-first.md) Freezing a local depends on which arm you write first <sup>bug · p1 · 0</sup>
 
 ### buried
 
@@ -150,6 +146,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0143`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0143-a-span-that-lands-mid-character-panics-the-reporter.md) A span that lands mid-character panics the reporter <sup>bug · p2 · 0</sup>
 - [x] [`0153`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0153-the-parser-and-checker-do-not-implement-aggregate-construction.md) The parser and checker do not implement aggregate construction <sup>feature · p0 · 0</sup>
 - [x] [`0154`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0154-naming-a-local-freezes-it.md) Naming a local freezes it <sup>feature · p0 · 0</sup>
+- [x] [`0157`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0157-freezing-a-local-depends-on-which-arm-you-write-first.md) Freezing a local depends on which arm you write first <sup>bug · p1 · 0</sup>
 
 ## rites — The Rites
 
