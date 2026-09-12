@@ -95,7 +95,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`#####·····` 46% · 6 of 13 done · due 2027-01-15
+`######····` 54% · 7 of 13 done · due 2027-01-15
 
 ### unmarked
 
@@ -105,7 +105,6 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0052`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0052-property-test-depth-is-monotone.md) Property test: depth is monotone <sup>chore · p1 · 0</sup>
 - [ ] [`0053`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0053-proof-one-read-one-hole.md) Proof: one read, one hole <sup>chore · p0 · 3</sup>
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
-- [ ] [`0122`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0122-spec-a-function-cannot-contain-a-descent-and-be-called.md) Spec: a function cannot contain a descent and be called <sup>spec · p0</sup>
 
 ### buried
 
@@ -115,6 +114,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0119`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0119-spec-ambient-soundness-is-stated-as-something-that-is-not-true.md) Spec: ambient soundness is stated as something that is not true <sup>spec · p0</sup>
 - [x] [`0120`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0120-spec-app-s-premise-forbids-the-specification-s-own-examples.md) Spec: APP's premise forbids the specification's own examples <sup>spec · p0</sup>
 - [x] [`0121`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0121-spec-the-orpheus-error-points-at-the-wrong-column.md) Spec: the Orpheus error points at the wrong column <sup>spec · p1</sup>
+- [x] [`0122`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0122-spec-a-function-cannot-contain-a-descent-and-be-called.md) Spec: a function cannot contain a descent and be called <sup>spec · p0</sup>
 
 ## surface — The Surface
 

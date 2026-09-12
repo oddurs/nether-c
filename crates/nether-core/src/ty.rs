@@ -53,15 +53,19 @@ pub enum Type {
         /// The length, when it was written.
         len: Option<u64>,
     },
-    /// `τ₁ --d--> τ₂`. The latent depth is the deepest stratum the function
-    /// reaches when applied, and is what [APP] joins into a call's depth.
+    /// `τ₁ --dƒ--> τ₂@d_r`. Two depths, because they are two facts: what a
+    /// caller must already hold, and how deep what comes back is. A function
+    /// that descends for itself asks for nothing and still hands back
+    /// something deep. `spec/02-calculus.md` §2.1.
     Fn {
         /// The parameter types, in order.
         params: Vec<Type>,
-        /// The deepest stratum applying this reaches.
+        /// `dƒ`: what a caller must already hold to apply it. [APP]'s premise.
         latent: Depth,
         /// What applying it produces.
         result: Box<Type>,
+        /// `d_r`: the depth of what comes back. [APP] joins this, not `dƒ`.
+        result_depth: Depth,
     },
 }
 
@@ -80,8 +84,8 @@ impl fmt::Display for Type {
             Self::Struct(name) => f.write_str(name),
             Self::Array { elem, len: Some(n) } => write!(f, "{elem}[{n}]"),
             Self::Array { elem, len: None } => write!(f, "{elem}[]"),
-            Self::Fn { params, latent, result } => {
-                write!(f, "{result}(")?;
+            Self::Fn { params, latent, result, result_depth } => {
+                write!(f, "{result}@{result_depth}(")?;
                 for (i, p) in params.iter().enumerate() {
                     if i > 0 {
                         f.write_str(", ")?;
@@ -180,8 +184,20 @@ mod tests {
             params: vec![Type::Str],
             latent: Depth::DISK,
             result: Box::new(Type::Answer(Box::new(Type::Bytes))),
+            result_depth: Depth::DISK,
         };
-        assert_eq!(read.to_string(), "Answer<Bytes>(Str) @3");
+        assert_eq!(read.to_string(), "Answer<Bytes>@3(Str) @3");
+    }
+
+    #[test]
+    fn a_function_that_descends_for_itself_asks_for_nothing() {
+        let load = Type::Fn {
+            params: vec![Type::Str],
+            latent: Depth::PURE,
+            result: Box::new(Type::Bytes),
+            result_depth: Depth::DISK,
+        };
+        assert_eq!(load.to_string(), "Bytes@3(Str) @0");
     }
 
     #[test]
