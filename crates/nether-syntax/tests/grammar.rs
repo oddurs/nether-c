@@ -34,17 +34,17 @@ const SAMPLES: &[(&str, Shape)] = &[
     ("spec/00-overview.md:125", Shape::Unit),
     ("spec/01-strata.md:52", Shape::Unit),
     ("spec/01-strata.md:94", Shape::Unit),
-    ("spec/01-strata.md:111", Shape::Unit),
+    ("spec/01-strata.md:114", Shape::Unit),
     ("spec/02-calculus.md:159", Shape::Unit),
     ("spec/02-calculus.md:202", Shape::Statements),
     ("spec/03-lexical.md:26", Shape::Unit),
     ("spec/04-grammar.md:155", Shape::Statements),
     ("spec/05-types.md:52", Shape::Statements),
     ("spec/05-types.md:71", Shape::Unit),
-    ("spec/05-types.md:113", Shape::Blocked("0116: a struct cannot be constructed")),
+    ("spec/05-types.md:116", Shape::Blocked("0116: a struct cannot be constructed")),
     ("spec/06-evaluation.md:33", Shape::Unit),
     ("spec/09-prelude.md:78", Shape::Statements),
-    ("spec/90-rationale.md:368", Shape::Unit),
+    ("spec/90-rationale.md:392", Shape::Unit),
 ];
 
 /// Every fenced `c` block under `spec/`, keyed `file:line` the way the

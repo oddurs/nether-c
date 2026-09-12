@@ -215,9 +215,10 @@ fn seal_of_something_the_world_has_not_answered_stays_a_seal() {
 }
 
 #[test]
-fn sealing_a_shade_names_what_is_inside_it() {
-    // §1.5: `seal` on a shade is legal and yields the cairn of the underlying
-    // value — not a name for the wrapper.
+fn sealing_a_shade_names_the_shade_and_not_what_is_inside_it() {
+    // §1.5: `seal` on a shade names the shade. §7.1 puts the stratum it came
+    // out of in its encoding, so the two names are different, and reaching
+    // through an opaque thing for a name would be a hole in it.
     let shaded = pure(
         ExprKind::Rite { rite: Rite::Shade, operand: Box::new(int(7)) },
         Type::Shade { origin: Depth::PURE, inner: Box::new(Type::Int) },
@@ -225,39 +226,39 @@ fn sealing_a_shade_names_what_is_inside_it() {
     let sealed = pure(ExprKind::Rite { rite: Rite::Seal, operand: Box::new(shaded) }, Type::Cairn);
     let r = buried(&demanding(vec![sealed]));
 
-    let want = Value::Int(7).cairn();
+    let inside = Value::Int(7).cairn();
+    let want = Value::Shade { origin: 0, value: inside }.cairn();
     assert_eq!(r.demands[0].kind, ExprKind::Literal(Literal::Cairn(*want.as_bytes())));
+    assert_ne!(want, inside, "the shade and what it holds have the same name");
 }
 
 #[test]
-fn two_shades_are_equal_when_what_is_inside_them_is() {
-    // §5.3. Comparing shades does not count as looking at them, because it
-    // reveals only what `seal` already revealed.
-    let shade = |n: i64, origin: Depth| {
+fn two_shades_are_equal_when_their_stratum_and_their_value_are() {
+    // §5.3, which compares canonical encodings, and §7.1, which puts the
+    // origin stratum in a shade's. Comparing them does not count as looking at
+    // them: it reveals only what `seal` on each would reveal anyway.
+    let shade = |n: i64| {
         pure(
             ExprKind::Rite { rite: Rite::Shade, operand: Box::new(int(n)) },
-            Type::Shade { origin, inner: Box::new(Type::Int) },
+            Type::Shade { origin: Depth::PURE, inner: Box::new(Type::Int) },
         )
     };
     let same = pure(
-        ExprKind::Binary {
-            op: BinOp::Eq,
-            lhs: Box::new(shade(7, Depth::PURE)),
-            rhs: Box::new(shade(7, Depth::PURE)),
-        },
+        ExprKind::Binary { op: BinOp::Eq, lhs: Box::new(shade(7)), rhs: Box::new(shade(7)) },
         Type::Bool,
     );
     let different = pure(
-        ExprKind::Binary {
-            op: BinOp::Eq,
-            lhs: Box::new(shade(7, Depth::PURE)),
-            rhs: Box::new(shade(8, Depth::PURE)),
-        },
+        ExprKind::Binary { op: BinOp::Eq, lhs: Box::new(shade(7)), rhs: Box::new(shade(8)) },
         Type::Bool,
     );
     let r = buried(&demanding(vec![same, different]));
     assert_eq!(r.demands[0].kind, ExprKind::Literal(Literal::Bool(true)));
     assert_eq!(r.demands[1].kind, ExprKind::Literal(Literal::Bool(false)));
+
+    // Two shades out of two different strata are not comparable here: the
+    // checker will not let a stage-one burial hold a finished deep value at
+    // all, so the case where the origins differ is proved where it lives, in
+    // the encoding. `nether-ledger`'s `a_shades_origin_is_part_of_its_name`.
 }
 
 // ── the graph ───────────────────────────────────────────────────────────────

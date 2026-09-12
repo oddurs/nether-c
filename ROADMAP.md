@@ -95,12 +95,11 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`#########·` 89% · 16 of 18 done · due 2027-01-15
+`##########` 94% · 17 of 18 done · due 2027-01-15
 
 ### unmarked
 
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
-- [ ] [`0127`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0127-spec-section-5-3-says-two-different-things-about-shade-equality.md) Spec: section 5.3 says two different things about shade equality <sup>spec · p1</sup>
 
 ### buried
 
@@ -119,6 +118,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [x] [`0124`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0124-spec-fuel-must-be-deterministic-and-a-step-is-undefined.md) Spec: fuel must be deterministic and a step is undefined <sup>spec · p0</sup>
 - [x] [`0125`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0125-spec-an-implementation-s-own-limits-are-not-mentioned.md) Spec: an implementation's own limits are not mentioned <sup>spec · p0</sup>
 - [x] [`0126`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0126-spec-starvation-is-the-name-of-two-different-things.md) Spec: starvation is the name of two different things <sup>spec · p1</sup>
+- [x] [`0127`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0127-spec-section-5-3-says-two-different-things-about-shade-equality.md) Spec: section 5.3 says two different things about shade equality <sup>spec · p1</sup>
 - [x] [`0129`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0129-spec-monotonicity-is-stated-the-wrong-way-round.md) Spec: monotonicity is stated the wrong way round <sup>spec · p0</sup>
 
 ## surface — The Surface

@@ -146,7 +146,7 @@ fn unit_samples() -> Vec<String> {
         ("03-lexical.md", 26),
         ("05-types.md", 71),
         ("06-evaluation.md", 33),
-        ("90-rationale.md", 368),
+        ("90-rationale.md", 392),
     ];
     UNITS
         .iter()

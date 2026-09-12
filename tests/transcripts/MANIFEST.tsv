@@ -15,8 +15,8 @@ spec/00-overview.md:125	c	pinned	e34350c3cc044f96
 spec/00-overview.md:136	console	pinned	e183405459af89bf
 spec/01-strata.md:52	c	pinned	39d95c03c09e3f8c
 spec/01-strata.md:94	c	pinned	32212f92be2604ee
-spec/01-strata.md:111	c	pinned	42acff8a32601370
-spec/01-strata.md:135	text	pinned	448359f29ad0b97f
+spec/01-strata.md:114	c	pinned	42acff8a32601370
+spec/01-strata.md:138	text	pinned	448359f29ad0b97f
 spec/02-calculus.md:16	text	pinned	0597a19f1d266527
 spec/02-calculus.md:52	text	pinned	d1e54373b8e0ddac
 spec/02-calculus.md:159	c	pinned	8f6164dc55253768
@@ -36,7 +36,7 @@ spec/04-grammar.md:155	c	pinned	4fae387bf70b6809
 spec/05-types.md:37	text	pinned	1de4c44f9b08a8ce
 spec/05-types.md:52	c	pinned	0c96fcfac5c029b7
 spec/05-types.md:71	c	pinned	bae6053b958ec44b
-spec/05-types.md:113	c	pinned	b90bad42db5f84e0
+spec/05-types.md:116	c	pinned	b90bad42db5f84e0
 spec/06-evaluation.md:14	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md:33	c	pinned	32047b898ae2a1c0
 spec/06-evaluation.md:125	text	pinned	07c9e60510dab9cc
@@ -64,4 +64,4 @@ spec/09-prelude.md:127	signatures	pinned	834d41e9dd803353
 spec/09-prelude.md:143	signatures	pinned	df4cca1bd2fc65e5
 spec/09-prelude.md:153	signatures	pinned	b3bc31d5c47581b4
 spec/09-prelude.md:171	signatures	pinned	b83338a5100b0081
-spec/90-rationale.md:368	c	pinned	f426e2ac55ce8205
+spec/90-rationale.md:392	c	pinned	f426e2ac55ce8205
