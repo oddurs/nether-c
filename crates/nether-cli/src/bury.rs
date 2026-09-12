@@ -221,6 +221,8 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
     let told = Buried {
         path: path.display().to_string(),
         cairn: trace_cairn,
+        residue: residue_cairn,
+        source: source_cairn,
         depth: residue.depth.get(),
         holes: residue.holes.clone(),
         nodes: written + 2,
@@ -243,6 +245,11 @@ fn reached_the_bottom(store: &Store, witness: Cairn) -> bool {
 struct Buried {
     path: String,
     cairn: Cairn,
+    /// The residue, as source. §6.5 makes it a MUST that this can be printed
+    /// and lowered again, and a person who cannot get at its name cannot
+    /// check that.
+    residue: Cairn,
+    source: Cairn,
     depth: u8,
     holes: Vec<Cairn>,
     nodes: usize,
@@ -290,9 +297,11 @@ impl Buried {
             })
             .collect();
         format!(
-            "{{\"buried\":{},\"cairn\":\"{}\",\"depth\":{},\"nodes\":{},\"fuel_spent\":{},\"holes\":[{}]}}",
+            "{{\"buried\":{},\"cairn\":\"{}\",\"residue\":\"{}\",\"source\":\"{}\",             \"depth\":{},\"nodes\":{},\"fuel_spent\":{},\"holes\":[{}]}}",
             json::string(&self.path),
             self.cairn,
+            self.residue,
+            self.source,
             self.depth,
             self.nodes,
             self.fuel_spent,
