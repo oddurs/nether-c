@@ -186,9 +186,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
     let trace = Node::Trace {
         residue: residue_cairn,
         holes: residue.holes.clone(),
-        // Empty, and honestly so: burial does not produce deposits yet, which
-        // is filed. An empty list is what is true today.
-        deposits: Vec::new(),
+        deposits: residue.deposits.clone(),
         source: source_cairn,
         fuel_spent: residue.fuel_spent,
         depth: residue.depth.get(),
