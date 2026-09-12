@@ -2,8 +2,9 @@
 id: 159
 title: Nothing shows a trace its residue
 type: feature
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 depends_on:
 - 155
 created: 2026-09-12
@@ -28,5 +29,9 @@ what verifying §6.5 actually took.
 
 ## Acceptance criteria
 
-- [ ] A rite gives the residue's cairn for a trace
-- [ ] `bury --json` includes it
+- [x] A rite gives the residue's cairn for a trace
+- [x] `bury --json` includes it
+
+## 2026-09-12
+
+Two ways in, because a person and a script want different ones: bury --json names the residue and the source, and lamp's one-line rendering of a trace names the residue so a provenance walk reaches it. The human summary is untouched, because section 6.8 fixes its shape.

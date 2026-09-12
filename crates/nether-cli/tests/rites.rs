@@ -906,3 +906,31 @@ fn a_rendered_call_reads_back_as_the_call_that_was_made() {
     let out = nether(Some(&dir), &["strata", &awkward.to_string()]);
     assert!(stdout(&out).contains(r#"b"a, b)""#), "{}", stdout(&out));
 }
+
+#[test]
+fn bury_says_where_the_residue_is() {
+    // §6.5 makes it a MUST that a residue can be printed and lowered again,
+    // and that is the thing a person would want to check. It was written,
+    // named in the trace, and surfaced by nothing — checking it meant scanning
+    // the store object by object.
+    let dir = scratch("bury-residue");
+    let build = format!("{}/../../tests/programs/build.nc", env!("CARGO_MANIFEST_DIR"));
+    let out = nether(Some(&dir), &["bury", &build, "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    let field = |name: &str| {
+        text.split(&format!("\"{name}\":\""))
+            .nth(1)
+            .and_then(|r| r.split('"').next())
+            .unwrap_or_else(|| panic!("bury --json has no {name}:\n{text}"))
+    };
+
+    // And it is the source of a program, which is what §6.5 says a residue is.
+    let shown = nether(Some(&dir), &["lamp", field("residue")]);
+    assert_eq!(code(&shown), 0, "{}", stderr(&shown));
+    assert!(stdout(&shown).contains("demand"), "not a program:\n{}", stdout(&shown));
+
+    // The one-line rendering names it too, so a provenance walk reaches it.
+    let walked = nether(Some(&dir), &["lamp", field("cairn"), "--provenance"]);
+    assert!(stdout(&walked).contains("residue "), "{}", stdout(&walked));
+}
