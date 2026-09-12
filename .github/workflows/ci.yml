@@ -30,8 +30,16 @@ jobs:
         with:
           python-version: '3.12'
 
+      # From the repository it is actually published from, pinned to a tag, and
+      # with no `||`.
+      #
+      # This used to be `cargo install cairn --locked || echo ...`, which was
+      # wrong twice. `cairn` on crates.io is an unrelated crate — the binary
+      # here comes from `cairn-md` — and the `||` meant that whatever the
+      # install did, `scripts/task check` skipped `cairn check` and the run
+      # stayed green. A gate that cannot fail is not one.
       - name: Install cairn
-        run: cargo install cairn --locked || echo "cairn unavailable; scripts/task skips it"
+        run: cargo install --locked --git https://github.com/oddurs/cairn --tag v0.2.0 cairn-md
 
       # CI and the local hooks run the same command, so they cannot drift.
       - name: scripts/task check
