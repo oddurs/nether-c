@@ -123,11 +123,10 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## surface — The Surface
 
-`##········` 20% · 2 of 10 done · due 2027-02-28
+`###·······` 27% · 3 of 11 done · due 2027-02-28
 
 ### unmarked
 
-- [ ] [`0054`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0054-nether-syntax-the-lexer.md) nether-syntax: the lexer <sup>feature · p0 · 0</sup>
 - [ ] [`0055`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0055-the-recursive-descent-parser.md) The recursive descent parser <sup>feature · p0 · 0</sup>
 - [ ] [`0056`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0056-lowering-ast-to-ir.md) Lowering: AST to IR <sup>feature · p0 · 0</sup>
 - [ ] [`0057`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0057-depth-inference.md) Depth inference <sup>feature · p0 · 0</sup>
@@ -135,9 +134,11 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 - [ ] [`0059`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0059-proof-the-three-sample-programs.md) Proof: the three sample programs <sup>chore · p0 · 3</sup>
 - [ ] [`0116`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0116-spec-a-struct-cannot-be-constructed.md) Spec: a struct cannot be constructed <sup>spec · p0</sup>
 - [ ] [`0123`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0123-spec-sizeof-has-no-answer.md) Spec: sizeof has no answer <sup>spec · p2</sup>
+- [ ] [`0131`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0131-spec-section-3-6-does-not-say-what-an-integer-literal-may-hold.md) Spec: section 3.6 does not say what an integer literal may hold <sup>spec · p1</sup>
 
 ### buried
 
+- [x] [`0054`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0054-nether-syntax-the-lexer.md) nether-syntax: the lexer <sup>feature · p0 · 0</sup>
 - [x] [`0118`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0118-spec-json-is-bound-in-the-prelude-scope-and-never-defined.md) Spec: Json is bound in the prelude scope and never defined <sup>spec · p2</sup>
 - [x] [`0130`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0130-decide-where-the-lexer-gets-unicode.md) Decide: where the lexer gets Unicode <sup>spec · p0</sup>
 
