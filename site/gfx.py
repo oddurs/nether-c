@@ -58,13 +58,23 @@ PALETTE = [
     _rgb(NETHER["code"]),     # 13 TEAL
     _rgb(_RAMP[6]),           # 14 ROT
     _rgb(_RAMP[1]),           # 15 BILE
+    # Sixteen names were never nine strata, so `DEPTH` used to be six colours
+    # with three of them repeated. The table is thirty-two entries now and the
+    # nine have their own, which is the difference between a picture of the
+    # ramp and an approximation of it.
+    *[_rgb(c) for c in _RAMP],  # 16..24 the strata, in order
 ]
+DEPTH = list(range(16, 25))
+
+# The header declares a table of thirty-two, so thirty-two is what has to be
+# written. A short table is not a smaller table: everything after it shifts by
+# three bytes an entry and the file stops being a GIF.
+PALETTE += [PALETTE[0]] * (32 - len(PALETTE))
 
 VOID, BONE, SULPHUR, LILAC, SALMON, ICE, LIME, ASH = range(8)
 SMOKE, PLUM, BLOOD, MOSS, DEEP, TEAL, ROT, BILE = range(8, 16)
 
 # The depth ramp: stratum 0 is sulphur, stratum 8 is lilac.
-DEPTH = [SULPHUR, SULPHUR, BILE, ROT, SALMON, SALMON, PLUM, LILAC, LILAC]
 
 # ── LZW, as the GIF specification describes it ──────────────────────────────
 
@@ -280,7 +290,7 @@ def write_gif(path: Path, frames: list[Frame], delays: list[int], loop: bool = T
     w, h = frames[0].w, frames[0].h
     out = bytearray(b"GIF89a")
     out += w.to_bytes(2, "little") + h.to_bytes(2, "little")
-    out += bytes([0b1111_0011, 0, 0])  # global colour table, 16 entries
+    out += bytes([0b1111_0100, 0, 0])  # global colour table, 32 entries
     for r, g, b in PALETTE:
         out += bytes((r, g, b))
 
@@ -291,7 +301,7 @@ def write_gif(path: Path, frames: list[Frame], delays: list[int], loop: bool = T
         out += b"\x21\xf9\x04\x00" + delay.to_bytes(2, "little") + b"\x00\x00"
         out += b"\x2c" + (0).to_bytes(2, "little") + (0).to_bytes(2, "little")
         out += w.to_bytes(2, "little") + h.to_bytes(2, "little") + b"\x00"
-        out += bytes([4]) + sub_blocks(lzw(bytes(frame.px), 4))
+        out += bytes([5]) + sub_blocks(lzw(bytes(frame.px), 5))
 
     out += b"\x3b"
     return bytes(out)

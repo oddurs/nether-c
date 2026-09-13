@@ -43,7 +43,7 @@ from pathlib import Path
 TOKENS = Path(__file__).resolve().parent / "tokens.css"
 
 #: The hue the whole scheme is built on, in degrees. Indigo.
-GROUND_HUE = 272.0
+GROUND_HUE = 268.0
 
 #: Its complement, which is where the lamp is.
 LAMP_HUE = (GROUND_HUE + 180.0) % 360.0
@@ -91,63 +91,83 @@ def _convert(lightness: float, chroma: float, hue: float) -> str | None:
     return "#{:02X}{:02X}{:02X}".format(*out)
 
 
-def strata(lightness: float = 0.80, chroma: float = 0.115) -> list[str]:
+def strata(
+    lightness: float = 0.88,
+    chroma: float = 0.16,
+    dim: float = 0.22,
+    rise: float = 0.08,
+) -> list[str]:
     """The nine. One lightness, one chroma, and the hue does the talking.
 
-    From the lamp's hue to a little past the ground's, the long way round, so
-    that a stratum is told apart by *which* colour it is and never by how hard
-    it is to see. §1.1 makes the strata a total order; a ramp that dimmed as it
-    went would make the deep ones a total order and a legibility problem.
+    From gold to violet, the long way round, losing a little lightness and
+    gaining a little chroma on the way down.
+
+    It held one lightness at first, on the reasoning that depth ought not to
+    mean "harder to see". That produced nine interchangeable pastels: correct,
+    and dead. Held all the way, the deep end bleaches out -- the most saturated
+    hues sRGB has at high lightness are the pale ones, so d6, d7 and d8 came
+    out washed while d0 was vivid.
+
+    Falling a little and saturating a little keeps every step above 5:1 and
+    lets depth look like depth, which is what the nine are for.
     """
-    first, last = LAMP_HUE, GROUND_HUE + 30.0
+    first, last = LAMP_HUE + 4.0, GROUND_HUE + 37.0
     return [
-        srgb(lightness, chroma, first + (last - first) * n / 8) for n in range(9)
+        srgb(
+            lightness - dim * n / 8,
+            chroma + rise * n / 8,
+            first + (last - first) * n / 8,
+        )
+        for n in range(9)
     ]
 
 
 #: Everything the stylesheet names, and what each one is for.
 NETHER = {
-    # the dark, three deep
-    "sunk": srgb(0.13, 0.030, GROUND_HUE),
-    "ground": srgb(0.17, 0.035, GROUND_HUE),
-    "raised": srgb(0.23, 0.040, GROUND_HUE),
-    # what is written on it
-    "ink": srgb(0.945, 0.012, GROUND_HUE),
-    "dim": srgb(0.730, 0.028, GROUND_HUE),
-    "dimmer": srgb(0.520, 0.032, GROUND_HUE),
-    # the lamp, and the one thing opposite it
-    "accent": srgb(0.840, 0.120, LAMP_HUE),
-    "alt": srgb(0.780, 0.105, GROUND_HUE + 20),
-    # the three that mean something
-    "warn": srgb(0.740, 0.135, 25.0),
-    "good": srgb(0.820, 0.105, 150.0),
-    "code": srgb(0.850, 0.075, 175.0),
-    "quote": srgb(0.760, 0.090, GROUND_HUE - 40),
+    # The dark, three deep. It is indigo rather than black on purpose: black
+    # has no colour in it, so nothing put on it is *related* to it, and the
+    # page reads as a terminal rather than as a place.
+    "sunk": srgb(0.085, 0.070, GROUND_HUE),
+    "ground": srgb(0.155, 0.075, GROUND_HUE),
+    "raised": srgb(0.215, 0.080, GROUND_HUE),
+    # What is written on it. The ink is warm, so it sits with the lamp rather
+    # than against it.
+    "ink": srgb(0.970, 0.020, 80.0),
+    "dim": srgb(0.700, 0.080, GROUND_HUE),
+    "dimmer": srgb(0.500, 0.090, GROUND_HUE),
+    # The lamp, and the one thing opposite it.
+    "accent": srgb(0.890, 0.220, 92.0),
+    "alt": srgb(0.800, 0.170, 300.0),
+    # The three that mean something.
+    "warn": srgb(0.740, 0.190, 25.0),
+    "good": srgb(0.830, 0.170, 150.0),
+    "code": srgb(0.820, 0.190, 170.0),
+    "quote": srgb(0.780, 0.150, 225.0),
 }
 
 #: The surface. The same hues with the sun on them: the lightnesses invert
 #: about the middle and the chroma comes down, because a colour that reads as
 #: quiet on a dark ground shouts on a light one.
 LIT = {
-    "sunk": srgb(0.985, 0.008, GROUND_HUE),
-    "ground": srgb(0.965, 0.012, GROUND_HUE),
-    "raised": srgb(0.915, 0.020, GROUND_HUE),
-    "ink": srgb(0.220, 0.035, GROUND_HUE),
-    "dim": srgb(0.430, 0.045, GROUND_HUE),
-    "dimmer": srgb(0.620, 0.045, GROUND_HUE),
-    "accent": srgb(0.480, 0.110, LAMP_HUE - 10),
-    "alt": srgb(0.420, 0.150, GROUND_HUE + 20),
-    "warn": srgb(0.470, 0.170, 25.0),
-    "good": srgb(0.460, 0.105, 150.0),
-    "code": srgb(0.440, 0.085, 175.0),
-    "quote": srgb(0.450, 0.120, GROUND_HUE - 40),
+    "sunk": srgb(0.995, 0.006, 80.0),
+    "ground": srgb(0.975, 0.012, 80.0),
+    "raised": srgb(0.920, 0.024, GROUND_HUE),
+    "ink": srgb(0.200, 0.060, GROUND_HUE),
+    "dim": srgb(0.430, 0.070, GROUND_HUE),
+    "dimmer": srgb(0.600, 0.060, GROUND_HUE),
+    "accent": srgb(0.480, 0.140, 70.0),
+    "alt": srgb(0.400, 0.180, 300.0),
+    "warn": srgb(0.470, 0.190, 25.0),
+    "good": srgb(0.450, 0.140, 150.0),
+    "code": srgb(0.430, 0.130, 170.0),
+    "quote": srgb(0.440, 0.150, 225.0),
 }
 
 
 #: A ramp for each ground. One is bright and one is not, because the job is
 #: the same on both: nine hues at a single lightness, all legible, none of them
 #: louder than its neighbour.
-RAMPS = {"nether": strata(), "lit": strata(0.470, 0.130)}
+RAMPS = {"nether": strata(), "lit": strata(0.535, 0.150, dim=0.20, rise=0.06)}
 
 #: Space, in cells. The face advances six of its eight pixels, and at a body
 #: size of sixteen that is twelve -- so a cell is 12px and every margin,
