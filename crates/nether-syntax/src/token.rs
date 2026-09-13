@@ -30,6 +30,8 @@ pub enum TokenKind {
     Str(String),
     /// A `b"…"` literal.
     Bytes(Vec<u8>),
+    /// `#` and sixty-four lowercase hex digits. §3.6.
+    Cairn([u8; 32]),
     /// `@` immediately followed by a digit: a depth annotation on a type,
     /// which §3.5 requires to be one token sequence with no space in it.
     ///

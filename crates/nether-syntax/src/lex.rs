@@ -41,6 +41,9 @@ pub enum FaultKind {
     NotAnI64,
     /// A `@` followed by a digit that is not a stratum.
     NotAStratum,
+    /// A `#` and something that is not sixty-four lowercase hex digits, and
+    /// which of those it was. §3.6.
+    NotACairn(&'static str),
     /// A character that starts nothing.
     Stray,
     /// The parser wanted something the source does not have there.
@@ -79,6 +82,9 @@ impl fmt::Display for Fault {
             FaultKind::EmptyNumber => "this number has no digits",
             FaultKind::NotAnI64 => "this does not fit in an I64",
             FaultKind::NotAStratum => "a depth is 0 to 8",
+            FaultKind::NotACairn(which) => {
+                return write!(f, "a cairn is sixty-four lowercase hex digits, and {which}");
+            }
             FaultKind::Stray => "this starts nothing",
             FaultKind::Expected(what) => return write!(f, "expected {what}"),
             FaultKind::Unknown(what) => return write!(f, "this does not name {what}"),
@@ -107,6 +113,10 @@ impl Fault {
             }
             FaultKind::UnknownEscape => Some(r#"the escapes are \n \t \r \0 \\ \" and \u{…}."#),
             FaultKind::NotAnI64 => Some("there is one integer type, and this is outside it."),
+            FaultKind::NotACairn(_) => Some(
+                "§3.6 gives a cairn one spelling, and it is the one `nether lamp` \
+                 prints — paste that with a `#` in front of it.",
+            ),
             FaultKind::TooDeep => Some(
                 "this is a limit of the implementation and not of the language. \
                  The grammar is recursive and this parser is not.",
@@ -209,6 +219,7 @@ impl Scanner<'_> {
                     self.string(from, true)?;
                 }
                 '@' => self.depth(from)?,
+                '#' => self.cairn(from)?,
                 '0'..='9' => self.number(from)?,
                 c if unicode_ident::is_xid_start(c) || c == '_' => self.word(from),
                 _ => self.punctuation(from)?,
@@ -267,6 +278,33 @@ impl Scanner<'_> {
             return Err(self.fault(from, FaultKind::NotAStratum));
         }
         self.push(from, TokenKind::Depth(d));
+        Ok(())
+    }
+
+    /// `#` and sixty-four lowercase hex digits. §3.6.
+    ///
+    /// The near misses are refused by name. A cairn is sixty-five characters
+    /// long, and "this starts nothing" pointing at the sixty-fourth of them is
+    /// a message nobody can act on — so the length, the case and a `_` each
+    /// say what is wrong rather than leaving it to be counted.
+    fn cairn(&mut self, from: usize) -> Result<(), Fault> {
+        self.at += 1;
+        let digits_from = self.at;
+        while self.peek().is_some_and(|c| c == '_' || c.is_ascii_alphanumeric()) {
+            self.at += 1;
+        }
+        let digits = &self.text[digits_from..self.at];
+        if let Some(which) = wrong_with(digits) {
+            return Err(self.fault(from, FaultKind::NotACairn(which)));
+        }
+        let mut bytes = [0u8; 32];
+        for (i, byte) in bytes.iter_mut().enumerate() {
+            let Ok(b) = u8::from_str_radix(&digits[i * 2..i * 2 + 2], 16) else {
+                unreachable!("sixty-four hex digits are thirty-two bytes")
+            };
+            *byte = b;
+        }
+        self.push(from, TokenKind::Cairn(bytes));
         Ok(())
     }
 
@@ -379,6 +417,45 @@ impl Scanner<'_> {
         }
         self.at += self.peek().map_or(1, char::len_utf8);
         Err(self.fault(from, FaultKind::Stray))
+    }
+}
+
+/// Which of §3.6's four ways this one is not a cairn.
+///
+/// Named rather than counted. A cairn is sixty-five characters long, so
+/// "this starts nothing" pointing at the sixty-fourth of them is a message
+/// nobody can act on.
+fn wrong_with(digits: &str) -> Option<&'static str> {
+    // §3.8 says a C programmer will look for these, so this is where one
+    // finds out. `#exe` especially: everything it did, burial does.
+    if matches!(
+        digits,
+        "include"
+            | "define"
+            | "undef"
+            | "if"
+            | "ifdef"
+            | "ifndef"
+            | "else"
+            | "endif"
+            | "pragma"
+            | "exe"
+    ) {
+        return Some("this is a preprocessor directive, and §3.8 has no preprocessor");
+    }
+    if digits.contains('_') {
+        return Some("this one has a `_` in it: a cairn has no separators");
+    }
+    if digits.bytes().any(|b| b.is_ascii_uppercase()) {
+        return Some("this one has a capital in it");
+    }
+    if digits.bytes().any(|b| !b.is_ascii_digit() && !(b'a'..=b'f').contains(&b)) {
+        return Some("this one has a letter past `f` in it");
+    }
+    match digits.len() {
+        64 => None,
+        n if n < 64 => Some("this one is too short"),
+        _ => Some("this one is too long"),
     }
 }
 

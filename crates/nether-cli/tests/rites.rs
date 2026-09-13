@@ -1337,3 +1337,23 @@ fn a_branch_on_exists_folds() {
         field(&stdout(&there(&dir, &["exhume", &gone, "--grant", "disk", "--json"])), "sealed");
     assert_eq!(stdout(&there(&dir, &["lamp", &after])), "it is not\n");
 }
+
+#[test]
+fn a_residue_that_seals_something_is_a_program() {
+    // §6.5 is a MUST and it was false: `seal` is depth 0, so a program that
+    // needed no capability at all buried to a residue whose second line read
+    // `demand «a cairn has no syntax»;`. 0172, 0173.
+    let dir = a_build("sealed-residue");
+    std::fs::write(dir.join("names.nc"), "Cairn c = seal b\"hi\";\ndemand c;\n")
+        .expect("a program");
+
+    let buried = stdout(&there(&dir, &["bury", "names.nc", "--json"]));
+    let residue = stdout(&there(&dir, &["lamp", &field(&buried, "residue")]));
+    assert!(residue.contains("demand #"), "the residue does not name it:\n{residue}");
+    assert!(!residue.contains('«'), "the residue still has a placeholder in it:\n{residue}");
+
+    // And it is a program: burying it again works, and gives the same name.
+    std::fs::write(dir.join("again.nc"), &residue).expect("the residue, as source");
+    let again = stdout(&there(&dir, &["bury", "again.nc", "--json"]));
+    assert_eq!(field(&again, "residue"), field(&buried, "residue"), "a second burial moved it");
+}

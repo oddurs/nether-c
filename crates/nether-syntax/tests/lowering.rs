@@ -242,3 +242,14 @@ fn a_capability_that_is_not_in_the_prelude_is_refused() {
     let faults = lower(&ast).expect_err("there is no such capability");
     assert_eq!(faults.len(), 1, "{faults:?}");
 }
+
+#[test]
+fn a_cairn_literal_survives_the_round_trip() {
+    // §6.5 is a MUST: a residue is a program. A burial that folds `seal` has a
+    // cairn to write down, and until §3.6 had a literal the printer emitted a
+    // placeholder that did not parse — with no capability granted and none
+    // needed, because `seal` is depth 0. 0172, 0173.
+    let name = "f1353fd9d1aea164452daae9d822f156fb89e8f4d7734cf382d453f0afcfc60f";
+    let unit = round_trip(&format!("Cairn c = #{name};\ndemand c;\n"));
+    assert!(print(&unit).contains(&format!("#{name}")), "{}", print(&unit));
+}

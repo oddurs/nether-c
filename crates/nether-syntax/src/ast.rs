@@ -212,6 +212,8 @@ pub enum ExprKind {
     Str(String),
     /// A `b"…"` literal.
     Bytes(Vec<u8>),
+    /// A `#…` literal: the thirty-two bytes §3.6's sixty-four digits spell.
+    Cairn([u8; 32]),
     /// `true` or `false`.
     Bool(bool),
     /// An identifier. What it names is lowering's question.

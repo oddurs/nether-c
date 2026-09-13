@@ -657,6 +657,12 @@ impl Lowering<'_> {
                 Depth::PURE,
                 span,
             ),
+            ast::ExprKind::Cairn(c) => Self::at(
+                ir::ExprKind::Literal(ir::Literal::Cairn(*c)),
+                ir::Type::Cairn,
+                Depth::PURE,
+                span,
+            ),
             ast::ExprKind::Bool(b) => Self::at(
                 ir::ExprKind::Literal(ir::Literal::Bool(*b)),
                 ir::Type::Bool,

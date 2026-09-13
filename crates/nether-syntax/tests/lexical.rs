@@ -83,8 +83,13 @@ fn the_longest_punctuation_wins() {
 
 #[test]
 fn the_tokens_section_three_point_eight_says_are_absent_are_absent() {
-    // No preprocessor: `#` starts nothing at all.
-    assert_eq!(fault("#include <stdio.h>"), FaultKind::Stray);
+    // No preprocessor. §3.6 spends the `#` on the cairn literal, so a reader
+    // who types one finds out from the cairn's own diagnostic rather than
+    // from "this starts nothing" — which is what §3.8 is for.
+    let said = lex(b"#include <stdio.h>").unwrap_err().to_string();
+    assert!(said.contains("no preprocessor"), "{said}");
+    // And `#exe`, which is the one this language actually replaced.
+    assert!(lex(b"#exe {}").unwrap_err().to_string().contains("no preprocessor"));
     // No increment: `++` is two `+`, which the grammar has nowhere to put.
     assert_eq!(kinds("++"), vec![TokenKind::Punct(Punct::Plus), TokenKind::Punct(Punct::Plus)]);
     // No `goto`: it is not reserved, so it is an ordinary identifier and the
@@ -233,6 +238,9 @@ fn every_token_knows_where_it_came_from() {
             TokenKind::Bytes(_) => {
                 assert!(text.starts_with("b\"") && text.ends_with('"'), "{text}");
             }
+            TokenKind::Cairn(_) => {
+                assert!(text.starts_with('#') && text.len() == 65, "{text}");
+            }
         }
     }
 }
@@ -275,4 +283,52 @@ fn a_source_a_span_cannot_address_is_refused_rather_than_clamped() {
     assert_eq!(nether_syntax::MAX_SOURCE, u32::MAX as usize, "a span is two u32s");
     let said = Fault { span: Span::default(), kind: FaultKind::TooBig }.to_string();
     assert!(said.contains(&nether_syntax::MAX_SOURCE.to_string()), "{said}");
+}
+
+// ── §3.6, the cairn literal ─────────────────────────────────────────────────
+
+/// Sixty-four lowercase hex digits, as `nether lamp` prints them.
+const NAME: &str = "f1353fd9d1aea164452daae9d822f156fb89e8f4d7734cf382d453f0afcfc60f";
+
+#[test]
+fn a_cairn_literal_is_thirty_two_bytes() {
+    let source = format!("#{NAME}");
+    let tokens = lex(source.as_bytes()).expect("lexes");
+    assert_eq!(tokens.len(), 1);
+    let TokenKind::Cairn(bytes) = &tokens[0].kind else { panic!("not a cairn: {:?}", tokens[0]) };
+    assert_eq!(bytes[0], 0xf1, "the first digit pair is the first byte");
+    assert_eq!(bytes[31], 0x0f, "and the last pair the last");
+    assert_eq!(tokens[0].span, Span { start: 0, end: 65 }, "the `#` is part of it");
+}
+
+#[test]
+fn every_near_miss_says_which_one_it_is() {
+    // §3.6 gives a cairn one spelling. A cairn is sixty-five characters long,
+    // so "this starts nothing" pointing at the sixty-fourth of them is a
+    // message nobody can act on: each way to miss says which it was.
+    let short = format!("#{}", &NAME[..8]);
+    let long = format!("#{NAME}f");
+    let upper = format!("#{}", NAME.to_uppercase());
+    let split = format!("#{}_{}", &NAME[..4], &NAME[4..]);
+    let past_f = format!("#{}z", &NAME[..63]);
+    for (source, expected) in [
+        (&short, "too short"),
+        (&long, "too long"),
+        (&upper, "a capital"),
+        (&split, "a `_`"),
+        (&past_f, "past `f`"),
+    ] {
+        let f = lex(source.as_bytes()).unwrap_err();
+        let said = f.to_string();
+        assert!(said.contains("sixty-four lowercase hex digits"), "{source}: {said}");
+        assert!(said.contains(expected), "{source}: expected `{expected}` in: {said}");
+    }
+}
+
+#[test]
+fn a_cairn_is_not_an_identifier_and_an_identifier_is_not_a_cairn() {
+    // The `#` is why the mark exists: `deadbeef` is a plausible cairn prefix
+    // and a plausible variable name, and only one of them is a literal.
+    let tokens = lex(NAME.as_bytes()).expect("a bare hex word lexes");
+    assert!(matches!(tokens[0].kind, TokenKind::Ident(_)), "{:?}", tokens[0]);
 }
