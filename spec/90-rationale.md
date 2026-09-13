@@ -671,6 +671,29 @@ in §3.6 explaining why. The alternative is one range and a value that cannot
 be written, and a type with a value nobody can write is a type with a hole in
 it.
 
+### A declared set the trace does not hold
+
+[§9.4](09-prelude.md#94-stratum-2-env) used to say a trace records the
+declared set as well as the values read from it. [§7.3.1](07-ledger.md#731-node-encoding)
+is frozen and a `Trace` has no field for one, so the sentence described an
+implementation that could not be written.
+
+The alternative considered was to unfreeze the node encoding and give `Trace` a
+seventh member: the cairn of a canonical list of declared names. Rejected on
+what it buys. A name that was read is already a `Witness` — including one
+declared and unset, because §9.9 makes a refusal an answer and an answer is
+witnessed. A name that was never declared collapses and there is no trace to
+put anything in. So the only thing the field would record is a name that was
+declared and never read, and the only thing it would do is make two traces
+differ over something that changed neither of them. Content addressing is the
+claim that two identical programs have one name; a field that breaks that to
+describe the invocation is a field that makes the ledger worse.
+
+**What it cost.** The invocation is not recoverable from the trace. Somebody
+holding a sealed trace can see every environment variable the program read and
+cannot see the ones it was offered and ignored, and no rite will tell them.
+That is the price of the cairn meaning what it says.
+
 ### Floating point
 
 Excluded from [§3.6](03-lexical.md#36-literals) because IEEE 754 has

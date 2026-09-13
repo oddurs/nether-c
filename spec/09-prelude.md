@@ -119,8 +119,16 @@ Neither returns empty. A build that silently behaves differently because a
 variable was absent is exactly the class of bug this language exists to make
 impossible.
 
-The declaration lives outside the program, in the burial invocation. A trace
-records the declared set and every value read from it.
+The declaration lives outside the program, in the exhumation that answers the
+hole: [§8.3.1](08-rites.md#831-declaring-an-environment) is the invocation.
+
+A trace records every value read from it, as a `Witness` like any other, and
+does **not** record the declared set. It does not need to. A read produces a
+witness; a refusal is an answer and is witnessed the same way; and a name that
+was never declared collapses, which produces no trace at all. So everything the
+declaration did to the program is already named by the trace, and what is left
+over is a name the program never read — which changed nothing, and which two
+cairns therefore must not be made to differ by.
 
 ## 9.5 Strata 3 and 4 — `disk`, `disk!`
 

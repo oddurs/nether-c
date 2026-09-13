@@ -94,7 +94,8 @@ spent, because that is where it is a fact.
 ## 8.3 `exhume`
 
 ```
-nether exhume <cairn> [--grant <cap>]... [--replay] [--json]
+nether exhume <cairn> [--grant <cap>]... [--declare <name>=<value>]...
+                      [--clock <seconds>] [--target <triple>] [--replay] [--json]
 ```
 
 Grants capabilities, answers holes, records every answer, re-buries the
@@ -105,6 +106,29 @@ than reach the world if an answer is missing, and it MUST report the first
 node whose cairn differs from the original.
 
 `--grant` and `--replay` are mutually exclusive.
+
+### 8.3.1 Declaring an environment
+
+The three flags are the declaration [§9.4](09-prelude.md#94-stratum-2-env)
+puts outside the program. They are the whole of what `env` may answer from, and
+an implementation MUST NOT read the process environment, the wall clock or the
+host triple to fill any of them in.
+
+`--declare` MAY be given any number of times, including with an empty value:
+`--declare CC=` declares `CC` and leaves it unset, which is the refusal §9.4
+distinguishes from the collapse. A name given twice is an error rather than a
+last-one-wins, because the two invocations differ and only one of them can be
+what was meant.
+
+`--clock` is whole seconds since the Unix epoch and `--target` is a triple,
+and both are required whenever `env` is granted. There is no default. A default
+would be the host's, and a rite whose answer depends on which machine ran it is
+the thing [§6.7](06-evaluation.md#67-replay) exists to prevent.
+
+Granting `env` and declaring nothing is legal and means an environment in which
+every name is undeclared. Declaring without granting `env` is an error: the
+declaration could not be read, so accepting it would be §8.0's failure in a
+smaller place.
 
 ## 8.4 `lamp`
 

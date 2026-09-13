@@ -188,7 +188,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`#######···` 64% · 7 of 11 done · due 2027-05-15
+`#######···` 67% · 8 of 12 done · due 2027-05-15
 
 ### unmarked
 
@@ -206,6 +206,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0165`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0165-a-pull-request-title-is-not-a-conventional-commit.md) A pull request title is not a Conventional Commit <sup>bug · p2 · 0</sup>
 - [x] [`0166`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0166-a-symlink-reaches-out-of-the-disk-root.md) A symlink reaches out of the disk root <sup>bug · p0 · 3</sup>
 - [x] [`0169`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0169-recorder-carries-a-source-it-never-uses.md) Recorder carries a source it never uses <sup>chore · p2 · 0</sup>
+- [x] [`0170`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0170-where-a-frozen-environment-is-declared.md) Where a frozen environment is declared <sup>spec · p0 · 2</sup>
 
 ## necropolis — The Necropolis
 
