@@ -1,126 +1,41 @@
 /* ===========================================================================
    nether.css
    ---------------------------------------------------------------------------
-   There is no build step. This file is the whole design.
+   There is no build step and no framework. This file says what things are made
+   of; site/tokens.css says what the materials are, and site/design.py makes
+   that. If you are about to write a `#` in here, the value belongs there.
 
-   TempleOS was 640x480, sixteen colours, fixed by covenant. Nether C takes
-   those sixteen colours and complements every one of them.
+   The system is three scales.
 
-   Fourteen of the sixteen land back inside the palette. BROWN (#AA5500) and
-   LTBLUE (#5555FF) do not: their opposites are #55AAFF and #AAAA00, which are
-   not VGA colours at all. We kept them and named them ROT and BILE.
+   Colour is Oklch. A lightness, a chroma and an angle -- and two colours with
+   the same lightness look equally bright, which is the whole reason a ramp
+   built that way looks designed and one picked out of a box does not. The
+   scheme is a single axis: the ground is indigo, the complement of indigo is
+   amber, and the nine strata sweep between them at one lightness, so depth
+   reads as *hue* and never as "harder to see". Nothing is at full chroma.
 
-   The palette is therefore almost, but not quite, its own opposite. That is
-   the most honest thing about this project.
+   Space is the cell: twelve pixels, the advance of the face this site is set
+   in. Every margin and rule is a count of them and nothing lands on a half.
 
-   Sixteen colours chosen in the 1980s for a text mode are under no obligation
-   to clear WCAG, and several pairs did not. The rule was that where a pair
-   fails, the pair changes and the standard does not. tests/contrast/run holds
-   every pair this file uses to 4.5:1 for text and 3:1 for anything that marks
-   a boundary, on both grounds, and the build fails if one slips.
+   Type is the cell doubled and trebled. There are four sizes, because a face
+   drawn on an eight-pixel grid has exactly four at which a pixel of it is a
+   whole number of the screen's.
 
-   Two consequences are visible here: inline code is LIME on black and PURPLE
-   on white, because GREEN on white is 3.11:1; and h4 is the one colour with no
-   opposite, because ROT and BROWN clear on their respective grounds and
-   LILAC and its complement do not.
+   What this replaced was the sixteen VGA colours, complemented -- a derivation
+   that was clever, that was somebody else's sixteen colours underneath, and
+   that was chosen for a text mode in the 1980s rather than for reading. Two
+   of the sixteen had no opposite inside the palette and had to be invented,
+   which was the first sign. tests/contrast/run holds every pair this file uses
+   to WCAG AA on both grounds, as it always did.
    =========================================================================== */
 
 :root {
-  /* the nether palette: VGA, complemented.  (was ...) */
-  --void:    #000000;  /* WHITE    */
-  --bone:    #FFFFFF;  /* BLACK    */
-  --sulphur: #FFFF55;  /* BLUE     */
-  --lilac:   #FF55FF;  /* GREEN    */
-  --salmon:  #FF5555;  /* CYAN     */
-  --ice:     #55FFFF;  /* RED      */
-  --lime:    #55FF55;  /* PURPLE   */
-  --ash:     #555555;  /* LTGRAY   */
-  --smoke:   #AAAAAA;  /* DKGRAY   */
-  --plum:    #AA00AA;  /* LTGREEN  */
-  --blood:   #AA0000;  /* LTCYAN   */
-  --moss:    #00AA00;  /* LTPURPLE */
-  --deep:    #0000AA;  /* YELLOW   */
-  --teal:    #00AAAA;  /* LTRED    */
-  --rot:     #55AAFF;  /* BROWN    -- no opposite */
-  --bile:    #AAAA00;  /* LTBLUE   -- no opposite */
-
-  /* ── the nether ─────────────────────────────────────────────────────────
-     The sixteen above are the complement of VGA and are not negotiable; they
-     are argued for in spec/90-rationale.md and every one of them is still
-     here. What the page is *made* of is a different question, and the answer
-     comes from the one colour system this project invented rather than
-     inherited: the nine strata, sulphur at 0 down to magenta at 8.
-
-     A reader of this site is at the bottom of that. So the ground is stratum
-     eight with no light falling on it, and the chrome is the deep end of the
-     ramp. The accent stays sulphur, because the lamp is the only thing in the
-     language that carries light downwards, and a warm light in a cold dark is
-     the whole of the picture.
-
-     Pure black was never the point. The nether is not empty, it is deep. */
-  --nether:  #150020;   /* stratum 8, unlit */
-  --shade:   #B79ECB;   /* the same, with something reflected off it */
-  --shadow:  #6E5580;   /* and with almost nothing */
-
-  --ground:  var(--nether);
-  --ink:     var(--bone);
-  --dim:     var(--shade);
-  --dimmer:  var(--shadow);
-  --accent:  var(--sulphur);
-  --alt:     var(--lilac);
-  --warn:    var(--salmon);
-  --good:    var(--lime);
-  --code:    var(--lime);
-  --quote:   #FF55CC;   /* stratum 7 */
-  --bevel-hi: var(--shade);
-  --bevel-lo: var(--shadow);
-
-  /* Eighty columns of the face this repository draws, and not `80ch` of
-     whatever the reader happened to have installed. The cell is eight pixels
-     of ink in a six-pixel advance; at a body size of sixteen that advance is
-     twelve, so eighty columns is nine hundred and sixty and every one of them
-     is the same number on every machine. */
-  --cell: 12px;
+  /* Colour, space and type are generated into tokens.css by site/design.py,
+     which is the only place on this site where a colour is a number. If you
+     are about to write a `#` below this line, the value belongs there. */
   --col: calc(80 * var(--cell));
-}
-
-/* The lamp, lit. You get the temple's own colours back, on the temple's own
-   ground. This is the only place in the project where anything ascends. */
-:root[data-lamp="lit"] {
-  --void:    #FFFFFF;
-  --bone:    #000000;
-  --sulphur: #0000AA;
-  --lilac:   #00AA00;
-  --salmon:  #00AAAA;
-  --ice:     #AA0000;
-  --lime:    #AA00AA;
-  --ash:     #AAAAAA;
-  --smoke:   #555555;
-  --plum:    #55FF55;
-  --blood:   #55FFFF;
-  --moss:    #FF55FF;
-  --deep:    #FFFF55;
-  --teal:    #FF5555;
-  --rot:     #AA5500;
-  --bile:    #5555FF;
-
-  /* The surface. Still the same violet, with the sun on it. */
-  --nether:  #FBF2FF;
-  --shade:   #5E4670;
-  --shadow:  #9B84AD;
-
-  --ground:  var(--nether);
-  --ink:     #150020;
-  --dim:     var(--shade);
-  --dimmer:  var(--shadow);
-  --accent:  #3A0070;
-  --alt:     #8800AA;
-  --warn:    #AA0000;
-  --good:    #006600;   /* MOSS on this ground is 4.28:1, so the green darkens */
-  --code:    #8800AA;   /* GREEN on a light ground is 3.11:1, so code is purple */
-  --quote:   #8800AA;
-  --bevel-hi: #FFFFFF;
-  --bevel-lo: var(--shade);
+  --bevel-hi: var(--dim);
+  --bevel-lo: var(--dimmer);
 }
 
 /* --------------------------------------------------------------------------
@@ -251,15 +166,15 @@ td.shaft span {
   color: var(--ground);
   text-align: right;
 }
-td.shaft span.d0 { background: #FFFF55; }
-td.shaft span.d1 { background: #FFDD55; }
-td.shaft span.d2 { background: #FFBB55; }
-td.shaft span.d3 { background: #FF9955; }
-td.shaft span.d4 { background: #FF7755; }
-td.shaft span.d5 { background: #FF5566; }
-td.shaft span.d6 { background: #FF5599; }
-td.shaft span.d7 { background: #FF55CC; }
-td.shaft span.d8 { background: #FF55FF; }
+td.shaft span.d0 { background: var(--d0); }
+td.shaft span.d1 { background: var(--d1); }
+td.shaft span.d2 { background: var(--d2); }
+td.shaft span.d3 { background: var(--d3); }
+td.shaft span.d4 { background: var(--d4); }
+td.shaft span.d5 { background: var(--d5); }
+td.shaft span.d6 { background: var(--d6); }
+td.shaft span.d7 { background: var(--d7); }
+td.shaft span.d8 { background: var(--d8); }
 
 /* --- navigation ----------------------------------------------------------- */
 
@@ -311,7 +226,7 @@ h3::before { content: "\25B8 "; color: var(--dim); }
 
 h4 {
   margin: 1.2rem 0 .4rem;
-  color: var(--rot);
+  color: var(--quote);
   font-size: 16px;
   font-weight: bold;
 }
@@ -323,7 +238,7 @@ h2 a:hover, h3 a:hover, h4 a:hover { text-decoration: underline; }
 
 p { margin: 0 0 .9rem; }
 strong { color: var(--accent); font-weight: bold; }
-em { color: var(--lilac); font-style: normal; text-decoration: underline; }
+em { color: var(--alt); font-style: normal; text-decoration: underline; }
 
 a { color: var(--alt); text-decoration: underline; }
 a:hover { background: var(--alt); color: var(--ground); text-decoration: none; }
@@ -343,7 +258,7 @@ blockquote {
   background: var(--ground);
   color: var(--dim);
 }
-blockquote strong { color: var(--lilac); }
+blockquote strong { color: var(--alt); }
 blockquote p:last-child { margin-bottom: 0; }
 
 /* --- code ----------------------------------------------------------------- */
@@ -382,19 +297,19 @@ figure.listing pre code { color: var(--ink); white-space: pre; }
 .t  { color: var(--alt); }                        /* type        */
 .c  { color: var(--dim); }                        /* comment     */
 .s  { color: var(--good); }                       /* string      */
-.n  { color: var(--lilac); }                      /* number      */
+.n  { color: var(--alt); }                      /* number      */
 .p  { color: var(--dim); }                        /* prompt      */
-.h  { color: var(--ice); }                        /* cairn       */
+.h  { color: var(--quote); }                        /* cairn       */
 .e  { color: var(--warn); font-weight: bold; }    /* error       */
-.d0 { color: #FFFF55; font-weight: bold; }
-.d1 { color: #FFDD55; font-weight: bold; }
-.d2 { color: #FFBB55; font-weight: bold; }
-.d3 { color: #FF9955; font-weight: bold; }
-.d4 { color: #FF7755; font-weight: bold; }
-.d5 { color: #FF5566; font-weight: bold; }
-.d6 { color: #FF5599; font-weight: bold; }
-.d7 { color: #FF55CC; font-weight: bold; }
-.d8 { color: #FF55FF; font-weight: bold; }
+.d0 { color: var(--d0); font-weight: bold; }
+.d1 { color: var(--d1); font-weight: bold; }
+.d2 { color: var(--d2); font-weight: bold; }
+.d3 { color: var(--d3); font-weight: bold; }
+.d4 { color: var(--d4); font-weight: bold; }
+.d5 { color: var(--d5); font-weight: bold; }
+.d6 { color: var(--d6); font-weight: bold; }
+.d7 { color: var(--d7); font-weight: bold; }
+.d8 { color: var(--d8); font-weight: bold; }
 
 /* --- tables --------------------------------------------------------------- */
 

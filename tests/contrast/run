@@ -10,8 +10,11 @@ This encodes every foreground/background pair the stylesheet actually uses and
 checks both palettes against WCAG 2.1 AA: 4.5:1 for text, 3:1 for large text
 and for anything that is only a boundary.
 
-Colours are duplicated from site/nether.css on purpose. A test that reads the
-thing it is testing agrees with it by construction.
+The colours come from site/design.py, which is where they are generated. That
+was a duplicated table for as long as the stylesheet was written by hand; a
+generated one would mean retyping generated output, and the thing worth
+checking moved -- it is now whether what the generator *produces* is legible,
+not whether somebody copied it across correctly.
 """
 
 from __future__ import annotations
@@ -22,28 +25,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CSS = ROOT / "site" / "nether.css"
+TOKENS = ROOT / "site" / "tokens.css"
 
-NETHER = {
-    "void": "#000000", "bone": "#FFFFFF", "sulphur": "#FFFF55", "lilac": "#FF55FF",
-    "salmon": "#FF5555", "ice": "#55FFFF", "lime": "#55FF55", "ash": "#555555",
-    "smoke": "#AAAAAA", "plum": "#AA00AA", "blood": "#AA0000", "moss": "#00AA00",
-    "deep": "#0000AA", "teal": "#00AAAA", "rot": "#55AAFF", "bile": "#AAAA00",
-    "nether": "#150020", "shade": "#B79ECB", "shadow": "#6E5580",
-    "ground": "#150020", "ink": "#FFFFFF", "dim": "#B79ECB", "dimmer": "#6E5580",
-    "accent": "#FFFF55", "alt": "#FF55FF", "warn": "#FF5555", "good": "#55FF55",
-    "code": "#55FF55", "quote": "#FF55CC",
-}
+sys.path.insert(0, str(ROOT / "site"))
+from design import LIT as _LIT, NETHER as _NETHER, RAMPS  # noqa: E402
 
-TEMPLE = {
-    "void": "#FFFFFF", "bone": "#000000", "sulphur": "#0000AA", "lilac": "#00AA00",
-    "salmon": "#00AAAA", "ice": "#AA0000", "lime": "#AA00AA", "ash": "#AAAAAA",
-    "smoke": "#555555", "plum": "#55FF55", "blood": "#55FFFF", "moss": "#FF55FF",
-    "deep": "#FFFF55", "teal": "#FF5555", "rot": "#AA5500", "bile": "#5555FF",
-    "nether": "#FBF2FF", "shade": "#5E4670", "shadow": "#9B84AD",
-    "ground": "#FBF2FF", "ink": "#150020", "dim": "#5E4670", "dimmer": "#9B84AD",
-    "accent": "#3A0070", "alt": "#8800AA", "warn": "#AA0000", "good": "#006600",
-    "code": "#8800AA", "quote": "#8800AA",
-}
+NETHER = dict(_NETHER, **{f"d{n}": c for n, c in enumerate(RAMPS["nether"])})
+TEMPLE = dict(_LIT, **{f"d{n}": c for n, c in enumerate(RAMPS["lit"])})
 
 # (what it is, foreground token, background token, minimum ratio)
 PAIRS = [
@@ -54,7 +42,7 @@ PAIRS = [
     ("strong and h1",      "accent",  "ground", 4.5),
     ("h2 title bar",       "ground",  "accent", 4.5),
     ("h3",                 "alt",     "ground", 4.5),
-    ("h4",                 "rot",     "ground", 4.5),
+    ("h4",                 "quote",   "ground", 4.5),
     ("inline code",        "code",    "ground", 4.5),
     ("errors",             "warn",    "ground", 4.5),
     ("table header",       "ground",  "dim",    4.5),
@@ -108,10 +96,15 @@ def check_palette(name: str, palette: dict[str, str]) -> list[str]:
 
 
 def check_css_declares(palette_name: str, tokens: list[str]) -> list[str]:
-    """Every token the test knows about must exist in the stylesheet."""
-    css = CSS.read_text(encoding="utf-8")
+    """Every token the test knows about must be declared where the page reads it.
+
+    The generator producing a colour is not the same as the page getting it, so
+    this reads the two stylesheets the template actually links rather than the
+    Python that wrote one of them.
+    """
+    css = TOKENS.read_text(encoding="utf-8") + CSS.read_text(encoding="utf-8")
     missing = [t for t in tokens if not re.search(rf"--{t}\s*:", css)]
-    return [f"{palette_name}: --{t} is not declared in site/nether.css" for t in missing]
+    return [f"{palette_name}: --{t} reaches no stylesheet" for t in missing]
 
 
 def main() -> int:

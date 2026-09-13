@@ -22,33 +22,42 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 OUT = ROOT / "site" / "gfx"
 
 # ── the palette ─────────────────────────────────────────────────────────────
-# VGA, complemented. Fourteen of the sixteen are their own opposites.
-# BROWN and LTBLUE are not, so ROT and BILE were invented for them.
+#
+# Sixteen slots, because that is what a GIF colour table is here, filled from
+# site/design.py so that a drawing and the page it sits on are made of the same
+# colours. The names are the roles they were always playing; what each one
+# resolves to now comes out of Oklch rather than out of a 1980s text mode.
 
-# Index 0 is the page's ground rather than pure black. Every graphic here is
-# opaque, so a black background would put a black box around each one on a
-# violet page -- and the void a drawing sits in should be the same void the
-# page is. `site/nether.css` derives it: stratum eight, unlit.
+from design import NETHER, RAMPS  # noqa: E402 -- a sibling, not a dependency
+
+
+def _rgb(value: str) -> tuple[int, int, int]:
+    raw = value.lstrip("#")
+    return tuple(int(raw[i:i + 2], 16) for i in (0, 2, 4))
+
+
+_RAMP = RAMPS["nether"]
 PALETTE = [
-    (0x15, 0x00, 0x20),  #  0 VOID  -- the nether ground
-    (0xFF, 0xFF, 0xFF),  #  1 BONE
-    (0xFF, 0xFF, 0x55),  #  2 SULPHUR
-    (0xFF, 0x55, 0xFF),  #  3 LILAC
-    (0xFF, 0x55, 0x55),  #  4 SALMON
-    (0x55, 0xFF, 0xFF),  #  5 ICE
-    (0x55, 0xFF, 0x55),  #  6 LIME
-    (0x55, 0x55, 0x55),  #  7 ASH
-    (0xAA, 0xAA, 0xAA),  #  8 SMOKE
-    (0xAA, 0x00, 0xAA),  #  9 PLUM
-    (0xAA, 0x00, 0x00),  # 10 BLOOD
-    (0x00, 0xAA, 0x00),  # 11 MOSS
-    (0x00, 0x00, 0xAA),  # 12 DEEP
-    (0x00, 0xAA, 0xAA),  # 13 TEAL
-    (0x55, 0xAA, 0xFF),  # 14 ROT   (no opposite)
-    (0xAA, 0xAA, 0x00),  # 15 BILE  (no opposite)
+    _rgb(NETHER["ground"]),   #  0 VOID    -- the page's own ground
+    _rgb(NETHER["ink"]),      #  1 BONE
+    _rgb(NETHER["accent"]),   #  2 SULPHUR -- the lamp
+    _rgb(NETHER["alt"]),      #  3 LILAC
+    _rgb(NETHER["warn"]),     #  4 SALMON
+    _rgb(_RAMP[4]),           #  5 ICE
+    _rgb(NETHER["good"]),     #  6 LIME
+    _rgb(NETHER["dimmer"]),   #  7 ASH
+    _rgb(NETHER["dim"]),      #  8 SMOKE
+    _rgb(NETHER["quote"]),    #  9 PLUM
+    _rgb(_RAMP[0]),           # 10 BLOOD
+    _rgb(_RAMP[2]),           # 11 MOSS
+    _rgb(NETHER["sunk"]),     # 12 DEEP
+    _rgb(NETHER["code"]),     # 13 TEAL
+    _rgb(_RAMP[6]),           # 14 ROT
+    _rgb(_RAMP[1]),           # 15 BILE
 ]
 
 VOID, BONE, SULPHUR, LILAC, SALMON, ICE, LIME, ASH = range(8)
