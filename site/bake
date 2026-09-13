@@ -21,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "spec"
+BOARD = ROOT / "cairn" / "items"
 SITE = ROOT / "site"
 REPO = "https://github.com/oddurs/nether-c"
 
@@ -298,6 +299,117 @@ def split_front_matter(raw: str) -> tuple[dict[str, str], str]:
     return meta, raw[end + 5:]
 
 
+# ── the board, which is where the state of the project actually lives ───────
+#
+# A page that states the state of the project in prose is a page that was true
+# once. The banner said "nothing is implemented" for as long as it took to
+# implement everything, and being a GIF it did not even change colour. So the
+# two blocks that describe where the work has got to are generated from
+# `cairn/items/`, and `site/bake --check` fails the day the board moves and
+# the page has not been rebaked. 0179.
+
+#: The descent, in the order it is descended. A milestone not named here is a
+#: milestone somebody added without deciding where it goes.
+DESCENT = [
+    "codex", "lamp", "ledger", "calculus", "surface",
+    "rites", "world", "necropolis", "futamura",
+]
+
+#: What a status means to a reader who has not read the schema.
+SAID = {
+    "buried": "buried",
+    "descending": "descending",
+    "starved": "starved",
+    "marked": "still owed",
+    "unmarked": "still owed",
+}
+
+
+def load_board() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Every milestone in descent order, and every item still owed."""
+    milestones: dict[str, dict[str, str]] = {}
+    owed: list[dict[str, str]] = []
+    for path in sorted(BOARD.glob("*.md")):
+        meta, _ = split_front_matter(path.read_text(encoding="utf-8"))
+        if meta.get("type") == "milestone":
+            milestones[meta.get("key", "")] = meta
+        elif meta.get("status") in ("unmarked", "marked", "descending", "starved"):
+            owed.append(meta)
+
+    ordered = [milestones[k] | {"key": k} for k in DESCENT if k in milestones]
+    owed.sort(key=lambda m: (DESCENT.index(m["milestone"]) if m.get("milestone") in DESCENT
+                             else len(DESCENT), m.get("priority", "p9"), m.get("id", "")))
+    return ordered, owed
+
+
+def titled(meta: dict[str, str], width: int) -> str:
+    """A title, unquoted, cut to the column, and padded before it is escaped.
+
+    Padding after escaping counts `&#x27;` as six characters and puts the
+    stratum hard against the last letter of a long one, which is how the
+    first version of this printed `does not existstratum 0`.
+    """
+    text = meta.get("title", "").strip("'\"")
+    if len(text) > width:
+        text = text[: width - 1] + "\u2026"
+    return esc(text.ljust(width))
+
+
+def numeral(n: int) -> str:
+    """A plain number, right-aligned to two columns.
+
+    Not `bury`'s ①..⑳. A circled numeral is drawn in a six by eight cell here
+    and only the first one reads at that size: the ring eats the digit. The
+    rites print them because a terminal font has room; this does not, and a
+    numeral nobody can read is worse than the one that is not a quotation.
+    """
+    return f"{n:>2}"
+
+
+def descent_block(milestones: list[dict[str, str]], owed: list[dict[str, str]]) -> str:
+    """Where the work has got to, in the shape `nether strata` prints."""
+    left = sum(1 for m in milestones if m.get("status") != "buried")
+    rows = []
+    for n, m in enumerate(milestones, 1):
+        state = SAID.get(m.get("status", ""), m.get("status", ""))
+        here = sum(1 for i in owed if i.get("milestone") == m["key"])
+        note = f"{here} hole(s)" if here else ""
+        cls = "d0" if m.get("status") == "buried" else "d5"
+        rows.append(
+            f'  <span class="{cls}">{numeral(n)}</span>  '
+            f'{titled(m, 22)}{state:<12}{note}'
+        )
+    body = "\n".join(rows)
+    return (
+        '<figure class="listing"><figcaption>the descent, from '
+        'cairn/items/</figcaption><pre><code>'
+        f'depth {len(milestones) - left} of {len(milestones)}   '
+        f'{len(owed)} hole(s) still owed\n\n{body}\n</code></pre></figure>'
+    )
+
+
+def holes_block(owed: list[dict[str, str]]) -> str:
+    """What the world still owes, in the shape `nether bury` prints a hole."""
+    shown = [i for i in owed if i.get("priority") in ("p0", "p1")][:8]
+    rows = []
+    for n, i in enumerate(shown, 1):
+        stratum = i.get("stratum", "").strip("'\"") or "0"
+        rows.append(
+            f'  hole <span class="d{stratum}">{numeral(n)}</span>  '
+            f'{titled(i, 42)}  '
+            f'<span class="d{stratum}">stratum {stratum}</span>  '
+            f'{esc(i.get("milestone", ""))}'
+        )
+    rest = len(owed) - len(shown)
+    tail = f"\n  ... and {rest} more, in the roadmap" if rest > 0 else ""
+    body = "\n".join(rows)
+    return (
+        '<figure class="listing"><figcaption>what the world still owes'
+        '</figcaption><pre><code>'
+        f'holes {len(owed)}\n\n{body}{tail}\n</code></pre></figure>'
+    )
+
+
 # ── the pages ──────────────────────────────────────────────────────────────
 
 def load_sections() -> list[dict[str, str]]:
@@ -364,7 +476,10 @@ def build() -> dict[Path, str]:
         f'<td>{esc(s["status"])}</td></tr>'
         for s in sections
     )
+    milestones, owed = load_board()
     body = body.replace("{{TOC}}", toc)
+    body = body.replace("{{DESCENT}}", descent_block(milestones, owed))
+    body = body.replace("{{HOLES}}", holes_block(owed))
     files[SITE / "index.html"] = page("Nether C", body, current="index", depth=0)
 
     # the specification index
