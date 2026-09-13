@@ -689,6 +689,7 @@ impl Parser<'_> {
             Some(TokenKind::Int(n)) => ExprKind::Int(*n),
             Some(TokenKind::Str(s)) => ExprKind::Str(s.clone()),
             Some(TokenKind::Bytes(b)) => ExprKind::Bytes(b.clone()),
+            Some(TokenKind::Cairn(c)) => ExprKind::Cairn(*c),
             Some(TokenKind::Keyword(Keyword::True)) => ExprKind::Bool(true),
             Some(TokenKind::Keyword(Keyword::False)) => ExprKind::Bool(false),
             Some(TokenKind::Ident(text)) => ExprKind::Name(Name { text: text.clone(), span: from }),

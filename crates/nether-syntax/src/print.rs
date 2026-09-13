@@ -305,9 +305,17 @@ fn literal(l: &Literal) -> String {
         Literal::Str(s) => quoted(s.as_bytes(), false),
         Literal::Bytes(b) => quoted(b, true),
         Literal::Refusal(r) => r.name().to_string(),
-        // Nothing writes one. `seal` produces them and burial folds them, and
-        // neither of those is source.
-        Literal::Cairn(_) => "«a cairn has no syntax»".into(),
+        // §3.6: `#` and sixty-four lowercase hex digits, which is what the
+        // rites print. §6.5 needs this: a residue is a program, and a burial
+        // that folds `seal` has a cairn to write down.
+        Literal::Cairn(c) => {
+            let mut out = String::with_capacity(65);
+            out.push('#');
+            for byte in c {
+                let _ = write!(out, "{byte:02x}");
+            }
+            out
+        }
     }
 }
 
