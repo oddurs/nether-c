@@ -198,3 +198,53 @@ fn a_status_the_world_said_no_with_is_the_refusal_it_means() {
         let _ = server.heard();
     }
 }
+
+#[test]
+fn a_program_cannot_write_headers_of_its_own() {
+    // 0180. §8.3.2's reach decides which socket opens; it does not decide what
+    // goes down it, and §3.6 gives a string literal `\r` and `\n`. The server
+    // is up and declared, and is still never asked.
+    let server = Once::saying("200 OK", "should not be read");
+    let host = format!("127.0.0.1:{}", server.port);
+    let a = Asked::reaching("smuggle", vec![host.clone()], false);
+
+    for attempt in [
+        format!("http://{host}/x\r\nHost: internal-admin\r\n"),
+        format!("http://{host}/x HTTP/1.1\r\n\r\nGET /admin HTTP/1.1\r\n"),
+        format!("http://{host}/x\nX-Evil: 1"),
+        format!("http://{host}/a b"),
+    ] {
+        assert_eq!(
+            a.get(&attempt),
+            AnswerOf::Refused(Refusal::Malformed),
+            "this was sent: {attempt:?}"
+        );
+    }
+
+    // A host wearing another host is not the host that was reached.
+    let b = Asked::reaching("userinfo", vec!["example.com".into()], false);
+    assert_eq!(b.get("http://example.com@evil.invalid/"), AnswerOf::Refused(Refusal::Malformed));
+
+    // Nothing connected. Let the server go.
+    let _ = TcpStream::connect(("127.0.0.1", server.port));
+    let _ = server.heard();
+}
+
+#[test]
+fn a_response_that_never_stops_is_exhausted_rather_than_endless() {
+    // The body has had a bound since this was written and nothing above it
+    // did. A server that sends a status line and then headers forever used to
+    // grow a String until the timeout. 0180.
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("a port");
+    let port = listener.local_addr().expect("an address").port();
+    std::thread::spawn(move || {
+        use std::io::Write as _;
+        let Ok((mut socket, _)) = listener.accept() else { return };
+        let _ = socket.write_all(b"HTTP/1.1 200 OK\r\n");
+        // Never a blank line, and never an end.
+        while socket.write_all(b"X-Padding: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\n").is_ok() {}
+    });
+
+    let a = Asked::reaching("endless", vec![format!("127.0.0.1:{port}")], false);
+    assert_eq!(a.get(&format!("http://127.0.0.1:{port}/")), AnswerOf::Refused(Refusal::Exhausted));
+}
