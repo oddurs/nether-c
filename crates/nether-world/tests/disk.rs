@@ -43,7 +43,16 @@ impl Asked {
 
     /// Ask, and give back what the world said — read from the ledger, because
     /// that is the only place a provider can have put it.
+    /// What was recorded, unwrapped, for the functions §09 types as answers.
     fn ask(&self, function: &str, args: Vec<Cairn>) -> AnswerOf {
+        match self.said(function, args) {
+            Value::Answer(a) => *a,
+            other => panic!("not an answer: {other:?}"),
+        }
+    }
+
+    /// What was recorded, exactly as the program would receive it.
+    fn said(&self, function: &str, args: Vec<Cairn>) -> Value {
         let call = Call { function: function.to_owned(), args };
         let span = Span { source: self.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
         let recorded = self.world.ask(&call, span, &Recorder::new(&self.store)).expect("granted");
@@ -57,8 +66,8 @@ impl Asked {
         assert_eq!(answer, recorded.answer(), "the witness names something else");
 
         match self.store.get(recorded.answer()) {
-            Ok(Stored::Value(Value::Answer(a))) => *a,
-            other => panic!("not an answer: {other:?}"),
+            Ok(Stored::Value(v)) => v,
+            other => panic!("not a value: {other:?}"),
         }
     }
 
@@ -111,19 +120,14 @@ fn a_listing_is_sorted_because_a_filesystem_has_no_order() {
 }
 
 #[test]
-fn exists_answers_rather_than_refuses() {
+fn exists_is_a_bool_and_not_an_answer() {
     // §9.5 gives `exists` a `Bool` and no refusals: "is it there" has an answer
-    // either way.
+    // either way, so there is no no to distinguish and nothing to unwrap. An
+    // `Answer` here is an `Answer` where the program declared a `Bool`.
     let a = Asked::new("exists", false);
     std::fs::write(a.root.join("here.nc"), b"").expect("a file");
-    assert_eq!(
-        a.ask("exists", vec![a.arg(Value::Str("here.nc".into()))]),
-        AnswerOf::Given(Value::Bool(true))
-    );
-    assert_eq!(
-        a.ask("exists", vec![a.arg(Value::Str("gone.nc".into()))]),
-        AnswerOf::Given(Value::Bool(false))
-    );
+    assert_eq!(a.said("exists", vec![a.arg(Value::Str("here.nc".into()))]), Value::Bool(true));
+    assert_eq!(a.said("exists", vec![a.arg(Value::Str("gone.nc".into()))]), Value::Bool(false));
 }
 
 #[test]

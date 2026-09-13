@@ -1308,3 +1308,32 @@ fn a_hole_the_ledger_does_not_hold_is_reported() {
     assert!(stderr(&out).contains("a hole the ledger does not hold"), "{}", stderr(&out));
     assert!(stderr(&out).contains(&absent.to_string()), "it does not say which");
 }
+
+/// A program that asks whether something is there, and does something either
+/// way. Both branches deposit, so a branch that did not fold shows nothing.
+const LOOKS: &str = "Bool@3 here = descend disk { exists(\"m.nc\") };\n\n\
+                     U0 note()\n{\n  if (here) { b\"it is there\"; } else { b\"it is not\"; }\n}\n\n\
+                     demand note();\n";
+
+#[test]
+fn a_branch_on_exists_folds() {
+    // §9.5 types `exists` as `Bool`. Recorded as `Answer<Bool>` it is an
+    // `Answer` where the program declared a `Bool`: the branch cannot fold,
+    // the deposit inside it never happens, and the trace seals anyway with
+    // the right depth and nothing to show. 0171.
+    let dir = a_build("exists-folds");
+    std::fs::write(dir.join("looks.nc"), LOOKS).expect("a program that looks");
+    std::fs::write(dir.join("m.nc"), b"x\n").expect("the file it looks for");
+
+    let trace = field(&stdout(&there(&dir, &["bury", "looks.nc", "--json"])), "cairn");
+    let sealed =
+        field(&stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"])), "sealed");
+    assert_eq!(stdout(&there(&dir, &["lamp", &sealed])), "it is there\n");
+
+    // And the other way, so this is about the answer and not about `true`.
+    std::fs::remove_file(dir.join("m.nc")).expect("take it away");
+    let gone = field(&stdout(&there(&dir, &["bury", "looks.nc", "--json"])), "cairn");
+    let after =
+        field(&stdout(&there(&dir, &["exhume", &gone, "--grant", "disk", "--json"])), "sealed");
+    assert_eq!(stdout(&there(&dir, &["lamp", &after])), "it is not\n");
+}

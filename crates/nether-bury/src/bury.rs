@@ -671,7 +671,18 @@ impl Burial<'_> {
     /// and stays a hole for a later burial. §6.5 keeps that sound — a residue
     /// is a program, and this one still asks.
     fn answered(said: &Value, x: &Expr) -> Val {
-        let Value::Answer(a) = said else { return Self::stuck(x) };
+        let Value::Answer(a) = said else {
+            // Not every prelude function returns one. §9.5 types `exists` as a
+            // plain `Bool` and §9.4 types `clock` as an `I64`, because there is
+            // no no to distinguish — so the world records a plain value
+            // ([`Prim::refusable`]) and it folds as a plain value. Folding it
+            // as an `Answer` anyway leaves a branch on it unable to fold, and
+            // everything inside that branch silently does not happen. 0171.
+            return literal(said).map_or_else(
+                || Self::stuck(x),
+                |l| Val { kind: Kind::Known(l), ty: x.ty.clone(), depth: x.depth },
+            );
+        };
         let kind = match a.as_ref() {
             nether_ledger::AnswerOf::Refused(r) => Kind::Refused(code(*r)),
             nether_ledger::AnswerOf::Given(v) => match literal(v) {

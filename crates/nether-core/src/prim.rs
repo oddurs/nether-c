@@ -162,6 +162,22 @@ impl Prim {
         self.signature().1
     }
 
+    /// Whether §09 types this one's result as an `Answer`.
+    ///
+    /// The rule every provider is written to. A function the world may say no
+    /// to returns `Answer<T>` and its answer is wrapped (§9.9: a refusal is an
+    /// answer); one it cannot returns `T`, and wrapping that anyway puts an
+    /// `Answer` where the program declared a `Bool` — the branch on it cannot
+    /// fold, and everything inside the branch silently does not happen.
+    ///
+    /// The five that cannot be refused are the ones whose question has an
+    /// answer either way: is it there, what time was pinned, what is the
+    /// target, and give me *n* bytes.
+    #[must_use]
+    pub const fn refusable(self) -> bool {
+        !matches!(self, Self::HasNode | Self::Clock | Self::Target | Self::Exists | Self::Draw)
+    }
+
     /// The prelude function of that name, if there is one.
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
