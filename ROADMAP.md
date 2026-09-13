@@ -188,7 +188,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`########··` 71% · 10 of 14 done · due 2027-05-15
+`#######···` 67% · 10 of 15 done · due 2027-05-15
 
 ### unmarked
 
@@ -196,6 +196,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [ ] [`0070`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0070-strata-5-and-6-the-network.md) Strata 5 and 6: the network <sup>feature · p1 · 6</sup>
 - [ ] [`0071`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0071-stratum-7-entropy.md) Stratum 7: entropy <sup>feature · p1 · 7</sup>
 - [ ] [`0072`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0072-stratum-8-the-unrecorded.md) Stratum 8: the Unrecorded <sup>feature · p2 · 8</sup>
+- [ ] [`0173`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0173-a-cairn-literal-in-the-lexer-the-parser-and-the-printer.md) A cairn literal, in the lexer, the parser and the printer <sup>feature · p0 · 0</sup>
 
 ### buried
 
