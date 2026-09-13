@@ -7,8 +7,9 @@ milestone: world
 depends_on:
 - 16
 - 67
+- 175
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-13
 priority: p2
 effort: l
 area: crates/nether-world

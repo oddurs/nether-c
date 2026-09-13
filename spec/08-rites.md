@@ -96,7 +96,7 @@ spent, because that is where it is a fact.
 ```
 nether exhume <cairn> [--grant <cap>]... [--declare <name>=<value>]...
                       [--clock <seconds>] [--target <triple>] [--reach <host>]...
-                      [--replay] [--json]
+                      [--load <path>]... [--replay] [--json]
 ```
 
 Grants capabilities, answers holes, records every answer, re-buries the
@@ -152,6 +152,26 @@ would be a reach nobody declared.
 Granting `net` and reaching nothing is legal and means a network with nothing
 in it, which is the right default for the same reason as no `--grant` at all.
 Reaching without granting `net` is an error, on §8.3.1's reasoning.
+
+### 8.3.3 Declaring what may be loaded
+
+`--load` names one shared object `unrecorded` may load. It MAY be given any
+number of times, and a symbol found in nothing named is `denied`.
+
+A symbol is looked for in the objects in the order they were given, and the
+first that has it answers. Order is the invocation's and not the loader's,
+because two objects that both define a symbol is a question only the person
+running the rite can settle.
+
+Granting `unrecorded` and loading nothing is legal and means no foreign code,
+which is the one case where the useless invocation is also the safe one.
+Loading without granting `unrecorded` is an error, on
+[§8.3.1](#831-declaring-an-environment)'s reasoning.
+
+This is the same argument as §8.3.2 in the place it matters most. A
+stratum-8 call that may load any object on the machine is ambient authority,
+and [§1.7](01-strata.md#17-stratum-8-the-unrecorded) already says this stratum
+is the one that has to be quarantined loudly.
 
 ## 8.4 `lamp`
 

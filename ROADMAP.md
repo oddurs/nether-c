@@ -188,7 +188,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`##########` 94% · 15 of 16 done · due 2027-05-15
+`##########` 94% · 16 of 17 done · due 2027-05-15
 
 ### unmarked
 
@@ -211,6 +211,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0172`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0172-a-sealed-value-has-no-syntax-so-a-residue-holding-one-is-not-a-program.md) A sealed value has no syntax, so a residue holding one is not a program <sup>spec · p0 · 0</sup>
 - [x] [`0173`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0173-a-cairn-literal-in-the-lexer-the-parser-and-the-printer.md) A cairn literal, in the lexer, the parser and the printer <sup>feature · p0 · 0</sup>
 - [x] [`0174`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0174-where-the-network-s-reach-is-declared-and-which-schemes-are-served.md) Where the network's reach is declared, and which schemes are served <sup>spec · p0 · 6</sup>
+- [x] [`0175`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0175-what-a-foreign-call-looks-like-from-the-other-side.md) What a foreign call looks like from the other side <sup>spec · p0 · 8</sup>
 
 ## necropolis — The Necropolis
 

@@ -199,6 +199,45 @@ An implementation MUST make this unpleasant to reach for — at minimum, naming
 the symbol in `nether strata` output — because a stratum-8 call is a hole in
 the record that no later care can fill in.
 
+What may be loaded at all is [§8.3.3](08-rites.md#833-declaring-what-may-be-loaded).
+
+### 9.8.1 The other side
+
+`sym` names a function with C linkage and this signature:
+
+```
+int32_t sym(const uint8_t *args, size_t args_len,
+            uint8_t *out, size_t out_cap, size_t *out_len);
+```
+
+That is C, not Nether C. It is here the way a header file is here: to be read,
+and written against.
+
+It is handed the `Bytes` the program passed, and a buffer to write its answer
+into. It MUST set `*out_len` to the length of its answer whether or not the
+answer fit, and MUST NOT write more than `out_cap` bytes. It returns:
+
+| Value | Meaning |
+| ---: | --- |
+| `0` | the answer is in `out`, and is `*out_len` bytes |
+| `1` | `out_cap` was too small; `*out_len` is what is needed |
+| `2`..`7` | a refusal, in the order [§5.1.1](05-types.md#511-answers-and-refusals) lists them |
+| anything else | malformed |
+
+On `1` the implementation MUST call once more with a buffer of at least
+`*out_len`, and MUST NOT call a third time: a callee whose answer grows every
+time it is asked is a callee that never finishes.
+
+Neither side frees the other's memory. The buffer belongs to the caller for its
+whole life, and `args` belongs to the caller too — a callee that keeps either
+pointer after it returns has kept a pointer to something it does not own, and
+no wording here can stop it. That is what stratum 8 *is*, and it is why §1.7
+marks the trace rather than trying to make the call safe.
+
+An implementation MUST NOT assume anything else about the callee. In
+particular it MUST record the witness before the call, so that a callee which
+does not return leaves a trace saying what was attempted.
+
 ## 9.9 Failure, and the difference between two of them
 
 Nether C has no exceptions and no unwinding. Unwinding has no meaning in a
