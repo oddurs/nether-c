@@ -12,7 +12,7 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use nether_core::{Capability, Depth};
+use nether_core::{Capability, Depth, Prim};
 use nether_ledger::{AnswerOf, Call, Refusal, Span, Store, StoreError, Stored, Value};
 
 use crate::provider::Provider;
@@ -94,9 +94,17 @@ fn within(root: &Path, at: &Path) -> bool {
     }
 }
 
-/// What the world said, before it is written down.
-fn given(v: Value) -> Value {
-    Value::Answer(Box::new(AnswerOf::Given(v)))
+/// What the world said, shaped the way §09 types the function that asked.
+///
+/// [`Prim::refusable`] is the rule. `read` returns `Answer<Bytes>` and is
+/// wrapped; `exists` returns a plain `Bool` and is not, because an `Answer`
+/// substituted where the program declared a `Bool` is a branch that cannot
+/// fold and a deposit inside it that never happens.
+fn given(function: &str, v: Value) -> Value {
+    match Prim::from_name(function) {
+        Some(p) if !p.refusable() => v,
+        _ => Value::Answer(Box::new(AnswerOf::Given(v))),
+    }
 }
 
 /// Which no it was. §5.1.1's closed set of six.
@@ -143,8 +151,10 @@ impl Provider for Disk {
             _ => Depth::DISK,
         };
         // A call whose argument is not a finished string is a call §6.3 says
-        // cannot have become a hole. Refusing is the only honest answer and it
-        // is recorded like any other.
+        // cannot have become a hole, and §04 types the argument, so reaching
+        // here at all means a program the checker should have rejected. The
+        // refusal is wrapped even for `exists`, because there is no plain
+        // `Bool` that is not also an answer to a question nobody asked.
         let Some(path) = path_of(into.store(), call) else {
             return into.record(call, stratum, span, &refused(Refusal::Malformed));
         };
@@ -160,10 +170,9 @@ impl Disk {
     /// Touch the world, once, and say what it said.
     fn act(function: &str, at: &Path, call: &Call, into: &Recorder) -> Value {
         match function {
-            "read" => {
-                std::fs::read(at).map_or_else(|e| refused(why(&e)), |b| given(Value::Bytes(b)))
-            }
-            "exists" => given(Value::Bool(at.exists())),
+            "read" => std::fs::read(at)
+                .map_or_else(|e| refused(why(&e)), |b| given(function, Value::Bytes(b))),
+            "exists" => given(function, Value::Bool(at.exists())),
             "list" => match std::fs::read_dir(at) {
                 Err(e) => refused(why(&e)),
                 Ok(entries) => {
@@ -173,12 +182,11 @@ impl Disk {
                         .filter_map(|e| Some(e.ok()?.file_name().to_str()?.to_owned()))
                         .collect();
                     names.sort();
-                    given(Value::Array(names.into_iter().map(Value::Str).collect()))
+                    given(function, Value::Array(names.into_iter().map(Value::Str).collect()))
                 }
             },
-            "remove" => {
-                std::fs::remove_file(at).map_or_else(|e| refused(why(&e)), |()| given(Value::Unit))
-            }
+            "remove" => std::fs::remove_file(at)
+                .map_or_else(|e| refused(why(&e)), |()| given(function, Value::Unit)),
             "write" => Self::write(at, call, into),
             _ => refused(Refusal::Malformed),
         }
@@ -197,6 +205,7 @@ impl Disk {
                 return refused(why(&e));
             }
         }
-        std::fs::write(at, &bytes).map_or_else(|e| refused(why(&e)), |()| given(Value::Unit))
+        std::fs::write(at, &bytes)
+            .map_or_else(|e| refused(why(&e)), |()| given("write", Value::Unit))
     }
 }
