@@ -44,17 +44,36 @@
   --rot:     #55AAFF;  /* BROWN    -- no opposite */
   --bile:    #AAAA00;  /* LTBLUE   -- no opposite */
 
-  --ground:  var(--void);
+  /* ── the nether ─────────────────────────────────────────────────────────
+     The sixteen above are the complement of VGA and are not negotiable; they
+     are argued for in spec/90-rationale.md and every one of them is still
+     here. What the page is *made* of is a different question, and the answer
+     comes from the one colour system this project invented rather than
+     inherited: the nine strata, sulphur at 0 down to magenta at 8.
+
+     A reader of this site is at the bottom of that. So the ground is stratum
+     eight with no light falling on it, and the chrome is the deep end of the
+     ramp. The accent stays sulphur, because the lamp is the only thing in the
+     language that carries light downwards, and a warm light in a cold dark is
+     the whole of the picture.
+
+     Pure black was never the point. The nether is not empty, it is deep. */
+  --nether:  #150020;   /* stratum 8, unlit */
+  --shade:   #B79ECB;   /* the same, with something reflected off it */
+  --shadow:  #6E5580;   /* and with almost nothing */
+
+  --ground:  var(--nether);
   --ink:     var(--bone);
-  --dim:     var(--smoke);
+  --dim:     var(--shade);
+  --dimmer:  var(--shadow);
   --accent:  var(--sulphur);
-  --alt:     var(--ice);
+  --alt:     var(--lilac);
   --warn:    var(--salmon);
   --good:    var(--lime);
   --code:    var(--lime);
-  --quote:   var(--plum);
-  --bevel-hi: var(--smoke);
-  --bevel-lo: var(--ash);
+  --quote:   #FF55CC;   /* stratum 7 */
+  --bevel-hi: var(--shade);
+  --bevel-lo: var(--shadow);
 
   /* Eighty columns of the face this repository draws, and not `80ch` of
      whatever the reader happened to have installed. The cell is eight pixels
@@ -85,15 +104,23 @@
   --rot:     #AA5500;
   --bile:    #5555FF;
 
-  --dim:     #555555;
-  --accent:  #0000AA;
-  --alt:     #AA0000;
+  /* The surface. Still the same violet, with the sun on it. */
+  --nether:  #FBF2FF;
+  --shade:   #5E4670;
+  --shadow:  #9B84AD;
+
+  --ground:  var(--nether);
+  --ink:     #150020;
+  --dim:     var(--shade);
+  --dimmer:  var(--shadow);
+  --accent:  #3A0070;
+  --alt:     #8800AA;
   --warn:    #AA0000;
-  --good:    #00AA00;
-  --code:    #AA00AA;   /* GREEN on white is 3.11:1, so code is PURPLE here */
-  --quote:   #AA00AA;   /* LTGREEN on white is 1.33:1; a rule you cannot see is not a rule */
+  --good:    #006600;   /* MOSS on this ground is 4.28:1, so the green darkens */
+  --code:    #8800AA;   /* GREEN on a light ground is 3.11:1, so code is purple */
+  --quote:   #8800AA;
   --bevel-hi: #FFFFFF;
-  --bevel-lo: #555555;
+  --bevel-lo: var(--shade);
 }
 
 /* --------------------------------------------------------------------------
@@ -257,7 +284,7 @@ nav.bar .spacer { flex: 1 1 auto; }
 h1 {
   margin: 1.5rem 0 .75rem;
   color: var(--accent);
-  font-size: 16px;
+  font-size: 24px;
   font-weight: bold;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -269,7 +296,7 @@ h2 {
   padding: .15rem .6rem;
   background: var(--accent);
   color: var(--ground);
-  font-size: 16px;
+  font-size: 24px;
   font-weight: bold;
 }
 h2::before { content: "\25A0 "; }

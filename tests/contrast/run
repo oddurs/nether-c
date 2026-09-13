@@ -28,9 +28,10 @@ NETHER = {
     "salmon": "#FF5555", "ice": "#55FFFF", "lime": "#55FF55", "ash": "#555555",
     "smoke": "#AAAAAA", "plum": "#AA00AA", "blood": "#AA0000", "moss": "#00AA00",
     "deep": "#0000AA", "teal": "#00AAAA", "rot": "#55AAFF", "bile": "#AAAA00",
-    "ground": "#000000", "ink": "#FFFFFF", "dim": "#AAAAAA", "dimmer": "#555555",
-    "accent": "#FFFF55", "alt": "#55FFFF", "warn": "#FF5555", "good": "#55FF55",
-    "code": "#55FF55", "quote": "#AA00AA",
+    "nether": "#150020", "shade": "#B79ECB", "shadow": "#6E5580",
+    "ground": "#150020", "ink": "#FFFFFF", "dim": "#B79ECB", "dimmer": "#6E5580",
+    "accent": "#FFFF55", "alt": "#FF55FF", "warn": "#FF5555", "good": "#55FF55",
+    "code": "#55FF55", "quote": "#FF55CC",
 }
 
 TEMPLE = {
@@ -38,9 +39,10 @@ TEMPLE = {
     "salmon": "#00AAAA", "ice": "#AA0000", "lime": "#AA00AA", "ash": "#AAAAAA",
     "smoke": "#555555", "plum": "#55FF55", "blood": "#55FFFF", "moss": "#FF55FF",
     "deep": "#FFFF55", "teal": "#FF5555", "rot": "#AA5500", "bile": "#5555FF",
-    "ground": "#FFFFFF", "ink": "#000000", "dim": "#555555", "dimmer": "#AAAAAA",
-    "accent": "#0000AA", "alt": "#AA0000", "warn": "#AA0000", "good": "#00AA00",
-    "code": "#AA00AA", "quote": "#AA00AA",
+    "nether": "#FBF2FF", "shade": "#5E4670", "shadow": "#9B84AD",
+    "ground": "#FBF2FF", "ink": "#150020", "dim": "#5E4670", "dimmer": "#9B84AD",
+    "accent": "#3A0070", "alt": "#8800AA", "warn": "#AA0000", "good": "#006600",
+    "code": "#8800AA", "quote": "#8800AA",
 }
 
 # (what it is, foreground token, background token, minimum ratio)

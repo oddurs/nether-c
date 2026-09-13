@@ -214,7 +214,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`#######···` 69% · 9 of 13 done · due 2027-07-15
+`########··` 71% · 10 of 14 done · due 2027-07-15
 
 ### unmarked
 
@@ -234,6 +234,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0183`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0183-depth-is-the-site-s-colour-and-it-is-computed.md) Depth is the site's colour, and it is computed <sup>feature · p1 · 0</sup>
 - [x] [`0184`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0184-furniture-of-our-own-and-a-way-to-look-at-the-site.md) Furniture of our own, and a way to look at the site <sup>feature · p1 · 0</sup>
 - [x] [`0185`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0185-two-wordmarks-on-the-front-page.md) Two wordmarks on the front page <sup>bug · p1 · 0</sup>
+- [x] [`0186`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0186-the-nether-has-a-ground-of-its-own.md) The nether has a ground of its own <sup>feature · p1 · 0</sup>
 
 ## futamura — Self-Burial
 
