@@ -31,18 +31,24 @@ pub trait Provider {
     fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse>;
 }
 
-/// What a provider could not do. §9.9's two failures, and only those two.
+/// What a provider could not do. §9.9's one, and the machine's two.
 ///
-/// Neither is the world saying no: a refusal is an answer and comes back as an
-/// ordinary [`Recorded`].
+/// None of them is the world saying no: a refusal is an answer and comes back
+/// as an ordinary [`Recorded`].
 #[derive(Debug)]
 pub enum Refuse {
     /// The ledger would not take the answer, so the program was told nothing.
     NotRecorded(StoreError),
     /// The program asked something that has no answer and never will — `env`
-    /// on a name that was never declared (§9.4). Not catchable, by §9.9, so
-    /// the rite reports it and stops.
+    /// on a name that was never declared (§9.4), `draw` of fewer than no
+    /// bytes. Not catchable, by §9.9, so the rite reports it and stops.
     Collapse(String),
+    /// This machine could not answer at all, and the question was good.
+    ///
+    /// Not §9.9's either: the program did nothing wrong and the world said
+    /// nothing. It is what is left when a provider promised a source at the
+    /// grant and does not have one at the call.
+    Unavailable(String),
 }
 
 impl From<StoreError> for Refuse {
@@ -76,6 +82,8 @@ pub enum Unanswered {
     NotRecorded(String),
     /// The program asked something that has no answer and never will. §9.9.
     Collapsed(String),
+    /// This machine could not answer, and the question was good.
+    Unavailable(String),
 }
 
 impl core::fmt::Display for Unanswered {
@@ -89,6 +97,7 @@ impl core::fmt::Display for Unanswered {
             }
             Self::NotRecorded(why) => write!(f, "the answer could not be written down: {why}"),
             Self::Collapsed(why) => write!(f, "{why}"),
+            Self::Unavailable(why) => write!(f, "this machine cannot answer that: {why}"),
         }
     }
 }
@@ -143,6 +152,7 @@ impl World {
         provider.answer(call, span, into).map_err(|e| match e {
             Refuse::NotRecorded(e) => Unanswered::NotRecorded(e.to_string()),
             Refuse::Collapse(why) => Unanswered::Collapsed(why),
+            Refuse::Unavailable(why) => Unanswered::Unavailable(why),
         })
     }
 }

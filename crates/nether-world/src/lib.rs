@@ -12,6 +12,7 @@
 //! forgot to record has nothing to return and does not compile.
 
 mod disk;
+mod entropy;
 mod env;
 mod ledger;
 mod net;
@@ -20,6 +21,7 @@ mod recorder;
 mod replay;
 
 pub use disk::Disk;
+pub use entropy::{Entropy, MOST as MOST_DRAWN};
 pub use env::{Declared, Env};
 pub use ledger::Ledger;
 pub use net::Net;

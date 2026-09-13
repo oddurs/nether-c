@@ -12,7 +12,7 @@ use nether_bury::{Answers, HaltKind, bury_with};
 use nether_core::{Capability, check};
 use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
-use nether_world::{Declared, Disk, Env, Ledger, Net, Recorder, Replay, World};
+use nether_world::{Declared, Disk, Entropy, Env, Ledger, Net, Recorder, Replay, World};
 
 use crate::{FAILED, code, json, ledger, usage_error};
 
@@ -212,13 +212,23 @@ fn world_from(asked: &Asked, root: &Path) -> Result<World, Capability> {
             )),
             // §8.3.2 is the whole of where it may reach; granting `net` and
             // reaching nothing is a network with nothing in it.
+            // §9.7: a machine with nothing to draw from cannot grant it at
+            // all, and finding that out here is better than finding it out
+            // halfway through a burial.
+            Capability::Entropy => match Entropy::opening() {
+                Ok(source) => Box::new(source),
+                Err(e) => {
+                    eprintln!("nether: this machine has no entropy to grant: {e}");
+                    return Err(*cap);
+                }
+            },
             Capability::Net => Box::new(Net::fetching(asked.reach.clone())),
             Capability::NetWrite => Box::new(Net::sending(asked.reach.clone())),
             Capability::Disk => Box::new(Disk::reading(root)),
             Capability::DiskWrite => Box::new(Disk::writing(root)),
-            // §09 has the rest and this build does not. Saying which is
-            // better than answering nothing and calling it a refusal.
-            other => return Err(*other),
+            // §9.8 is the one left, and this build does not have it. Saying
+            // which is better than answering nothing and calling it a refusal.
+            other @ Capability::Unrecorded => return Err(*other),
         };
         world = world.granting(provider);
     }
@@ -290,9 +300,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
             Ok(world) => world,
             Err(cap) => {
                 eprintln!("nether: `{cap}` is in §9.1 and is not built yet.");
-                eprintln!(
-                    "        store env disk disk! net net! are; entropy is 0071 and unrecorded 0072."
-                );
+                eprintln!("        §9.1's first seven are built; stratum 8 is 0072.");
                 return ExitCode::from(code::UNIMPLEMENTED);
             }
         };
@@ -312,6 +320,12 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
                     eprintln!("nether: {e}");
                     eprintln!("        §9.9: a collapse is a bug in the program, not an answer.");
                     return FAILED;
+                }
+                // Not the program's mistake and not the world's answer. §8.8
+                // has a code for a machine that cannot do what was asked.
+                Err(e @ nether_world::Unanswered::Unavailable(_)) => {
+                    eprintln!("nether: {e}");
+                    return ExitCode::from(code::UNIMPLEMENTED);
                 }
                 Err(e) => {
                     eprintln!("nether: {e}");

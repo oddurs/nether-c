@@ -188,11 +188,10 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`#########·` 88% · 14 of 16 done · due 2027-05-15
+`##########` 94% · 15 of 16 done · due 2027-05-15
 
 ### unmarked
 
-- [ ] [`0071`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0071-stratum-7-entropy.md) Stratum 7: entropy <sup>feature · p1 · 7</sup>
 - [ ] [`0072`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0072-stratum-8-the-unrecorded.md) Stratum 8: the Unrecorded <sup>feature · p2 · 8</sup>
 
 ### buried
@@ -201,6 +200,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0068`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0068-strata-1-and-2-store-and-frozen-environment.md) Strata 1 and 2: store and frozen environment <sup>feature · p1 · 2</sup>
 - [x] [`0069`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0069-strata-3-and-4-the-disk.md) Strata 3 and 4: the disk <sup>feature · p0 · 4</sup>
 - [x] [`0070`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0070-strata-5-and-6-the-network.md) Strata 5 and 6: the network <sup>feature · p1 · 6</sup>
+- [x] [`0071`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0071-stratum-7-entropy.md) Stratum 7: entropy <sup>feature · p1 · 7</sup>
 - [x] [`0073`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0073-replay-refuses-the-world.md) Replay refuses the world <sup>feature · p0 · 0</sup>
 - [x] [`0164`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0164-the-attribution-ban-is-not-enforced.md) The attribution ban is not enforced <sup>bug · p1 · 0</sup>
 - [x] [`0165`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0165-a-pull-request-title-is-not-a-conventional-commit.md) A pull request title is not a Conventional Commit <sup>bug · p2 · 0</sup>
