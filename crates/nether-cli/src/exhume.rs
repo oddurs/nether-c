@@ -12,67 +12,136 @@ use nether_bury::{Answers, HaltKind, bury_with};
 use nether_core::{Capability, check};
 use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
-use nether_world::{Disk, Recorder, Replay, World};
+use nether_world::{Declared, Disk, Env, Ledger, Recorder, Replay, World};
 
 use crate::{FAILED, code, json, ledger, usage_error};
 
 /// The budget, as §8.2 gives `bury` one.
 const DEFAULT_FUEL: u64 = 1_000_000;
 
-/// `nether exhume <cairn> [--grant <cap>]... [--replay] [--json]`
-pub fn run(args: &[String]) -> ExitCode {
-    let mut wants_json = false;
-    let mut replaying = false;
-    let mut granted: Vec<Capability> = Vec::new();
-    let mut name: Option<&str> = None;
+/// What one invocation asked for. §8.3, and §8.3.1 for the declaration.
+#[derive(Default)]
+struct Asked<'a> {
+    name: Option<&'a str>,
+    granted: Vec<Capability>,
+    declared: Declared,
+    clock: Option<i64>,
+    target: Option<&'a str>,
+    replaying: bool,
+    wants_json: bool,
+}
 
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
-        match arg.as_str() {
-            "--json" => wants_json = true,
-            "--replay" => replaying = true,
-            "--grant" => match rest.next().map(|c| Capability::from_name(c)) {
-                Some(Some(cap)) => granted.push(cap),
-                Some(None) => {
-                    eprintln!("nether: no capability by that name");
-                    eprintln!(
-                        "        §9.1 lists them: store env disk disk! net net! entropy unrecorded"
-                    );
-                    return usage_error();
+const USAGE: &str = "usage: nether exhume <cairn> [--grant <cap>]... \
+                     [--declare <name>=<value>]...\n       [--clock <seconds>] \
+                     [--target <triple>] [--replay] [--json]";
+
+fn wrong(what: &str) -> ExitCode {
+    eprintln!("nether: {what}");
+    eprintln!("{USAGE}");
+    usage_error()
+}
+
+impl<'a> Asked<'a> {
+    /// Read the flags, or say which one was wrong.
+    fn parse(args: &'a [String]) -> Result<Self, ExitCode> {
+        let mut it = Self::default();
+        let mut rest = args.iter();
+        while let Some(arg) = rest.next() {
+            match arg.as_str() {
+                "--json" => it.wants_json = true,
+                "--replay" => it.replaying = true,
+                "--grant" => it.granted.push(grant(rest.next())?),
+                "--declare" => it.declared = declare(it.declared, rest.next())?,
+                "--clock" => match rest.next().map(|n| n.parse()) {
+                    Some(Ok(n)) => it.clock = Some(n),
+                    _ => return Err(wrong("`--clock` wants whole seconds since the epoch")),
+                },
+                "--target" => match rest.next() {
+                    Some(t) => it.target = Some(t),
+                    None => return Err(wrong("`--target` wants a triple")),
+                },
+                other if other.starts_with("--") => {
+                    return Err(wrong(&format!("unknown option {other}")));
                 }
-                None => {
-                    eprintln!("nether: --grant wants a capability");
-                    return usage_error();
-                }
-            },
-            other if other.starts_with("--") => {
-                eprintln!("nether: unknown option {other}");
-                return usage_error();
+                // `lamp` refuses this too. Taking two and using one is the
+                // same as being handed a cairn and exhuming a different one.
+                _ if it.name.is_some() => return Err(wrong("one cairn at a time")),
+                other => it.name = Some(other),
             }
-            // `lamp` refuses this too. Taking two and using one is the same
-            // as being handed a cairn and quietly exhuming a different one.
-            _ if name.is_some() => {
-                eprintln!("nether: one cairn at a time");
-                return usage_error();
-            }
-            other => name = Some(other),
         }
+        it.settled()
     }
 
-    let Some(name) = name else {
-        eprintln!("usage: nether exhume <cairn> [--grant <cap>]... [--replay] [--json]");
-        return usage_error();
+    /// The invocations §8.3 and §8.3.1 refuse outright.
+    fn settled(self) -> Result<Self, ExitCode> {
+        if self.name.is_none() {
+            return Err(wrong("which cairn?"));
+        }
+        // Not a preference: replay that can be handed a grant is replay that
+        // can reach the world, and then the flag is a lie. §6.7.
+        if self.replaying && !self.granted.is_empty() {
+            eprintln!("nether: `--replay` and `--grant` are mutually exclusive.");
+            eprintln!();
+            eprintln!("  §6.7: replay does not prefer the ledger over the world, it cannot");
+            eprintln!("  reach the world. A replay holding a grant would be neither.");
+            return Err(usage_error());
+        }
+        let env = self.granted.contains(&Capability::Env);
+        if env && (self.clock.is_none() || self.target.is_none()) {
+            eprintln!("nether: granting `env` means pinning it: `--clock` and `--target`.");
+            eprintln!();
+            eprintln!("  §8.3.1: there is no default, because a default would be this");
+            eprintln!("  machine's, and a rite whose answer depends on which machine ran");
+            eprintln!("  it is what §6.7 exists to prevent.");
+            return Err(usage_error());
+        }
+        if !env
+            && (self.clock.is_some() || self.target.is_some() || self.declared != Declared::none())
+        {
+            eprintln!("nether: a declaration without `--grant env` could not be read.");
+            eprintln!();
+            eprintln!("  §8.3.1, and the same reasoning as §8.0: a flag that validates");
+            eprintln!("  its argument and changes nothing looks like it worked.");
+            return Err(usage_error());
+        }
+        Ok(self)
+    }
+}
+
+/// One `--grant`, by the names §9.1 fixes.
+fn grant(arg: Option<&String>) -> Result<Capability, ExitCode> {
+    match arg.map(|c| Capability::from_name(c)) {
+        Some(Some(cap)) => Ok(cap),
+        Some(None) => {
+            eprintln!("nether: no capability by that name");
+            eprintln!("        §9.1 lists them: store env disk disk! net net! entropy unrecorded");
+            Err(usage_error())
+        }
+        None => Err(wrong("`--grant` wants a capability")),
+    }
+}
+
+/// One `--declare name=value`. §8.3.1: an empty value declares and unsets.
+fn declare(so_far: Declared, arg: Option<&String>) -> Result<Declared, ExitCode> {
+    let Some((name, value)) = arg.and_then(|d| d.split_once('=')) else {
+        return Err(wrong("`--declare` wants <name>=<value>"));
     };
-    // §8.3. Not a preference: replay that can be handed a grant is replay that
-    // can reach the world, and then the flag is a lie.
-    if replaying && !granted.is_empty() {
-        eprintln!("nether: `--replay` and `--grant` are mutually exclusive.");
-        eprintln!();
-        eprintln!("  §6.7: replay does not prefer the ledger over the world, it cannot");
-        eprintln!("  reach the world. A replay holding a grant would be neither.");
-        return usage_error();
+    if name.is_empty() {
+        return Err(wrong("`--declare` wants a name before the `=`"));
     }
+    so_far.and(name, value).map_err(|twice| {
+        eprintln!("nether: {twice}");
+        eprintln!("        §8.3.1: the two invocations differ and only one can be meant.");
+        usage_error()
+    })
+}
 
+/// `nether exhume <cairn> [--grant <cap>]... [--declare <name>=<value>]...`
+pub fn run(args: &[String]) -> ExitCode {
+    let asked = match Asked::parse(args) {
+        Ok(asked) => asked,
+        Err(code) => return code,
+    };
     let store = match ledger() {
         Ok(store) => store,
         Err(e) => {
@@ -80,14 +149,14 @@ pub fn run(args: &[String]) -> ExitCode {
             return FAILED;
         }
     };
-    let cairn = match store.resolve(name) {
+    let cairn = match store.resolve(asked.name.unwrap_or_default()) {
         Ok(cairn) => cairn,
         Err(e) => {
             eprintln!("nether: {e}");
             return ExitCode::from(code::ABSENT);
         }
     };
-    dig_up(&store, cairn, &granted, replaying, wants_json)
+    dig_up(&store, cairn, &asked)
 }
 
 /// Every hole a trace names, with the question it asks and where it was asked.
@@ -115,28 +184,32 @@ fn no_such_hole(hole: Cairn) -> ExitCode {
 }
 
 /// The world a grant asks for, or the reason there is not one yet.
-fn world_from(granted: &[Capability], root: &Path) -> Result<World, Capability> {
+fn world_from(asked: &Asked, root: &Path) -> Result<World, Capability> {
     let mut world = World::sealed();
-    for cap in granted {
-        match cap {
-            Capability::Disk => world = world.granting(Box::new(Disk::reading(root))),
-            Capability::DiskWrite => world = world.granting(Box::new(Disk::writing(root))),
+    for cap in &asked.granted {
+        let provider: Box<dyn nether_world::Provider> = match cap {
+            Capability::Store => Box::new(Ledger),
+            // §8.3.1 makes both required when `env` is granted, and `settled`
+            // has already refused the invocation that leaves either out.
+            Capability::Env => Box::new(Env::pinned(
+                asked.declared.clone(),
+                asked.clock.unwrap_or_default(),
+                asked.target.unwrap_or_default(),
+            )),
+            Capability::Disk => Box::new(Disk::reading(root)),
+            Capability::DiskWrite => Box::new(Disk::writing(root)),
             // §09 has the rest and this build does not. Saying which is
             // better than answering nothing and calling it a refusal.
             other => return Err(*other),
-        }
+        };
+        world = world.granting(provider);
     }
     Ok(world)
 }
 
 #[expect(clippy::too_many_lines, reason = "one pass, in the order §6.6 puts it")]
-fn dig_up(
-    store: &Store,
-    cairn: Cairn,
-    granted: &[Capability],
-    replaying: bool,
-    wants_json: bool,
-) -> ExitCode {
+fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
+    let (replaying, wants_json) = (asked.replaying, asked.wants_json);
     let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. })) =
         store.get(cairn)
     else {
@@ -195,7 +268,7 @@ fn dig_up(
         }
     } else {
         let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let world = match world_from(granted, &root) {
+        let world = match world_from(asked, &root) {
             Ok(world) => world,
             Err(cap) => {
                 eprintln!("nether: `{cap}` is in §9.1 and is not built yet.");
@@ -213,6 +286,13 @@ fn dig_up(
                 // A hole nothing granted answers stays a hole, which is what
                 // makes exhumation incremental rather than all or nothing.
                 Err(nether_world::Unanswered::Ungranted { .. }) => {}
+                // §9.9: not catchable, and not the world saying no. The rite
+                // reports where it happened and stops, as a burial does.
+                Err(e @ nether_world::Unanswered::Collapsed(_)) => {
+                    eprintln!("nether: {e}");
+                    eprintln!("        §9.9: a collapse is a bug in the program, not an answer.");
+                    return FAILED;
+                }
                 Err(e) => {
                     eprintln!("nether: {e}");
                     return FAILED;

@@ -1,7 +1,9 @@
 //! Writing an answer down, and the proof that it was written.
 
 use nether_core::Depth;
-use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
+
+use crate::provider::Refuse;
 
 /// What the world said, and the proof that it was written down first.
 ///
@@ -78,16 +80,17 @@ impl<'a> Recorder<'a> {
     ///
     /// # Errors
     ///
-    /// [`StoreError`] if the ledger would not take it. Nothing is returned in
-    /// that case, so nothing was answered — which is the right outcome: an
-    /// answer that could not be recorded is an answer the program must not see.
+    /// [`Refuse::NotRecorded`] if the ledger would not take it. Nothing is
+    /// returned in that case, so nothing was answered — which is the right
+    /// outcome: an answer that could not be recorded is an answer the program
+    /// must not see.
     pub fn record(
         &self,
         call: &Call,
         stratum: Depth,
         span: Span,
         said: &Value,
-    ) -> Result<Recorded, StoreError> {
+    ) -> Result<Recorded, Refuse> {
         let answer = self.store.put(&Stored::Value(said.clone()))?;
         let witness = self.store.put(&Stored::Node(Node::Witness {
             stratum: stratum.get(),
