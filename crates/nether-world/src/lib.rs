@@ -14,6 +14,7 @@
 mod disk;
 mod env;
 mod ledger;
+mod net;
 mod provider;
 mod recorder;
 mod replay;
@@ -21,6 +22,7 @@ mod replay;
 pub use disk::Disk;
 pub use env::{Declared, Env};
 pub use ledger::Ledger;
+pub use net::Net;
 pub use provider::{Provider, Refuse, Unanswered, World};
 pub use recorder::{Recorded, Recorder};
 pub use replay::Replay;

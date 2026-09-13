@@ -1033,9 +1033,11 @@ fn a_grant_and_a_replay_are_mutually_exclusive() {
 
 #[test]
 fn a_capability_that_is_not_built_says_which() {
+    // §9.1's shallow seven are built. When 0072 lands there is nothing left
+    // for this to ask for, and this test goes with it.
     let dir = a_build("exhume-unbuilt");
     let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
-    let out = there(&dir, &["exhume", &buried, "--grant", "net"]);
+    let out = there(&dir, &["exhume", &buried, "--grant", "unrecorded"]);
     assert_eq!(code(&out), 69, "{}", stderr(&out));
     assert!(stderr(&out).contains("not built yet"), "{}", stderr(&out));
 }
@@ -1481,4 +1483,70 @@ fn the_ledger_can_be_read_by_the_program_that_named_it() {
     let sealed =
         field(&stdout(&there(&dir, &["exhume", &trace, "--grant", "store", "--json"])), "sealed");
     assert_eq!(stdout(&there(&dir, &["lamp", &sealed])), "the ledger has it\n");
+}
+
+// ── §9.6 the network, and the stage-four proof ──────────────────────────────
+
+/// One request answered, then the socket is gone. The port is chosen by the
+/// operating system, so nothing else can be holding it.
+fn one_answer(body: &'static str) -> (u16, std::thread::JoinHandle<()>) {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("a port");
+    let port = listener.local_addr().expect("an address").port();
+    let thread = std::thread::spawn(move || {
+        use std::io::{Read as _, Write as _};
+        let Ok((mut socket, _)) = listener.accept() else { return };
+        let _ = socket.read(&mut [0u8; 4096]);
+        let said = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let _ = socket.write_all(said.as_bytes());
+        // Dropped here, and the port with it.
+    });
+    (port, thread)
+}
+
+#[test]
+fn a_program_that_fetched_replays_with_no_network_at_all() {
+    // 0070's proof, and the whole of what strata 5 and 6 are for. §9.6: the
+    // response is sealed on arrival, and replay serves the record and MUST
+    // NOT open a socket. By the time the replay runs, there is nothing to
+    // open one to.
+    let (port, server) = one_answer("what the world said");
+    let dir = a_build("fetches");
+    std::fs::write(
+        dir.join("fetches.nc"),
+        format!(
+            "Bytes@5 said = must(descend net {{ get(\"http://127.0.0.1:{port}/thing\") }});\n\
+             U0 note()\n{{\n  said;\n}}\n\ndemand note();\n"
+        ),
+    )
+    .expect("a program that fetches");
+
+    let trace = field(&stdout(&there(&dir, &["bury", "fetches.nc", "--json"])), "cairn");
+    let out = there(
+        &dir,
+        &["exhume", &trace, "--grant", "net", "--reach", &format!("127.0.0.1:{port}"), "--json"],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let sealed = field(&stdout(&out), "sealed");
+    assert_eq!(stdout(&there(&dir, &["lamp", &sealed])), "what the world said\n");
+
+    // The server has answered its one request and let the port go.
+    server.join().expect("the server finished");
+
+    let replayed = there(&dir, &["exhume", &sealed, "--replay"]);
+    assert_eq!(code(&replayed), 0, "{}", stderr(&replayed));
+    assert_eq!(stdout(&replayed), "identical.\n", "{}", stderr(&replayed));
+}
+
+#[test]
+fn reaching_without_granting_net_is_refused() {
+    // §8.3.2, on §8.3.1's reasoning: a reach nothing can use could not be
+    // read, and accepting it would be §8.0's failure in a smaller place.
+    let dir = a_build("no-grant");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let out = there(&dir, &["exhume", &trace, "--reach", "example.com"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("could not be used"), "{}", stderr(&out));
 }

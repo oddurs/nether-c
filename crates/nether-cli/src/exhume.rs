@@ -12,7 +12,7 @@ use nether_bury::{Answers, HaltKind, bury_with};
 use nether_core::{Capability, check};
 use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
-use nether_world::{Declared, Disk, Env, Ledger, Recorder, Replay, World};
+use nether_world::{Declared, Disk, Env, Ledger, Net, Recorder, Replay, World};
 
 use crate::{FAILED, code, json, ledger, usage_error};
 
@@ -25,6 +25,7 @@ struct Asked<'a> {
     name: Option<&'a str>,
     granted: Vec<Capability>,
     declared: Declared,
+    reach: Vec<String>,
     clock: Option<i64>,
     target: Option<&'a str>,
     replaying: bool,
@@ -60,6 +61,10 @@ impl<'a> Asked<'a> {
                     Some(t) => it.target = Some(t),
                     None => return Err(wrong("`--target` wants a triple")),
                 },
+                "--reach" => match rest.next() {
+                    Some(h) if !h.is_empty() => it.reach.push(h.clone()),
+                    _ => return Err(wrong("`--reach` wants a host, and optionally a port")),
+                },
                 other if other.starts_with("--") => {
                     return Err(wrong(&format!("unknown option {other}")));
                 }
@@ -84,6 +89,15 @@ impl<'a> Asked<'a> {
             eprintln!();
             eprintln!("  §6.7: replay does not prefer the ledger over the world, it cannot");
             eprintln!("  reach the world. A replay holding a grant would be neither.");
+            return Err(usage_error());
+        }
+        // §8.3.2, on §8.3.1's reasoning: a reach nothing can use could not be
+        // read, and accepting it would be §8.0's failure in a smaller place.
+        let net = self.granted.iter().any(|c| matches!(c, Capability::Net | Capability::NetWrite));
+        if !net && !self.reach.is_empty() {
+            eprintln!("nether: a reach without `--grant net` could not be used.");
+            eprintln!();
+            eprintln!("  §8.3.2: `--grant net` says which stratum, `--reach` says how far.");
             return Err(usage_error());
         }
         let env = self.granted.contains(&Capability::Env);
@@ -196,6 +210,10 @@ fn world_from(asked: &Asked, root: &Path) -> Result<World, Capability> {
                 asked.clock.unwrap_or_default(),
                 asked.target.unwrap_or_default(),
             )),
+            // §8.3.2 is the whole of where it may reach; granting `net` and
+            // reaching nothing is a network with nothing in it.
+            Capability::Net => Box::new(Net::fetching(asked.reach.clone())),
+            Capability::NetWrite => Box::new(Net::sending(asked.reach.clone())),
             Capability::Disk => Box::new(Disk::reading(root)),
             Capability::DiskWrite => Box::new(Disk::writing(root)),
             // §09 has the rest and this build does not. Saying which is
@@ -272,7 +290,9 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
             Ok(world) => world,
             Err(cap) => {
                 eprintln!("nether: `{cap}` is in §9.1 and is not built yet.");
-                eprintln!("        disk and disk! are; the rest are 0068, 0070, 0071 and 0072.");
+                eprintln!(
+                    "        store env disk disk! net net! are; entropy is 0071 and unrecorded 0072."
+                );
                 return ExitCode::from(code::UNIMPLEMENTED);
             }
         };
