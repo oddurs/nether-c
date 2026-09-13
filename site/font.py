@@ -105,22 +105,35 @@ def outline(rows: tuple[str, ...]) -> bytes:
     out += struct.pack(f">{len(ends)}H", *ends)
     out += struct.pack(">H", 0)  # no instructions: there is no hinting here
 
-    # Flags: on-curve, and both deltas are short. 0x01 | 0x02 | 0x10 = 0x13
-    # would mean "positive x"; the sign bits are set per point below, so the
-    # flag byte is written per point rather than run-length encoded.
+    # One flag byte per point, and the deltas in two streams after them.
+    #
+    # TrueType spells a delta three ways and the flag says which, so the flag
+    # and the bytes have to agree exactly: SHORT set is one unsigned byte with
+    # the companion bit for its sign; SHORT clear with the companion bit SET
+    # means "the same as the last one" and no bytes at all; SHORT clear and
+    # the companion clear means a two-byte signed delta follows.
+    #
+    # The third case is the one that matters here. A pixel is 128 units, so a
+    # run two pixels wide is 256 and does not fit a byte — and writing the
+    # flag for a long delta without writing the delta desynchronises every
+    # point after it. 0178.
     flags = bytearray()
     dxs = bytearray()
     dys = bytearray()
     px = py = 0
     for x, y in zip(xs, ys):
-        dx, dy = x - px, y - py
         flag = 0x01  # on-curve
-        if -255 <= dx <= 255:
-            flag |= 0x02 | (0x10 if dx >= 0 else 0)
-            dxs.append(abs(dx))
-        if -255 <= dy <= 255:
-            flag |= 0x04 | (0x20 if dy >= 0 else 0)
-            dys.append(abs(dy))
+        for delta, short, same, stream in (
+            (x - px, 0x02, 0x10, dxs),
+            (y - py, 0x04, 0x20, dys),
+        ):
+            if delta == 0:
+                flag |= same
+            elif -255 <= delta <= 255:
+                flag |= short | (same if delta > 0 else 0)
+                stream.append(abs(delta))
+            else:
+                stream += struct.pack(">h", delta)
         flags.append(flag)
         px, py = x, y
 

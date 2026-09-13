@@ -12,8 +12,10 @@ site/font.py, so a face that was built wrong fails here too.
 
 import html
 import re
+import struct
 import sys
 import unicodedata
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,22 +37,20 @@ def rendered() -> set[str]:
     return seen - IGNORED
 
 
-def woff_cmap(data: bytes) -> set[int]:
-    """The codepoints the shipped file actually maps, read out of the file."""
-    import struct
-    import zlib
-
+def tables(data: bytes) -> dict[bytes, bytes]:
+    """Every table in the WOFF, uncompressed."""
     count = struct.unpack(">H", data[12:14])[0]
-    table = None
+    out: dict[bytes, bytes] = {}
     for i in range(count):
         at = 44 + 20 * i
         tag, offset, comp, orig, _ = struct.unpack(">4sIIII", data[at:at + 20])
-        if tag == b"cmap":
-            raw = data[offset:offset + comp]
-            table = raw if comp == orig else zlib.decompress(raw)
-    if table is None:
-        raise SystemExit("font: the file has no cmap")
+        raw = data[offset:offset + comp]
+        out[tag] = raw if comp == orig else zlib.decompress(raw)
+    return out
 
+
+def cmap_of(table: bytes) -> set[int]:
+    """The codepoints the shipped file actually maps, read out of the file."""
     (sub_offset,) = struct.unpack(">I", table[8:12])
     sub = table[sub_offset:]
     seg2 = struct.unpack(">H", sub[6:8])[0]
@@ -73,7 +73,8 @@ def main() -> int:
     if not FONT.exists():
         print("font: site/nether.woff is not built; run python3 site/font.py", file=sys.stderr)
         return 1
-    have = woff_cmap(FONT.read_bytes())
+    shipped = tables(FONT.read_bytes())
+    have = cmap_of(shipped[b"cmap"])
     want = rendered()
     missing = sorted(c for c in want if ord(c) not in have)
     if missing:
@@ -82,9 +83,104 @@ def main() -> int:
             print(f"  U+{ord(c):04X}  {c}  {unicodedata.name(c, '?')}", file=sys.stderr)
         print("\n  draw them in site/font.py, or take them out of the page", file=sys.stderr)
         return 1
+    wrong = outlines(shipped, have)
+    if wrong:
+        print("font: the glyph outlines do not decode back to what was drawn:",
+              file=sys.stderr)
+        for code, why in wrong:
+            print(f"  U+{code:04X}  {why}", file=sys.stderr)
+        return 1
+
     spare = len(have) - len(want)
     print(f"font: {len(want)} glyph(s) rendered, all present, {spare} spare")
+    print(f"font: {len(have)} outline(s) decode to the pixels they were drawn from")
     return 0
+
+
+def points_of(glyph: bytes) -> list[tuple[int, int]] | str:
+    """Decode one simple glyph, or say where the point stream ran out.
+
+    The encoder writes a flag per point and the deltas in two streams after
+    them, and the flag says how many bytes its delta takes. If the two ever
+    disagree the stream desynchronises and every point after it is wrong --
+    which is exactly what 0178 was, so this walks it byte by byte and refuses
+    to guess.
+    """
+    if not glyph:
+        return []
+    (n,) = struct.unpack(">h", glyph[:2])
+    if n < 0:
+        return "composite glyphs are not written here"
+    at = 10
+    ends = struct.unpack(f">{n}H", glyph[at:at + 2 * n])
+    at += 2 * n
+    (instructions,) = struct.unpack(">H", glyph[at:at + 2])
+    at += 2 + instructions
+
+    total = ends[-1] + 1
+    flags = glyph[at:at + total]
+    if len(flags) != total:
+        return f"{total} points but only {len(flags)} flag(s)"
+    at += total
+
+    coords: list[list[int]] = []
+    for short, same in ((0x02, 0x10), (0x04, 0x20)):
+        values = []
+        value = 0
+        for flag in flags:
+            if flag & short:
+                if at >= len(glyph):
+                    return "the point stream ends inside a short delta"
+                step = glyph[at]
+                at += 1
+                value += step if flag & same else -step
+            elif flag & same:
+                pass
+            else:
+                if at + 2 > len(glyph):
+                    return "the point stream ends inside a long delta"
+                (step,) = struct.unpack(">h", glyph[at:at + 2])
+                at += 2
+                value += step
+            values.append(value)
+        coords.append(values)
+
+    # Up to three bytes of padding to the next four-byte boundary, and no more.
+    if len(glyph) - at > 3:
+        return f"{len(glyph) - at} bytes left over after the last point"
+    return list(zip(coords[0], coords[1]))
+
+
+def outlines(shipped: dict[bytes, bytes], have: set[int]) -> list[tuple[int, str]]:
+    """Every glyph, decoded and compared with the bitmap it was drawn from."""
+    sys.path.insert(0, str(ROOT / "site"))
+    import font as source  # noqa: E402 — the thing under test, not a dependency
+
+    (fmt,) = struct.unpack(">h", shipped[b"head"][50:52])
+    loca_raw = shipped[b"loca"]
+    if fmt == 0:
+        loca = [o * 2 for o in struct.unpack(f">{len(loca_raw) // 2}H", loca_raw)]
+    else:
+        loca = list(struct.unpack(f">{len(loca_raw) // 4}I", loca_raw))
+    glyf = shipped[b"glyf"]
+
+    wrong: list[tuple[int, str]] = []
+    for i, code in enumerate(sorted(have)):
+        gid = i + 1  # glyph 0 is .notdef
+        got = points_of(glyf[loca[gid]:loca[gid + 1]])
+        if isinstance(got, str):
+            wrong.append((code, got))
+            continue
+        # What the bitmap says the corners should be, in the same order.
+        want = []
+        for r, first, last in source.runs(source.G[chr(code)]):
+            x0, x1 = first * source.PIXEL, (last + 1) * source.PIXEL
+            y0 = source.ASCENT - (r + 1) * source.PIXEL
+            want += [(x0, y0), (x0, y0 + source.PIXEL),
+                     (x1, y0 + source.PIXEL), (x1, y0)]
+        if got != want:
+            wrong.append((code, f"{len(got)} point(s) decoded, {len(want)} drawn"))
+    return wrong
 
 
 if __name__ == "__main__":
