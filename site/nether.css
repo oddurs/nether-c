@@ -170,6 +170,12 @@ pre.sign {
   font-size: 8px;
   line-height: 1;
   white-space: pre;
+  /* `pre` is a block, so it is as wide as the column and the art sits at the
+     left of it while everything around it is centred. `fit-content` shrinks
+     the box to the art, and then the margins can centre it. */
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
 }
 pre.sign b { color: var(--alt); font-weight: normal; }
 
