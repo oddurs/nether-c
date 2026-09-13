@@ -213,7 +213,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`#####·····` 43% · 3 of 7 done · due 2027-07-15
+`#####·····` 50% · 4 of 8 done · due 2027-07-15
 
 ### unmarked
 
@@ -227,6 +227,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0074`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0074-wasm-build-of-the-core.md) WASM build of the core <sup>chore · p1 · 0</sup>
 - [x] [`0177`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0177-one-font-drawn-so-the-site-reads-the-same-on-every-machine.md) One font, drawn, so the site reads the same on every machine <sup>feature · p1 · 0</sup>
 - [x] [`0178`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0178-every-glyph-in-the-face-is-malformed-the-long-delta-is-never-written.md) Every glyph in the face is malformed: the long delta is never written <sup>bug · p0 · 0</sup>
+- [x] [`0179`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0179-the-front-page-says-the-compiler-does-not-exist.md) The front page says the compiler does not exist <sup>bug · p0 · 0</sup>
 
 ## futamura — Self-Burial
 

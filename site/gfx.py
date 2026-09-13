@@ -334,31 +334,6 @@ def lamp() -> tuple[list[Frame], list[int]]:
     return frames, [11] * 8
 
 
-def excavation() -> tuple[list[Frame], list[int]]:
-    """The 1990s promised that everything was under construction. It was."""
-    w, h, n = 396, 44, 6
-    frames = []
-    for step in range(n):
-        f = Frame(w, h, VOID)
-        for x in range(0, w, 8):
-            f.rect(x, 0, 4, 3, BILE)
-            f.rect(x + 4, 0, 4, 3, VOID)
-            f.rect(x + (step * 2) % 8, h - 3, 4, 3, BILE)
-        f.frame_box(0, 4, w, h - 8, SMOKE, ASH)
-        msg = "UNDER EXCAVATION"
-        f.text((w - Frame.width_of(msg)) // 2, 12, msg, SULPHUR)
-        sub = "NOTHING IS IMPLEMENTED - THE SPEC COMES FIRST"
-        f.text((w - Frame.width_of(sub)) // 2, 24, sub, SMOKE if step % 2 else ASH)
-        # a pick, swinging
-        px = 22 + (step % 3) * 2
-        py = 16 + (step % 3)
-        for k in range(7):
-            f.set(px + k, py + k, ROT)
-        f.rect(px + 5, py + 5, 4, 2, SALMON)
-        frames.append(f)
-    return frames, [16] * n
-
-
 def badge(top: str, bottom: str, ink: int, glow: int) -> tuple[list[Frame], list[int]]:
     """88x31. The only standard the web ever really agreed on."""
     frames = []
@@ -631,7 +606,6 @@ def og_card() -> Frame:
 GRAPHICS = {
     "bg.gif": bg_tile,
     "lamp.gif": lamp,
-    "excavation.gif": excavation,
     "cairn.gif": lambda: counter("8F3A1C0E"),
     "badge-unlit.gif": lambda: badge("BEST VIEWED", "UNLIT", SULPHUR, BONE),
     "badge-handmade.gif": lambda: badge("MADE BY HAND", "NO LIBRARIES", LIME, BONE),
