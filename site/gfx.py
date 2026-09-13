@@ -28,8 +28,12 @@ OUT = ROOT / "site" / "gfx"
 # VGA, complemented. Fourteen of the sixteen are their own opposites.
 # BROWN and LTBLUE are not, so ROT and BILE were invented for them.
 
+# Index 0 is the page's ground rather than pure black. Every graphic here is
+# opaque, so a black background would put a black box around each one on a
+# violet page -- and the void a drawing sits in should be the same void the
+# page is. `site/nether.css` derives it: stratum eight, unlit.
 PALETTE = [
-    (0x00, 0x00, 0x00),  #  0 VOID
+    (0x15, 0x00, 0x20),  #  0 VOID  -- the nether ground
     (0xFF, 0xFF, 0xFF),  #  1 BONE
     (0xFF, 0xFF, 0x55),  #  2 SULPHUR
     (0xFF, 0x55, 0xFF),  #  3 LILAC
