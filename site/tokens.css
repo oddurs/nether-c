@@ -7,27 +7,27 @@
  */
 
 :root {
-  --sunk: #040613;
-  --ground: #0A0E1F;
-  --raised: #161B30;
-  --ink: #EAECF5;
-  --dim: #A1A7BA;
-  --dimmer: #62687C;
-  --accent: #E7C869;
-  --alt: #B8ABF5;
-  --warn: #F4877F;
-  --good: #92D8A0;
-  --code: #99DECB;
-  --quote: #73BBE1;
-  --d0: #D8BB61;
-  --d1: #B7C870;
-  --d2: #8ED18F;
-  --d3: #66D6B3;
-  --d4: #4DD4D7;
-  --d5: #5DCEF4;
-  --d6: #89C3FE;
-  --d7: #ABB9FF;
-  --d8: #CBACFC;
+  --sunk: #000014;
+  --ground: #03062B;
+  --raised: #0A153E;
+  --ink: #FCF4E6;
+  --dim: #899DD1;
+  --dimmer: #4D6197;
+  --accent: #FFD755;
+  --alt: #C9ACFE;
+  --warn: #FF7F77;
+  --good: #68E68A;
+  --code: #13E5B4;
+  --quote: #01CAFE;
+  --d0: #FDD343;
+  --d1: #C4DD4B;
+  --d2: #70E479;
+  --d3: #05DCB1;
+  --d4: #18CCD2;
+  --d5: #16BDED;
+  --d6: #54A7FE;
+  --d7: #858CFE;
+  --d8: #B362FE;
 
   --cell: 12px;
   --hair: calc(1 * var(--cell));
@@ -44,25 +44,25 @@
 
 /* The lamp, lit: the same hues with the sun on them. */
 :root[data-lamp="lit"] {
-  --sunk: #F8FAFF;
-  --ground: #F0F3FC;
-  --raised: #DEE2F1;
-  --ink: #15192B;
-  --dim: #474F69;
-  --dimmer: #7C85A2;
-  --accent: #795702;
-  --alt: #523696;
-  --warn: #A51E24;
-  --good: #226837;
-  --code: #026150;
-  --quote: #005D7F;
-  --d0: #6E5802;
-  --d1: #566200;
-  --d2: #1E6D25;
-  --d3: #036B54;
-  --d4: #03686A;
-  --d5: #01657E;
-  --d6: #035DA0;
-  --d7: #4851A2;
-  --d8: #694596;
+  --sunk: #FFFDFA;
+  --ground: #FBF6EE;
+  --raised: #DEE4F5;
+  --ink: #0A1331;
+  --dim: #3F4E76;
+  --dimmer: #717FA5;
+  --accent: #825103;
+  --alt: #591F97;
+  --warn: #AC011A;
+  --good: #03672D;
+  --code: #055E49;
+  --quote: #045B74;
+  --d0: #846A05;
+  --d1: #606F03;
+  --d2: #04731F;
+  --d3: #016852;
+  --d4: #035D60;
+  --d5: #045269;
+  --d6: #02447D;
+  --d7: #3214A2;
+  --d8: #4D007C;
 }
