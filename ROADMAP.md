@@ -188,7 +188,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`#######···` 69% · 9 of 13 done · due 2027-05-15
+`########··` 71% · 10 of 14 done · due 2027-05-15
 
 ### unmarked
 
@@ -208,6 +208,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0169`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0169-recorder-carries-a-source-it-never-uses.md) Recorder carries a source it never uses <sup>chore · p2 · 0</sup>
 - [x] [`0170`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0170-where-a-frozen-environment-is-declared.md) Where a frozen environment is declared <sup>spec · p0 · 2</sup>
 - [x] [`0171`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0171-exists-answers-where-the-prelude-gives-it-a-plain-bool.md) exists answers where the prelude gives it a plain Bool <sup>bug · p0 · 3</sup>
+- [x] [`0172`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0172-a-sealed-value-has-no-syntax-so-a-residue-holding-one-is-not-a-program.md) A sealed value has no syntax, so a residue holding one is not a program <sup>spec · p0 · 0</sup>
 
 ## necropolis — The Necropolis
 

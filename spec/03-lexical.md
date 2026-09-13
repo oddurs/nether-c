@@ -102,6 +102,9 @@ bin            := "0b" ( "0" | "1" ) ( "0" | "1" | "_" )*
 
 bool_literal   := "true" | "false"
 
+cairn_literal  := "#" lowerhex{64}
+lowerhex       := digit | "a".."f"
+
 str_literal    := '"' ( str_char | escape )* '"'
 bytes_literal  := "b" str_literal
 
@@ -117,6 +120,22 @@ without a stated evaluation semantics.
 
 An integer literal is `I64`. There is no unsigned type and no integer
 promotion; see [section 05](05-types.md).
+
+A cairn literal is `Cairn`, and is exactly sixty-four lowercase hexadecimal
+digits after the `#`. Not sixty-three, not sixty-five, no `_` separators, and
+no uppercase: a cairn is a name, two spellings of one name are two names, and
+[§7.1](07-ledger.md#71-canonical-encoding) refuses the same thing one level
+down for the same reason.
+
+It is the spelling the rites print. A name copied out of `nether lamp` or
+`nether cairn` pastes into a program with a `#` in front of it and means the
+same thing there. There is no short form — a prefix is something a person types
+at a terminal, where a ledger is present to resolve it, and a program has no
+ledger while it is being read.
+
+The literal exists because [§6.5](06-evaluation.md#65-residue) requires a
+residue to be a program. A burial that folds `seal` has a cairn to write down,
+and a value the language cannot spell is a residue that does not parse.
 
 The three spellings do not hold the same range, because they are not spelling
 the same thing.
@@ -148,6 +167,8 @@ For the avoidance of doubt, and because a C programmer will look for them:
 - No preprocessor. No `#include`, no `#define`, no `#if`, and in particular no
   `#exe`. Everything `#exe` did, burial does — see
   [section 06](06-evaluation.md) — so a second mechanism for it would be a
-  second, worse burial.
+  second, worse burial. The `#` is not free for one either way: §3.6 spends it
+  on the cairn literal, which is the nearest thing this language has to the
+  thing `#include` was reaching for and arrives at it from the other end.
 - No `goto`.
 - No pointer syntax. See [section 05](05-types.md).
