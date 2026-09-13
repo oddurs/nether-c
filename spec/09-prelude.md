@@ -156,6 +156,18 @@ Answer<Bytes> post(Str url, Bytes b)   @6;   // unreachable, denied, conflict
 The response is sealed on arrival, with the request as its witness. Replay
 serves the recorded response and MUST NOT open a socket.
 
+A URL names a scheme, and an implementation MUST state which schemes it serves.
+It is not required to serve all of them: `https` is TLS, and an implementation
+that wrote its own would be writing its own cryptography. One that will not
+serve a scheme MUST refuse it with `denied` rather than `unreachable`, because
+those are different sentences — `denied` is this build saying no, and
+`unreachable` is the world not answering. A trace would otherwise record "the
+host was down" for a build that never dialled.
+
+Where an implementation may reach at all is
+[§8.3.2](08-rites.md#832-declaring-a-reach), and is a fact about the invocation
+rather than about the language.
+
 ## 9.7 Stratum 7 — `entropy`
 
 ```signatures

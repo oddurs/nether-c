@@ -95,7 +95,8 @@ spent, because that is where it is a fact.
 
 ```
 nether exhume <cairn> [--grant <cap>]... [--declare <name>=<value>]...
-                      [--clock <seconds>] [--target <triple>] [--replay] [--json]
+                      [--clock <seconds>] [--target <triple>] [--reach <host>]...
+                      [--replay] [--json]
 ```
 
 Grants capabilities, answers holes, records every answer, re-buries the
@@ -129,6 +130,28 @@ Granting `env` and declaring nothing is legal and means an environment in which
 every name is undeclared. Declaring without granting `env` is an error: the
 declaration could not be read, so accepting it would be §8.0's failure in a
 smaller place.
+
+### 8.3.2 Declaring a reach
+
+`--reach` names one host `net` and `net!` may open a socket to. It MAY be given
+any number of times, and a host nobody named is `denied`
+([§9.6](09-prelude.md#96-strata-5-and-6-net-net)).
+
+The reasoning is the one an implementation already applies to the disk. §09
+says nothing about where a path is rooted, and an implementation that rooted it
+nowhere would be one nobody could grant a capability to; a socket is the same
+argument with a longer reach. `--grant net` says which stratum, and `--reach`
+says how far.
+
+A host is a name and optionally a port: `example.com`, or `example.com:8080`.
+Without a port it matches whatever port the URL asks for, because the port is a
+detail of the service and the host is the party being trusted. It matches that
+host exactly — a subdomain is a different party, and a reach that spread to one
+would be a reach nobody declared.
+
+Granting `net` and reaching nothing is legal and means a network with nothing
+in it, which is the right default for the same reason as no `--grant` at all.
+Reaching without granting `net` is an error, on §8.3.1's reasoning.
 
 ## 8.4 `lamp`
 

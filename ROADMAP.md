@@ -188,7 +188,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`########··` 80% · 12 of 15 done · due 2027-05-15
+`#########·` 81% · 13 of 16 done · due 2027-05-15
 
 ### unmarked
 
@@ -210,6 +210,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0171`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0171-exists-answers-where-the-prelude-gives-it-a-plain-bool.md) exists answers where the prelude gives it a plain Bool <sup>bug · p0 · 3</sup>
 - [x] [`0172`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0172-a-sealed-value-has-no-syntax-so-a-residue-holding-one-is-not-a-program.md) A sealed value has no syntax, so a residue holding one is not a program <sup>spec · p0 · 0</sup>
 - [x] [`0173`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0173-a-cairn-literal-in-the-lexer-the-parser-and-the-printer.md) A cairn literal, in the lexer, the parser and the printer <sup>feature · p0 · 0</sup>
+- [x] [`0174`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0174-where-the-network-s-reach-is-declared-and-which-schemes-are-served.md) Where the network's reach is declared, and which schemes are served <sup>spec · p0 · 6</sup>
 
 ## necropolis — The Necropolis
 

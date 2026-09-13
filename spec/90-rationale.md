@@ -718,6 +718,48 @@ next is not a literal.
 will read as a preprocessor directive for as long as anyone remembers what one
 was.
 
+### `https`, and the one dependency exception
+
+`CLAUDE.md` permits exactly one kind of dependency — "do not write your own
+cryptography" — and refuses the rest. `https` is TLS, so
+[§9.6](09-prelude.md#96-strata-5-and-6-net-net) had to settle whether `net`
+means a TLS stack or means less than people will expect.
+
+It settles neither, deliberately: the scheme set is the implementation's, and
+what §9.6 requires is that it be *stated* and that a scheme this build will not
+serve come back `denied` rather than `unreachable`. This implementation serves
+`http` and refuses `https` by name.
+
+The alternative considered was a TLS dependency — `rustls` and a root store —
+on the grounds that a `net` capability that cannot reach most of the network is
+a capability nobody will grant. Rejected for now on what the stratum is *for*.
+The interesting content of strata 5 and 6 is the witness and the replay: a
+response sealed on arrival, served back from the ledger, with no socket opened.
+None of that is about TLS, and all of it can be demonstrated without it.
+
+**What it cost.** `nether exhume --grant net` will not fetch from most of the
+web today, and anybody who needs it to has to build with a TLS stack this
+repository does not ship. That is a real exclusion and it is stated here rather
+than discovered.
+
+### The network's reach
+
+[§8.3.2](08-rites.md#832-declaring-a-reach) makes `--grant net` insufficient on
+its own: a host has to be named as well.
+
+The alternative considered was the capability alone, on §9.1's reasoning — a
+capability is the audit point, and the whole apparatus exists so that a reader
+can see what a burial may touch by reading one line of the invocation.
+Rejected because it makes `net` the one capability with no bound on *what*. An
+implementation already roots the disk somewhere, for a reason it states in its
+own source: a burial able to read `/etc/shadow` because a program asked it to is
+a burial nobody can grant a capability to. A socket is that argument with a
+longer reach.
+
+**What it cost.** A second flag, and an invocation that fails when somebody
+grants `net` and forgets `--reach`. The failure is the cheap one — the trace is
+not written, rather than written against a host nobody meant to allow.
+
 ### Floating point
 
 Excluded from [§3.6](03-lexical.md#36-literals) because IEEE 754 has
