@@ -89,6 +89,10 @@ name = "nether-core"
 version = "0.0.0"
 
 [[package]]
+name = "nether-foreign"
+version = "0.0.0"
+
+[[package]]
 name = "nether-ledger"
 version = "0.0.0"
 dependencies = [
@@ -109,6 +113,7 @@ name = "nether-world"
 version = "0.0.0"
 dependencies = [
  "nether-core",
+ "nether-foreign",
  "nether-ledger",
 ]
 

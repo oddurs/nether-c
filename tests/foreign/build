@@ -1,0 +1,14 @@
+#!/bin/sh
+# Build the shared object the stratum-8 proof calls.
+#
+# Not a build system. One `cc` invocation, because the whole of the foreign
+# side is one file and `spec/09-prelude.md` §9.8.1 is its only interface.
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+out=${1:-$here}
+case "$(uname -s)" in
+  Darwin) name=libsaid.dylib ;;
+  *)      name=libsaid.so ;;
+esac
+cc -shared -fPIC -O1 -o "$out/$name" "$here/said.c"
+printf '%s/%s\n' "$out" "$name"

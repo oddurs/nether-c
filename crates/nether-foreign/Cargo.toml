@@ -1,0 +1,28 @@
+[package]
+name = "nether-foreign"
+description = "Stratum 8, and the only `unsafe` in the language"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Nothing. This crate dials `dlopen` and `dlsym` itself, because a binding
+# crate would be a dependency for three declarations.
+
+[lints.rust]
+# The one place in the workspace. `spec/01-strata.md` §1.7 quarantines this
+# stratum loudly, and `spec/90-rationale.md` says why the exception is a crate
+# rather than an `allow` on a module: `forbid` exists so that it cannot be
+# locally undone, and downgrading it to `deny` for one module downgrades it
+# for every module.
+#
+# Everything unsafe in Nether C is in this directory. That is the whole claim
+# and it is checkable by reading it.
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
