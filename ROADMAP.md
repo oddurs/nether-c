@@ -150,11 +150,10 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## rites — The Rites
 
-`##########` 94% · 29 of 31 done · due 2027-03-31
+`##########` 97% · 30 of 31 done · due 2027-03-31
 
 ### unmarked
 
-- [ ] [`0167`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0167-exhuming-a-trace-loses-what-the-program-deposited.md) Exhuming a trace loses what the program deposited <sup>bug · p0 · 1</sup>
 - [ ] [`0168`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0168-exhume-does-not-say-what-it-did.md) exhume does not say what it did <sup>bug · p1 · 1</sup>
 
 ### buried
@@ -188,6 +187,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0161`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0161-as-unit-drops-a-demand-rather-than-failing.md) as_unit drops a demand rather than failing <sup>bug · p3 · 0</sup>
 - [x] [`0162`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0162-a-ledger-was-committed-to-the-repository.md) A ledger was committed to the repository <sup>chore · p2 · 0</sup>
 - [x] [`0163`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0163-fuel-spent-is-the-one-thing-stopping-replay.md) fuel_spent is the one thing stopping replay <sup>spec · p0 · 0</sup>
+- [x] [`0167`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0167-exhuming-a-trace-loses-what-the-program-deposited.md) Exhuming a trace loses what the program deposited <sup>bug · p0 · 1</sup>
 
 ## world — The World
 

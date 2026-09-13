@@ -1174,3 +1174,52 @@ fn grafting_something_the_trace_never_asked_says_so() {
     assert_eq!(code(&out), 1, "{}", stderr(&out));
     assert!(stderr(&out).contains("answers nothing under"), "{}", stderr(&out));
 }
+
+/// A program with something to keep, and a hole to answer.
+const KEEPS: &str = "U0 note()\n{\n  b\"a deposit that happened\";\n}\n\n\
+                     Bytes@3 src = must(descend disk { read(\"main.nc\") });\n\n\
+                     demand note();\ndemand src;\n";
+
+#[test]
+fn a_deposit_survives_exhuming_and_grafting() {
+    // §6.8: depositing is the only thing a program can do with a value it
+    // wants kept, and §8.4 is how it is read. Exhuming used to throw it away —
+    // the residue is right not to deposit again, so if the new trace does not
+    // name the old one's deposits, nothing does.
+    let dir = a_build("deposits");
+    std::fs::write(dir.join("keeps.nc"), KEEPS).expect("a program that keeps something");
+
+    let buried = stdout(&there(&dir, &["bury", "keeps.nc", "--json"]));
+    let trace = field(&buried, "cairn");
+    let hole = buried
+        .split("\"cairn\":\"")
+        .nth(2)
+        .and_then(|r| r.split('"').next())
+        .expect("the hole's cairn");
+    assert_eq!(stdout(&there(&dir, &["lamp", &trace])), "a deposit that happened\n");
+
+    let exhumed = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+    let sealed = field(&exhumed, "sealed");
+    assert_eq!(
+        stdout(&there(&dir, &["lamp", &sealed])),
+        "a deposit that happened\n",
+        "exhuming lost what the program deposited"
+    );
+
+    let answer = field(&exhumed, "answer");
+    let grafted = field(
+        &stdout(&there(&dir, &["graft", &trace, "--replace", hole, "--with", &answer, "--json"])),
+        "grafted",
+    );
+    assert_eq!(
+        stdout(&there(&dir, &["lamp", &grafted])),
+        "a deposit that happened\n",
+        "grafting lost what the program deposited"
+    );
+
+    // And once, not twice: a deposit is named by its content, so carrying one
+    // forward into a trace that deposited the same thing must not say the
+    // program did it twice.
+    let again = field(&stdout(&there(&dir, &["exhume", &sealed, "--json"])), "sealed");
+    assert_eq!(stdout(&there(&dir, &["lamp", &again])), "a deposit that happened\n");
+}

@@ -2,8 +2,9 @@
 id: 167
 title: Exhuming a trace loses what the program deposited
 type: bug
-status: unmarked
+status: buried
 milestone: rites
+assignee: Oddur Sigurdsson
 created: 2026-09-13
 updated: 2026-09-13
 priority: p0
@@ -43,6 +44,14 @@ the old one recorded, exactly as it does for witnesses.
 
 ## Acceptance criteria
 
-- [ ] A deposit survives exhuming
-- [ ] A deposit survives grafting
-- [ ] A deposit made *by* the second burial is recorded once, not twice
+- [x] A deposit survives exhuming
+- [x] A deposit survives grafting
+- [x] A deposit made *by* the second burial is recorded once, not twice
+
+## 2026-09-13
+
+Both rites now close a trace through crates/nether-cli/src/closing.rs, which grows a third derived fact: deposits(before, now). exhume was still computing its own depth and unrecorded mark inline with a private copy of reached() -- exactly the duplication that module exists to remove -- so converting it paid for most of the fix.
+
+## 2026-09-13
+
+Deduplicated on the way in. A deposit is named by its content, so a residue that deposits the same value at the same span gives the same cairn; lamp already collapses repeats when it walks, so carrying a repeat forward would only disagree with what lamp shows.
