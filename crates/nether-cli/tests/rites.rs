@@ -1614,9 +1614,12 @@ fn drawing_fewer_than_no_bytes_collapses() {
 // ── §9.8 the Unrecorded, and §1.7's mark ────────────────────────────────────
 
 /// Build `tests/foreign/said.c`, or `None` on a machine with no `cc`.
-fn foreign() -> Option<String> {
+///
+/// Into a directory named after the caller. These run in parallel, and `cc`
+/// writing the file while another test loads it is `file too short`. 0176.
+fn foreign(what: &str) -> Option<String> {
     let build = format!("{}/../../tests/foreign/build", env!("CARGO_MANIFEST_DIR"));
-    let out = std::env::temp_dir().join("nether-foreign-rites");
+    let out = std::env::temp_dir().join(format!("nether-foreign-rites-{what}"));
     std::fs::create_dir_all(&out).ok()?;
     let said = Command::new(&build).arg(&out).output().ok()?;
     if !said.status.success() {
@@ -1630,7 +1633,7 @@ fn a_trace_that_reached_eight_will_not_claim_to_be_reproducible() {
     // 0072's proof, and §1.7's MUST: an implementation must refuse to report a
     // marked trace as replayable *in every rite that reports replayability*.
     // There are two of them.
-    let Some(object) = foreign() else { return };
+    let Some(object) = foreign("claims") else { return };
     let dir = a_build("foreign");
     std::fs::write(
         dir.join("calls.nc"),
