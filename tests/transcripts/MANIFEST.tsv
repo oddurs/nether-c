@@ -25,7 +25,7 @@ spec/03-lexical.md § 3.2 Comments #1	c	pinned	583a67ed3002e592
 spec/03-lexical.md § 3.3 Identifiers #1	text	pinned	a847859bb6afdffe
 spec/03-lexical.md § 3.4 Keywords #1	text	pinned	f6e139d170fc9105
 spec/03-lexical.md § 3.5 Depth annotations #1	text	pinned	f3d54dbae87a451e
-spec/03-lexical.md § 3.6 Literals #1	text	pinned	e5fdf9832863d9cd
+spec/03-lexical.md § 3.6 Literals #1	text	pinned	fe17d52337f01191
 spec/03-lexical.md § 3.7 Punctuation #1	text	pinned	25fd164649674a25
 spec/04-grammar.md § 4.1 Compilation unit #1	ebnf	pinned	d8137d228d3b4996
 spec/04-grammar.md § 4.2 Declarations #1	ebnf	pinned	82a7b0222c7269d4

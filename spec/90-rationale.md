@@ -694,6 +694,30 @@ holding a sealed trace can see every environment variable the program read and
 cannot see the ones it was offered and ignored, and no rite will tell them.
 That is the price of the cairn meaning what it says.
 
+### A cairn with no way to write it
+
+[§3.6](03-lexical.md#36-literals) had no cairn literal, on the reasoning that
+a program never needs to write one: a cairn is something `seal` produces, and
+sealing is how you get one. That is true of a program somebody writes and false
+of a residue, and [§6.5](06-evaluation.md#65-residue) makes a residue a
+program. `Cairn c = seal b"hi"; demand c;` buried to a residue whose second
+line read `demand «a cairn has no syntax»;`, which does not parse.
+
+The alternative considered was sixty-four hex digits with no mark in front.
+Rejected because an identifier may begin with a letter and `deadbeef` is both
+a plausible cairn prefix and a plausible variable name; a lexer that has to
+count to sixty-four before it knows which token it is reading is a lexer whose
+error messages cannot be written.
+
+Also rejected: allowing the short form the rites accept. `nether lamp 76c4b655`
+works because a ledger is there to resolve the prefix. A program is read
+without one, and a literal that names one thing on this machine and two on the
+next is not a literal.
+
+**What it cost.** A sixty-five character token, and the `#` that C programmers
+will read as a preprocessor directive for as long as anyone remembers what one
+was.
+
 ### Floating point
 
 Excluded from [§3.6](03-lexical.md#36-literals) because IEEE 754 has
