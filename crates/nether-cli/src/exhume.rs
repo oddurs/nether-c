@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use nether_bury::{Answers, HaltKind, bury_with};
 use nether_core::{Capability, check};
-use nether_ledger::{Cairn, Call, Node, Store, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
 use nether_world::{Disk, Recorder, Replay, World};
 
@@ -49,6 +49,12 @@ pub fn run(args: &[String]) -> ExitCode {
                 eprintln!("nether: unknown option {other}");
                 return usage_error();
             }
+            // `lamp` refuses this too. Taking two and using one is the same
+            // as being handed a cairn and quietly exhuming a different one.
+            _ if name.is_some() => {
+                eprintln!("nether: one cairn at a time");
+                return usage_error();
+            }
             other => name = Some(other),
         }
     }
@@ -84,15 +90,28 @@ pub fn run(args: &[String]) -> ExitCode {
     dig_up(&store, cairn, &granted, replaying, wants_json)
 }
 
-/// Every hole a trace names, with the question it asks.
-fn questions(store: &Store, holes: &[Cairn]) -> Vec<(Cairn, Call, u8)> {
+/// Every hole a trace names, with the question it asks and where it was asked.
+///
+/// `Err` is the cairn of a hole this ledger cannot read. Dropping one instead
+/// left it a hole in the new trace, so a trace half of whose holes were missing
+/// exhumed to a trace with fewer holes and no complaint.
+fn questions(store: &Store, holes: &[Cairn]) -> Result<Vec<(Call, u8, Span)>, Cairn> {
     holes
         .iter()
-        .filter_map(|h| match store.get(*h) {
-            Ok(Stored::Node(Node::Hole { call, stratum, .. })) => Some((*h, call, stratum)),
-            _ => None,
+        .map(|h| match store.get(*h) {
+            Ok(Stored::Node(Node::Hole { call, stratum, span })) => Ok((call, stratum, span)),
+            _ => Err(*h),
         })
         .collect()
+}
+
+/// What to say about a hole named by a trace and absent from the ledger.
+fn no_such_hole(hole: Cairn) -> ExitCode {
+    eprintln!("nether: this trace names a hole the ledger does not hold");
+    eprintln!("        {hole}");
+    eprintln!("        Exhuming it would answer less than the trace asks and");
+    eprintln!("        report that it had answered everything.");
+    ExitCode::from(code::ABSENT)
 }
 
 /// The world a grant asks for, or the reason there is not one yet.
@@ -160,8 +179,12 @@ fn dig_up(
         // the world with — which is the difference between preferring the
         // ledger and being unable to leave it.
         let have = Replay::of_trace(store, &witnesses);
-        for (_, call, _) in questions(store, &holes) {
-            if have.answer(&call).is_none() {
+        let asked = match questions(store, &holes) {
+            Ok(asked) => asked,
+            Err(hole) => return no_such_hole(hole),
+        };
+        for (call, _, _) in &asked {
+            if have.answer(call).is_none() {
                 eprintln!("nether: nothing recorded answers `{}`", call.function);
                 eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
                 return FAILED;
@@ -181,8 +204,11 @@ fn dig_up(
             }
         };
         let into = Recorder::new(store);
-        for (hole, call, _) in questions(store, &holes) {
-            let Ok(Stored::Node(Node::Hole { span, .. })) = store.get(hole) else { continue };
+        let asked = match questions(store, &holes) {
+            Ok(asked) => asked,
+            Err(hole) => return no_such_hole(hole),
+        };
+        for (call, _, span) in asked {
             match world.ask(&call, span, &into) {
                 // A hole nothing granted answers stays a hole, which is what
                 // makes exhumation incremental rather than all or nothing.
@@ -192,7 +218,10 @@ fn dig_up(
                     return FAILED;
                 }
                 Ok(answer) => {
-                    let Ok(Stored::Value(value)) = store.get(answer.answer()) else { continue };
+                    let Ok(Stored::Value(value)) = store.get(answer.answer()) else {
+                        eprintln!("nether: the answer to `{}` is not readable back", call.function);
+                        return FAILED;
+                    };
                     said.push((call.clone(), answer.answer()));
                     recorded.push(answer.witness());
                     answers = answers.and(call, value);
@@ -258,7 +287,14 @@ fn dig_up(
         return ExitCode::from(code::MALFORMED);
     }
 
-    let told = Sealed { was: cairn, now: next, said, depth: deepest, holes: residue.holes.len() };
+    let told = Sealed {
+        was: cairn,
+        now: next,
+        said,
+        depth: deepest,
+        holes: residue.holes.clone(),
+        spent: residue.fuel_spent,
+    };
     if wants_json {
         println!("{}", told.json());
     } else {
@@ -273,10 +309,26 @@ struct Sealed {
     now: Cairn,
     said: Vec<(Call, Cairn)>,
     depth: u8,
-    holes: usize,
+    holes: Vec<Cairn>,
+    /// §8.2: a rite reports what it spent, because that is where it is a fact.
+    /// Not in the trace — a trace holding it could not be replayed (§6.7).
+    spent: u64,
 }
 
 impl Sealed {
+    /// The word for what happened. §6.6: a trace with no holes is *sealed*.
+    ///
+    /// Nothing else earns the word. A grant that answered nothing leaves the
+    /// trace exactly as deep and exactly as full of holes as it was, and
+    /// saying "sealed" over that is saying a thing happened.
+    fn what(&self) -> &'static str {
+        match (self.said.is_empty(), self.holes.is_empty()) {
+            (true, _) => "unchanged",
+            (false, true) => "sealed",
+            (false, false) => "exhumed",
+        }
+    }
+
     fn text(&self, store: &Store) -> String {
         let mut out = String::new();
         for (n, (call, answer)) in self.said.iter().enumerate() {
@@ -288,16 +340,22 @@ impl Sealed {
             let numeral = crate::bury::circled(n + 1);
             let _ = writeln!(out, "  {numeral}  {asked}  →  {size}  {}", answer.short());
         }
+        // `was + a + b → now` when something was answered; just the name when
+        // nothing was, because there is no arrow to draw between a trace and
+        // itself.
         let answered: Vec<String> = self.said.iter().map(|(_, a)| a.short()).collect();
-        let _ = writeln!(
-            out,
-            "sealed   {} + {} → {}   depth {}   holes {}",
-            self.was.short(),
-            answered.join(" + "),
-            self.now.short(),
-            self.depth,
-            self.holes
-        );
+        let became = if answered.is_empty() {
+            self.was.short()
+        } else {
+            format!("{} + {} → {}", self.was.short(), answered.join(" + "), self.now.short())
+        };
+        let word = self.what();
+        let _ =
+            writeln!(out, "{word:<8} {became}   depth {}   holes {}", self.depth, self.holes.len());
+        if self.said.is_empty() && !self.holes.is_empty() {
+            let hint = "§9.1 names the capability each hole's stratum asks for.";
+            let _ = writeln!(out, "\nnothing was granted, so nothing was answered. {hint}");
+        }
         out
     }
 
@@ -309,12 +367,17 @@ impl Sealed {
                 format!("{{\"call\":{},\"answer\":\"{answer}\"}}", json::string(&call.function))
             })
             .collect();
-        format!(
-            "{{\"was\":\"{}\",\"sealed\":\"{}\",\"depth\":{},\"holes\":{},\"answered\":[{}]}}",
+        let named = format!(
+            "\"was\":\"{}\",\"sealed\":\"{}\",\"was_it\":{}",
             self.was,
             self.now,
+            json::string(self.what())
+        );
+        format!(
+            "{{{named},\"depth\":{},\"holes\":{},\"fuel_spent\":{},\"answered\":[{}]}}",
             self.depth,
-            self.holes,
+            self.holes.len(),
+            self.spent,
             said.join(",")
         )
     }

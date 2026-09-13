@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use nether_ledger::{Cairn, Store, Stored, Value};
+use nether_ledger::{Cairn, Node, Store, Stored, Value};
 
 /// A directory nothing else is using, named after the test that asked.
 fn scratch(what: &str) -> PathBuf {
@@ -366,7 +366,7 @@ fn an_unknown_rite_is_a_usage_error_and_prints_the_six() {
 
 // ── §8.4 `lamp` ─────────────────────────────────────────────────────────────
 
-use nether_ledger::{Call, Node, Span};
+use nether_ledger::{Call, Span};
 
 /// A store holding `build.nc`'s shape: a hole asking for a file, the witness
 /// that answered it, the bytes that came back, and a deposit of a greeting.
@@ -1222,4 +1222,89 @@ fn a_deposit_survives_exhuming_and_grafting() {
     // program did it twice.
     let again = field(&stdout(&there(&dir, &["exhume", &sealed, "--json"])), "sealed");
     assert_eq!(stdout(&there(&dir, &["lamp", &again])), "a deposit that happened\n");
+}
+
+// ── §8.3 `exhume` says what it did ──────────────────────────────────────────
+
+#[test]
+fn exhuming_without_a_grant_says_nothing_happened() {
+    // §6.6: a trace with no holes is *sealed*. Nothing else earns the word,
+    // and a grant that answered nothing leaves the trace exactly as it was.
+    let dir = a_build("said-nothing");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+
+    let out = there(&dir, &["exhume", &trace]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let told = stdout(&out);
+    assert!(told.starts_with("unchanged "), "{told}");
+    assert!(!told.contains("sealed"), "it said sealed over an unanswered hole:\n{told}");
+    assert!(!told.contains(" + "), "it drew an arrow from a trace to itself:\n{told}");
+    assert!(told.contains("nothing was answered"), "{told}");
+    assert!(told.contains("holes 1"), "{told}");
+}
+
+#[test]
+fn exhume_reports_what_it_spent() {
+    // §8.2: "A rite reports what it spent, because that is where it is a
+    // fact." Not in the trace — a trace holding it could not be replayed.
+    let dir = a_build("spent");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let told = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+
+    assert_eq!(field(&told, "was_it"), "sealed", "{told}");
+    let spent = told
+        .split("\"fuel_spent\":")
+        .nth(1)
+        .and_then(|r| r.split(&[',', '}'][..]).next())
+        .and_then(|n| n.parse::<u64>().ok())
+        .unwrap_or_else(|| panic!("no fuel_spent in:\n{told}"));
+    assert!(spent > 0, "it spent nothing to answer a hole:\n{told}");
+}
+
+#[test]
+fn exhume_refuses_a_second_cairn() {
+    // `lamp` refuses this. Taking two and using one is being handed a cairn
+    // and quietly exhuming a different one.
+    let dir = a_build("two-cairns");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+
+    let out = there(&dir, &["exhume", "deadbeef", &trace]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("one cairn at a time"), "{}", stderr(&out));
+    assert!(stdout(&out).is_empty(), "a refusal is not output");
+}
+
+#[test]
+fn a_hole_the_ledger_does_not_hold_is_reported() {
+    // Skipping it left the hole in the new trace and said nothing, so a trace
+    // half of whose holes were missing exhumed to a trace with fewer holes and
+    // no complaint.
+    let dir = a_build("absent-hole");
+    let buried = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    let trace = field(&buried, "cairn");
+
+    let store = Store::open(dir.join(".nether")).expect("a store");
+    let Ok(Stored::Node(Node::Trace { residue, source, depth, .. })) =
+        store.get(trace.parse().expect("a cairn"))
+    else {
+        panic!("bury wrote something that is not a trace");
+    };
+    // A name of the right shape that this ledger never wrote.
+    let absent = Cairn::of_encoded(b"a hole from somewhere else");
+    let forged = store
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes: vec![absent],
+            witnesses: Vec::new(),
+            deposits: Vec::new(),
+            unrecorded: false,
+            source,
+            depth,
+        }))
+        .expect("put");
+
+    let out = there(&dir, &["exhume", &forged.to_string(), "--grant", "disk"]);
+    assert_eq!(code(&out), 66, "{}", stderr(&out));
+    assert!(stderr(&out).contains("a hole the ledger does not hold"), "{}", stderr(&out));
+    assert!(stderr(&out).contains(&absent.to_string()), "it does not say which");
 }
