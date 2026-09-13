@@ -760,6 +760,43 @@ longer reach.
 grants `net` and forgets `--reach`. The failure is the cheap one — the trace is
 not written, rather than written against a host nobody meant to allow.
 
+### Who frees what, across the foreign boundary
+
+[§9.8.1](09-prelude.md#981-the-other-side) makes the caller own both buffers
+and calls twice when the first is too small.
+
+The alternative considered was the usual one: the callee allocates its answer
+and the caller frees it. Rejected because it makes the two sides share an
+allocator, which they do not — a Rust caller and a C callee linked against a
+different libc free from different heaps, and the failure is a corrupted heap
+at some later, unrelated moment. A protocol whose failure mode is "something
+else crashes an hour from now" is a bad protocol in any language and an
+unusable one in a language whose whole argument is that you can tell what
+happened afterwards.
+
+**What it cost.** A callee that cannot size its answer in advance is called
+twice, and does its work twice or caches it itself.
+
+### A foreign call, and the one `unsafe`
+
+The workspace sets `unsafe_code = "forbid"`. A foreign call cannot be written
+under it, so [§9.8](09-prelude.md#98-stratum-8-unrecorded) needs somewhere for
+the exception to live.
+
+The alternative considered was relaxing the lint where it was needed — an
+`allow` on the module that does the call. Rejected because `forbid` exists
+precisely so that it cannot be locally undone, and downgrading it to `deny` to
+make one module possible makes every other module possible too.
+
+So the exception is a crate, and nothing else in the workspace changes.
+[§1.7](01-strata.md#17-stratum-8-the-unrecorded) says this stratum is
+quarantined loudly; this is the same quarantine one layer down, and a reader
+can see the whole of the unsafety in the language by reading one directory.
+
+**What it cost.** A crate boundary where a module would have done, and a
+`Cargo.toml` that says `unsafe_code = "allow"` in exactly one place where a
+reader will go looking for it.
+
 ### Floating point
 
 Excluded from [§3.6](03-lexical.md#36-literals) because IEEE 754 has
