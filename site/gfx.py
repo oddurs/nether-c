@@ -492,38 +492,6 @@ def counter(text: str) -> tuple[list[Frame], list[int]]:
 
 
 
-def sign_over_the_door() -> tuple[list[Frame], list[int]]:
-    """NETHER C, in blocks, with the depth ramp bleeding down through it.
-
-    The letters are lit from stratum 0 and stain toward stratum 8 as the
-    animation runs, which is the only thing the page is really about.
-    """
-    w, h, n = 396, 62, 9
-    frames = []
-    for step in range(n):
-        f = Frame(w, h, VOID)
-
-        # sediment behind, so the ground is not flat
-        for y in range(0, h, 5):
-            for x in range((y // 5) % 4, w, 4):
-                f.set(x, y, ASH)
-
-        title = "NETHER C"
-        scale = 4
-        x0 = (w - len(title) * 6 * scale) // 2
-        for i, ch in enumerate(title):
-            # Each letter sits one stratum deeper than the one before it, and
-            # the whole word descends as the animation runs.
-            band = min(8, i + step)
-            big_text(f, x0 + i * 6 * scale, 8, ch, DEPTH[band], scale)
-
-        f.rect(0, h - 5, w, 1, ASH)
-        for d in range(9):
-            f.rect(d * (w // 9), h - 4, (w // 9) + 1, 3, DEPTH[d])
-        frames.append(f)
-    return frames, [18] * n
-
-
 def descent_animated() -> tuple[list[Frame], list[int]]:
     """A value falling through the strata, and never coming back.
 
@@ -738,7 +706,6 @@ GRAPHICS = {
     "badge-norun.gif": lambda: badge("THERE IS NO", "RUN", SALMON, LILAC),
     "badge-80col.gif": lambda: badge("80 COLUMNS", "AND NO MORE", BILE, BONE),
     "badge-decay.gif": lambda: badge("THE CORE ONLY", "DECAYS", ROT, BONE),
-    "sign.gif": sign_over_the_door,
     "descending.gif": descent_animated,
     "orpheus.gif": orpheus,
     "hole.gif": hole_filled,
