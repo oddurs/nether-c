@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""One rule about the stylesheet, and it is the one that needs a browser to see.
+
+`overflow-x: auto` does not leave the other axis alone. CSS computes a
+`visible` axis beside a non-`visible` one to `auto`, so an element meant to
+scroll sideways gets a vertical scrollbar as well, and anything at all below
+its content box shows one. It cost the site a scrollbar in the header of every
+page, and it took a person looking at it to notice, because nothing here runs
+a browser.
+
+So: a declaration of one axis has to declare the other. A rule that holds only
+because the arithmetic came out even is a rule that breaks the next time
+somebody changes a number. 0181.
+"""
+
+import re
+import sys
+from pathlib import Path
+
+CSS = Path(__file__).resolve().parents[2] / "site" / "nether.css"
+
+
+def blocks(text: str):
+    """Every `selector { ... }`, with the line it starts on. Comments first."""
+    text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
+    for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", text):
+        yield text[: m.start()].count("\n") + 1, m.group(1).strip(), m.group(2)
+
+
+def main() -> int:
+    wrong = []
+    for line, selector, body in blocks(CSS.read_text(encoding="utf-8")):
+        axes = {m.group(1) for m in re.finditer(r"\boverflow-(x|y)\s*:", body)}
+        if len(axes) == 1:
+            said = f"overflow-{axes.pop()}"
+            wrong.append((line, " ".join(selector.split()), said))
+
+    if wrong:
+        print("css: one axis of overflow declared without the other:", file=sys.stderr)
+        for line, selector, said in wrong:
+            print(f"  site/nether.css:{line}  {selector}  sets {said} alone", file=sys.stderr)
+        print(
+            "\n  CSS computes the other axis to `auto`, so this scrolls in a"
+            "\n  direction nobody asked for. Say both, even to say `hidden`.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("css: every overflow names both axes")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -31,6 +31,8 @@ case "${1:-}" in
     python3 tests/attribution/run
     # Every glyph the site renders is in the face that ships with it.
     python3 tests/font/run
+    # The one stylesheet rule you need a browser to see going wrong.
+    python3 tests/css/run
     ;;
   build)
     cargo build --workspace
