@@ -1550,3 +1550,53 @@ fn reaching_without_granting_net_is_refused() {
     assert_eq!(code(&out), 64, "{}", stderr(&out));
     assert!(stderr(&out).contains("could not be used"), "{}", stderr(&out));
 }
+
+// ── §9.7 entropy ────────────────────────────────────────────────────────────
+
+/// A program that draws, and keeps what it drew where `lamp` can read it.
+const DRAWS: &str = "Bytes@7 seed = descend entropy { draw(8) };\n\
+                     U0 note()\n{\n  seed;\n}\n\ndemand note();\n";
+
+#[test]
+fn a_trace_that_drew_is_at_seven_and_replays_exactly() {
+    // 0071's proof. §9.7: `draw` is the only nondeterminism in the language,
+    // so burying the same source twice gives two different traces — and §6.7
+    // still holds, because the bytes are in the witness. The one thing that is
+    // lost is re-derivation, not replay.
+    let dir = a_build("draws");
+    std::fs::write(dir.join("draws.nc"), DRAWS).expect("a program that draws");
+    let trace = field(&stdout(&there(&dir, &["bury", "draws.nc", "--json"])), "cairn");
+
+    let once =
+        field(&stdout(&there(&dir, &["exhume", &trace, "--grant", "entropy", "--json"])), "sealed");
+    let again =
+        field(&stdout(&there(&dir, &["exhume", &trace, "--grant", "entropy", "--json"])), "sealed");
+    assert_ne!(once, again, "two draws gave one trace");
+
+    // §7.3.2's depth, read back by the rite that has the whole graph.
+    let told = stdout(&there(&dir, &["strata", &once]));
+    assert!(told.contains("depth 7"), "{told}");
+    assert!(told.contains("entropy"), "{told}");
+    // §1.7: stratum 7 is recordable, so the trace is not marked and replay is
+    // exact. Only stratum 8 loses that.
+    assert!(told.contains("replayable: yes"), "{told}");
+
+    let replayed = there(&dir, &["exhume", &once, "--replay"]);
+    assert_eq!(code(&replayed), 0, "{}", stderr(&replayed));
+    assert_eq!(stdout(&replayed), "identical.\n", "{}", stderr(&replayed));
+}
+
+#[test]
+fn drawing_fewer_than_no_bytes_collapses() {
+    // §9.7 types `draw` as `Bytes`, so there is no refusal to give and §9.9's
+    // other failure is the only one left.
+    let dir = a_build("draws-wrongly");
+    std::fs::write(dir.join("wrong.nc"), "Bytes@7 s = descend entropy { draw(-1) };\ndemand s;\n")
+        .expect("a program that asks wrongly");
+    let trace = field(&stdout(&there(&dir, &["bury", "wrong.nc", "--json"])), "cairn");
+
+    let out = there(&dir, &["exhume", &trace, "--grant", "entropy"]);
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert!(stderr(&out).contains("fewer than no bytes"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("§9.9"), "{}", stderr(&out));
+}
