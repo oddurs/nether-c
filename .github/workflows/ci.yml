@@ -23,6 +23,9 @@ jobs:
         run: |
           rustup show active-toolchain || rustup toolchain install
           rustup component add rustfmt clippy
+          # The Necropolis ships the core to a browser, and `scripts/task
+          # check` builds for it. `scripts/setup` installs the same target.
+          rustup target add wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
 

@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+"""What the browser is promised, checked against the module itself.
+
+The size is what a browser actually downloads, which is the compressed size
+and not the one on disk. The exports are read out of the module's binary
+format rather than out of the source, so renaming one fails here instead of
+in somebody's browser.
+
+`.wasm-ceiling` is a budget and not a high-water mark. The Decay Rule can be
+pinned to the line because a line count is the same everywhere; a Rust release
+build is not, and the same source compresses to a different number of bytes on
+a laptop and on a runner. A ceiling set to the last measurement therefore fails
+on the next machine and says the module grew when nothing changed. So it is a
+round number somebody chose, lowered in steps, and the headroom is printed
+every time so that choosing again is easy.
+
+There is no wasm library in this repository. The export section is a length,
+then that many entries of (name, kind, index), and reading it is thirty lines.
+"""
+
+import gzip
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+CEILING = ROOT / ".wasm-ceiling"
+
+# What web/necropolis/necropolis.js calls. `memory` is exported by the linker.
+PROMISED = {"nether_alloc", "nether_free", "nether_bury", "memory"}
+
+
+def leb128(data, at):
+    """One unsigned LEB128, and where it ended."""
+    n = shift = 0
+    while True:
+        byte = data[at]
+        at += 1
+        n |= (byte & 0x7F) << shift
+        if byte & 0x80 == 0:
+            return n, at
+        shift += 7
+
+
+def exports(data):
+    """Every name the module exports."""
+    if data[:4] != b"\x00asm":
+        raise SystemExit("wasm: that is not a WebAssembly module")
+    at = 8  # the magic and the version
+    while at < len(data):
+        kind = data[at]
+        size, at = leb128(data, at + 1)
+        end = at + size
+        if kind != 7:  # not the export section
+            at = end
+            continue
+        count, at = leb128(data, at)
+        found = set()
+        for _ in range(count):
+            length, at = leb128(data, at)
+            found.add(data[at : at + length].decode("utf-8"))
+            at += length + 1  # the kind byte
+            _, at = leb128(data, at)  # the index
+        return found
+    return set()
+
+
+def main():
+    where = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    if where is None or not where.exists():
+        raise SystemExit("usage: tests/wasm/run <module.wasm>")
+    data = where.read_bytes()
+
+    found = exports(data)
+    missing = PROMISED - found
+    if missing:
+        raise SystemExit(f"wasm: the module does not export {', '.join(sorted(missing))}")
+
+    ceiling = int(CEILING.read_text().strip())
+    size = len(gzip.compress(data, 9))
+    print(f"wasm: {len(found)} export(s), all promised names present")
+    if size > ceiling:
+        print(f"wasm: the module grew.", file=sys.stderr)
+        print(f"      ceiling  {ceiling:>7} bytes  (.wasm-ceiling)", file=sys.stderr)
+        print(f"      now      {size:>7} bytes  compressed", file=sys.stderr)
+        print(file=sys.stderr)
+        print(f"  A browser downloads this. Either take {size - ceiling} bytes back out,",
+              file=sys.stderr)
+        print("  or raise the ceiling deliberately and say why in the PR body.",
+              file=sys.stderr)
+        raise SystemExit(1)
+    room = ceiling - size
+    print(f"wasm: {size} bytes compressed, {room} under the {ceiling}-byte budget")
+    # A budget with no room left is one that fails on the next machine rather
+    # than on the next change, so say so before it does.
+    if room < 1024:
+        print("      that is less than a kilobyte of room. Lower the module or",
+              "raise the budget deliberately.")
+
+
+if __name__ == "__main__":
+    main()

@@ -21,3 +21,15 @@ pedantic = { level = "warn", priority = -1 }
 [profile.release]
 lto = "thin"
 strip = true
+
+# What ships to a browser. A separate profile rather than a smaller `release`,
+# because the two want different things: the binary is built for speed and the
+# module is built for the length of a download. 0074, and `scripts/wasm` holds
+# the ceiling.
+[profile.wasm]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+panic = "abort"
+codegen-units = 1
+strip = true

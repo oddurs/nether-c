@@ -17,3 +17,10 @@
 .nether/
 
 # nothing generated belongs here except the site, which is committed on purpose
+
+# Built by `scripts/task wasm`, not committed. A Rust release build is not
+# byte-reproducible across machines, so a committed copy could only be checked
+# by rebuilding it -- and then the committed copy is doing nothing. What is
+# checked instead is the module the build produces: its exports, and its
+# compressed size against `.wasm-ceiling`.
+web/necropolis/nether.wasm

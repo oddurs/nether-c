@@ -15,6 +15,13 @@ else
 fi
 
 command -v cargo   >/dev/null 2>&1 || echo "setup: cargo not found; see rust-toolchain.toml"
+
+# The Necropolis ships the core to a browser, so `scripts/task check` builds
+# for it. One target, installed once.
+if command -v rustup >/dev/null 2>&1; then
+  rustup target add wasm32-unknown-unknown >/dev/null 2>&1 \
+    && echo "setup: wasm32-unknown-unknown installed"
+fi
 command -v python3 >/dev/null 2>&1 || echo "setup: python3 not found; site/bake needs it"
 
 echo "setup: done. Try 'scripts/agent doctor'."

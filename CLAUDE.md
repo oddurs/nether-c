@@ -116,7 +116,14 @@ workflow file or a hook. CI and local checks must never be able to drift.
 **The Decay Rule.** `.decay-ceiling` holds the line count of `crates/`.
 `scripts/decay` fails if it grows. Lowering it is an ordinary commit. Raising it
 means editing the file and justifying it in the pull request body. Below, things
-only decay.
+only decay. `.wasm-ceiling` is the same idea for what a browser downloads, but
+a budget rather than a high-water mark: a line count is the same everywhere and
+a compressed release build is not.
+
+**`unsafe` lives only where the language ends.** Two crates, and no others:
+`nether-foreign`, where Nether C calls out (§1.7), and `nether-wasm`, where
+something else calls in. The workspace `forbid`s it everywhere else, which is
+why each is a crate rather than an `allow` on a module.
 
 **Every item has a proof.** A cairn item's `proof` field is the observable fact
 that settles whether it is done. "The code exists" is not a proof. `cairn list
@@ -139,6 +146,10 @@ advantages is marketing.
 - **Never edit `site/index.html`, `site/spec/*.html` or `site/gfx/*.gif`.**
   Generated. Change `spec/*.md`, `site/src/index.html` or `site/gfx.py`, then run
   `site/bake` and `python3 site/gfx.py`, and commit what comes out.
+- **Never commit `web/necropolis/nether.wasm`.** Built by `scripts/task wasm`,
+  and ignored. A Rust release build is not byte-reproducible across machines,
+  so a committed copy could only be checked by rebuilding it. `.wasm-ceiling`
+  holds the budget for its compressed size.
 - **Never write a `TODO` comment or a stray `NOTES.md`.** If it is worth
   remembering it is worth an item. If it is not worth an item it is not worth a
   comment.
@@ -170,7 +181,10 @@ site/bake             markdown -> html. one file. no dependencies
 site/gfx.py           GIF89a encoder, LZW, and a 5x7 font. typed out by hand
 site/src/index.html   the front page. hand-written on purpose
 site/nether.css       the whole design. one file
-crates/nether-cli/    the `nether` binary. refuses `run`. nothing else yet
+crates/nether-cli/    the `nether` binary. refuses `run`
+crates/nether-foreign/ stratum 8. one of the two places `unsafe` is allowed
+crates/nether-wasm/   the core, for a browser. the other one
+web/necropolis/       the page that buries without a server
 cairn/items/          the roadmap, one markdown file per item
 scripts/              task, agent, decay, setup
 .githooks/            commit-msg, pre-commit, pre-push, post-merge

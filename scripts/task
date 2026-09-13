@@ -64,6 +64,10 @@ case "${1:-}" in
     # The Decay Rule. The trusted core may only ever get smaller.
     exec "$root/scripts/decay"
     ;;
+  wasm)
+    # The core, built for a browser, and copied to where the page loads it.
+    exec "$root/scripts/wasm"
+    ;;
   check)
     "$0" fmt:check
     "$0" lint
@@ -71,13 +75,14 @@ case "${1:-}" in
     "$0" build
     "$0" site:check
     "$0" gfx:check
+    "$0" wasm
     "$0" decay
     # Skipped when it is not installed, which is for a contributor who has
     # not got it rather than for CI. CI installs it and lets the install fail.
     if command -v cairn >/dev/null 2>&1; then cairn check; fi
     ;;
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|decay|check}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|wasm|decay|check}" >&2
     exit 2
     ;;
 esac

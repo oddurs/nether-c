@@ -18,8 +18,9 @@ repository.workspace = true
 # locally undone, and downgrading it to `deny` for one module downgrades it
 # for every module.
 #
-# Everything unsafe in Nether C is in this directory. That is the whole claim
-# and it is checkable by reading it.
+# `unsafe` lives only where the language ends, and there are two ends: this
+# crate, where Nether C calls out, and `nether-wasm`, where something else
+# calls in. Those two, and no others.
 unsafe_code = "allow"
 missing_docs = "warn"
 

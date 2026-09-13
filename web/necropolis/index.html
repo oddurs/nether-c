@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>the necropolis</title>
+<link rel="stylesheet" href="../../site/nether.css">
+<style>
+  body { margin: 0; padding: 2rem 1rem; font: 14px/1.5 ui-monospace, monospace; }
+  main { max-width: 62rem; margin: 0 auto; }
+  textarea { width: 100%; min-height: 11rem; font: inherit; padding: .75rem; }
+  pre { overflow-x: auto; padding: .75rem; }
+  .holes li { margin: .25rem 0; }
+</style>
+<main>
+  <h1>the necropolis</h1>
+  <p>Burial happens here. Nothing is sent anywhere &mdash; the whole of
+     <code>bury</code> is in the page, and this file is served from a disk.</p>
+  <p><small>Run <code>scripts/task wasm</code> first: the module is built, not
+     committed. Then serve this directory &mdash; a module cannot be loaded
+     from a <code>file://</code> URL.</small></p>
+
+  <textarea id="source" spellcheck="false">Bytes@3 src = must(descend disk { read("main.nc") });
+
+U0 note()
+{
+  b"a deposit that happened";
+}
+
+demand note();
+demand src;
+</textarea>
+  <p><button id="bury">bury</button> <span id="state">loading&hellip;</span></p>
+
+  <h2>trace</h2>
+  <pre id="trace">&mdash;</pre>
+  <h2>holes</h2>
+  <ul class="holes" id="holes"><li>&mdash;</li></ul>
+  <h2>residue</h2>
+  <pre id="residue">&mdash;</pre>
+</main>
+
+<script type="module">
+  import { open } from "./necropolis.js";
+
+  const $ = (id) => document.getElementById(id);
+  const short = (c) => c.slice(0, 8);
+
+  let nether;
+  try {
+    nether = await open();
+    $("state").textContent = "ready. nothing leaves this page.";
+  } catch (e) {
+    $("state").textContent = `the module did not load: ${e}`;
+  }
+
+  $("bury").addEventListener("click", () => {
+    if (!nether) return;
+    const said = nether.bury($("source").value);
+    if (said.error) {
+      $("trace").textContent = said.error;
+      $("holes").innerHTML = "<li>&mdash;</li>";
+      $("residue").textContent = "—";
+      return;
+    }
+    $("trace").textContent =
+      `buried   → ${short(said.cairn)}   depth ${said.depth}   ` +
+      `holes ${said.holes.length}   ${said.nodes} nodes   ` +
+      `${said.fuel_spent} steps`;
+    $("holes").innerHTML = said.holes.length
+      ? said.holes
+          .map((h, i) =>
+            `<li>${i + 1}. <code>${h.call}</code> — stratum ${h.stratum}` +
+            (h.capability ? ` <code>${h.capability}</code>` : "") +
+            ` — ${short(h.cairn)}</li>`)
+          .join("")
+      : "<li>none. it is sealed.</li>";
+    $("residue").textContent = said.printed;
+  });
+</script>

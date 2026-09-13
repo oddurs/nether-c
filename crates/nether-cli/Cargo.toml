@@ -20,5 +20,10 @@ nether-bury = { path = "../nether-bury" }
 nether-world = { path = "../nether-world" }
 nether-ledger = { path = "../nether-ledger" }
 
+[dev-dependencies]
+# The browser's burial and this one have to agree, and the only way to know is
+# to ask both. 0074.
+nether-wasm = { path = "../nether-wasm" }
+
 [lints]
 workspace = true

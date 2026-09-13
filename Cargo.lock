@@ -81,6 +81,7 @@ dependencies = [
  "nether-core",
  "nether-ledger",
  "nether-syntax",
+ "nether-wasm",
  "nether-world",
 ]
 
@@ -106,6 +107,16 @@ dependencies = [
  "nether-core",
  "unicode-ident",
  "unicode-normalization",
+]
+
+[[package]]
+name = "nether-wasm"
+version = "0.0.0"
+dependencies = [
+ "nether-bury",
+ "nether-core",
+ "nether-ledger",
+ "nether-syntax",
 ]
 
 [[package]]

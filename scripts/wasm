@@ -1,0 +1,43 @@
+#!/bin/sh
+# The Necropolis ships the core to a browser, and a browser downloads it.
+#
+# Two gates, both about the same promise: 0074 says "small enough to ship to a
+# browser without apology", and a promise nothing measures is a wish.
+#
+#   1. The module is no larger, compressed, than .wasm-ceiling -- a budget
+#      somebody chose, not the last measurement. Raising it is a deliberate
+#      act, argued for in the pull request, as the Decay Rule is below
+#      crates/; unlike the Decay Rule it cannot be pinned to the byte,
+#      because a line count is the same on every machine and a compressed
+#      release build is not.
+#   2. It exports the four names web/necropolis/necropolis.js calls. Read out
+#      of the module's own export section, so a rename fails here rather than
+#      in somebody's browser.
+#
+# The module is built, not committed. A Rust release build is not
+# byte-reproducible across machines -- the same source on CI and on a laptop
+# gives two different files -- so a committed copy could only be checked by
+# rebuilding it, and then the committed copy is doing nothing. Serving the
+# page means running this first, which `web/necropolis/index.html` says.
+#
+#   scripts/wasm
+set -eu
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+target=wasm32-unknown-unknown
+built=target/$target/wasm/nether_wasm.wasm
+shipped=web/necropolis/nether.wasm
+
+if ! rustup target list --installed 2>/dev/null | grep -qx "$target"; then
+  echo "wasm: the $target target is not installed." >&2
+  echo "      rustup target add $target" >&2
+  exit 1
+fi
+
+cargo build --quiet -p nether-wasm --profile wasm --target "$target"
+mkdir -p "$(dirname "$shipped")"
+cp "$built" "$shipped"
+
+exec python3 tests/wasm/run "$shipped"
