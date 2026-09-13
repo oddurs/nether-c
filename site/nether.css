@@ -56,7 +56,13 @@
   --bevel-hi: var(--smoke);
   --bevel-lo: var(--ash);
 
-  --col: 80ch;
+  /* Eighty columns of the face this repository draws, and not `80ch` of
+     whatever the reader happened to have installed. The cell is eight pixels
+     of ink in a six-pixel advance; at a body size of sixteen that advance is
+     twelve, so eighty columns is nine hundred and sixty and every one of them
+     is the same number on every machine. */
+  --cell: 12px;
+  --col: calc(80 * var(--cell));
 }
 
 /* The lamp, lit. You get the temple's own colours back, on the temple's own
@@ -118,15 +124,30 @@ html {
 }
 html[data-lamp="lit"] { background-image: none; }
 
+/* One font, drawn in this repository, so the site reads the same on a machine
+   with nothing installed. site/font.py makes it; there is no font library here
+   for the same reason there is no image library. The fallback is named after
+   it rather than instead of it: if the face does not load, a monospace stack
+   keeps the columns, and nothing else here depends on the letterforms. */
+@font-face {
+  font-family: "Nether 8";
+  src: url("nether.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
 body {
   max-width: var(--col);
   margin: 0 auto;
   padding: 1.5rem 1rem 6rem;
   background: transparent;
   color: var(--ink);
-  font-family: "DejaVu Sans Mono", ui-monospace, SFMono-Regular, Menlo,
-               Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 15px;
+  font-family: "Nether 8", ui-monospace, monospace;
+  /* Twice the cell, so every pixel of the face lands on two of the screen's
+     and nothing is ever asked to draw half of one. The scale is 8, 16, 24, 32
+     and there is nothing in between it. */
+  font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: none;
   font-smooth: never;
@@ -139,8 +160,8 @@ body {
 pre.sign {
   overflow-x: auto;
   color: var(--accent);
-  font-size: 11px;
-  line-height: 1.05;
+  font-size: 8px;
+  line-height: 1;
   white-space: pre;
 }
 pre.sign b { color: var(--alt); font-weight: normal; }
@@ -186,7 +207,7 @@ nav.bar .spacer { flex: 1 1 auto; }
 h1 {
   margin: 1.5rem 0 .75rem;
   color: var(--accent);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: bold;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -198,7 +219,7 @@ h2 {
   padding: .15rem .6rem;
   background: var(--accent);
   color: var(--ground);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: bold;
 }
 h2::before { content: "\25A0 "; }
@@ -206,7 +227,7 @@ h2::before { content: "\25A0 "; }
 h3 {
   margin: 1.6rem 0 .5rem;
   color: var(--alt);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: bold;
 }
 h3::before { content: "\25B8 "; color: var(--dim); }
@@ -214,7 +235,7 @@ h3::before { content: "\25B8 "; color: var(--dim); }
 h4 {
   margin: 1.2rem 0 .4rem;
   color: var(--rot);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: bold;
 }
 
@@ -266,7 +287,7 @@ figure.listing figcaption {
   padding: .1rem .6rem;
   background: var(--dim);
   color: var(--ground);
-  font-size: 12px;
+  font-size: 8px;
   letter-spacing: .1em;
   text-transform: uppercase;
 }
@@ -341,7 +362,7 @@ div.box.shout { border-color: var(--warn); color: var(--warn); }
 div.box.shout strong { color: var(--warn); }
 
 dl.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9ch, 1fr)); gap: 2px; }
-dl.swatches div { padding: .35rem .4rem; color: #000; font-size: 11px; line-height: 1.2; }
+dl.swatches div { padding: .35rem .4rem; color: #000; font-size: 8px; line-height: 1.2; }
 dl.swatches dt { font-weight: bold; }
 dl.swatches dd { opacity: .75; }
 
@@ -369,7 +390,7 @@ span.cursor { animation: blink 1.06s step-end infinite; color: var(--accent); }
 footer {
   margin-top: 2.5rem;
   color: var(--dim);
-  font-size: 13px;
+  font-size: 8px;
 }
 footer a { color: var(--dim); }
 footer .badge {
@@ -378,7 +399,7 @@ footer .badge {
   padding: 0 .5ch;
   border: 1px solid var(--dim);
   color: var(--dim);
-  font-size: 11px;
+  font-size: 8px;
   text-transform: uppercase;
 }
 
@@ -387,8 +408,11 @@ footer .badge {
 }
 
 @media (max-width: 640px) {
-  body { font-size: 13px; padding: 1rem .6rem 4rem; }
-  pre.sign { font-size: 7px; }
+  /* The size does not move. Eight and sixteen are the only body sizes at
+     which a pixel of the face is a whole number of the screen's, and a
+     narrow screen is the last place to start drawing half of one. */
+  body { padding: 1rem .6rem 4rem; }
+  pre.sign { font-size: 8px; }
 }
 
 /* ===========================================================================
@@ -406,6 +430,10 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 
 img.banner { width: 100%; max-width: 396px; margin: 0 auto; }
 img.rule   { width: 100%; max-width: 396px; margin: 1rem auto; }
+/* The specimen is drawn at three times the cell and must not be resampled to
+   anything else: a bitmap face shown at 1.4 pixels per pixel is an argument
+   against itself. */
+img.specimen { width: 100%; max-width: 435px; margin: 1rem auto; image-rendering: pixelated; }
 
 /* the marquee, which we are not sorry about */
 .marquee {
@@ -433,7 +461,7 @@ img.rule   { width: 100%; max-width: 396px; margin: 1rem auto; }
   padding: .15rem .6rem;
   background: var(--dim);
   color: var(--ground);
-  font-size: 13px;
+  font-size: 8px;
   letter-spacing: .12em;
 }
 .plaque > h3::before { content: none; }
@@ -466,6 +494,6 @@ ol.doctrine > li span { color: var(--dim); }
 .badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 1rem 0; }
 .badges img { width: 88px; height: 31px; }
 
-.counter { display: flex; align-items: center; justify-content: center; gap: 1ch; margin: 1rem 0; color: var(--dim); font-size: 12px; }
+.counter { display: flex; align-items: center; justify-content: center; gap: 1ch; margin: 1rem 0; color: var(--dim); font-size: 8px; }
 
 hr.gfx { height: 0; margin: 1.2rem 0; border: 0; }

@@ -16,8 +16,9 @@ installs whatever it is asked for is a package manager with extra steps.
 **Write it yourself.** There is no image library in this repository. There is a
 GIF89a encoder, an LZW compressor, a PNG encoder and a 5x7 bitmap font in
 `site/gfx.py`, because that was 400 lines and a dependency is forever. There is
-no markdown library; `site/bake` is one file. There is no web framework; the
-site is HTML and one stylesheet.
+no font library; `site/font.py` draws the body face and writes the TrueType
+tables and the WOFF container itself. There is no markdown library; `site/bake`
+is one file. There is no web framework; the site is HTML and one stylesheet.
 
 Before you add a dependency, work out how many lines the part you actually need
 would be. It is usually fewer than you think, and then you understand it.
@@ -143,9 +144,10 @@ advantages is marketing.
 ## NEVER
 
 - **Never edit `ROADMAP.md`.** Generated. Change items, run `cairn render`.
-- **Never edit `site/index.html`, `site/spec/*.html` or `site/gfx/*.gif`.**
-  Generated. Change `spec/*.md`, `site/src/index.html` or `site/gfx.py`, then run
-  `site/bake` and `python3 site/gfx.py`, and commit what comes out.
+- **Never edit `site/index.html`, `site/spec/*.html`, `site/gfx/*.gif` or
+  `site/nether.woff`.** Generated. Change `spec/*.md`, `site/src/index.html`,
+  `site/gfx.py` or `site/font.py`, run `scripts/task site gfx font`, and commit
+  what comes out.
 - **Never commit `web/necropolis/nether.wasm`.** Built by `scripts/task wasm`,
   and ignored. A Rust release build is not byte-reproducible across machines,
   so a committed copy could only be checked by rebuilding it. `.wasm-ceiling`
@@ -179,12 +181,14 @@ The body explains *why*; the diff already says what. Reference the item in a
 spec/                 the specification. canonical. read 00, 01, 02, 06 first
 site/bake             markdown -> html. one file. no dependencies
 site/gfx.py           GIF89a encoder, LZW, and a 5x7 font. typed out by hand
+site/font.py          the body face: 8x8 glyphs, a TrueType writer, and WOFF
 site/src/index.html   the front page. hand-written on purpose
 site/nether.css       the whole design. one file
 crates/nether-cli/    the `nether` binary. refuses `run`
 crates/nether-foreign/ stratum 8. one of the two places `unsafe` is allowed
 crates/nether-wasm/   the core, for a browser. the other one
 web/necropolis/       the page that buries without a server
+site/nether.woff      the face, built by site/font.py. do not edit
 cairn/items/          the roadmap, one markdown file per item
 scripts/              task, agent, decay, setup
 .githooks/            commit-msg, pre-commit, pre-push, post-merge

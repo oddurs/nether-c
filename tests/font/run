@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Every glyph the site puts on a page is in the face that ships with it.
+
+The face is not a guess at what might be wanted. This reads the built site and
+the specification, collects every codepoint that will actually be rendered, and
+fails naming any the font does not have — so the day a transcript grows a new
+arrow, the build says which glyph to draw rather than a reader finding a box.
+
+It also reads the glyph back out of the font's own `cmap`, not out of
+site/font.py, so a face that was built wrong fails here too.
+"""
+
+import html
+import re
+import sys
+import unicodedata
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+FONT = ROOT / "site" / "nether.woff"
+
+# What the browser never asks the face for.
+IGNORED = set("\n\r\t ﻿")
+
+
+def rendered() -> set[str]:
+    """Every character the site and the specification put in front of a reader."""
+    seen: set[str] = set()
+    for page in sorted(ROOT.glob("site/**/*.html")) + sorted(ROOT.glob("spec/*.md")):
+        text = page.read_text(encoding="utf-8")
+        if page.suffix == ".html":
+            text = re.sub(r"<(script|style)\b.*?</\1>", " ", text, flags=re.S | re.I)
+            text = html.unescape(re.sub(r"<[^>]+>", " ", text))
+        seen |= set(text)
+    return seen - IGNORED
+
+
+def woff_cmap(data: bytes) -> set[int]:
+    """The codepoints the shipped file actually maps, read out of the file."""
+    import struct
+    import zlib
+
+    count = struct.unpack(">H", data[12:14])[0]
+    table = None
+    for i in range(count):
+        at = 44 + 20 * i
+        tag, offset, comp, orig, _ = struct.unpack(">4sIIII", data[at:at + 20])
+        if tag == b"cmap":
+            raw = data[offset:offset + comp]
+            table = raw if comp == orig else zlib.decompress(raw)
+    if table is None:
+        raise SystemExit("font: the file has no cmap")
+
+    (sub_offset,) = struct.unpack(">I", table[8:12])
+    sub = table[sub_offset:]
+    seg2 = struct.unpack(">H", sub[6:8])[0]
+    n = seg2 // 2
+    ends = struct.unpack(f">{n}H", sub[14:14 + seg2])
+    starts = struct.unpack(f">{n}H", sub[16 + seg2:16 + 2 * seg2])
+    deltas = struct.unpack(f">{n}h", sub[16 + 2 * seg2:16 + 3 * seg2])
+
+    found: set[int] = set()
+    for start, end, delta in zip(starts, ends, deltas):
+        if start == 0xFFFF:
+            continue
+        for code in range(start, end + 1):
+            if (code + delta) & 0xFFFF:
+                found.add(code)
+    return found
+
+
+def main() -> int:
+    if not FONT.exists():
+        print("font: site/nether.woff is not built; run python3 site/font.py", file=sys.stderr)
+        return 1
+    have = woff_cmap(FONT.read_bytes())
+    want = rendered()
+    missing = sorted(c for c in want if ord(c) not in have)
+    if missing:
+        print("font: the site renders glyphs the face does not have:", file=sys.stderr)
+        for c in missing:
+            print(f"  U+{ord(c):04X}  {c}  {unicodedata.name(c, '?')}", file=sys.stderr)
+        print("\n  draw them in site/font.py, or take them out of the page", file=sys.stderr)
+        return 1
+    spare = len(have) - len(want)
+    print(f"font: {len(want)} glyph(s) rendered, all present, {spare} spare")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
