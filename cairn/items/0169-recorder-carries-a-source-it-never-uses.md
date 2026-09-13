@@ -2,7 +2,7 @@
 id: 169
 title: Recorder carries a source it never uses
 type: chore
-status: unmarked
+status: buried
 milestone: world
 created: 2026-09-13
 updated: 2026-09-13
@@ -34,5 +34,9 @@ than dead code. Nothing being API is worse than nothing being code.
 
 ## Acceptance criteria
 
-- [ ] Every field on `Recorder` is read by something
-- [ ] `Recorder::new` takes what it uses
+- [x] Every field on `Recorder` is read by something
+- [x] `Recorder::new` takes what it uses
+
+## 2026-09-13
+
+The tests were already writing Recorder::new(&store, span.source) -- passing the field the span carries. That is the whole argument for the field not existing.

@@ -56,9 +56,8 @@ fn what_a_provider_returns_is_already_in_the_ledger() {
     let said = Value::Bytes(b"int main(void) { return 0; }".to_vec());
     let world = World::sealed().granting(Box::new(Says(said.clone())));
 
-    let recorded = world
-        .ask(&asking("read"), span(), &Recorder::new(&store, source()))
-        .expect("disk was granted");
+    let recorded =
+        world.ask(&asking("read"), span(), &Recorder::new(&store)).expect("disk was granted");
 
     // The answer is in the ledger, and it is what the world said.
     assert_eq!(store.get(recorded.answer()).expect("written"), Stored::Value(said));
@@ -98,7 +97,7 @@ fn a_refusal_is_written_down_like_any_other_answer() {
     let world = World::sealed().granting(Box::new(Refuses));
 
     let recorded = world
-        .ask(&asking("read"), span(), &Recorder::new(&store, source()))
+        .ask(&asking("read"), span(), &Recorder::new(&store))
         .expect("a refusal is an answer, not an error");
     assert!(matches!(
         store.get(recorded.answer()).expect("written"),
@@ -115,7 +114,7 @@ fn a_world_with_nothing_granted_answers_nothing() {
     let world = World::sealed();
 
     let refused = world
-        .ask(&asking("read"), span(), &Recorder::new(&store, source()))
+        .ask(&asking("read"), span(), &Recorder::new(&store))
         .expect_err("nothing was granted");
     assert!(refused.to_string().contains("descend disk"), "{refused}");
     assert_eq!(world.depth(), Depth::PURE);
@@ -131,9 +130,8 @@ fn a_grant_answers_only_what_it_is_for() {
     assert!(world.holds(Capability::Disk));
     assert_eq!(world.depth(), Depth::DISK);
     // `get` is stratum 5, and disk does not answer it.
-    let refused = world
-        .ask(&asking("get"), span(), &Recorder::new(&store, source()))
-        .expect_err("net was not granted");
+    let refused =
+        world.ask(&asking("get"), span(), &Recorder::new(&store)).expect_err("net was not granted");
     assert!(refused.to_string().contains("descend net"), "{refused}");
 }
 
@@ -161,7 +159,6 @@ fn whatever_a_provider_hands_back_was_written_first() {
     let store = Store::open(&dir).expect("a store");
     let world = World::sealed().granting(Box::new(Slippery));
 
-    let recorded =
-        world.ask(&asking("read"), span(), &Recorder::new(&store, source())).expect("granted");
+    let recorded = world.ask(&asking("read"), span(), &Recorder::new(&store)).expect("granted");
     assert_eq!(store.get(recorded.answer()).expect("written"), Stored::Value(Value::Int(2)));
 }

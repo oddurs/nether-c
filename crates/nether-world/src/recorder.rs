@@ -45,24 +45,18 @@ impl Recorded {
 
 /// The only way to make a [`Recorded`].
 ///
-/// Holds the store the answer goes to and the cairn of the source the question
-/// was asked from, because a span names its source by cairn (§7.3).
+/// Holds the store the answer goes to, and nothing else. A recorder does not
+/// need to know where the question came from: the span it is handed names its
+/// own source by cairn, because that is what §7.3 makes a span.
 pub struct Recorder<'a> {
     store: &'a Store,
-    source: Cairn,
 }
 
 impl<'a> Recorder<'a> {
-    /// A recorder over that store, for questions asked from that source.
+    /// A recorder over that store.
     #[must_use]
-    pub const fn new(store: &'a Store, source: Cairn) -> Self {
-        Self { store, source }
-    }
-
-    /// The source questions are being asked from.
-    #[must_use]
-    pub const fn source(&self) -> Cairn {
-        self.source
+    pub const fn new(store: &'a Store) -> Self {
+        Self { store }
     }
 
     /// The ledger, for reading a call's arguments back.

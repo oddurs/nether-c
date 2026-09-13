@@ -180,7 +180,7 @@ fn dig_up(
                 return ExitCode::from(code::UNIMPLEMENTED);
             }
         };
-        let into = Recorder::new(store, source);
+        let into = Recorder::new(store);
         for (hole, call, _) in questions(store, &holes) {
             let Ok(Stored::Node(Node::Hole { span, .. })) = store.get(hole) else { continue };
             match world.ask(&call, span, &into) {
