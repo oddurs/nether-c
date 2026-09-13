@@ -1683,3 +1683,40 @@ fn an_object_that_will_not_load_says_so_at_the_grant() {
     assert_eq!(code(&out), 69, "{}", stderr(&out));
     assert!(stderr(&out).contains("would not load"), "{}", stderr(&out));
 }
+
+// ── 0074: the same burial, in a browser ─────────────────────────────────────
+
+#[test]
+fn the_browser_buries_what_the_rite_buries() {
+    // 0074's proof, minus the browser. `nether-wasm` is what the page loads,
+    // and the claim worth checking is not that it loads — `scripts/wasm` reads
+    // its exports out of the module — but that it agrees. A second burial that
+    // gave a different cairn for the same source would make the Necropolis a
+    // picture of a different program.
+    let dir = a_build("in-the-browser");
+    let source = std::fs::read(dir.join("build.nc")).expect("build.nc");
+
+    let told = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    let said = nether_wasm::burying(&source, 0);
+
+    for name in ["cairn", "residue", "source"] {
+        assert_eq!(field(&said, name), field(&told, name), "the two disagree about `{name}`");
+    }
+    // And the same holes, in the same order, at the same strata.
+    let mine: Vec<String> = said
+        .split("\"cairn\":\"")
+        .skip(2)
+        .filter_map(|r| r.split('"').next().map(str::to_owned))
+        .collect();
+    let theirs: Vec<String> = told
+        .split("\"cairn\":\"")
+        .skip(2)
+        .filter_map(|r| r.split('"').next().map(str::to_owned))
+        .collect();
+    assert_eq!(mine, theirs, "the holes are not the same holes");
+    assert!(!mine.is_empty(), "a proof about holes needs a program with one");
+
+    // The residue is source (§6.5), and the page prints it. Same bytes.
+    let printed = said.split("\"printed\":").nth(1).expect("the residue, printed");
+    assert!(printed.contains("descend disk"), "{printed}");
+}

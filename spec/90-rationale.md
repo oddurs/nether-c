@@ -790,12 +790,16 @@ make one module possible makes every other module possible too.
 
 So the exception is a crate, and nothing else in the workspace changes.
 [§1.7](01-strata.md#17-stratum-8-the-unrecorded) says this stratum is
-quarantined loudly; this is the same quarantine one layer down, and a reader
-can see the whole of the unsafety in the language by reading one directory.
+quarantined loudly; this is the same quarantine one layer down.
 
-**What it cost.** A crate boundary where a module would have done, and a
-`Cargo.toml` that says `unsafe_code = "allow"` in exactly one place where a
-reader will go looking for it.
+The rule that came out of it is narrower than "unsafe is allowed here":
+`unsafe` lives only where the language ends. There are two ends — the one
+where Nether C calls out, and the one where something else calls in — and each
+is a crate whose `Cargo.toml` says so.
+
+**What it cost.** A crate boundary where a module would have done, and two
+`Cargo.toml` files that say `unsafe_code = "allow"` in exactly the places a
+reader will go looking for them.
 
 ### Floating point
 

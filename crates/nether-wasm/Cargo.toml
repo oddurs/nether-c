@@ -1,0 +1,36 @@
+[package]
+name = "nether-wasm"
+description = "Burial in a browser: the core, with a hand-written linear-memory seam"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Everything a burial needs and nothing that touches a machine. `nether-world`
+# is absent on purpose: a browser has no world to grant, and every
+# world-touching expression becomes a hole, which is §8.2's default anyway.
+nether-core = { path = "../nether-core" }
+nether-ledger = { path = "../nether-ledger" }
+nether-syntax = { path = "../nether-syntax" }
+nether-bury = { path = "../nether-bury" }
+
+[lints.rust]
+# The second of two places in the workspace, and the last. Unsafe lives only
+# where the language ends: `nether-foreign` is the edge where Nether C calls
+# out (§1.7), and this is the edge where something else calls in. An exported
+# symbol has no Rust caller to be checked against, which is what the attribute
+# spells and why `forbid` cannot be satisfied here.
+#
+# `spec/90-rationale.md` has the argument for why each is a crate rather than
+# an `allow` on a module.
+unsafe_code = "allow"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }

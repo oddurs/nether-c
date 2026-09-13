@@ -2,8 +2,11 @@
 //!
 //! `spec/09-prelude.md` §9.8 and §9.8.1, and `spec/01-strata.md` §1.7. A crate
 //! rather than a module, because the workspace sets `unsafe_code = "forbid"`
-//! and `forbid` exists so that it cannot be locally undone. Everything unsafe
-//! in Nether C is here, and that claim is checkable by reading one directory.
+//! and `forbid` exists so that it cannot be locally undone.
+//!
+//! `unsafe` lives only where the language ends, and there are two ends. This
+//! is where Nether C calls out; `nether-wasm` is where something else calls
+//! in. Those two crates, and no others.
 //!
 //! Nothing here is safe and nothing here pretends to be. §9.8.1 says as much
 //! in the specification: a callee that keeps a pointer after it returns has

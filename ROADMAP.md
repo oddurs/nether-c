@@ -213,15 +213,18 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`··········` 0% · 0 of 5 done · due 2027-07-15
+`##········` 20% · 1 of 5 done · due 2027-07-15
 
 ### unmarked
 
-- [ ] [`0074`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0074-wasm-build-of-the-core.md) WASM build of the core <sup>chore · p1 · 0</sup>
 - [ ] [`0075`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0075-the-trace-graph-browser.md) The trace graph browser <sup>feature · p0 · 0</sup>
 - [ ] [`0076`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0076-provenance-walk.md) Provenance walk <sup>feature · p0 · 0</sup>
 - [ ] [`0077`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0077-the-playground-editor.md) The playground editor <sup>feature · p1 · 0</sup>
 - [ ] [`0078`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0078-proof-a-stranger-explains-a-hole.md) Proof: a stranger explains a hole <sup>chore · p0</sup>
+
+### buried
+
+- [x] [`0074`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0074-wasm-build-of-the-core.md) WASM build of the core <sup>chore · p1 · 0</sup>
 
 ## futamura — Self-Burial
 

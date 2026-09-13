@@ -1,0 +1,43 @@
+#!/bin/sh
+# The Necropolis ships the core to a browser, and a browser downloads it.
+#
+# Two gates, both about the same promise: 0074 says "small enough to ship to a
+# browser without apology", and a promise nothing measures is a wish.
+#
+#   1. The module is no larger, compressed, than .wasm-ceiling. Raising it is
+#      a deliberate act, argued for in the pull request, exactly as the Decay
+#      Rule works below crates/.
+#   2. It exports the four names web/necropolis/necropolis.js calls. Read out
+#      of the module's own export section, so a rename fails here rather than
+#      in somebody's browser.
+#
+#   scripts/wasm [--check]
+set -eu
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cd "$root"
+
+target=wasm32-unknown-unknown
+built=target/$target/wasm/nether_wasm.wasm
+shipped=web/necropolis/nether.wasm
+
+if ! rustup target list --installed 2>/dev/null | grep -qx "$target"; then
+  echo "wasm: the $target target is not installed." >&2
+  echo "      rustup target add $target" >&2
+  exit 1
+fi
+
+cargo build --quiet -p nether-wasm --profile wasm --target "$target"
+mkdir -p "$(dirname "$shipped")"
+
+if [ "${1:-}" = "--check" ]; then
+  if ! cmp -s "$built" "$shipped"; then
+    echo "wasm: web/necropolis/nether.wasm is not what the crate builds." >&2
+    echo "      scripts/task wasm, then commit what comes out." >&2
+    exit 1
+  fi
+else
+  cp "$built" "$shipped"
+fi
+
+exec python3 tests/wasm/run "$shipped"
