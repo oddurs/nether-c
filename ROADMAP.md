@@ -188,7 +188,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`##########` 100% · 18 of 18 done · due 2027-05-15
+`##########` 100% · 19 of 19 done · due 2027-05-15
 
 ### buried
 
@@ -210,6 +210,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0174`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0174-where-the-network-s-reach-is-declared-and-which-schemes-are-served.md) Where the network's reach is declared, and which schemes are served <sup>spec · p0 · 6</sup>
 - [x] [`0175`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0175-what-a-foreign-call-looks-like-from-the-other-side.md) What a foreign call looks like from the other side <sup>spec · p0 · 8</sup>
 - [x] [`0176`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0176-the-stratum-8-proof-builds-one-object-into-one-path-from-five-tests.md) The stratum-8 proof builds one object into one path from five tests <sup>bug · p0 · 8</sup>
+- [x] [`0180`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0180-a-program-can-write-headers-of-its-own-into-a-request-net-sends.md) A program can write headers of its own into a request net sends <sup>bug · p0 · 6</sup>
 
 ## necropolis — The Necropolis
 

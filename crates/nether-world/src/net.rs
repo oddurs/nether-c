@@ -35,6 +35,13 @@ const PATIENCE: Duration = Duration::from_secs(30);
 /// which is a refusal the program can see rather than a machine that stops.
 const MOST: u64 = 64 * 1024 * 1024;
 
+/// How much of one may be the status line and the headers.
+///
+/// The body has had a bound since this was written and nothing above it did,
+/// so a server that sent one line and never a newline grew a `String` until
+/// the timeout. Sixty-four kilobytes is more than any real response uses.
+const MOST_HEAD: u64 = 64 * 1024;
+
 /// The network, reaching only where the invocation said. §8.3.2.
 pub struct Net {
     reach: Vec<String>,
@@ -76,12 +83,39 @@ struct Asked {
     path: String,
 }
 
+/// Whether every byte of this is one a URL may contain.
+///
+/// Everything from `!` to `~`, and nothing else. It is deliberately narrower
+/// than the grammar of a URL: a space ends the request line early and a
+/// carriage return starts a header, so a program that puts either in a URL is
+/// writing HTTP rather than asking for a resource, and §5.1.1 has a word for
+/// something that is not the shape it claims to be. 0180.
+fn printable(text: &str) -> bool {
+    text.chars().all(|c| ('\u{21}'..='\u{7e}').contains(&c))
+}
+
+/// Whether that is a host and not something wearing one.
+///
+/// Letters, digits, `-` and `.`. No `@`, because `a@b` is a host with another
+/// host in front of it and only one of the two is the party being reached;
+/// no `_`, no `%`, nothing that has to be decoded before it means anything.
+fn hostlike(host: &str) -> bool {
+    !host.is_empty()
+        && host.len() <= 253
+        && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+}
+
 /// Split a URL, or say which no it is.
 ///
 /// Hand-written, like everything else here. What §9.6 needs is the scheme, the
 /// authority and the rest — a general URL parser would be a larger thing that
 /// this has no use for.
 fn split(url: &str) -> Result<Asked, Refusal> {
+    // Before anything is taken apart, because what makes this dangerous is
+    // the bytes reaching `fetch` and not what they parse as.
+    if !printable(url) {
+        return Err(Refusal::Malformed);
+    }
     // §9.6: a scheme this build will not serve is `denied`, because `denied`
     // is this build saying no and `unreachable` is the world not answering.
     let Some(("http", rest)) = url.split_once("://") else { return Err(Refusal::Denied) };
@@ -93,7 +127,7 @@ fn split(url: &str) -> Result<Asked, Refusal> {
         Some((h, p)) => (h, p.parse().map_err(|_| Refusal::Malformed)?),
         None => (authority, 80u16),
     };
-    if host.is_empty() {
+    if !hostlike(host) {
         return Err(Refusal::Malformed);
     }
     Ok(Asked { host: host.to_owned(), port, path: format!("/{path}") })
@@ -220,14 +254,23 @@ fn fetch(function: &str, at: &Asked, body: &[u8]) -> Result<Vec<u8>, Refusal> {
 /// (§1.1), the program is told the body, and a `Date` header would make two
 /// identical fetches two different witnesses.
 fn status_of(reading: &mut BufReader<TcpStream>) -> Result<u16, Refusal> {
+    // `take` spends one budget across every read, so this bounds the status
+    // line and all the headers together rather than each of them separately.
+    let mut head = reading.by_ref().take(MOST_HEAD);
     let mut line = String::new();
-    reading.read_line(&mut line).map_err(|e| why(&e))?;
+    head.read_line(&mut line).map_err(|e| why(&e))?;
     let code =
         line.split_whitespace().nth(1).and_then(|c| c.parse().ok()).ok_or(Refusal::Unreachable)?;
     loop {
         let mut header = String::new();
-        let read = reading.read_line(&mut header).map_err(|e| why(&e))?;
-        if read == 0 || header.trim_end().is_empty() {
+        let read = head.read_line(&mut header).map_err(|e| why(&e))?;
+        if read == 0 {
+            // Either the server stopped or the budget did, and the difference
+            // matters: a truncated header block read as a whole one is a
+            // response this never actually saw the end of.
+            return if head.limit() == 0 { Err(Refusal::Exhausted) } else { Ok(code) };
+        }
+        if header.trim_end().is_empty() {
             return Ok(code);
         }
     }
