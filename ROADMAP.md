@@ -150,7 +150,12 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## rites — The Rites
 
-`##########` 100% · 29 of 29 done · due 2027-03-31
+`##########` 94% · 29 of 31 done · due 2027-03-31
+
+### unmarked
+
+- [ ] [`0167`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0167-exhuming-a-trace-loses-what-the-program-deposited.md) Exhuming a trace loses what the program deposited <sup>bug · p0 · 1</sup>
+- [ ] [`0168`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0168-exhume-does-not-say-what-it-did.md) exhume does not say what it did <sup>bug · p1 · 1</sup>
 
 ### buried
 
@@ -186,7 +191,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`######····` 56% · 5 of 9 done · due 2027-05-15
+`#####·····` 45% · 5 of 11 done · due 2027-05-15
 
 ### unmarked
 
@@ -194,6 +199,8 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [ ] [`0070`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0070-strata-5-and-6-the-network.md) Strata 5 and 6: the network <sup>feature · p1 · 6</sup>
 - [ ] [`0071`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0071-stratum-7-entropy.md) Stratum 7: entropy <sup>feature · p1 · 7</sup>
 - [ ] [`0072`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0072-stratum-8-the-unrecorded.md) Stratum 8: the Unrecorded <sup>feature · p2 · 8</sup>
+- [ ] [`0166`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0166-a-symlink-reaches-out-of-the-disk-root.md) A symlink reaches out of the disk root <sup>bug · p0 · 3</sup>
+- [ ] [`0169`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0169-recorder-carries-a-source-it-never-uses.md) Recorder carries a source it never uses <sup>chore · p2 · 0</sup>
 
 ### buried
 
