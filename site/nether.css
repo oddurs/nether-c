@@ -191,6 +191,43 @@ hr {
 hr.thin  { border-top: 1px solid var(--dim); }
 hr.heavy { border-top: 3px double var(--accent); }
 
+/* --- depth, as the site's own colour --------------------------------------
+
+   The ramp from sulphur to magenta is the one piece of colour this project
+   invented rather than inherited, and for a long time it only appeared inside
+   code samples. Every page of the specification now carries the deepest
+   stratum it describes, computed from the page rather than written down, and
+   anything that has a depth is stained by it.
+   -------------------------------------------------------------------------- */
+
+.gauge { display: flex; gap: 2px; margin: 0 0 1.25rem; }
+.gauge span {
+  flex: 1 1 0;
+  height: 4px;
+  background: currentColor;
+  opacity: .16;
+}
+.gauge span.lit { opacity: 1; }
+
+td.shaft { min-width: 12ch; }
+td.shaft span {
+  display: inline-block;
+  min-width: 2ch;
+  padding: 0 .4ch;
+  background: currentColor;
+  color: var(--ground);
+  text-align: right;
+}
+td.shaft span.d0 { background: #FFFF55; }
+td.shaft span.d1 { background: #FFDD55; }
+td.shaft span.d2 { background: #FFBB55; }
+td.shaft span.d3 { background: #FF9955; }
+td.shaft span.d4 { background: #FF7755; }
+td.shaft span.d5 { background: #FF5566; }
+td.shaft span.d6 { background: #FF5599; }
+td.shaft span.d7 { background: #FF55CC; }
+td.shaft span.d8 { background: #FF55FF; }
+
 /* --- navigation ----------------------------------------------------------- */
 
 nav.bar {

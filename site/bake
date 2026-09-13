@@ -412,19 +412,33 @@ def holes_block(owed: list[dict[str, str]]) -> str:
 
 # ── the pages ──────────────────────────────────────────────────────────────
 
+def deepest(html: str) -> int:
+    """How far down a section goes, read out of the section itself.
+
+    `paint_nc` stains every `@n` it finds, so the deepest stain in a page is
+    the deepest stratum that page talks about. The site's colour is therefore
+    computed from the specification the same way a trace's depth is computed
+    from its parts, rather than written into a table somebody has to remember
+    to update. §7.3.2, applied to prose.
+    """
+    return max((int(m) for m in re.findall(r'class="d([0-8])"', html)), default=0)
+
+
 def load_sections() -> list[dict[str, str]]:
     out = []
     for path in sorted(SPEC.glob("*.md")):
         if not path.name[0].isdigit():
             continue
         meta, body = split_front_matter(path.read_text(encoding="utf-8"))
+        html = render(body)
         out.append(
             {
                 "slug": path.stem,
                 "section": meta.get("section", ""),
                 "title": meta.get("title", path.stem),
                 "status": meta.get("status", "draft"),
-                "html": render(body),
+                "depth": deepest(html),
+                "html": html,
             }
         )
     return out
@@ -471,8 +485,10 @@ def build() -> dict[Path, str]:
     # the front page
     body = (SITE / "src" / "index.html").read_text(encoding="utf-8")
     toc = "".join(
-        f'<tr><td><a href="spec/{s["slug"]}.html">{esc(s["section"])}</a></td>'
+        f'<tr><td class="d{s["depth"]}">'
+        f'<a href="spec/{s["slug"]}.html">{esc(s["section"])}</a></td>'
         f'<td><a href="spec/{s["slug"]}.html">{esc(s["title"])}</a></td>'
+        f'<td class="d{s["depth"]}">{s["depth"]}</td>'
         f'<td>{esc(s["status"])}</td></tr>'
         for s in sections
     )
@@ -490,8 +506,11 @@ def build() -> dict[Path, str]:
 
     # the specification index
     rows = "".join(
-        f'<tr><td><a href="{s["slug"]}.html">{esc(s["section"])}</a></td>'
+        f'<tr><td class="d{s["depth"]}">'
+        f'<a href="{s["slug"]}.html">{esc(s["section"])}</a></td>'
         f'<td><a href="{s["slug"]}.html">{esc(s["title"])}</a></td>'
+        f'<td class="shaft"><span class="d{s["depth"]}" '
+        f'style="width:{(s["depth"] + 1) * 11}%">{s["depth"]}</span></td>'
         f'<td>{esc(s["status"])}</td></tr>'
         for s in sections
     )
@@ -505,7 +524,7 @@ def build() -> dict[Path, str]:
         "disagree with the Markdown, the Markdown is right and continuous "
         "integration is broken.</p>"
         '<div class="scroll"><table><thead><tr><th>&sect;</th><th>Section</th>'
-        f"<th>Status</th></tr></thead><tbody>{rows}</tbody></table></div>"
+        f"<th>Depth</th><th>Status</th></tr></thead><tbody>{rows}</tbody></table></div>"
         '<div class="box shout"><strong>Nothing here is frozen</strong> except '
         "one thing: there is no <code>run</code>. Everything else is a draft and "
         "will change without a version bump.</div>"
@@ -531,9 +550,19 @@ def build() -> dict[Path, str]:
             else '<span class="sep">end &rarr;</span>'
         )
         foot.append("</nav>")
+        # The section's own depth, computed from the section. A reader should
+        # be able to tell how far down a page goes before reading it, which is
+        # the thing the language spends nine strata on.
         head = (
             f'<p class="c">&sect; {esc(s["section"])} &middot; {esc(s["status"])} '
+            f'&middot; <span class="d{s["depth"]}">depth {s["depth"]}</span> '
             f'&middot; <a href="{REPO}/blob/main/spec/{s["slug"]}.md">edit the source</a></p>'
+            f'<div class="gauge" aria-hidden="true">'
+            + "".join(
+                f'<span class="d{n}{" lit" if n <= s["depth"] else ""}"></span>'
+                for n in range(9)
+            )
+            + "</div>"
         )
         files[SITE / "spec" / f'{s["slug"]}.html'] = page(
             f'{s["section"]} {s["title"]}', head + s["html"] + "".join(foot),
