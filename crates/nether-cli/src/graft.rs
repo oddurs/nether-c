@@ -66,7 +66,8 @@ pub fn run(args: &[String]) -> ExitCode {
 
 #[expect(clippy::too_many_lines, reason = "one pass, in the order §8.7 puts it")]
 fn take(store: &Store, trace: Cairn, replace: Cairn, with: Cairn, wants_json: bool) -> ExitCode {
-    let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, source, .. })) = store.get(trace)
+    let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. })) =
+        store.get(trace)
     else {
         eprintln!("nether: {} is not a trace", trace.short());
         return FAILED;
@@ -190,7 +191,7 @@ fn take(store: &Store, trace: Cairn, replace: Cairn, with: Cairn, wants_json: bo
         residue: next_residue,
         holes: residue.holes.clone(),
         witnesses: witnesses.clone(),
-        deposits: residue.deposits.clone(),
+        deposits: crate::closing::deposits(&deposits, &residue.deposits),
         source,
         depth: crate::closing::depth(store, residue.depth.get(), &witnesses),
         unrecorded: crate::closing::unrecorded(store, &witnesses),

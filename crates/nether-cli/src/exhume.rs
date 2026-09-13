@@ -118,7 +118,8 @@ fn dig_up(
     replaying: bool,
     wants_json: bool,
 ) -> ExitCode {
-    let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, source, .. })) = store.get(cairn)
+    let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. })) =
+        store.get(cairn)
     else {
         eprintln!("nether: {} is not a trace", cairn.short());
         return FAILED;
@@ -228,19 +229,13 @@ fn dig_up(
             return FAILED;
         }
     };
-    // §7.3.2: the join of what the residue still reaches and what a witness
-    // reached. A sealed trace has no holes left, so the second half is the
-    // whole of it — which is why §6.6 reads `depth 3   holes 0` over a program
-    // that has finished.
-    let deepest = recorded.iter().map(|w| reached(store, *w)).fold(residue.depth.get(), u8::max);
+    let deepest = crate::closing::depth(store, residue.depth.get(), &recorded);
     let deeper = Node::Trace {
         residue: next_residue,
         holes: residue.holes.clone(),
-        // §1.7: marked when something *reached* stratum 8, not when a hole
-        // would.
-        unrecorded: recorded.iter().any(|w| reached(store, *w) == 8),
+        unrecorded: crate::closing::unrecorded(store, &recorded),
+        deposits: crate::closing::deposits(&deposits, &residue.deposits),
         witnesses: recorded,
-        deposits: residue.deposits.clone(),
         source,
         depth: deepest,
     };
@@ -270,14 +265,6 @@ fn dig_up(
         print!("{}", told.text(store));
     }
     ExitCode::SUCCESS
-}
-
-/// The stratum a witness reached, if it is one.
-fn reached(store: &Store, witness: Cairn) -> u8 {
-    match store.get(witness) {
-        Ok(Stored::Node(Node::Witness { stratum, .. })) => stratum,
-        _ => 0,
-    }
 }
 
 /// The summary §6.6 prints.

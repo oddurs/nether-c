@@ -1,6 +1,6 @@
 //! What a trace says about itself, computed once.
 //!
-//! `spec/07-ledger.md` §7.3.2 gives a trace two derived facts, and three rites
+//! `spec/07-ledger.md` §7.3.2 gives a trace its derived facts, and three rites
 //! write a trace. Working them out at each of those three is how each of them
 //! came to be wrong at least once.
 
@@ -32,4 +32,22 @@ pub fn depth(store: &Store, residue: u8, witnesses: &[Cairn]) -> u8 {
 /// record yet.
 pub fn unrecorded(store: &Store, witnesses: &[Cairn]) -> bool {
     witnesses.iter().any(|w| reached(store, *w) == nether_ledger::MAX_STRATUM)
+}
+
+/// §6.8: what the trace deposited, then what burying its residue deposited.
+///
+/// Carried forward the way witnesses are. A deposit is something the program
+/// already did, and a residue is right not to do it again — so a trace that
+/// does not name the deposits of the one it came from loses them, and `nether
+/// lamp` shows less after exhuming than before. In order, without repeating
+/// one: a deposit is named by its content, so the same value at the same place
+/// gives the same cairn, and naming it twice would say it happened twice.
+pub fn deposits(before: &[Cairn], now: &[Cairn]) -> Vec<Cairn> {
+    let mut out = before.to_vec();
+    for one in now {
+        if !out.contains(one) {
+            out.push(*one);
+        }
+    }
+    out
 }
