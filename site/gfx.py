@@ -163,6 +163,106 @@ class Frame:
         return len(s) * 6 - 1
 
 
+# ── the cairn ───────────────────────────────────────────────────────────────
+
+
+#: Five stones, base first, drawn small and blown up threefold like everything
+#: else here. `+` is the face turned towards the lamp, `#` is stone, `-` is
+#: the face turned away, and `.` is not stone at all.
+#:
+#: Typed out one row at a time. A stone with the same profile on both sides is
+#: a disc, and five discs are a stack of plates -- so none of these is
+#: symmetric, none of them is the same shape, and the pile leans.
+STONES: list[tuple[int, list[str]]] = [
+    (0, [
+        "...++++#######----..",
+        "..++##############--",
+        ".+#################-",
+        "+##################-",
+        "-###############---.",
+        "..---#########----..",
+    ]),
+    (1, [
+        "..+++#######---..",
+        ".++############--",
+        "+##############--",
+        "+#############---",
+        "-###########----.",
+        "..--#######---...",
+    ]),
+    (-2, [
+        "..++######---.",
+        ".+##########--",
+        "+###########--",
+        "-##########---",
+        "..--######---.",
+    ]),
+    (2, [
+        ".++#####--",
+        "+#######--",
+        "+#######--",
+        "-..-####--",
+    ]),
+    (-1, [
+        ".++###-",
+        "+#####-",
+        "-.--##-",
+    ]),
+]
+
+#: Enough of a seam that you can count them.
+COURSE = 1
+
+#: What each mark in a stone is made of. The lamp is the only thing in the
+#: language that carries light downwards, so the lit faces take sulphur.
+QUARRY = {"+": BONE, "#": SMOKE, "-": ASH, ".": None}
+
+
+def cairn() -> tuple[list[Frame], list[int]]:
+    """The mark somebody leaves so that the next person can find the way down.
+
+    A temple is built upwards. This is the other thing you can build out of
+    stone: something small, at the mouth of a descent, that says a person was
+    here and this is the way.
+    """
+    scale = 3
+    small = Frame(32, 40, VOID)
+
+    # The ground, and the dark it opens into. The rim catches the light and
+    # the inside does not, which is the whole of what a shaft is.
+    floor = 30
+    small.rect(1, floor, 30, 1, ASH)
+    small.rect(4, floor + 1, 24, 1, SMOKE)
+    for n in range(2, 10):
+        inset = 4 + n
+        if inset * 2 < 32:
+            # The rim catches what the lamp gives it and nothing below does.
+            # A colour down there would be something to see, and the whole
+            # point of a shaft is that there is not.
+            small.rect(inset, floor + n, 32 - inset * 2, 1, ASH if n == 2 else VOID)
+
+    y = floor
+    for lean, rows in STONES:
+        y -= len(rows) + COURSE
+        wide = len(rows[0])
+        if any(len(r) != wide for r in rows):
+            raise SystemExit("gfx: a stone with rows of different widths")
+        left = (32 - wide) // 2 + lean
+        for n, row in enumerate(rows):
+            for x, mark in enumerate(row):
+                shade = QUARRY[mark]
+                if shade is not None:
+                    small.set(left + x, y + n, shade)
+
+    frame = Frame(32 * scale, 40 * scale, VOID)
+    for yy in range(40):
+        for x in range(32):
+            c = small.px[yy * 32 + x]
+            if c != VOID:
+                frame.rect(x * scale, yy * scale, scale, scale, c)
+    return [frame], [0]
+
+
 def write_gif(path: Path, frames: list[Frame], delays: list[int], loop: bool = True) -> bytes:
     w, h = frames[0].w, frames[0].h
     out = bytearray(b"GIF89a")
@@ -606,7 +706,8 @@ def og_card() -> Frame:
 GRAPHICS = {
     "bg.gif": bg_tile,
     "lamp.gif": lamp,
-    "cairn.gif": lambda: counter("8F3A1C0E"),
+    "counter.gif": lambda: counter("8F3A1C0E"),
+    "cairn.gif": cairn,
     "badge-unlit.gif": lambda: badge("BEST VIEWED", "UNLIT", SULPHUR, BONE),
     "badge-handmade.gif": lambda: badge("MADE BY HAND", "NO LIBRARIES", LIME, BONE),
     "badge-public.gif": lambda: badge("PUBLIC DOMAIN", "TAKE IT", ICE, BONE),

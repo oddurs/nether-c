@@ -367,6 +367,12 @@ div.box {
 }
 div.box > :last-child { margin-bottom: 0; }
 div.box.shout { border-color: var(--warn); color: var(--warn); }
+/* The one sentence everything else follows from. It gets the room. */
+div.box.covenant { border-color: var(--accent); color: var(--accent); margin: 1.5rem 0; }
+div.box.covenant strong { font-size: 24px; letter-spacing: .1em; }
+div.box.covenant p + p { color: var(--dim); margin-top: .5rem; }
+
+p.small { color: var(--dim); }
 div.box.shout strong { color: var(--warn); }
 
 dl.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9ch, 1fr)); gap: 2px; }
@@ -437,6 +443,9 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 .center { text-align: center; }
 
 img.banner { width: 100%; max-width: 396px; margin: 0 auto; }
+/* The mark. Drawn at three times the cell and shown at exactly that, because
+   a bitmap resampled to 1.4 pixels per pixel is an argument against itself. */
+img.mark { display: block; width: 96px; height: 120px; margin: 0 auto 1rem; image-rendering: pixelated; }
 img.rule   { width: 100%; max-width: 396px; margin: 1rem auto; }
 /* The specimen is drawn at three times the cell and must not be resampled to
    anything else: a bitmap face shown at 1.4 pixels per pixel is an argument

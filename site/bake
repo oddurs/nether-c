@@ -482,6 +482,12 @@ def build() -> dict[Path, str]:
     body = body.replace("{{HOLES}}", holes_block(owed))
     files[SITE / "index.html"] = page("Nether C", body, current="index", depth=0)
 
+    # One page for the memorial, off the path, linked once from the footer.
+    memorial = (SITE / "src" / "in-memoriam.html").read_text(encoding="utf-8")
+    files[SITE / "in-memoriam.html"] = page(
+        "Terry A. Davis", memorial, current="", depth=0
+    )
+
     # the specification index
     rows = "".join(
         f'<tr><td><a href="{s["slug"]}.html">{esc(s["section"])}</a></td>'
