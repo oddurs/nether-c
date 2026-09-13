@@ -54,7 +54,7 @@ PALETTE = [
     _rgb(NETHER["quote"]),    #  9 PLUM
     _rgb(_RAMP[0]),           # 10 BLOOD
     _rgb(_RAMP[2]),           # 11 MOSS
-    _rgb(NETHER["sunk"]),     # 12 DEEP
+    _rgb(NETHER["raised"]),   # 12 DEEP    -- one step up from the ground
     _rgb(NETHER["code"]),     # 13 TEAL
     _rgb(_RAMP[6]),           # 14 ROT
     _rgb(_RAMP[1]),           # 15 BILE
@@ -409,15 +409,26 @@ FONT: dict[str, list[str]] = {
 
 
 def bg_tile() -> tuple[list[Frame], list[int]]:
-    """A seamless 32x32 tile. Sediment, barely visible, tiled forever."""
+    """A seamless 32x32 tile. Sediment: the ground, one step up, and no more.
+
+    This was drawn in `ASH`, which was a mid grey when the palette was VGA and
+    is `--dimmer` now: 3.46:1 against the ground, which is a legible grid
+    rather than a texture. A background you can read is a background competing
+    with the text on it.
+
+    `DEEP` is `--raised`, 1.13:1 -- there if you look for it and gone if you do
+    not, which is what sediment is.
+    """
     f = Frame(32, 32, VOID)
-    for y in range(32):
-        if y % 8 == 0:
-            for x in range(0, 32, 2):
-                f.set(x + (y // 8 % 2), y, ASH)
-        if y % 16 == 7:
-            for x in range(0, 32, 5):
-                f.set(x, y, ASH)
+    # Two strata to the tile, broken rather than ruled, because a straight line
+    # all the way across a page is a rule and this is not one.
+    for y in (5, 21):
+        for x in range(0, 32, 3):
+            if (x // 3 + y) % 4:
+                f.set(x + (y // 16), y, DEEP)
+    # And a few grains between them, at no particular spacing.
+    for x, y in ((7, 12), (23, 13), (14, 27), (29, 2), (2, 18), (18, 30)):
+        f.set(x, y, DEEP)
     return [f], [0]
 
 
