@@ -38,3 +38,7 @@ The proof is that the two burials agree. scripts/wasm reads the module's export 
 ## 2026-09-13
 
 The module is built, not committed. The first version committed it and compared bytes in wasm:check, which failed on CI: a Rust release build is not byte-reproducible across machines, so a committed copy can only be checked by rebuilding it -- and then the committed copy is doing nothing. What is checked is what the build produces.
+
+## 2026-09-13
+
+.wasm-ceiling is a budget, not a high-water mark. The Decay Rule can be pinned to the line because a line count is the same everywhere; the same source compresses to 147512 bytes here and 147529 on CI, so a ceiling set to the last measurement says the module grew when nothing changed. 150 KiB, chosen, with the headroom printed every time.

@@ -6,6 +6,14 @@ and not the one on disk. The exports are read out of the module's binary
 format rather than out of the source, so renaming one fails here instead of
 in somebody's browser.
 
+`.wasm-ceiling` is a budget and not a high-water mark. The Decay Rule can be
+pinned to the line because a line count is the same everywhere; a Rust release
+build is not, and the same source compresses to a different number of bytes on
+a laptop and on a runner. A ceiling set to the last measurement therefore fails
+on the next machine and says the module grew when nothing changed. So it is a
+round number somebody chose, lowered in steps, and the headroom is printed
+every time so that choosing again is easy.
+
 There is no wasm library in this repository. The export section is a length,
 then that many entries of (name, kind, index), and reading it is thirty lines.
 """
@@ -80,11 +88,13 @@ def main():
         print("  or raise the ceiling deliberately and say why in the PR body.",
               file=sys.stderr)
         raise SystemExit(1)
-    if size < ceiling:
-        print(f"wasm: {size} bytes compressed, {ceiling - size} below the ceiling")
-        print(f"      lower it:  echo {size} > .wasm-ceiling")
-    else:
-        print(f"wasm: at the ceiling ({size} bytes compressed)")
+    room = ceiling - size
+    print(f"wasm: {size} bytes compressed, {room} under the {ceiling}-byte budget")
+    # A budget with no room left is one that fails on the next machine rather
+    # than on the next change, so say so before it does.
+    if room < 1024:
+        print("      that is less than a kilobyte of room. Lower the module or",
+              "raise the budget deliberately.")
 
 
 if __name__ == "__main__":

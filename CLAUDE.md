@@ -116,7 +116,9 @@ workflow file or a hook. CI and local checks must never be able to drift.
 **The Decay Rule.** `.decay-ceiling` holds the line count of `crates/`.
 `scripts/decay` fails if it grows. Lowering it is an ordinary commit. Raising it
 means editing the file and justifying it in the pull request body. Below, things
-only decay. `.wasm-ceiling` is the same rule for what a browser downloads.
+only decay. `.wasm-ceiling` is the same idea for what a browser downloads, but
+a budget rather than a high-water mark: a line count is the same everywhere and
+a compressed release build is not.
 
 **`unsafe` lives only where the language ends.** Two crates, and no others:
 `nether-foreign`, where Nether C calls out (§1.7), and `nether-wasm`, where
@@ -147,7 +149,7 @@ advantages is marketing.
 - **Never commit `web/necropolis/nether.wasm`.** Built by `scripts/task wasm`,
   and ignored. A Rust release build is not byte-reproducible across machines,
   so a committed copy could only be checked by rebuilding it. `.wasm-ceiling`
-  holds its compressed size and works like the Decay Rule.
+  holds the budget for its compressed size.
 - **Never write a `TODO` comment or a stray `NOTES.md`.** If it is worth
   remembering it is worth an item. If it is not worth an item it is not worth a
   comment.

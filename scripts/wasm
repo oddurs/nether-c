@@ -4,9 +4,12 @@
 # Two gates, both about the same promise: 0074 says "small enough to ship to a
 # browser without apology", and a promise nothing measures is a wish.
 #
-#   1. The module is no larger, compressed, than .wasm-ceiling. Raising it is
-#      a deliberate act, argued for in the pull request, exactly as the Decay
-#      Rule works below crates/.
+#   1. The module is no larger, compressed, than .wasm-ceiling -- a budget
+#      somebody chose, not the last measurement. Raising it is a deliberate
+#      act, argued for in the pull request, as the Decay Rule is below
+#      crates/; unlike the Decay Rule it cannot be pinned to the byte,
+#      because a line count is the same on every machine and a compressed
+#      release build is not.
 #   2. It exports the four names web/necropolis/necropolis.js calls. Read out
 #      of the module's own export section, so a rename fails here rather than
 #      in somebody's browser.
