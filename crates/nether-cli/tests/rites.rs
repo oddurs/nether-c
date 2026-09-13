@@ -1357,3 +1357,128 @@ fn a_residue_that_seals_something_is_a_program() {
     let again = stdout(&there(&dir, &["bury", "again.nc", "--json"]));
     assert_eq!(field(&again, "residue"), field(&buried, "residue"), "a second burial moved it");
 }
+
+// ── §8.3.1 the declaration, and §9.4's two mistakes ─────────────────────────
+
+/// A program that asks the world what it was built with.
+const ASKS: &str = "Str@2 cc = must(descend env { env(\"CC\") });\n\
+                    U0 note()\n{\n  raw(cc);\n}\n\ndemand note();\n";
+
+fn asking(what: &str) -> PathBuf {
+    let dir = a_build(what);
+    std::fs::write(dir.join("asks.nc"), ASKS).expect("a program that asks");
+    dir
+}
+
+fn pinned<'a>(trace: &'a str, declare: &'a str) -> Vec<&'a str> {
+    vec![
+        "exhume",
+        trace,
+        "--grant",
+        "env",
+        "--declare",
+        declare,
+        "--clock",
+        "1700000000",
+        "--target",
+        "aarch64-apple-darwin",
+        "--json",
+    ]
+}
+
+#[test]
+fn the_same_declaration_gives_the_same_cairn_and_a_different_one_does_not() {
+    // 0068's proof. §8.3.1 puts the declaration outside the program, and §6.7
+    // is what that buys: the same invocation names the same trace, and a
+    // different one names a different trace, on any machine.
+    let dir = asking("declared");
+    let trace = field(&stdout(&there(&dir, &["bury", "asks.nc", "--json"])), "cairn");
+
+    let once = field(&stdout(&there(&dir, &pinned(&trace, "CC=clang"))), "sealed");
+    let again = field(&stdout(&there(&dir, &pinned(&trace, "CC=clang"))), "sealed");
+    assert_eq!(once, again, "the same declaration moved the trace");
+
+    let other = field(&stdout(&there(&dir, &pinned(&trace, "CC=gcc"))), "sealed");
+    assert_ne!(once, other, "a different declaration did not");
+    assert_eq!(stdout(&there(&dir, &["lamp", &once])), "clang\n");
+    assert_eq!(stdout(&there(&dir, &["lamp", &other])), "gcc\n");
+}
+
+#[test]
+fn a_variable_never_declared_collapses_rather_than_answering() {
+    // §9.4's two mistakes. Declared and unset is a refusal — the world was
+    // asked and said no. Never declared is a bug in the program, and §9.9
+    // makes that a collapse: not an empty string, which is exactly the class
+    // of bug this language exists to make impossible.
+    let dir = asking("undeclared");
+    let trace = field(&stdout(&there(&dir, &["bury", "asks.nc", "--json"])), "cairn");
+
+    let out = there(&dir, &pinned(&trace, "CFLAGS=-O2"));
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert!(stderr(&out).contains("never declared"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("§9.9"), "{}", stderr(&out));
+
+    // And declared-but-unset is the other mistake. It collapses too — this
+    // program wrote `must` — but over something else: the world answered, and
+    // the answer was no. Which no it was is a thing the program can ask.
+    let out = there(&dir, &pinned(&trace, "CC="));
+    assert_eq!(code(&out), 1, "{}", stderr(&out));
+    assert!(stderr(&out).contains("this answer was refused"), "{}", stderr(&out));
+    assert!(!stderr(&out).contains("never declared"), "{}", stderr(&out));
+}
+
+#[test]
+fn granting_env_means_pinning_it_and_declaring_means_granting_it() {
+    // §8.3.1: no default, because a default would be this machine's. And a
+    // declaration nothing can read is §8.0's failure in a smaller place.
+    let dir = asking("pinning");
+    let trace = field(&stdout(&there(&dir, &["bury", "asks.nc", "--json"])), "cairn");
+
+    let out = there(&dir, &["exhume", &trace, "--grant", "env"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("--clock"), "{}", stderr(&out));
+
+    let out = there(&dir, &["exhume", &trace, "--declare", "CC=clang"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("could not be read"), "{}", stderr(&out));
+
+    let out = there(
+        &dir,
+        &[
+            "exhume",
+            &trace,
+            "--grant",
+            "env",
+            "--clock",
+            "1",
+            "--target",
+            "x",
+            "--declare",
+            "CC=clang",
+            "--declare",
+            "CC=gcc",
+        ],
+    );
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("declared twice"), "{}", stderr(&out));
+}
+
+#[test]
+fn the_ledger_can_be_read_by_the_program_that_named_it() {
+    // §9.3: reading the ledger is depth 1 because it is a place on a machine,
+    // and only depth 1 because what comes back is determined by the cairn.
+    let dir = a_build("reads-the-ledger");
+    std::fs::write(
+        dir.join("reads.nc"),
+        "Cairn c = seal b\"hi\";\n\
+         Bool@1 held = descend store { has_node(c) };\n\
+         U0 note()\n{\n  if (held) { b\"the ledger has it\"; } else { b\"it does not\"; }\n}\n\n\
+         demand note();\n",
+    )
+    .expect("a program that reads the ledger");
+
+    let trace = field(&stdout(&there(&dir, &["bury", "reads.nc", "--json"])), "cairn");
+    let sealed =
+        field(&stdout(&there(&dir, &["exhume", &trace, "--grant", "store", "--json"])), "sealed");
+    assert_eq!(stdout(&there(&dir, &["lamp", &sealed])), "the ledger has it\n");
+}

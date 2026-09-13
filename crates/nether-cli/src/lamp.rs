@@ -237,6 +237,9 @@ pub fn said(store: &Store, function: &str, args: &[Cairn]) -> String {
 fn as_written(v: &Value) -> String {
     match v {
         Value::Str(s) => format!("{s:?}"),
+        // §3.6: `#` and sixty-four hex digits, which is the literal a program
+        // writes and the thing a reader can paste back.
+        Value::Cairn(c) => format!("#{c}"),
         Value::Bytes(b) => match core::str::from_utf8(b) {
             Ok(s) => format!("b{s:?}"),
             // No literal form, so say what is there rather than pretend.

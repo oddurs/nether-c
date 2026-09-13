@@ -1,7 +1,7 @@
 //! Who answers what, and what a grant is.
 
-use nether_core::{Capability, Depth};
-use nether_ledger::{Call, Span, StoreError};
+use nether_core::{Capability, Depth, Prim};
+use nether_ledger::{AnswerOf, Call, Refusal, Span, StoreError, Value};
 
 use crate::recorder::{Recorded, Recorder};
 
@@ -26,8 +26,29 @@ pub trait Provider {
     ///
     /// # Errors
     ///
-    /// [`StoreError`] if the answer could not be written.
-    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, StoreError>;
+    /// [`Refuse`] if the answer could not be written, or if the program asked
+    /// something §9.9 makes a collapse rather than a refusal.
+    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse>;
+}
+
+/// What a provider could not do. §9.9's two failures, and only those two.
+///
+/// Neither is the world saying no: a refusal is an answer and comes back as an
+/// ordinary [`Recorded`].
+#[derive(Debug)]
+pub enum Refuse {
+    /// The ledger would not take the answer, so the program was told nothing.
+    NotRecorded(StoreError),
+    /// The program asked something that has no answer and never will — `env`
+    /// on a name that was never declared (§9.4). Not catchable, by §9.9, so
+    /// the rite reports it and stops.
+    Collapse(String),
+}
+
+impl From<StoreError> for Refuse {
+    fn from(e: StoreError) -> Self {
+        Self::NotRecorded(e)
+    }
 }
 
 /// What has been granted, and nothing else.
@@ -53,6 +74,8 @@ pub enum Unanswered {
     },
     /// The ledger would not take the answer, so the program was told nothing.
     NotRecorded(String),
+    /// The program asked something that has no answer and never will. §9.9.
+    Collapsed(String),
 }
 
 impl core::fmt::Display for Unanswered {
@@ -65,6 +88,7 @@ impl core::fmt::Display for Unanswered {
                 write!(f, "nothing granted answers `{function}`")
             }
             Self::NotRecorded(why) => write!(f, "the answer could not be written down: {why}"),
+            Self::Collapsed(why) => write!(f, "{why}"),
         }
     }
 }
@@ -116,7 +140,10 @@ impl World {
                 wanted: wants(&call.function),
             });
         };
-        provider.answer(call, span, into).map_err(|e| Unanswered::NotRecorded(e.to_string()))
+        provider.answer(call, span, into).map_err(|e| match e {
+            Refuse::NotRecorded(e) => Unanswered::NotRecorded(e.to_string()),
+            Refuse::Collapse(why) => Unanswered::Collapsed(why),
+        })
     }
 }
 
@@ -124,4 +151,23 @@ impl World {
 fn wants(function: &str) -> Option<Capability> {
     let prim = nether_core::Prim::from_name(function)?;
     Capability::at(prim.latent())
+}
+
+/// What the world said, shaped the way §09 types the function that asked.
+///
+/// [`Prim::refusable`] is the rule, stated here so no provider decides for
+/// itself. `read` returns `Answer<Bytes>` and is wrapped; `exists` returns a
+/// plain `Bool` and is not, because an `Answer` substituted where the program
+/// declared a `Bool` is a branch that cannot fold and a deposit inside it that
+/// never happens. 0171.
+pub(crate) fn given(function: &str, v: Value) -> Value {
+    match Prim::from_name(function) {
+        Some(p) if !p.refusable() => v,
+        _ => Value::Answer(Box::new(AnswerOf::Given(v))),
+    }
+}
+
+/// Which no it was. §5.1.1's closed set of six, and §9.9 makes it an answer.
+pub(crate) fn refused(r: Refusal) -> Value {
+    Value::Answer(Box::new(AnswerOf::Refused(r)))
 }

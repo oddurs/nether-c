@@ -10,8 +10,8 @@
 //! The compiler checks the last part. See `Recorded`'s `compile_fail` example.
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Cairn, Call, Span, Store, StoreError, Stored, Value};
-use nether_world::{Provider, Recorded, Recorder, World};
+use nether_ledger::{Cairn, Call, Span, Store, Stored, Value};
+use nether_world::{Provider, Recorded, Recorder, Refuse, World};
 
 fn scratch(what: &str) -> std::path::PathBuf {
     let at = std::time::SystemTime::now()
@@ -44,7 +44,7 @@ impl Provider for Says {
     fn answers(&self, function: &str) -> bool {
         function == "read"
     }
-    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, StoreError> {
+    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
         into.record(call, Depth::DISK, span, &self.0)
     }
 }
@@ -82,7 +82,7 @@ impl Provider for Refuses {
     fn answers(&self, function: &str) -> bool {
         function == "read"
     }
-    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, StoreError> {
+    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
         let no = Value::Answer(Box::new(nether_ledger::AnswerOf::Refused(
             nether_ledger::Refusal::Absent,
         )));
@@ -147,7 +147,7 @@ impl Provider for Slippery {
     fn answers(&self, function: &str) -> bool {
         function == "read"
     }
-    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, StoreError> {
+    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
         let _ = into.record(call, Depth::DISK, span, &Value::Int(1))?;
         into.record(call, Depth::DISK, span, &Value::Int(2))
     }

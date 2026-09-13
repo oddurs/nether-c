@@ -12,11 +12,15 @@
 //! forgot to record has nothing to return and does not compile.
 
 mod disk;
+mod env;
+mod ledger;
 mod provider;
 mod recorder;
 mod replay;
 
 pub use disk::Disk;
-pub use provider::{Provider, Unanswered, World};
+pub use env::{Declared, Env};
+pub use ledger::Ledger;
+pub use provider::{Provider, Refuse, Unanswered, World};
 pub use recorder::{Recorded, Recorder};
 pub use replay::Replay;

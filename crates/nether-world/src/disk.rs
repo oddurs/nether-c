@@ -12,10 +12,10 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use nether_core::{Capability, Depth, Prim};
-use nether_ledger::{AnswerOf, Call, Refusal, Span, Store, StoreError, Stored, Value};
+use nether_core::{Capability, Depth};
+use nether_ledger::{Call, Refusal, Span, Store, Stored, Value};
 
-use crate::provider::Provider;
+use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
 
 /// The disk, under a root nothing may reach out of.
@@ -94,24 +94,6 @@ fn within(root: &Path, at: &Path) -> bool {
     }
 }
 
-/// What the world said, shaped the way §09 types the function that asked.
-///
-/// [`Prim::refusable`] is the rule. `read` returns `Answer<Bytes>` and is
-/// wrapped; `exists` returns a plain `Bool` and is not, because an `Answer`
-/// substituted where the program declared a `Bool` is a branch that cannot
-/// fold and a deposit inside it that never happens.
-fn given(function: &str, v: Value) -> Value {
-    match Prim::from_name(function) {
-        Some(p) if !p.refusable() => v,
-        _ => Value::Answer(Box::new(AnswerOf::Given(v))),
-    }
-}
-
-/// Which no it was. §5.1.1's closed set of six.
-fn refused(r: Refusal) -> Value {
-    Value::Answer(Box::new(AnswerOf::Refused(r)))
-}
-
 /// The refusal an `io::Error` is. §9.5 lists which each function may give.
 fn why(e: &std::io::Error) -> Refusal {
     match e.kind() {
@@ -145,7 +127,7 @@ impl Provider for Disk {
         }
     }
 
-    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, StoreError> {
+    fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
         let stratum = match call.function.as_str() {
             "write" | "remove" => Depth::DISK_WRITE,
             _ => Depth::DISK,
