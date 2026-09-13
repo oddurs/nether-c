@@ -64,6 +64,13 @@ case "${1:-}" in
   gfx:check)
     python3 site/gfx.py --check
     ;;
+  design)
+    # Colour, space and type, generated into site/tokens.css.
+    python3 site/design.py --css
+    ;;
+  design:check)
+    python3 site/design.py --css --check
+    ;;
   font)
     # One font, drawn here. There is no font library in this repository for
     # the same reason there is no image library.
@@ -102,6 +109,7 @@ case "${1:-}" in
     "$0" build
     "$0" site:check
     "$0" gfx:check
+    "$0" design:check
     "$0" font:check
     "$0" wasm
     "$0" decay
@@ -110,7 +118,7 @@ case "${1:-}" in
     if command -v cairn >/dev/null 2>&1; then cairn check; fi
     ;;
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|font|font:check|wasm|serve|decay|check}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check}" >&2
     exit 2
     ;;
 esac
