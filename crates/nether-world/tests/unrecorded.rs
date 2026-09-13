@@ -12,15 +12,19 @@ use nether_core::{Capability, Depth};
 use nether_ledger::{AnswerOf, Cairn, Call, Node, Refusal, Span, Store, Stored, Value};
 use nether_world::{Provider, Recorder, Unanswered, Unrecorded, World};
 
-/// Build the shared object once, into a directory the test owns.
+/// Build the shared object into a directory this test alone owns.
+///
+/// Named after the caller, because cargo runs these in parallel and `cc`
+/// writing a file while another test's `dlopen` reads it is `file too short`
+/// on one machine and green on another. 0176.
 ///
 /// `cc` is not a dependency of this repository; it is how a C file becomes a
 /// shared object, and a test about calling C that could not compile any would
 /// be testing something else.
-fn object() -> Option<String> {
+fn object(what: &str) -> Option<String> {
     let at = std::env::var("CARGO_MANIFEST_DIR").ok()?;
     let build = PathBuf::from(&at).join("../../tests/foreign/build");
-    let out = std::env::temp_dir().join("nether-foreign-proof");
+    let out = std::env::temp_dir().join(format!("nether-foreign-proof-{what}"));
     std::fs::create_dir_all(&out).ok()?;
     let said = std::process::Command::new(&build).arg(&out).output().ok()?;
     if !said.status.success() {
@@ -75,7 +79,7 @@ impl Asked {
 
 #[test]
 fn foreign_code_is_called_and_what_it_said_is_recorded() {
-    let Some(path) = object() else { return };
+    let Some(path) = object("calls") else { return };
     let a = Asked::loading("calls", &[path]);
     assert_eq!(
         a.call("said", b"hello there").expect("granted"),
@@ -92,7 +96,7 @@ fn the_attempt_is_written_before_the_call() {
     // does not return cannot be tested from inside this process, so what is
     // checked is the thing that makes it true — that two witnesses exist for
     // one call, and the first of them says nothing came back.
-    let Some(path) = object() else { return };
+    let Some(path) = object("attempt") else { return };
     let a = Asked::loading("attempt", &[path]);
     a.call("said", b"x").expect("granted");
 
@@ -117,7 +121,7 @@ fn the_attempt_is_written_before_the_call() {
 fn a_callee_that_asks_twice_for_more_room_is_not_asked_a_third_time() {
     // §9.8.1. `greedy` always wants one more byte than it was given, so a
     // caller that kept obliging would never stop.
-    let Some(path) = object() else { return };
+    let Some(path) = object("greedy") else { return };
     let a = Asked::loading("greedy", &[path]);
     let no = a.call("greedy", b"x").expect_err("not an answer");
     let Unanswered::Unavailable(why) = no else { panic!("{no:?}") };
@@ -127,7 +131,7 @@ fn a_callee_that_asks_twice_for_more_room_is_not_asked_a_third_time() {
 #[test]
 fn a_return_value_is_the_refusal_section_five_gives_it() {
     // §9.8.1's table: 3 is `denied`, in the order §5.1.1 lists them.
-    let Some(path) = object() else { return };
+    let Some(path) = object("refuses") else { return };
     let a = Asked::loading("refuses", &[path]);
     assert_eq!(a.call("forbidden", b"").expect("granted"), AnswerOf::Refused(Refusal::Denied));
 }
@@ -137,7 +141,7 @@ fn a_symbol_in_nothing_loaded_is_denied() {
     // §8.3.3: `--grant unrecorded` says which stratum and `--load` says what,
     // and a symbol found in nothing named is denied rather than looked for on
     // the machine.
-    let Some(path) = object() else { return };
+    let Some(path) = object("absent") else { return };
     let a = Asked::loading("absent", &[path]);
     assert_eq!(
         a.call("nothing_defines_this", b"").expect("granted"),
