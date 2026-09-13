@@ -24,3 +24,7 @@
 # checked instead is the module the build produces: its exports, and its
 # compressed size against `.wasm-ceiling`.
 web/necropolis/nether.wasm
+
+# site/font.py imports site/gfx.py to draw the specimen, and Python leaves
+# these behind. One was committed before anyone noticed.
+site/__pycache__/

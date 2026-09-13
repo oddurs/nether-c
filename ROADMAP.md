@@ -213,7 +213,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`##········` 20% · 1 of 5 done · due 2027-07-15
+`####······` 33% · 2 of 6 done · due 2027-07-15
 
 ### unmarked
 
@@ -225,6 +225,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 ### buried
 
 - [x] [`0074`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0074-wasm-build-of-the-core.md) WASM build of the core <sup>chore · p1 · 0</sup>
+- [x] [`0177`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0177-one-font-drawn-so-the-site-reads-the-same-on-every-machine.md) One font, drawn, so the site reads the same on every machine <sup>feature · p1 · 0</sup>
 
 ## futamura — Self-Burial
 

@@ -29,6 +29,8 @@ case "${1:-}" in
     python3 tests/links/run
     # The work is published under the owner's name.
     python3 tests/attribution/run
+    # Every glyph the site renders is in the face that ships with it.
+    python3 tests/font/run
     ;;
   build)
     cargo build --workspace
@@ -60,6 +62,14 @@ case "${1:-}" in
   gfx:check)
     python3 site/gfx.py --check
     ;;
+  font)
+    # One font, drawn here. There is no font library in this repository for
+    # the same reason there is no image library.
+    python3 site/font.py
+    ;;
+  font:check)
+    python3 site/font.py --check
+    ;;
   decay)
     # The Decay Rule. The trusted core may only ever get smaller.
     exec "$root/scripts/decay"
@@ -75,6 +85,7 @@ case "${1:-}" in
     "$0" build
     "$0" site:check
     "$0" gfx:check
+    "$0" font:check
     "$0" wasm
     "$0" decay
     # Skipped when it is not installed, which is for a contributor who has
@@ -82,7 +93,7 @@ case "${1:-}" in
     if command -v cairn >/dev/null 2>&1; then cairn check; fi
     ;;
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|wasm|decay|check}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|font|font:check|wasm|decay|check}" >&2
     exit 2
     ;;
 esac

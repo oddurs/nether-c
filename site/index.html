@@ -449,6 +449,29 @@ correctly:</p>
 <p>That is the one behaviour this language will never change, so it was the
 honest thing to build first.</p>
 
+<img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
+
+<h2>The face this is set in</h2>
+
+<p>One font. It is in this repository, six columns of ink in an eight-pixel
+cell, and every glyph of it was typed out as a grid of <code>#</code> and
+<code>.</code> — including the arrows, the turnstile and the box rules the
+specification is drawn with.</p>
+
+<p class="center"><img class="specimen" src="gfx/specimen.gif" width="435" height="246" alt="Every glyph in the face, sixteen to a row: the printable ASCII, then the Greek, the arrows, the set and proof signs, and the box rules."></p>
+
+<p>TempleOS had one 8x8 fixed-width font and that was the whole of it. This
+site used to name a stack of fonts it hoped you already had, which meant it
+rendered differently on every machine — and a project whose entire claim is
+that a trace means the same thing on a machine that has never seen your
+filesystem should not leave its letterforms to chance.</p>
+
+<p><code>site/font.py</code> draws the glyphs and writes the TrueType tables
+and the WOFF container by hand, in about five hundred lines, because a font
+library is a dependency and a dependency is forever. The whole face is
+<strong>2,900 bytes</strong>. There is a check that fails the build if this
+page ever renders a glyph the font does not have.</p>
+
 <div class="plaque">
 <h3>ON TERRY DAVIS</h3>
 <div>
