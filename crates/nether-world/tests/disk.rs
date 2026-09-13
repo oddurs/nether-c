@@ -209,3 +209,44 @@ fn what_was_read_outlives_the_file_it_was_read_from() {
     // half worth anything: the ledger is the only place that answer still is.
     assert_eq!(a.reading("main.nc"), AnswerOf::Refused(Refusal::Absent));
 }
+
+#[test]
+fn a_link_does_not_reach_out_of_the_root() {
+    // The root is what makes granting `disk` to a burial safe, and refusing
+    // `..` textually is not enough: a link inside the root pointing out of it
+    // is a path that never climbs and still leaves.
+    let a = Asked::new("symlink", false);
+    let outside = a.root.parent().expect("a parent").join("outside.txt");
+    std::fs::write(&outside, b"SECRET").expect("a file outside the root");
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&outside, a.root.join("link.txt")).expect("a link to it");
+        assert_eq!(a.reading("link.txt"), AnswerOf::Refused(Refusal::Denied));
+
+        // And through a linked directory, which is the same trick one level up.
+        let elsewhere = a.root.parent().expect("a parent").join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).expect("a directory outside");
+        std::fs::write(elsewhere.join("secret.txt"), b"ALSO SECRET").expect("a file in it");
+        std::os::unix::fs::symlink(&elsewhere, a.root.join("out")).expect("a link to it");
+        assert_eq!(a.reading("out/secret.txt"), AnswerOf::Refused(Refusal::Denied));
+    }
+
+    // What is inside still reads, which is the half that makes it a root
+    // rather than a wall.
+    std::fs::write(a.root.join("inside.txt"), b"fine").expect("a file inside");
+    assert_eq!(a.reading("inside.txt"), AnswerOf::Given(Value::Bytes(b"fine".to_vec())));
+}
+
+#[test]
+fn a_path_that_does_not_exist_yet_still_resolves() {
+    // Asking the filesystem must not break `write`, whose whole point is a
+    // path that is not there yet — including one whose parent is not either.
+    let a = Asked::new("not-yet", true);
+    let bytes = a.arg(Value::Bytes(b"obj:nc".to_vec()));
+    assert_eq!(
+        a.ask("write", vec![a.arg(Value::Str("deep/down/obj".into())), bytes]),
+        AnswerOf::Given(Value::Unit)
+    );
+    assert_eq!(std::fs::read(a.root.join("deep/down/obj")).expect("written"), b"obj:nc");
+}

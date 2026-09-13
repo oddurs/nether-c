@@ -46,8 +46,17 @@ impl Disk {
 
     /// Where a path lands, or the refusal that says it does not.
     ///
-    /// `..` is resolved textually rather than by asking the filesystem,
-    /// because asking would follow a symbolic link back out of the root.
+    /// Two passes, because one is not enough. The first is textual and refuses
+    /// `..`, an absolute path and a drive letter — that is everything that can
+    /// be said about a path which does not exist yet. The second asks the
+    /// filesystem, because nothing textual can see a symbolic link: one inside
+    /// the root pointing out of it is a path that never climbs and still
+    /// leaves.
+    ///
+    /// What the second pass is worth, exactly: it is a check before an act, so
+    /// a link created between the two still wins. What it stops is a link that
+    /// was already there — which is the one a program being buried can arrange
+    /// for itself, by writing at stratum 4 and reading at stratum 3.
     fn resolve(&self, path: &str) -> Result<PathBuf, Refusal> {
         let mut out = self.root.clone();
         for part in Path::new(path).components() {
@@ -60,7 +69,28 @@ impl Disk {
                 }
             }
         }
-        Ok(out)
+        if within(&self.root, &out) { Ok(out) } else { Err(Refusal::Denied) }
+    }
+}
+
+/// Whether that path is under the root once every link in it is followed.
+///
+/// A path that does not exist cannot be a link, so what has to be asked about
+/// is the deepest part of it that does: for `write` that is usually the root
+/// itself, and for `read` it is the file.
+fn within(root: &Path, at: &Path) -> bool {
+    let Ok(root) = root.canonicalize() else { return false };
+    let mut probe = at;
+    loop {
+        if let Ok(real) = probe.canonicalize() {
+            return real.starts_with(&root);
+        }
+        // Nothing at this depth exists yet. Ask about its parent, and stop
+        // rather than walk off the end of the path we were handed.
+        match probe.parent() {
+            Some(parent) if parent != probe => probe = parent,
+            _ => return false,
+        }
     }
 }
 

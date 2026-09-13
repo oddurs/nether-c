@@ -2,8 +2,9 @@
 id: 166
 title: A symlink reaches out of the disk root
 type: bug
-status: unmarked
+status: buried
 milestone: world
+assignee: Oddur Sigurdsson
 created: 2026-09-13
 updated: 2026-09-13
 priority: p0
@@ -49,6 +50,18 @@ than that is how this got here.
 
 ## Acceptance criteria
 
-- [ ] A file outside the root cannot be read through a link inside it
-- [ ] A path that does not exist yet still resolves, so `write` works
-- [ ] The comment says what the check is worth and what it is not
+- [x] A file outside the root cannot be read through a link inside it
+- [x] A path that does not exist yet still resolves, so `write` works
+- [x] The comment says what the check is worth and what it is not
+
+## 2026-09-13
+
+Two passes. The textual one refuses .. and an absolute path, which is everything that can be said about a path that does not exist yet; the second canonicalises the deepest ancestor that does exist and checks it is still under a canonicalised root, because nothing textual can see a link.
+
+## 2026-09-13
+
+The comment now says what the check is worth: it is a check before an act, so a link created between the two still wins. What it stops is a link that was already there, which is the one a program being buried can arrange for itself by writing at stratum 4 and reading at stratum 3.
+
+## 2026-09-13
+
+Verified in both directions: with the check reverted the test reads SECRET from outside the root, and with it a linked file and a linked directory are both denied while a real file inside still reads.
