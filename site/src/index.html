@@ -1,4 +1,11 @@
+<p class="center"><img class="mark" src="gfx/cairn.gif" width="96" height="120" alt="A cairn: five stones stacked at the mouth of a shaft."></p>
+
 <p class="center"><img class="banner" src="gfx/sign.gif" width="396" height="62" alt="Nether C"></p>
+
+<div class="box covenant">
+<p class="center"><strong>NOTHING RUNS.</strong></p>
+<p class="center">Everything else in this language follows from that.</p>
+</div>
 
 <p class="tagline">A C dialect in which <em>nothing runs</em>. A program is
 buried &mdash; evaluated as far as the world permits &mdash; and what ships is
@@ -413,21 +420,26 @@ capability for, and it is the honest state of any unfinished thing.</p>
   [...]</code></pre>
 </figure>
 
-<div class="plaque">
-<h3>ON TERRY DAVIS</h3>
-<div>
-<p>He wrote an operating system, a compiler, a graphics stack, a document format
-and a language. Alone. And made every one of them follow from a single stated
-idea.</p>
-<p>Whatever you make of the idea, the coherence is the achievement, and it is
-rarer than the code.</p>
-<p>He was ill, and it is in the work, and pretending otherwise would be its own
-kind of disrespect. TempleOS is strange because he was strange. It is also
-genuinely, technically excellent. Both of those are true at once and neither one
-cancels the other.</p>
-<p>Nether C is an inversion of his language the way a photographic negative is
-an inversion: every value reversed, every edge in exactly the same place. That
-is a form of close reading. You cannot turn a thing over without first working
-out which way up it was.</p>
-</div>
-</div>
+<img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
+
+<h2>Who made this</h2>
+
+<p>Oddur Sigurdsson. Everything in this repository was written by hand, which
+is a claim worth listing rather than asserting:</p>
+
+<ul>
+<li>the compiler, the ledger, the burial and the six rites</li>
+<li>a GIF89a encoder, an LZW compressor and a PNG encoder</li>
+<li>the face this page is set in, drawn glyph by glyph, and the TrueType
+    tables and WOFF container that ship it</li>
+<li>an HTTP/1.1 client, and the loader for the one stratum that calls out</li>
+<li>the markdown renderer that made this page</li>
+</ul>
+
+<p>Nothing here downloads anything at build time. The only dependency in the
+tree is a hash function, because a hash that is subtly wrong fails silently
+and years late, and that exception is written down where it can be argued
+with.</p>
+
+<p class="small">Terry A. Davis, whose work this one is a negative of, has
+<a href="in-memoriam.html">a page of his own</a>.</p>
