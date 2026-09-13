@@ -46,8 +46,7 @@ impl Asked {
     fn ask(&self, function: &str, args: Vec<Cairn>) -> AnswerOf {
         let call = Call { function: function.to_owned(), args };
         let span = Span { source: self.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
-        let recorded =
-            self.world.ask(&call, span, &Recorder::new(&self.store, span.source)).expect("granted");
+        let recorded = self.world.ask(&call, span, &Recorder::new(&self.store)).expect("granted");
 
         // §1.4: the witness names the answer, and both were written before
         // this returned.
@@ -139,7 +138,7 @@ fn writing_is_stratum_four_and_reading_alone_will_not_do_it() {
     let span = Span { source: reading.arg(Value::Bytes(b"x".to_vec())), start: 0, end: 1 };
     let refused = reading
         .world
-        .ask(&call, span, &Recorder::new(&reading.store, span.source))
+        .ask(&call, span, &Recorder::new(&reading.store))
         .expect_err("disk! was not granted");
     assert!(refused.to_string().contains("descend disk!"), "{refused}");
 
@@ -194,8 +193,7 @@ fn what_was_read_outlives_the_file_it_was_read_from() {
     let call =
         Call { function: "read".to_owned(), args: vec![a.arg(Value::Str("main.nc".into()))] };
     let span = Span { source: a.arg(Value::Bytes(b"build.nc".to_vec())), start: 0, end: 1 };
-    let recorded =
-        a.world.ask(&call, span, &Recorder::new(&a.store, span.source)).expect("disk was granted");
+    let recorded = a.world.ask(&call, span, &Recorder::new(&a.store)).expect("disk was granted");
 
     std::fs::remove_file(&file).expect("delete it");
 
