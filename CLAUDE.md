@@ -144,9 +144,10 @@ advantages is marketing.
 - **Never edit `site/index.html`, `site/spec/*.html` or `site/gfx/*.gif`.**
   Generated. Change `spec/*.md`, `site/src/index.html` or `site/gfx.py`, then run
   `site/bake` and `python3 site/gfx.py`, and commit what comes out.
-- **Never edit `web/necropolis/nether.wasm`.** Generated. Change
-  `crates/nether-wasm`, run `scripts/task wasm`, and commit what comes out.
-  `.wasm-ceiling` holds its compressed size and works like the Decay Rule.
+- **Never commit `web/necropolis/nether.wasm`.** Built by `scripts/task wasm`,
+  and ignored. A Rust release build is not byte-reproducible across machines,
+  so a committed copy could only be checked by rebuilding it. `.wasm-ceiling`
+  holds its compressed size and works like the Decay Rule.
 - **Never write a `TODO` comment or a stray `NOTES.md`.** If it is worth
   remembering it is worth an item. If it is not worth an item it is not worth a
   comment.

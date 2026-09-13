@@ -11,7 +11,13 @@
 #      of the module's own export section, so a rename fails here rather than
 #      in somebody's browser.
 #
-#   scripts/wasm [--check]
+# The module is built, not committed. A Rust release build is not
+# byte-reproducible across machines -- the same source on CI and on a laptop
+# gives two different files -- so a committed copy could only be checked by
+# rebuilding it, and then the committed copy is doing nothing. Serving the
+# page means running this first, which `web/necropolis/index.html` says.
+#
+#   scripts/wasm
 set -eu
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -29,15 +35,6 @@ fi
 
 cargo build --quiet -p nether-wasm --profile wasm --target "$target"
 mkdir -p "$(dirname "$shipped")"
-
-if [ "${1:-}" = "--check" ]; then
-  if ! cmp -s "$built" "$shipped"; then
-    echo "wasm: web/necropolis/nether.wasm is not what the crate builds." >&2
-    echo "      scripts/task wasm, then commit what comes out." >&2
-    exit 1
-  fi
-else
-  cp "$built" "$shipped"
-fi
+cp "$built" "$shipped"
 
 exec python3 tests/wasm/run "$shipped"

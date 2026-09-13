@@ -34,3 +34,7 @@ nether-world is absent on purpose. A browser has no world to grant, so every wor
 ## 2026-09-13
 
 The proof is that the two burials agree. scripts/wasm reads the module's export section to check it loads; the_browser_buries_what_the_rite_buries checks it agrees with nether bury on the same source, cairn for cairn and hole for hole. A second burial giving a different cairn would make the Necropolis a picture of a different program.
+
+## 2026-09-13
+
+The module is built, not committed. The first version committed it and compared bytes in wasm:check, which failed on CI: a Rust release build is not byte-reproducible across machines, so a committed copy can only be checked by rebuilding it -- and then the committed copy is doing nothing. What is checked is what the build produces.

@@ -14,6 +14,9 @@
   <h1>the necropolis</h1>
   <p>Burial happens here. Nothing is sent anywhere &mdash; the whole of
      <code>bury</code> is in the page, and this file is served from a disk.</p>
+  <p><small>Run <code>scripts/task wasm</code> first: the module is built, not
+     committed. Then serve this directory &mdash; a module cannot be loaded
+     from a <code>file://</code> URL.</small></p>
 
   <textarea id="source" spellcheck="false">Bytes@3 src = must(descend disk { read("main.nc") });
 
