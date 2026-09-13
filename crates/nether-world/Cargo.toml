@@ -12,6 +12,9 @@ repository.workspace = true
 # provider is the seam between the two and needs both.
 nether-core = { path = "../nether-core" }
 nether-ledger = { path = "../nether-ledger" }
+# Stratum 8, and the only `unsafe` in the language. A crate of its own, for
+# the reason `spec/90-rationale.md` gives: `forbid` is not locally undoable.
+nether-foreign = { path = "../nether-foreign" }
 
 [lints]
 workspace = true

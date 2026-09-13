@@ -12,7 +12,9 @@ use nether_bury::{Answers, HaltKind, bury_with};
 use nether_core::{Capability, check};
 use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
-use nether_world::{Declared, Disk, Entropy, Env, Ledger, Net, Recorder, Replay, World};
+use nether_world::{
+    Declared, Disk, Entropy, Env, Ledger, Net, Recorder, Replay, Unrecorded, World,
+};
 
 use crate::{FAILED, code, json, ledger, usage_error};
 
@@ -26,6 +28,7 @@ struct Asked<'a> {
     granted: Vec<Capability>,
     declared: Declared,
     reach: Vec<String>,
+    load: Vec<String>,
     clock: Option<i64>,
     target: Option<&'a str>,
     replaying: bool,
@@ -65,6 +68,10 @@ impl<'a> Asked<'a> {
                     Some(h) if !h.is_empty() => it.reach.push(h.clone()),
                     _ => return Err(wrong("`--reach` wants a host, and optionally a port")),
                 },
+                "--load" => match rest.next() {
+                    Some(p) if !p.is_empty() => it.load.push(p.clone()),
+                    _ => return Err(wrong("`--load` wants the path of a shared object")),
+                },
                 other if other.starts_with("--") => {
                     return Err(wrong(&format!("unknown option {other}")));
                 }
@@ -98,6 +105,13 @@ impl<'a> Asked<'a> {
             eprintln!("nether: a reach without `--grant net` could not be used.");
             eprintln!();
             eprintln!("  §8.3.2: `--grant net` says which stratum, `--reach` says how far.");
+            return Err(usage_error());
+        }
+        // §8.3.3, on the same reasoning.
+        if !self.granted.contains(&Capability::Unrecorded) && !self.load.is_empty() {
+            eprintln!("nether: a load without `--grant unrecorded` could not be used.");
+            eprintln!();
+            eprintln!("  §8.3.3: `--grant unrecorded` says which stratum, `--load` says what.");
             return Err(usage_error());
         }
         let env = self.granted.contains(&Capability::Env);
@@ -226,9 +240,16 @@ fn world_from(asked: &Asked, root: &Path) -> Result<World, Capability> {
             Capability::NetWrite => Box::new(Net::sending(asked.reach.clone())),
             Capability::Disk => Box::new(Disk::reading(root)),
             Capability::DiskWrite => Box::new(Disk::writing(root)),
-            // §9.8 is the one left, and this build does not have it. Saying
-            // which is better than answering nothing and calling it a refusal.
-            other @ Capability::Unrecorded => return Err(*other),
+            // §8.3.3: opened at the grant. A burial that finds out halfway
+            // through that an object is missing has already done half its
+            // work at stratum 8, and there is no undoing that half.
+            Capability::Unrecorded => match Unrecorded::loading(&asked.load) {
+                Ok(foreign) => Box::new(foreign),
+                Err(why) => {
+                    eprintln!("nether: that shared object would not load: {why}");
+                    return Err(*cap);
+                }
+            },
         };
         world = world.granting(provider);
     }
@@ -238,8 +259,15 @@ fn world_from(asked: &Asked, root: &Path) -> Result<World, Capability> {
 #[expect(clippy::too_many_lines, reason = "one pass, in the order §6.6 puts it")]
 fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
     let (replaying, wants_json) = (asked.replaying, asked.wants_json);
-    let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. })) =
-        store.get(cairn)
+    let Ok(Stored::Node(Node::Trace {
+        residue,
+        holes,
+        witnesses,
+        deposits,
+        source,
+        unrecorded: marked,
+        ..
+    })) = store.get(cairn)
     else {
         eprintln!("nether: {} is not a trace", cairn.short());
         return FAILED;
@@ -268,6 +296,20 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
             nether_core::report(&fault.diagnostic(), &String::from_utf8_lossy(&text), &shown)
         );
         return ExitCode::from(code::MALFORMED);
+    }
+
+    // §1.7: an implementation MUST refuse to report a marked trace as
+    // replayable, in every rite that reports replayability — and `identical.`
+    // is this rite reporting it. §6.7's law is written with the exception in
+    // it for the same reason.
+    if replaying && marked {
+        eprintln!("nether: {} reached stratum 8, so replaying it proves nothing.", cairn.short());
+        eprintln!();
+        eprintln!("  §1.7: nothing downstream of an unrecorded call is recorded, so a");
+        eprintln!("  second run agreeing with the first would be a coincidence and a");
+        eprintln!("  second run disagreeing would be the same trace. `nether strata`");
+        eprintln!("  says `replayable: no` about this one, and so does this.");
+        return FAILED;
     }
 
     // Answer what can be answered, and write every answer down first.

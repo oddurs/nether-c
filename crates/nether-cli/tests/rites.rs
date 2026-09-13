@@ -1032,14 +1032,24 @@ fn a_grant_and_a_replay_are_mutually_exclusive() {
 }
 
 #[test]
-fn a_capability_that_is_not_built_says_which() {
-    // §9.1's shallow seven are built. When 0072 lands there is nothing left
-    // for this to ask for, and this test goes with it.
+fn every_capability_section_nine_names_is_built() {
+    // This used to assert that one was not. §9.1 fixes eight names and the
+    // World has all eight now, so what is left to check is that `--grant`
+    // takes each of them and that nothing else is a capability.
     let dir = a_build("exhume-unbuilt");
     let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
-    let out = there(&dir, &["exhume", &buried, "--grant", "unrecorded"]);
-    assert_eq!(code(&out), 69, "{}", stderr(&out));
-    assert!(stderr(&out).contains("not built yet"), "{}", stderr(&out));
+    for cap in ["store", "env", "disk", "disk!", "net", "net!", "entropy", "unrecorded"] {
+        let mut args = vec!["exhume", buried.as_str(), "--grant", cap];
+        if cap == "env" {
+            args.extend(["--clock", "0", "--target", "x"]);
+        }
+        let out = there(&dir, &args);
+        assert_ne!(code(&out), 69, "`{cap}` is not built: {}", stderr(&out));
+        assert_ne!(code(&out), 64, "`{cap}` was not accepted: {}", stderr(&out));
+    }
+    let out = there(&dir, &["exhume", &buried, "--grant", "everything"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("no capability by that name"), "{}", stderr(&out));
 }
 
 #[test]
@@ -1599,4 +1609,74 @@ fn drawing_fewer_than_no_bytes_collapses() {
     assert_eq!(code(&out), 1, "{}", stderr(&out));
     assert!(stderr(&out).contains("fewer than no bytes"), "{}", stderr(&out));
     assert!(stderr(&out).contains("§9.9"), "{}", stderr(&out));
+}
+
+// ── §9.8 the Unrecorded, and §1.7's mark ────────────────────────────────────
+
+/// Build `tests/foreign/said.c`, or `None` on a machine with no `cc`.
+fn foreign() -> Option<String> {
+    let build = format!("{}/../../tests/foreign/build", env!("CARGO_MANIFEST_DIR"));
+    let out = std::env::temp_dir().join("nether-foreign-rites");
+    std::fs::create_dir_all(&out).ok()?;
+    let said = Command::new(&build).arg(&out).output().ok()?;
+    if !said.status.success() {
+        return None;
+    }
+    Some(String::from_utf8(said.stdout).ok()?.trim().to_owned())
+}
+
+#[test]
+fn a_trace_that_reached_eight_will_not_claim_to_be_reproducible() {
+    // 0072's proof, and §1.7's MUST: an implementation must refuse to report a
+    // marked trace as replayable *in every rite that reports replayability*.
+    // There are two of them.
+    let Some(object) = foreign() else { return };
+    let dir = a_build("foreign");
+    std::fs::write(
+        dir.join("calls.nc"),
+        "Bytes@8 back = must(descend unrecorded { call_foreign(\"said\", b\"hello there\") });\n\
+         U0 note()\n{\n  back;\n}\n\ndemand note();\n",
+    )
+    .expect("a program that calls out");
+
+    let trace = field(&stdout(&there(&dir, &["bury", "calls.nc", "--json"])), "cairn");
+    let out =
+        there(&dir, &["exhume", &trace, "--grant", "unrecorded", "--load", &object, "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let sealed = field(&stdout(&out), "sealed");
+    assert_eq!(stdout(&there(&dir, &["lamp", &sealed])), "HELLO THERE\n");
+
+    // The first rite that reports it. §9.8: naming the symbol is the minimum.
+    let told = stdout(&there(&dir, &["strata", &sealed]));
+    assert!(told.contains("replayable: no"), "{told}");
+    assert!(told.contains("call_foreign(\"said\""), "it does not name the symbol:\n{told}");
+    assert!(told.contains("stratum 8 was reached"), "{told}");
+
+    // The second. `identical.` is this rite claiming reproducibility.
+    let replayed = there(&dir, &["exhume", &sealed, "--replay"]);
+    assert_eq!(code(&replayed), 1, "{}", stdout(&replayed));
+    assert!(stdout(&replayed).is_empty(), "it said something about replaying anyway");
+    assert!(stderr(&replayed).contains("proves nothing"), "{}", stderr(&replayed));
+}
+
+#[test]
+fn loading_without_granting_unrecorded_is_refused() {
+    // §8.3.3, on §8.3.1's reasoning.
+    let dir = a_build("no-grant-foreign");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let out = there(&dir, &["exhume", &trace, "--load", "/nowhere/libx.so"]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("could not be used"), "{}", stderr(&out));
+}
+
+#[test]
+fn an_object_that_will_not_load_says_so_at_the_grant() {
+    // §8.3.3: at the grant, not at the call. A burial that finds out halfway
+    // through has already done half its work at stratum 8.
+    let dir = a_build("bad-object");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let out =
+        there(&dir, &["exhume", &trace, "--grant", "unrecorded", "--load", "/nowhere/libx.so"]);
+    assert_eq!(code(&out), 69, "{}", stderr(&out));
+    assert!(stderr(&out).contains("would not load"), "{}", stderr(&out));
 }

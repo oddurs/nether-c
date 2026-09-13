@@ -19,6 +19,7 @@ mod net;
 mod provider;
 mod recorder;
 mod replay;
+mod unrecorded;
 
 pub use disk::Disk;
 pub use entropy::{Entropy, MOST as MOST_DRAWN};
@@ -28,3 +29,4 @@ pub use net::Net;
 pub use provider::{Provider, Refuse, Unanswered, World};
 pub use recorder::{Recorded, Recorder};
 pub use replay::Replay;
+pub use unrecorded::Unrecorded;
