@@ -158,7 +158,14 @@ body {
 /* --- the sign over the door ---------------------------------------------- */
 
 pre.sign {
+  /* Both axes, on purpose. `overflow-x: auto` alone computes `overflow-y` to
+     `auto` as well -- CSS says a `visible` axis beside a non-`visible` one
+     becomes `auto` -- so a horizontal scroll container has a vertical one it
+     never asked for. The face's ascent and descent are exactly one em, so at
+     `line-height: 1` the line boxes are exactly the content height and a
+     fraction of a pixel of rounding is enough to show it. 0181. */
   overflow-x: auto;
+  overflow-y: hidden;
   color: var(--accent);
   font-size: 8px;
   line-height: 1;
@@ -293,6 +300,7 @@ figure.listing figcaption {
 }
 figure.listing pre {
   overflow-x: auto;
+  overflow-y: hidden;
   padding: .7rem .9rem;
   line-height: 1.45;
   tab-size: 2;
@@ -320,7 +328,7 @@ figure.listing pre code { color: var(--ink); white-space: pre; }
 
 /* --- tables --------------------------------------------------------------- */
 
-div.scroll { overflow-x: auto; margin: 0 0 1.1rem; }
+div.scroll { overflow-x: auto; overflow-y: hidden; margin: 0 0 1.1rem; }
 
 table {
   width: 100%;
