@@ -448,8 +448,32 @@ def badge(top: str, bottom: str, ink: int, glow: int) -> tuple[list[Frame], list
     return frames, [70, 70]
 
 
+def owed() -> int:
+    """How many holes the world still owes, read off the board.
+
+    The same files `site/bake` reads. A counter that counts nothing is a
+    decoration; this one counts down as the work is done, which is the only
+    direction a roadmap is supposed to move.
+    """
+    open_states = {"unmarked", "marked", "descending", "starved"}
+    n = 0
+    for path in sorted((ROOT / "cairn" / "items").glob("*.md")):
+        raw = path.read_text(encoding="utf-8")
+        if not raw.startswith("---\n"):
+            continue
+        front = raw[4:raw.index("\n---\n", 3)]
+        meta = dict(
+            (k.strip(), v.strip().strip("\"'"))
+            for k, _, v in (line.partition(":") for line in front.split("\n"))
+            if k.strip() and v.strip()
+        )
+        if meta.get("type") != "milestone" and meta.get("status") in open_states:
+            n += 1
+    return n
+
+
 def counter(text: str) -> tuple[list[Frame], list[int]]:
-    """A hit counter counts visitors. This one counts nothing; it is a name."""
+    """An odometer. A hit counter counted visits; this counts what is left."""
     pad, cell = 3, 13
     w = pad * 2 + cell * len(text)
     h = 26
@@ -706,13 +730,13 @@ def og_card() -> Frame:
 GRAPHICS = {
     "bg.gif": bg_tile,
     "lamp.gif": lamp,
-    "counter.gif": lambda: counter("8F3A1C0E"),
+    "counter.gif": lambda: counter(f"{owed():06d}"),
     "cairn.gif": cairn,
     "badge-unlit.gif": lambda: badge("BEST VIEWED", "UNLIT", SULPHUR, BONE),
     "badge-handmade.gif": lambda: badge("MADE BY HAND", "NO LIBRARIES", LIME, BONE),
     "badge-public.gif": lambda: badge("PUBLIC DOMAIN", "TAKE IT", ICE, BONE),
     "badge-norun.gif": lambda: badge("THERE IS NO", "RUN", SALMON, LILAC),
-    "badge-80col.gif": lambda: badge("80 COLUMNS", "AS GOD MEANT", BILE, BONE),
+    "badge-80col.gif": lambda: badge("80 COLUMNS", "AND NO MORE", BILE, BONE),
     "badge-decay.gif": lambda: badge("THE CORE ONLY", "DECAYS", ROT, BONE),
     "sign.gif": sign_over_the_door,
     "descending.gif": descent_animated,

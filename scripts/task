@@ -76,6 +76,21 @@ case "${1:-}" in
     # The Decay Rule. The trusted core may only ever get smaller.
     exec "$root/scripts/decay"
     ;;
+  serve)
+    # A static file server, so the site can be looked at.
+    #
+    # Not a wrapper around anything the language does -- §8.0 is about `nether
+    # run` and this runs nothing. It exists because a browser treats a
+    # `file://` page as an opaque origin and refuses to load a font from one,
+    # so the face this site is set in is invisible exactly where somebody is
+    # most likely to open it, and `web/necropolis/` cannot load its module at
+    # all. Rooted at the repository so both are reachable.
+    port=${2:-8000}
+    echo "  site        http://localhost:$port/site/"
+    echo "  necropolis  http://localhost:$port/web/necropolis/"
+    echo
+    exec python3 -m http.server "$port" --bind 127.0.0.1
+    ;;
   wasm)
     # The core, built for a browser, and copied to where the page loads it.
     exec "$root/scripts/wasm"
@@ -95,7 +110,7 @@ case "${1:-}" in
     if command -v cairn >/dev/null 2>&1; then cairn check; fi
     ;;
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|font|font:check|wasm|decay|check}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|font|font:check|wasm|serve|decay|check}" >&2
     exit 2
     ;;
 esac
