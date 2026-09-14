@@ -243,6 +243,19 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0228`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0228-the-face-never-loads-one-field-in-the-cmap.md) The face never loads: one field in the cmap <sup>bug · p0 · 0</sup>
 - [x] [`0229`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0229-the-diagrams-that-teach-were-too-small-to-read.md) The diagrams that teach were too small to read <sup>bug · p1 · 0</sup>
 
+## face — The Face
+
+`··········` 0% · 0 of 6 done · due 2027-08-01
+
+### unmarked
+
+- [ ] [`0231`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0231-draw-a-bold-weight-and-refuse-to-fake-one.md) Draw a bold weight, and refuse to fake one <sup>feature · p0 · 0</sup>
+- [ ] [`0232`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0232-a-specimen-a-person-can-actually-read.md) A specimen a person can actually read <sup>feature · p1 · 0</sup>
+- [ ] [`0233`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0233-a-contributor-can-add-a-glyph-without-reading-the-encoder.md) A contributor can add a glyph without reading the encoder <sup>docs · p0 · 0</sup>
+- [ ] [`0234`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0234-read-the-face-at-the-sizes-it-is-read-at.md) Read the face at the sizes it is read at <sup>chore · p1 · 0</sup>
+- [ ] [`0235`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0235-ship-the-face-as-something-somebody-else-can-use.md) Ship the face as something somebody else can use <sup>chore · p2 · 0</sup>
+- [ ] [`0236`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0236-decide-whether-the-headings-are-the-same-face.md) Decide whether the headings are the same face <sup>spec · p2 · 0</sup>
+
 ## futamura — Self-Burial
 
 `··········` 0% · 0 of 4 done · due 2027-09-01
