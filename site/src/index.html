@@ -422,8 +422,11 @@ capability for, and it is the honest state of any unfinished thing.</p>
 
 <h2>Who made this</h2>
 
-<p>Oddur Sigurdsson. Everything in this repository was written by hand, which
-is a claim worth listing rather than asserting:</p>
+<p>Oddur Sigurdsson.</p>
+
+<p><strong>Nothing in this repository was imported.</strong> Not "mostly" and
+not "apart from the hard parts" &mdash; the list is short enough to print, and
+you can check every line of it:</p>
 
 <ul>
 <li>the compiler, the ledger, the burial and the six rites</li>
@@ -434,10 +437,15 @@ is a claim worth listing rather than asserting:</p>
 <li>the markdown renderer that made this page</li>
 </ul>
 
-<p>Nothing here downloads anything at build time. The only dependency in the
-tree is a hash function, because a hash that is subtly wrong fails silently
-and years late, and that exception is written down where it can be argued
-with.</p>
+<p>Nothing here downloads anything at build time. There is exactly one
+dependency in the tree &mdash; a hash function, because a hash that is subtly
+wrong fails silently and years late &mdash; and that single exception is
+written down in <a href="spec/90-rationale.html">&sect;90.2</a> where it can be
+argued with.</p>
+
+<p class="small">That is a claim about what the code is made of, which is
+checkable. It is deliberately not a claim about how it came to be written,
+which would not be.</p>
 
 <p class="small">Terry A. Davis, whose work this one is a negative of, has
 <a href="in-memoriam.html">a page of his own</a>.</p>

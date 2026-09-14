@@ -180,9 +180,9 @@ The body explains *why*; the diff already says what. Reference the item in a
 ```
 spec/                 the specification. canonical. read 00, 01, 02, 06 first
 site/bake             markdown -> html. one file. no dependencies
-site/gfx.py           GIF89a encoder, LZW, and a 5x7 font. typed out by hand
+site/gfx.py           GIF89a encoder, LZW, and a 5x7 font. none of it imported
 site/font.py          the body face: 8x8 glyphs, a TrueType writer, and WOFF
-site/src/index.html   the front page. hand-written on purpose
+site/src/index.html   the front page. written directly, not generated
 site/nether.css       the whole design. one file
 crates/nether-cli/    the `nether` binary. refuses `run`
 crates/nether-foreign/ stratum 8. one of the two places `unsafe` is allowed

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-gfx — hand-written animated GIF89a encoder, and the graphics for the site.
+gfx — an animated GIF89a encoder, and the graphics for the site.
 
 There is no image library here. There is no image library anywhere in this
 repository. This file contains a GIF89a writer, an LZW compressor, and a 5x7
-bitmap font, all of which are typed out rather than imported, because a project
-that inverts TempleOS should not be assembled out of other people's parts.
+bitmap font, none of which is imported. A project that inverts TempleOS should
+not be assembled out of other people's parts.
 
     python3 site/gfx.py            write site/gfx/*.gif
     python3 site/gfx.py --check    fail if what is committed is stale
@@ -193,9 +193,9 @@ class Frame:
 #: else here. `+` is the face turned towards the lamp, `#` is stone, `-` is
 #: the face turned away, and `.` is not stone at all.
 #:
-#: Typed out one row at a time. A stone with the same profile on both sides is
-#: a disc, and five discs are a stack of plates -- so none of these is
-#: symmetric, none of them is the same shape, and the pile leans.
+#: Written out one row at a time rather than generated. A stone with the same
+#: profile on both sides is a disc, and five discs are a stack of plates -- so
+#: none of these is symmetric, none is the same shape, and the pile leans.
 STONES: list[tuple[int, list[str]]] = [
     (0, [
         "...++++#######----..",
@@ -358,7 +358,7 @@ def big_text(f: Frame, x: int, y: int, s: str, c: int, scale: int) -> int:
     return x
 
 
-# ── a 5x7 font, typed out ───────────────────────────────────────────────────
+# ── a 5x7 font ──────────────────────────────────────────────────────────────
 
 FONT: dict[str, list[str]] = {
     " ": ["....."] * 7,
@@ -735,7 +735,7 @@ GRAPHICS = {
     "counter.gif": lambda: counter(f"{owed():06d}"),
     "cairn.gif": cairn,
     "badge-unlit.gif": lambda: badge("BEST VIEWED", "UNLIT", SULPHUR, BONE),
-    "badge-handmade.gif": lambda: badge("MADE BY HAND", "NO LIBRARIES", LIME, BONE),
+    "badge-handmade.gif": lambda: badge("NO LIBRARIES", "FROM SCRATCH", LIME, BONE),
     "badge-public.gif": lambda: badge("PUBLIC DOMAIN", "TAKE IT", ICE, BONE),
     "badge-norun.gif": lambda: badge("THERE IS NO", "RUN", SALMON, LILAC),
     "badge-80col.gif": lambda: badge("80 COLUMNS", "AND NO MORE", BILE, BONE),
