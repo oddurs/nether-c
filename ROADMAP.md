@@ -214,7 +214,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`#########·` 82% · 18 of 22 done · due 2027-07-15
+`#########·` 83% · 19 of 23 done · due 2027-07-15
 
 ### unmarked
 
@@ -243,6 +243,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0228`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0228-the-face-never-loads-one-field-in-the-cmap.md) The face never loads: one field in the cmap <sup>bug · p0 · 0</sup>
 - [x] [`0229`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0229-the-diagrams-that-teach-were-too-small-to-read.md) The diagrams that teach were too small to read <sup>bug · p1 · 0</sup>
 - [x] [`0237`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0237-the-release-workflow-ships-nothing-and-its-gate-cannot-fail.md) The release workflow ships nothing, and its gate cannot fail <sup>bug · p0 · 4</sup>
+- [x] [`0238`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0238-a-pull-request-should-land-itself.md) A pull request should land itself <sup>feature · p1 · 4</sup>
 
 ## face — The Face
 

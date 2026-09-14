@@ -86,6 +86,38 @@ Approvals are not required to merge — this is a one-maintainer project and
 requiring a review would deadlock it. The status check still is. That changes to
 one approval the moment there is a second maintainer.
 
+## After a pull request
+
+`scripts/agent pr` arms auto-merge. Nobody has to come back and press a button:
+the moment `required` goes green the pull request squashes onto `main` and its
+branch is deleted. If CI fails it sits there until it is fixed.
+
+`scripts/agent pr --draft` opens it without arming anything, which is how to
+say *not yet*.
+
+`main` is protected on the server, and the rule this repository keeps repeating
+is now true rather than aspirational:
+
+- a pull request is the only way in, and it must be up to date with `main`
+- the `required` check must pass
+- history stays linear; no merge commits
+- no force pushes, no deleting the branch
+- **and all of that is enforced on administrators too**
+
+A direct push to `main` is refused by GitHub, not by a hook somebody can skip.
+
+## Releases
+
+A release is a tag, and `scripts/task release vX.Y.Z` is what makes one. It
+refuses off `main`, on a dirty tree, when `main` is behind origin, when the tag
+already exists, and when `CHANGELOG.md` has no section for the version — then
+runs the full check and pushes the tag.
+
+The tag is the only trigger. `.github/workflows/release.yml` builds `nether`
+for linux and both macOS architectures, and publishes them with `nether.woff`,
+the specification, and `SHA256SUMS`. The notes are the changelog section, not a
+list of commit subjects.
+
 ## The Decay Rule
 
 TempleOS was fixed at a size given by covenant and never grew. Nether C inverts
