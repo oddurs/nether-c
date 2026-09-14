@@ -214,7 +214,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`########··` 76% · 13 of 17 done · due 2027-07-15
+`########··` 78% · 14 of 18 done · due 2027-07-15
 
 ### unmarked
 
@@ -238,6 +238,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0187`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0187-a-design-system-generated-instead-of-a-borrowed-palette.md) A design system, generated, instead of a borrowed palette <sup>feature · p1 · 0</sup>
 - [x] [`0189`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0189-the-background-is-a-legible-grid-not-a-texture.md) The background is a legible grid, not a texture <sup>bug · p1 · 0</sup>
 - [x] [`0190`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0190-the-system-came-out-tasteful-and-tasteful-is-not-what-this-is.md) The system came out tasteful, and tasteful is not what this is <sup>bug · p1 · 0</sup>
+- [x] [`0191`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0191-the-site-claims-to-be-made-by-hand.md) The site claims to be made by hand <sup>bug · p1 · 0</sup>
 
 ## futamura — Self-Burial
 

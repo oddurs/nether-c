@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-font — a hand-drawn 8x8 bitmap face, and the TrueType writer that ships it.
+font — an 8x8 bitmap face, and the TrueType writer that ships it.
 
 There is no font library here, for the same reason there is no image library:
 a project that inverts TempleOS should not be assembled out of other people's
@@ -365,7 +365,7 @@ def specimen(glyphs: dict[str, tuple[str, ...]]):
     return gfx.write_gif(OUT / "gfx" / "specimen.gif", [frame], [0], loop=False)
 
 
-# ── the face, typed out ─────────────────────────────────────────────────────
+# ── the face ────────────────────────────────────────────────────────────────
 #
 # Six columns wide and seven rows tall, in an eight by eight cell: the same
 # proportion as the 5x7 face in gfx.py, one column and one row larger. Capitals

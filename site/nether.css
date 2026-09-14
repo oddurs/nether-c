@@ -418,7 +418,7 @@ footer .badge {
    THE DATED PART
    ---------------------------------------------------------------------------
    Everything below here is on purpose. Every graphic on this site was written
-   by hand in site/gfx.py, which contains a GIF89a encoder, an LZW compressor
+   by site/gfx.py, which contains a GIF89a encoder, an LZW compressor
    and a 5x7 bitmap font, because there is no image library in this repository
    and there is not going to be one.
    =========================================================================== */

@@ -494,8 +494,11 @@ capability for, and it is the honest state of any unfinished thing.</p>
 
 <h2>Who made this</h2>
 
-<p>Oddur Sigurdsson. Everything in this repository was written by hand, which
-is a claim worth listing rather than asserting:</p>
+<p>Oddur Sigurdsson.</p>
+
+<p><strong>Nothing in this repository was imported.</strong> Not "mostly" and
+not "apart from the hard parts" &mdash; the list is short enough to print, and
+you can check every line of it:</p>
 
 <ul>
 <li>the compiler, the ledger, the burial and the six rites</li>
@@ -506,10 +509,15 @@ is a claim worth listing rather than asserting:</p>
 <li>the markdown renderer that made this page</li>
 </ul>
 
-<p>Nothing here downloads anything at build time. The only dependency in the
-tree is a hash function, because a hash that is subtly wrong fails silently
-and years late, and that exception is written down where it can be argued
-with.</p>
+<p>Nothing here downloads anything at build time. There is exactly one
+dependency in the tree &mdash; a hash function, because a hash that is subtly
+wrong fails silently and years late &mdash; and that single exception is
+written down in <a href="spec/90-rationale.html">&sect;90.2</a> where it can be
+argued with.</p>
+
+<p class="small">That is a claim about what the code is made of, which is
+checkable. It is deliberately not a claim about how it came to be written,
+which would not be.</p>
 
 <p class="small">Terry A. Davis, whose work this one is a negative of, has
 <a href="in-memoriam.html">a page of his own</a>.</p>
@@ -524,7 +532,7 @@ TempleOS shipped under. Take it. It was always there.</p>
 <div class="badges">
 <img src="gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
 <img src="gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
-<img src="gfx/badge-handmade.gif" width="88" height="31" alt="Made by hand, no libraries">
+<img src="gfx/badge-handmade.gif" width="88" height="31" alt="No libraries, written from scratch">
 <img src="gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
 <img src="gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
 <img src="gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
@@ -536,7 +544,7 @@ TempleOS shipped under. Take it. It was always there.</p>
   <span>holes</span>
 </div>
 
-<p class="center">Every graphic on this site was written by hand in
+<p class="center">Every graphic on this site is drawn by
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
