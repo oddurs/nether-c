@@ -79,6 +79,19 @@ html[data-lamp="lit"] { background-image: none; }
   font-display: block;
 }
 
+/* The elements the user agent gives a font-family of its own.
+   `font-family` inherits, but only where nothing else sets it -- and a browser
+   sets it on every one of these before the page is read. So `body` naming the
+   face reaches the prose and not one code listing, not the sign, and not the
+   lamp. It is the whole page on a site made of listings.
+
+   Every element here has a user-agent default. If a new one appears in the
+   markup it belongs in this list, and tests/css/run says so. */
+pre, code, kbd, samp, tt,
+button, input, optgroup, select, textarea {
+  font-family: inherit;
+}
+
 body {
   max-width: var(--col);
   margin: 0 auto;
