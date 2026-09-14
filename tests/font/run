@@ -83,6 +83,15 @@ def main() -> int:
             print(f"  U+{ord(c):04X}  {c}  {unicodedata.name(c, '?')}", file=sys.stderr)
         print("\n  draw them in site/font.py, or take them out of the page", file=sys.stderr)
         return 1
+    loose = unmapped(shipped)
+    if loose:
+        print("font: the cmap maps characters to glyphs the face does not have:",
+              file=sys.stderr)
+        for code, gid, total in loose:
+            print(f"  U+{code:04X} -> glyph {gid}, and there are {total}", file=sys.stderr)
+        print("\n  a browser throws out the whole face for this, and says nothing",
+              file=sys.stderr)
+        return 1
     wrong = outlines(shipped, have)
     if wrong:
         print("font: the glyph outlines do not decode back to what was drawn:",
@@ -95,6 +104,35 @@ def main() -> int:
     print(f"font: {len(want)} glyph(s) rendered, all present, {spare} spare")
     print(f"font: {len(have)} outline(s) decode to the pixels they were drawn from")
     return 0
+
+
+def unmapped(shipped: dict[bytes, bytes]) -> list[tuple[int, int, int]]:
+    """Characters the `cmap` sends to a glyph that is not there.
+
+    A browser sanitises a face before it will use it, and a mapping that points
+    past the end of the font fails that check -- the face is dropped whole and
+    every page falls back to a system font, with nothing said anywhere. 0229
+    was one field: the terminating segment mapped U+FFFF to glyph 65535 in a
+    font with 137 glyphs, because its idDelta was 0 where it had to be 1.
+
+    This walks the `cmap` the way the sanitiser does rather than trusting
+    `site/font.py`, so it fails whatever writes the table wrong.
+    """
+    count = struct.unpack(">H", shipped[b"maxp"][4:6])[0]
+    sub = shipped[b"cmap"][struct.unpack(">I", shipped[b"cmap"][8:12])[0]:]
+    segs = struct.unpack(">H", sub[6:8])[0] // 2
+    ends = struct.unpack(f">{segs}H", sub[14:14 + segs * 2])
+    starts = struct.unpack(f">{segs}H", sub[16 + segs * 2:16 + segs * 4])
+    deltas = struct.unpack(f">{segs}h", sub[16 + segs * 4:16 + segs * 6])
+
+    bad = []
+    for start, end, delta in zip(starts, ends, deltas):
+        # Every segment here is a run, so its ends are the extremes.
+        for code in {start, end}:
+            gid = (code + delta) & 0xFFFF
+            if gid >= count:
+                bad.append((code, gid, count))
+    return sorted(set(bad))
 
 
 def points_of(glyph: bytes) -> list[tuple[int, int]] | str:
