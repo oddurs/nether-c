@@ -113,8 +113,27 @@ cmd_pr() {
   # `fix/0164-the-attribution-ban` rather than a Conventional Commit. The
   # commit-msg hook never sees it, because the server does the squash.
   say "opening pull request"
-  if [ "${1:-}" = "--draft" ]; then gh pr create --fill-first --draft --base "$base"
-  else gh pr create --fill-first --base "$base"; fi
+  if [ "${1:-}" = "--draft" ]; then
+    gh pr create --fill-first --draft --base "$base"
+  else
+    gh pr create --fill-first --base "$base"
+    # Arm auto-merge: the server lands it the moment `required` goes green, and
+    # deletes the branch. Waiting for somebody to press the button means the
+    # merge happens when a human next looks rather than when the work is ready.
+    #
+    # The safety is in the branch protection, not here. `main` requires
+    # `required` to pass and a branch to be up to date with it, refuses force
+    # pushes, deletions and merge commits, and enforces all of that on admins.
+    # A pull request that arms this and then fails simply sits there.
+    #
+    # `--draft` is how to say not yet.
+    say "arming auto-merge"
+    if gh pr merge --auto --squash; then
+      say "armed: it lands when required goes green, and deletes its branch"
+    else
+      say "could not arm auto-merge -- merge it by hand once it is green"
+    fi
+  fi
   gh pr view --json url --jq .url
 }
 
