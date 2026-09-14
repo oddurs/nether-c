@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One rule about the stylesheet, and it is the one that needs a browser to see.
+"""Two rules about the stylesheet, and both need a browser to see going wrong.
 
 `overflow-x: auto` does not leave the other axis alone. CSS computes a
 `visible` axis beside a non-`visible` one to `auto`, so an element meant to
@@ -11,13 +11,23 @@ a browser.
 So: a declaration of one axis has to declare the other. A rule that holds only
 because the arithmetic came out even is a rule that breaks the next time
 somebody changes a number. 0181.
+
+The second is worse, because it looked like it worked. `font-family` inherits,
+but only where nothing else sets it, and a user agent sets it on `pre`, `code`,
+`button` and a handful of others before the page is read. So naming the face on
+`body` reached the prose and missed every code listing, the sign, and the lamp
+-- which on a site made of listings is most of what there is to look at. It
+went unnoticed for nine pull requests because a block character renders as a
+block in any monospace font, so the wordmark looked correct while being set in
+something else entirely. 0192.
 """
 
 import re
 import sys
 from pathlib import Path
 
-CSS = Path(__file__).resolve().parents[2] / "site" / "nether.css"
+ROOT = Path(__file__).resolve().parents[2]
+CSS = ROOT / "site" / "nether.css"
 
 
 def blocks(text: str):
@@ -25,6 +35,29 @@ def blocks(text: str):
     text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
     for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", text):
         yield text[: m.start()].count("\n") + 1, m.group(1).strip(), m.group(2)
+
+
+#: Elements a user agent gives a `font-family` of its own. Naming a face on
+#: `body` does not reach any of them.
+UA_FONT = {"pre", "code", "kbd", "samp", "tt", "button", "input", "optgroup",
+           "select", "textarea"}
+
+
+def opted_in(css: str) -> set[str]:
+    """Every element the stylesheet hands back to the inherited face."""
+    out: set[str] = set()
+    for selectors, body in ((sel, b) for _, sel, b in blocks(css)):
+        if re.search(r"font-family\s*:\s*inherit", body):
+            out |= set(re.findall(r"[a-z]+", selectors))
+    return out
+
+
+def check_the_face_reaches(css: str) -> list[str]:
+    """Anything on a built page with a user-agent face has to opt back in."""
+    on_page: set[str] = set()
+    for page in sorted(ROOT.glob("site/**/*.html")):
+        on_page |= set(re.findall(r"<([a-z]+)[\s>]", page.read_text(encoding="utf-8")))
+    return sorted((on_page & UA_FONT) - opted_in(css))
 
 
 def main() -> int:
@@ -46,7 +79,20 @@ def main() -> int:
         )
         return 1
 
+    missed = check_the_face_reaches(CSS.read_text(encoding="utf-8"))
+    if missed:
+        print("css: these are on a page and never get the face:", file=sys.stderr)
+        for tag in missed:
+            print(f"  <{tag}>  has a user-agent font-family of its own", file=sys.stderr)
+        print(
+            "\n  `font-family` inherits only where nothing else sets it. Add them"
+            "\n  to the `font-family: inherit` rule in site/nether.css.",
+            file=sys.stderr,
+        )
+        return 1
+
     print("css: every overflow names both axes")
+    print("css: every element with a user-agent face is handed back the site's")
     return 0
 
 
