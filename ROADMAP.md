@@ -276,3 +276,68 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [x] [`0137`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0137-sample-tables-in-tests-are-keyed-by-line-number.md) Sample tables in tests are keyed by line number <sup>chore · p2</sup>
 - [x] [`0148`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0148-hygiene-found-by-the-review.md) Hygiene found by the review <sup>chore · p3 · 0</sup>
 
+## quickening — The Quickening
+
+`··········` 0% · 0 of 6 done · due 2027-12-01
+
+### unmarked
+
+- [ ] [`0198`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0198-benchmark-burial-and-fail-the-build-when-it-slows.md) Benchmark burial, and fail the build when it slows <sup>chore · p0 · 0</sup>
+- [ ] [`0199`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0199-profile-a-real-burial-and-say-where-the-time-goes.md) Profile a real burial and say where the time goes <sup>chore · p0 · 0</sup>
+- [ ] [`0200`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0200-burying-twice-does-no-work-the-second-time.md) Burying twice does no work the second time <sup>feature · p0 · 1</sup>
+- [ ] [`0201`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0201-the-store-s-read-path-does-not-go-to-disk-twice.md) The store's read path does not go to disk twice <sup>feature · p1 · 1</sup>
+- [ ] [`0202`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0202-encoding-allocates-once.md) Encoding allocates once <sup>chore · p2 · 0</sup>
+- [ ] [`0203`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0203-a-fuel-budget-that-means-something.md) A fuel budget that means something <sup>spec · p2 · 0</sup>
+
+## cortege — The Cortege
+
+`··········` 0% · 0 of 6 done · due 2028-02-15
+
+### unmarked
+
+- [ ] [`0204`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0204-bury-independent-demands-in-parallel.md) Bury independent demands in parallel <sup>feature · p0 · 0</sup>
+- [ ] [`0205`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0205-one-program-one-cairn-however-many-threads.md) One program, one cairn, however many threads <sup>chore · p0 · 0</sup>
+- [ ] [`0206`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0206-answer-many-holes-at-once.md) Answer many holes at once <sup>feature · p1 · 5</sup>
+- [ ] [`0207`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0207-sixteen-processes-one-store.md) Sixteen processes, one store <sup>chore · p1 · 4</sup>
+- [ ] [`0208`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0208-two-machines-one-trace.md) Two machines, one trace <sup>feature · p2 · 6</sup>
+- [ ] [`0209`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0209-say-what-a-parallel-burial-may-and-may-not-do.md) Say what a parallel burial may and may not do <sup>spec · p0 · 0</sup>
+
+## ossuary — The Ossuary
+
+`··········` 0% · 0 of 6 done · due 2028-05-01
+
+### unmarked
+
+- [ ] [`0210`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0210-measure-a-year-of-a-real-store.md) Measure a year of a real store <sup>chore · p0 · 4</sup>
+- [ ] [`0211`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0211-secondary-burial-move-a-thing-without-renaming-it.md) Secondary burial: move a thing without renaming it <sup>feature · p0 · 4</sup>
+- [ ] [`0212`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0212-what-a-prune-may-remove-and-what-it-may-never.md) What a prune may remove, and what it may never <sup>spec · p0 · 4</sup>
+- [ ] [`0213`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0213-a-store-that-outlives-its-machine.md) A store that outlives its machine <sup>feature · p1 · 4</sup>
+- [ ] [`0214`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0214-what-a-damaged-store-can-still-tell-you.md) What a damaged store can still tell you <sup>feature · p1 · 3</sup>
+- [ ] [`0215`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0215-a-second-store-and-what-they-owe-each-other.md) A second store, and what they owe each other <sup>spec · p2 · 5</sup>
+
+## warden — The Warden
+
+`··········` 0% · 0 of 6 done · due 2028-07-15
+
+### unmarked
+
+- [ ] [`0216`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0216-write-the-threat-model-down.md) Write the threat model down <sup>docs · p0 · 0</sup>
+- [ ] [`0217`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0217-a-hostile-writer-cannot-change-what-a-reader-sees.md) A hostile writer cannot change what a reader sees <sup>chore · p0 · 4</sup>
+- [ ] [`0218`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0218-fuzz-every-parser-not-only-the-decoder.md) Fuzz every parser, not only the decoder <sup>chore · p0 · 0</sup>
+- [ ] [`0219`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0219-a-bound-on-every-path-that-reads-a-stranger-s-bytes.md) A bound on every path that reads a stranger's bytes <sup>chore · p1 · 0</sup>
+- [ ] [`0220`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0220-a-trace-s-claims-are-checkable-by-somebody-who-does-not-trust-it.md) A trace's claims are checkable by somebody who does not trust it <sup>feature · p1 · 1</sup>
+- [ ] [`0221`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0221-build-the-binary-reproducibly.md) Build the binary reproducibly <sup>chore · p2 · 4</sup>
+
+## assay — The Assay
+
+`··········` 0% · 0 of 6 done · due 2028-10-01
+
+### unmarked
+
+- [ ] [`0222`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0222-mechanize-the-depth-lattice.md) Mechanize the depth lattice <sup>chore · p0 · 0</sup>
+- [ ] [`0223`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0223-mechanize-the-orpheus-rule.md) Mechanize the Orpheus rule <sup>chore · p0 · 0</sup>
+- [ ] [`0224`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0224-mechanize-the-staging-law.md) Mechanize the staging law <sup>chore · p0 · 0</sup>
+- [ ] [`0225`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0225-the-canonical-encoding-is-injective.md) The canonical encoding is injective <sup>chore · p1 · 0</sup>
+- [ ] [`0226`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0226-the-implementation-agrees-with-the-model.md) The implementation agrees with the model <sup>chore · p1 · 0</sup>
+- [ ] [`0227`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0227-say-what-the-proofs-are-worth.md) Say what the proofs are worth <sup>docs · p2 · 0</sup>
+
