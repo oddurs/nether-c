@@ -501,9 +501,16 @@ ol.doctrine > li::before {
 ol.doctrine > li b { display: block; color: var(--ink); text-transform: uppercase; letter-spacing: .06em; }
 ol.doctrine > li span { color: var(--dim); }
 
+/* A diagram that carries labels is drawn small and shown at an exact 2x.
+   The 5x7 face has no more detail to give, so drawing it larger would cost
+   four times the bytes for the same pixels; an integer upscale of pixel art
+   is exact, and `image-rendering: pixelated` above keeps it that way. Below
+   600px it scales down instead of overflowing, and stays blocky doing it. */
+.diagram { display: block; width: 600px; max-width: 100%; height: auto; margin: 1.5rem auto; }
+
 /* the descent column, floated like it is 1997 */
-.descent { float: right; margin: 0 0 1rem 1.5ch; }
-@media (max-width: 640px) { .descent { float: none; display: block; margin: 0 auto 1rem; } }
+.descent { float: right; width: 240px; max-width: 40%; height: auto; margin: 0 0 1rem 1.5ch; }
+@media (max-width: 640px) { .descent { float: none; display: block; max-width: 100%; margin: 0 auto 1rem; } }
 
 /* the badge shelf */
 .badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 1rem 0; }
