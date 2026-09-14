@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""The release notes for one version, cut out of CHANGELOG.md.
+
+A release describes itself with the words somebody wrote for it, not with a
+list of commit subjects. `CHANGELOG.md` is already in Keep a Changelog format,
+which is a section per version, so the notes are already written -- this finds
+the right one and refuses if it is not there.
+
+    scripts/notes v0.1.0
+
+Refusing is the point. A tag with no section in the changelog is a release
+nobody described, and it is better to find that out before it is published
+than after.
+"""
+
+import re
+import sys
+from pathlib import Path
+
+CHANGELOG = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
+
+
+def notes(text: str, version: str) -> str | None:
+    """Everything under `## [version]`, up to the next `## `."""
+    want = version.lstrip("v")
+    # `## [1.2.3] - 2027-01-01` and `## [1.2.3]` both count, and nothing else
+    # does: `## [Unreleased]` is not a release and must not be published as one.
+    # The match runs to the end of the heading *line*, so the date in it does
+    # not become the first line of the notes.
+    head = re.compile(r"^##\s+\[" + re.escape(want) + r"\][^\n]*\n?", re.M)
+    found = head.search(text)
+    if not found:
+        return None
+    rest = text[found.end():]
+    nxt = re.search(r"^##\s", rest, re.M)
+    return (rest[: nxt.start()] if nxt else rest).strip()
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print("usage: scripts/notes <version>", file=sys.stderr)
+        return 2
+    version = argv[1]
+    if version.lstrip("v").lower() == "unreleased":
+        print("notes: `Unreleased` is not a version", file=sys.stderr)
+        return 1
+
+    body = notes(CHANGELOG.read_text(encoding="utf-8"), version)
+    if body is None:
+        print(f"notes: CHANGELOG.md has no section for {version}", file=sys.stderr)
+        print(f"\n  add `## [{version.lstrip('v')}] - YYYY-MM-DD` and say what changed",
+              file=sys.stderr)
+        return 1
+    if not body:
+        print(f"notes: the section for {version} is empty", file=sys.stderr)
+        return 1
+
+    print(body)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

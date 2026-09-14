@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""`scripts/notes` cuts the right section out of a changelog.
+
+A release is published with whatever this returns, so the ways it can be wrong
+are all expensive: notes belonging to the previous version, notes with the
+heading's date as their first line, or `Unreleased` going out as a release.
+"""
+
+import importlib.machinery
+import importlib.util
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+
+# `scripts/notes` has no extension, so it is loaded by path rather than
+# imported. It is a sibling script, not a package.
+_loader = importlib.machinery.SourceFileLoader("notes", str(ROOT / "scripts" / "notes"))
+_spec = importlib.util.spec_from_loader("notes", _loader)
+_notes = importlib.util.module_from_spec(_spec)
+_loader.exec_module(_notes)
+notes = _notes.notes
+
+SAMPLE = """# Changelog
+
+Preamble that is not a release.
+
+## [Unreleased]
+
+### Added
+
+- Something still descending.
+
+## [0.2.0] - 2027-01-02
+
+### Added
+
+- The second thing.
+
+### Fixed
+
+- A thing that was wrong.
+
+## [0.1.0] - 2026-12-01
+
+### Added
+
+- The first thing.
+"""
+
+CASES = [
+    ("the newest version stops at the next heading",
+     "v0.2.0", lambda r: r.startswith("### Added") and "The second thing." in r
+     and "A thing that was wrong." in r and "The first thing." not in r),
+    ("the date on the heading is not part of the notes",
+     "v0.2.0", lambda r: not r.startswith("-") and "2027-01-02" not in r),
+    ("the oldest version runs to the end of the file",
+     "v0.1.0", lambda r: "The first thing." in r and "The second thing." not in r),
+    ("a leading v is optional",
+     "0.2.0", lambda r: r is not None and "The second thing." in r),
+    ("unreleased content never leaks into a release",
+     "v0.2.0", lambda r: "Something still descending." not in r),
+    ("a version with no section is refused",
+     "v9.9.9", lambda r: r is None),
+]
+
+
+def main() -> int:
+    bad = []
+    for name, version, ok in CASES:
+        got = notes(SAMPLE, version)
+        try:
+            passed = ok(got)
+        except TypeError:            # ok() on None where a string was expected
+            passed = False
+        print(f"  {'ok  ' if passed else 'FAIL'}  {name}")
+        if not passed:
+            bad.append((name, got))
+
+    # `Unreleased` is refused by the command, not by the function: the function
+    # would happily find that section, and the guard is one line above it.
+    if notes(SAMPLE, "Unreleased") is None:
+        bad.append(("the sample has an Unreleased section to guard against", None))
+
+    if bad:
+        print("\nnotes: the release notes would have been wrong:", file=sys.stderr)
+        for name, got in bad:
+            print(f"  {name}\n    got: {str(got)[:120]!r}", file=sys.stderr)
+        return 1
+    print(f"notes: {len(CASES)} case(s), the right section every time")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
