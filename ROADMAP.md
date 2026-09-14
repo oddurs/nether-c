@@ -214,7 +214,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`########··` 79% · 15 of 19 done · due 2027-07-15
+`#########·` 81% · 17 of 21 done · due 2027-07-15
 
 ### unmarked
 
@@ -240,6 +240,8 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0190`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0190-the-system-came-out-tasteful-and-tasteful-is-not-what-this-is.md) The system came out tasteful, and tasteful is not what this is <sup>bug · p1 · 0</sup>
 - [x] [`0191`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0191-the-site-claims-to-be-made-by-hand.md) The site claims to be made by hand <sup>bug · p1 · 0</sup>
 - [x] [`0192`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0192-the-face-never-reached-the-code-listings-the-sign-or-the-lamp.md) The face never reached the code listings, the sign, or the lamp <sup>bug · p0 · 0</sup>
+- [x] [`0228`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0228-the-face-never-loads-one-field-in-the-cmap.md) The face never loads: one field in the cmap <sup>bug · p0 · 0</sup>
+- [x] [`0229`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0229-the-diagrams-that-teach-were-too-small-to-read.md) The diagrams that teach were too small to read <sup>bug · p1 · 0</sup>
 
 ## futamura — Self-Burial
 

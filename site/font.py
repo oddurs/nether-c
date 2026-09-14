@@ -189,7 +189,12 @@ def cmap_table(codes: list[int]) -> bytes:
     sub += struct.pack(f">{count}H", *[s for s, _, _ in segments])
     deltas = []
     for start, _, gid in segments:
-        deltas.append(0 if start == 0xFFFF else (gid - start) & 0xFFFF)
+        # The terminator has to map U+FFFF to .notdef, and a delta of 1 is how:
+        # 0xFFFF + 1 wraps to glyph 0. A delta of 0 maps it to glyph 65535,
+        # which a 137-glyph font does not have, and a browser's sanitiser
+        # throws out the whole face for it. Silently -- a face that fails to
+        # load is indistinguishable from one nobody asked for.
+        deltas.append(1 if start == 0xFFFF else (gid - start) & 0xFFFF)
     sub += struct.pack(f">{count}h", *[d - 0x10000 if d > 0x7FFF else d for d in deltas])
     sub += struct.pack(f">{count}H", *([0] * count))  # idRangeOffset: all delta
 
