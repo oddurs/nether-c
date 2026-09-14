@@ -214,7 +214,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`#########·` 81% · 17 of 21 done · due 2027-07-15
+`#########·` 82% · 18 of 22 done · due 2027-07-15
 
 ### unmarked
 
@@ -242,6 +242,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0192`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0192-the-face-never-reached-the-code-listings-the-sign-or-the-lamp.md) The face never reached the code listings, the sign, or the lamp <sup>bug · p0 · 0</sup>
 - [x] [`0228`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0228-the-face-never-loads-one-field-in-the-cmap.md) The face never loads: one field in the cmap <sup>bug · p0 · 0</sup>
 - [x] [`0229`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0229-the-diagrams-that-teach-were-too-small-to-read.md) The diagrams that teach were too small to read <sup>bug · p1 · 0</sup>
+- [x] [`0237`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0237-the-release-workflow-ships-nothing-and-its-gate-cannot-fail.md) The release workflow ships nothing, and its gate cannot fail <sup>bug · p0 · 4</sup>
 
 ## face — The Face
 

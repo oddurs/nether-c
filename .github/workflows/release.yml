@@ -1,5 +1,7 @@
 name: Release
 
+# A tag is the trigger, and the tag is the version. `scripts/task release`
+# makes one; nothing else should.
 on:
   push:
     tags: ['v*']
@@ -12,29 +14,120 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  # The same gate CI runs. A release that skips it is a release nobody checked,
+  # and this job used to be exactly that: it installed the wrong crate and hid
+  # the failure behind `|| echo`, so the run went green whatever happened.
+  check:
+    name: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Install the pinned toolchain
         run: |
           rustup show active-toolchain || rustup toolchain install
           rustup component add rustfmt clippy
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
 
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
+      # From the repository it is published from, pinned, and with no `||`.
       - name: Install cairn
-        run: cargo install cairn --locked || echo "cairn unavailable; scripts/task skips it"
+        run: cargo install --locked --git https://github.com/oddurs/cairn --tag v0.2.0 cairn-md
 
       - name: scripts/task check
         run: scripts/task check
 
+      - name: The tag must have a section in CHANGELOG.md
+        run: scripts/notes "${GITHUB_REF_NAME}" > /dev/null
+
+  build:
+    name: build ${{ matrix.target }}
+    needs: [check]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the pinned toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build the binary
+        run: cargo build --release --locked --bin nether --target ${{ matrix.target }}
+
+      # One archive per target, named so a person can tell them apart in a
+      # directory of downloads.
+      - name: Archive it
+        run: |
+          name="nether-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/nether" "dist/$name/"
+          cp README.md LICENSE CHANGELOG.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nether-${{ matrix.target }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: incoming
+
+      # The face is 3.2kB and drawn from nothing. People will want it without
+      # cloning the repository for one file.
+      - name: Gather what ships
+        run: |
+          mkdir -p dist
+          find incoming -name '*.tar.gz' -exec cp {} dist/ \;
+          cp site/nether.woff "dist/nether-${GITHUB_REF_NAME}.woff"
+          tar -czf "dist/netherc-spec-${GITHUB_REF_NAME}.tar.gz" spec/
+
+      # A project whose argument is that you can name what you were given
+      # should not ship tarballs nobody can check.
+      - name: Write the checksums
+        run: cd dist && sha256sum ./* > SHA256SUMS && cat SHA256SUMS
+
+      - name: The notes come from CHANGELOG.md
+        run: scripts/notes "${GITHUB_REF_NAME}" > notes.md
+
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            --verify-tag \
+            dist/*
