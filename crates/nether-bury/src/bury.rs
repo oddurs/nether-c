@@ -654,6 +654,13 @@ impl Burial<'_> {
             |why| Err(Halt { span: x.span, kind: HaltKind::Collapsed(why), grinding: None });
         let Some(answer) = values.first() else { return Ok(None) };
         Ok(match (p, &answer.kind) {
+            (Prim::Utf8, Kind::Known(Literal::Bytes(bytes))) => Some(Self::answered(
+                &Value::Answer(Box::new(match String::from_utf8(bytes.clone()) {
+                    Ok(s) => nether_ledger::AnswerOf::Given(Value::Str(s)),
+                    Err(_) => nether_ledger::AnswerOf::Refused(nether_ledger::Refusal::Malformed),
+                })),
+                x,
+            )),
             (Prim::Must, Kind::Answered(v)) => Some((**v).clone()),
             (Prim::Must, Kind::Refused(_)) => return collapse("this answer was refused"),
             (Prim::Given, Kind::Answered(_)) => Some(Self::known(Literal::Bool(true), x)),
@@ -1035,12 +1042,15 @@ impl Burial<'_> {
                     // §4.7: a value here is deposited, not discarded. `U0` has
                     // nothing to deposit, and one that is still waiting on the
                     // world is not a value yet — it will be deposited by the
-                    // exhumation that finishes it.
-                    if let Some(value) = as_value(&v) {
-                        if value != Value::Unit {
-                            let at = self.deposit(value, x.span);
-                            self.deposits.push(at);
-                        }
+                    // exhumation that finishes it. `return e` is not a bare
+                    // expression statement: it carries e to the caller, so
+                    // recording it here would expose a function's internals.
+                    if self.flow.is_none()
+                        && let Some(value) = as_value(&v)
+                        && value != Value::Unit
+                    {
+                        let at = self.deposit(value, x.span);
+                        self.deposits.push(at);
                     }
                     v
                 }

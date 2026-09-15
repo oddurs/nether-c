@@ -74,3 +74,26 @@ fn an_undemanded_function_deposits_nothing() {
     let r = buried("U0 g() @0 { \"never\"; }\nU0 h() @0 { \"said\"; }\ndemand h();\n");
     assert_eq!(said(&r), vec![Value::Str("said".to_owned())]);
 }
+
+#[test]
+fn returning_a_value_is_not_a_deposit() {
+    let r = buried("Str g() @0 { return \"private\"; }\ndemand g();\n");
+    assert!(r.deposits.is_empty(), "a return leaked into the trace: {:?}", said(&r));
+}
+
+#[test]
+fn nested_returns_leave_only_explicit_deposits() {
+    let r = buried(
+        "I64 f(I64 n) { if (n == 0) { return 7; } else { return f(n - 1); } } U0 g() { f(3); } demand g();",
+    );
+    assert_eq!(said(&r), vec![Value::Int(7)]);
+}
+
+#[test]
+fn utf8_finishes_and_refuses_invalid_bytes() {
+    // Cutting a multi-byte encoding produces invalid UTF-8 without a host fixture.
+    let r = buried(
+        "U0 g() { must(utf8(b\"hello\")); given(utf8(slice(raw(\"é\"), 0, 1))); refusal(utf8(slice(raw(\"é\"), 0, 1))) == malformed; } demand g();",
+    );
+    assert_eq!(said(&r), vec![Value::Str("hello".into()), Value::Bool(false), Value::Bool(true)]);
+}
