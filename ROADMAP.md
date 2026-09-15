@@ -266,10 +266,13 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ### unmarked
 
-- [ ] [`0079`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0079-the-interpreter-in-nether-c.md) The interpreter, in Nether C <sup>feature · p1 · 0</sup>
 - [ ] [`0080`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0080-the-first-projection.md) The first projection <sup>feature · p1 · 0</sup>
 - [ ] [`0081`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0081-the-second-projection.md) The second projection <sup>feature · p2 · 0</sup>
 - [ ] [`0082`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0082-the-third-projection.md) The third projection <sup>feature · p2 · 0</sup>
+
+### descending
+
+- [ ] [`0079`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0079-the-interpreter-in-nether-c.md) The interpreter, in Nether C <sup>feature · p1 · 0</sup>
 
 ## after — After the Burial
 

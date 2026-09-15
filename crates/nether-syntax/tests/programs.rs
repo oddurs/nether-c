@@ -24,6 +24,11 @@ fn program(name: &str) -> String {
         .unwrap_or_else(|e| panic!("tests/programs/{name}: {e}"))
 }
 
+fn library(name: &str) -> String {
+    std::fs::read_to_string(format!("{}/lib/{name}", root()))
+        .unwrap_or_else(|e| panic!("lib/{name}: {e}"))
+}
+
 /// Every program, and the sample it was lifted from.
 const PROGRAMS: [(&str, &str); 3] = [
     ("hello.nc", "00-overview.md § 0.7 A first program #1"),
@@ -48,6 +53,20 @@ fn compiles(name: &str) -> Result<nether_core::Unit, String> {
     let source = program(name);
     let ast = parse(source.as_bytes()).map_err(|f| format!("{name} does not parse: {f:?}"))?;
     lower(&ast).map_err(|f| format!("{name} does not lower: {f:?}"))
+}
+
+#[test]
+fn the_interpreter_s_lexical_cursor_is_nether_c() {
+    let source = library("interpreter.nc");
+    let ast = parse(source.as_bytes())
+        .map_err(|f| format!("interpreter.nc does not parse: {f:?}"))
+        .expect("interpreter.nc parses");
+    let unit = lower(&ast)
+        .map_err(|f| format!("interpreter.nc does not lower: {f:?}"))
+        .expect("interpreter.nc lowers");
+    let faults = check(&unit);
+    assert!(faults.is_empty(), "{faults:?}");
+    assert!(unit.funcs.len() >= 6, "the cursor is not the interpreter substrate");
 }
 
 // ── the two that compile ────────────────────────────────────────────────────
