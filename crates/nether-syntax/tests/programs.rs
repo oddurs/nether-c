@@ -56,8 +56,8 @@ fn compiles(name: &str) -> Result<nether_core::Unit, String> {
 }
 
 #[test]
-fn the_interpreter_s_lexical_cursor_is_nether_c() {
-    let source = library("interpreter.nc");
+fn the_interpreter_is_nether_c() {
+    let source = format!("{}\n{}", library("interpreter.nc"), library("evaluate.nc"));
     let ast = parse(source.as_bytes())
         .map_err(|f| format!("interpreter.nc does not parse: {f:?}"))
         .expect("interpreter.nc parses");

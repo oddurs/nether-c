@@ -3,7 +3,7 @@
 // The source is Bytes because the interpreter must be able to receive the
 // program from a disk hole. There is deliberately no host parser hiding behind
 // this file: every inspection below is a slice and a comparison the language
-// itself can bury. The evaluator will grow on this cursor.
+// itself can bury. evaluate.nc supplies values, checking and demand evaluation.
 
 Bool at(Bytes source, I64 from, Bytes needle)
 {
@@ -47,8 +47,8 @@ I64 skip_line(Bytes source, I64 from)
   }
 }
 
-// Malformed input collapses through an invalid slice until diagnostics have
-// a representation in the interpreter. It must never become a successful EOF.
+// Malformed syntax collapses through an invalid slice. Semantic errors have
+// typed records in evaluate.nc; a syntax failure must not become a valid EOF.
 I64 malformed_source(Bytes source)
 {
   return len(slice(source, -1, 0));
@@ -140,9 +140,7 @@ I64 source_start(Bytes source)
   return skip(source, 0);
 }
 
-// The current executable subset is U0 functions with no parameters, calls,
-// string deposits and demands. Every other form is rejected. The general
-// evaluator will replace this subset once values and environments are ready.
+// Identifiers in the bootstrap grammar use ASCII letters, digits and '_'.
 Bool letter(Bytes source, I64 p)
 {
   if (p >= len(source)) { return false; }
@@ -168,6 +166,7 @@ I64 token_end(Bytes source, I64 p)
 {
   I64 start = skip(source, p);
   if (start >= len(source)) { return start; }
+  if (at(source, start, b"b\"")) { return quote_end(source, start + 2) + 1; }
   if (at(source, start, b"\"")) { return quote_end(source, start + 1) + 1; }
   if (letter(source, start)) { return word_end(source, start + 1); }
   return start + 1;
@@ -189,78 +188,4 @@ I64 name_end(Bytes source, I64 p)
   I64 start = skip(source, p);
   if (!letter(source, start)) { return malformed_source(source); }
   return word_end(source, start + 1);
-}
-
-I64 call_end(Bytes source, I64 p)
-{
-  return expect(source, expect(source, name_end(source, p), b"("), b")");
-}
-
-I64 body_start(Bytes source, I64 p)
-{
-  return expect(source, call_end(source, expect(source, p, b"U0")), b"{");
-}
-
-// Validate each function body even when it is never called. Only its
-// evaluation is demand-driven. Quotes and comments cannot introduce calls.
-I64 body_end(Bytes source, I64 p)
-{
-  Bytes t = token(source, p);
-  if (t == b"}") { return token_end(source, p); }
-  if (len(t) == 0) { return malformed_source(source); }
-  if (starts_with(t, b"\"")) {
-    return body_end(source, expect(source, token_end(source, p), b";"));
-  }
-  return body_end(source, expect(source, call_end(source, p), b";"));
-}
-
-I64 item_end(Bytes source, I64 p)
-{
-  if (token(source, p) == b"demand") {
-    return expect(source, call_end(source, token_end(source, p)), b";");
-  }
-  return body_end(source, body_start(source, p));
-}
-
-I64 find_function(Bytes source, I64 p, Bytes name)
-{
-  if (skip(source, p) >= len(source)) { return malformed_source(source); }
-  if (token(source, p) == b"U0" && token(source, token_end(source, p)) == name) {
-    return body_start(source, p);
-  }
-  return find_function(source, item_end(source, p), name);
-}
-
-U0 evaluate_body(Bytes source, I64 p)
-{
-  Bytes t = token(source, p);
-  if (t == b"}") { return; }
-  if (starts_with(t, b"\"")) {
-    must(utf8(text(source, p)));
-    evaluate_body(source, expect(source, token_end(source, p), b";"));
-  } else {
-    evaluate_body(source, find_function(source, 0, t));
-    evaluate_body(source, expect(source, call_end(source, p), b";"));
-  }
-}
-
-U0 evaluate_demands(Bytes source, I64 p)
-{
-  if (skip(source, p) >= len(source)) { return; }
-  if (token(source, p) == b"demand") {
-    evaluate_body(source, find_function(source, 0, token(source, token_end(source, p))));
-  }
-  evaluate_demands(source, item_end(source, p));
-}
-
-I64 validate_unit(Bytes source, I64 p)
-{
-  if (skip(source, p) >= len(source)) { return len(source); }
-  return validate_unit(source, item_end(source, p));
-}
-
-U0 interpret_literal_functions(Bytes source)
-{
-  I64 end = validate_unit(source, 0);
-  if (end == len(source)) { evaluate_demands(source, 0); }
 }

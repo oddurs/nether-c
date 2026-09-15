@@ -2,10 +2,9 @@
 id: 79
 title: The interpreter, in Nether C
 type: feature
-status: descending
+status: buried
 milestone: futamura
 assignee: Oddur Sigurdsson
-claimed: 2026-09-15
 depends_on:
 - 23
 - 59
@@ -14,7 +13,7 @@ updated: 2026-09-15
 priority: p1
 effort: xl
 area: lib/
-stratum: '0'
+stratum: '5'
 proof: The Nether C interpreter, written in Nether C, runs the spec's sample programs
 ---
 
@@ -32,3 +31,7 @@ Review correction: the earlier literal_demand helper only searched for a keyword
 ## 2026-09-15
 
 Verification: Rust tests, lint, build, site/graphics/font checks and the WASM budget pass. The final formatted core is 8017 lines: an eight-line increase over 8009 for utf8 folding and correct return/deposit handling, reflected in .decay-ceiling. The executable subset remains explicitly incomplete for the item proof.
+
+## 2026-09-15
+
+The unchanged sample-program proof now passes through one Nether C interpreter: hello.nc deposits its greeting as Str; build.nc produces the real read(main.nc) question and resumes to obj: plus the supplied bytes; stamp.nc is rejected at the guest look byte offset with origin 5 and ambient 0, before any network question. Eighteen burial tests cover forward declarations, renamed bindings, typed parameters, unused network calls, Unicode and packet delimiters, refusals, call-depth propagation, repaired and too-shallow looks, source bytes arriving through a hole, and printed-residue reburial after staged source/file answers. Parsing, checking and evaluation of guest bytes are all in lib/interpreter.nc and lib/evaluate.nc. The host only buries that Nether C unit and supplies recorded answers. scripts/task check passes in full; the core remains at 8017 lines. The sample bootstrap boundary and remaining general-language work are explicit in lib/README.md: operators/control flow/aggregates, recursive checking, inferred latent signatures, memoised guest globals, runtime seal and guest fuel accounting are not claimed by this proof. Later self-burial projections remain separate items. Stratum 5 is prelude dispatch; these proofs use supplied ledger answers and perform no network I/O.
