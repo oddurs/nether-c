@@ -7,7 +7,7 @@ milestone: after
 depends_on:
 - 58
 created: 2026-09-11
-updated: 2026-09-11
+updated: 2026-09-15
 priority: p1
 effort: l
 area: tools/
@@ -26,3 +26,20 @@ what makes people understand it.
 Language Server Protocol is the obvious vehicle. The spans are already
 load-bearing throughout the compiler because every diagnostic and every hole
 points at source, so most of what a server needs will already exist.
+
+## Delivery plan — 2026-09-15
+
+### Starting point and scope
+
+Byte spans and CLI inspection exist; do not assume a full language server is required. Start with crates/nether-cli/src/lamp.rs, source-span tests and the browser's UTF-8 handling.
+
+### Steps
+
+1. Specify one editor adapter and a bounded inspection protocol for an already buried trace; define stale-buffer versus named-source behavior.
+2. Implement hover depth, source origin and recorded-reference navigation using existing compiler output.
+3. Exercise non-ASCII source, absent objects, stale buffers and repeated edits in the chosen editor.
+
+### Acceptance and evidence
+
+- [ ] A real editor demonstrates the stated hover and provenance task on a real trace. No reimplemented depth checker, invented source offsets or implied complete LSP coverage.
+- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.

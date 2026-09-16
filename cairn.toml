@@ -36,6 +36,11 @@ template = """
 
 - [ ]
 
+## Delivery steps and dependencies
+
+1. State the prerequisite decisions and the smallest reviewable specification change.
+2. Name the implementation/conformance items that discharge the contract later.
+
 ## Acceptance criteria
 
 - [ ] Every normative claim is stated once, in one place
@@ -52,11 +57,26 @@ template = """
 
 ## Proposal
 
+## Starting point and non-goals
+
+Name existing implementation/tests; distinguish missing work from work already delivered.
+
+## Delivery steps and dependencies
+
+1. Resolve specification changes first, in their own PR.
+2. Implement the smallest slice; name the paths and prerequisite items.
+3. Verify success, failure and boundary behavior.
+
 ## Which stratum does this reach?
 
 ## Acceptance criteria
 
 - [ ]
+
+## Evidence to close
+
+Set `proof` to the observable gate. Record the tested commit, exact checks and
+remaining limits here. Human or elapsed-time evidence cannot be replaced by CI.
 """
 
 [[type]]
@@ -74,17 +94,48 @@ template = """
 
 ## Cairn of the offending trace
 
+## Fix boundary and regression proof
+
+Name the smallest affected path, the failing test before the fix, and the
+verification after it. Preserve unrelated behavior.
+
 """
 
 [[type]]
 name = "chore"
 icon = "~"
 color = "gray"
+template = """
+## Starting point and scope
+
+## Steps and prerequisites
+
+1.
+
+## Acceptance and evidence
+
+- [ ] State the measurable result, exact check and evidence to retain.
+- [ ] Separate preparation from any human, external-service or elapsed-time gate.
+"""
 
 [[type]]
 name = "docs"
 icon = "*"
 color = "blue"
+template = """
+## Reader and missing answer
+
+## Existing sources and non-goals
+
+## Delivery steps
+
+1.
+
+## Acceptance and evidence
+
+- [ ] The reader can perform the stated task; commands and links are checked.
+- [ ] Normative rules are linked to their canonical source, not duplicated.
+"""
 
 [[type]]
 name = "milestone"
@@ -93,6 +144,18 @@ color = "yellow"
 description = "A descent. What we can honestly claim once it lands."
 groups = "one"
 inverse = "scheduled"
+template = """
+## Outcome and current boundary
+
+## Sequence
+
+Name item IDs in delivery order; distinguish hard dependencies from useful
+preparation. Dates are targets, not evidence or permission to skip a gate.
+
+## Exit gate
+
+State what the descent can honestly claim and which external proofs remain.
+"""
 
 # ─── Statuses ────────────────────────────────────────────────────────────────
 # Order is board order. `category` is what cairn reasons about; the names are
