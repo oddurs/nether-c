@@ -251,6 +251,5 @@ The reverse direction — using a deep value where a shallow one is required —
 is exactly what the language exists to prevent, and it is available only
 through `seal` and `shade`.
 
-> HolyC made everything an `I64` and let it coerce freely. This is the
-> inversion of that, and it is the place where the inversion is most likely to
-> be unpleasant in practice. See [section 90](90-rationale.md).
+> Explicit depth boundaries cost convenience. The tradeoff is recorded in
+> [section 90](90-rationale.md).

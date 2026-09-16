@@ -278,6 +278,5 @@ buried   <source> → <cairn>   depth <n>   holes <n>   <n> nodes
 
 It MUST NOT print any value the program deposited. A program's deposits are
 read with `nether lamp` ([section 08](08-rites.md)), by a person who decided to
-go and look. This is the inversion of HolyC's bare-string-prints, and it is
-the reason a Nether C program cannot leak to a log: it holds no capability
+go and look. A Nether C program cannot leak to a log: it holds no capability
 that reaches one.

@@ -1,9 +1,7 @@
 #!/bin/sh
 # The Decay Rule.
 #
-# TempleOS was fixed at a size given by covenant and never grew. Nether C
-# inverts that: the trusted core may only ever get SMALLER. Below, things
-# only decay.
+# The trusted core may only ever get SMALLER. Below, things only decay.
 #
 # The trusted core is the Rust that every guarantee rests on. Lowering the
 # ceiling in .decay-ceiling is an ordinary commit. Raising it is a deliberate

@@ -12,10 +12,8 @@ A Nether C source file is a sequence of Unicode scalar values encoded as
 UTF-8. An implementation MUST reject a file that is not well-formed UTF-8,
 rather than substituting replacement characters.
 
-> HolyC used 8-bit ASCII throughout its toolchain, deliberately. This is one
-> of the few places Nether C does not invert: a ledger that cannot record a
-> name is not a ledger, and half the names in the world need more than 256
-> code points.
+> A ledger must be able to record names, not just the ones that fit in an
+> eight-bit character set.
 
 Line terminators are `U+000A`. A `U+000D` immediately preceding `U+000A` is
 discarded; a `U+000D` anywhere else is an error. Source files SHOULD end with

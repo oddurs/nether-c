@@ -53,8 +53,8 @@ a decision, and it is the last one you get to make about that value. There is no
 <code>ascend</code> &mdash;
 <a href="spec/01-strata.html#12-the-monotonicity-law">&sect;1.2</a>.</span></li>
 
-<li><b>Nothing down here changes.</b><span>TempleOS let every task write to all
-of memory at all times. We kept the sharing and removed the writing. This is not
+<li><b>Nothing down here changes.</b><span>The ledger is shared, but its
+contents cannot be revised. This is not
 a safety feature bolted on. It is what the word <em>nether</em> means &mdash;
 <a href="spec/05-types.html#54-mutation">&sect;5.4</a>.</span></li>
 
@@ -73,11 +73,10 @@ program. We charge it anyway, and
 <a href="spec/90-rationale.html#901-the-inversions">&sect;90.1</a> says
 so.</span></li>
 
-<li><b>Entropy is the deepest recordable sin.</b><span>In TempleOS it was the
-Oracle: revelation, arriving from above, the highest channel in the system. Here
-it is stratum 7. Second from the bottom. It is the one act that makes a program
-impossible to derive again. Same mechanism. Opposite orientation. Read that
-twice &mdash; <a href="spec/09-prelude.html#97-stratum-7-entropy">&sect;9.7</a>.</span></li>
+<li><b>Entropy is the deepest recordable sin.</b><span>Stratum 7. Second from
+the bottom. Drawn bytes must be recorded: the source alone cannot tell you what
+they were. You can replay the answer, but you cannot derive it again &mdash;
+<a href="spec/09-prelude.html#97-stratum-7-entropy">&sect;9.7</a>.</span></li>
 
 <li><b>The world's answer is written down before you get it.</b><span>Not
 afterwards. Not usually. <strong>Before.</strong> A witness recorded after the
@@ -133,10 +132,9 @@ perform it.</p>
 <div class="plaque">
 <h3>THIS IS THE POINT, NOT THE PRICE</h3>
 <div>
-<p>In HolyC a bare string is a call to <code>PrintF</code>. The gesture here is
-identical and the semantics are its exact opposite, and that is the single
-largest tax the design charges. It lands in the first thirty seconds of
-everybody's first program.</p>
+<p>A bare string leaves a deposit, not a line on your terminal. Reading it takes
+a second command. That is the single largest tax the design charges, and it
+lands in the first thirty seconds of everybody's first program.</p>
 <p>Here is what it buys. A Nether C program holds <em>no capability that reaches
 a log</em>. Not one it is discouraged from using. Not one behind a flag. There is
 no code path from a running program to your terminal, so there is no such thing
@@ -300,9 +298,8 @@ argue against.</p>
 
 <p>This is not decoration and it is not a joke. Sit with it.</p>
 
-<p>TempleOS was 640&times;480 and sixteen colours, fixed by covenant, forever.
-This site takes those sixteen colours and complements every single one of
-them.</p>
+<p>The graphics start with the sixteen-colour VGA palette and complement
+every single colour.</p>
 
 <p><strong>Fourteen of the sixteen land back inside the palette.</strong>
 Complement blue and you get yellow. Complement green and you get light purple.
@@ -456,5 +453,5 @@ argued with.</p>
 checkable. It is deliberately not a claim about how it came to be written,
 which would not be.</p>
 
-<p class="small">Terry A. Davis, whose work this one is a negative of, has
+<p class="small">Terry A. Davis has
 <a href="in-memoriam.html">a page of his own</a>.</p>

@@ -213,9 +213,8 @@ backwards — a hole records no dependents and does not need to.
 
 `lamp` is a tool the operator carries, not a capability the program holds. A
 program cannot invoke it, cannot reach a terminal, and has no way to know
-whether anyone is looking. This is the inversion of HolyC's bare-string
-`PrintF`, and it is what makes it structurally impossible for a Nether C
-program to leak to a log.
+whether anyone is looking. This separation makes it structurally impossible
+for a Nether C program to leak to a log.
 
 ## 8.5 `cairn`
 

@@ -4,8 +4,8 @@ gfx — an animated GIF89a encoder, and the graphics for the site.
 
 There is no image library here. There is no image library anywhere in this
 repository. This file contains a GIF89a writer, an LZW compressor, and a 5x7
-bitmap font, none of which is imported. A project that inverts TempleOS should
-not be assembled out of other people's parts.
+bitmap font, none of which is imported. The drawing and encoding are small
+enough to keep together and inspect.
 
     python3 site/gfx.py            write site/gfx/*.gif
     python3 site/gfx.py --check    fail if what is committed is stale
