@@ -53,7 +53,7 @@ pub struct FuncId(pub u32);
 pub struct GlobalId(pub u32);
 
 /// A value that was written down rather than computed.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     /// `U0`. Not written in source — there is no literal for it — but the IR
     /// needs one wherever a construct has nothing to say.

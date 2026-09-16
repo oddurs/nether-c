@@ -253,3 +253,24 @@ fn a_cairn_literal_survives_the_round_trip() {
     let unit = round_trip(&format!("Cairn c = #{name};\ndemand c;\n"));
     assert!(print(&unit).contains(&format!("#{name}")), "{}", print(&unit));
 }
+
+/// A call holds its callee's result depth, and a callee's is not known until
+/// its body is lowered. A chain settles one link per pass, so a chain longer
+/// than the bound used to settle on the wrong depth and check cleanly anyway.
+///
+/// Burial's residue is where this bites: §6.5 mints a function per starved
+/// call, and the chain is as deep as the specialisation went.
+#[test]
+fn a_call_chain_longer_than_a_handful_still_settles() {
+    use std::fmt::Write as _;
+    let mut src = String::from("Bytes deep() { descend disk { must(read(\"k\")) } }\n");
+    for i in 0..24 {
+        let below = if i == 0 { "deep".to_string() } else { format!("up{}", i - 1) };
+        let _ = writeln!(src, "Bytes up{i}() {{ {below}() }}");
+    }
+    let unit = ir(&src);
+    for f in &unit.funcs {
+        assert_eq!(f.ret_depth, Depth::DISK, "{}", f.name);
+    }
+    clean(&unit);
+}

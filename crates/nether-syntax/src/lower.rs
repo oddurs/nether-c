@@ -203,10 +203,15 @@ impl<'a> Lowering<'a> {
         // A call lowered before its callee's body was is holding the wrong
         // result depth, so the whole thing is lowered again with the arrows
         // filled in, until nothing moves. A chain of calls settles in as many
-        // passes as the chain is long, and a bound keeps a cycle finite.
+        // passes as the chain is long, so the bound is the longest chain this
+        // unit could have — which is every function calling the next one — and
+        // it is there to keep a cycle finite rather than to cut a chain short.
+        // A residue's chain is as long as burial's specialisation was deep
+        // (`spec/06-evaluation.md` §6.5), so a fixed bound here would be a
+        // burial the compiler could not lower back.
         let mut globals = Vec::new();
         let mut funcs: Vec<ir::FuncDef> = Vec::new();
-        for _ in 0..8 {
+        for _ in 0..=declarations.len() {
             self.faults.clear();
             globals = self.unit_bindings(unit);
             funcs = declarations.iter().map(|f| self.func(f)).collect();

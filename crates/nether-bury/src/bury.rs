@@ -29,8 +29,8 @@
 use std::collections::{HashMap, HashSet};
 
 use nether_core::{
-    BinOp, Block, Capability, Demand, Depth, Diagnostic, Expr, ExprKind, FuncId, GlobalId, Literal,
-    Place, Prim, Refusal as RefusalCode, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
+    BinOp, Block, Capability, Demand, Depth, Diagnostic, Expr, ExprKind, FuncDef, FuncId, GlobalId,
+    Literal, Place, Prim, Refusal as RefusalCode, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
 };
 use nether_ledger::{Cairn, Node, Stored, Value};
 
@@ -56,6 +56,14 @@ pub struct Residue {
     /// two burials of the same input produce the same trace including that
     /// order.
     pub holes: Vec<Cairn>,
+    /// The functions minted for calls that starved, in the order they were
+    /// minted.
+    ///
+    /// §6.5: a starved call whose arguments are all values residualises as its
+    /// reduced body, and the reduced body needs none of those arguments, so it
+    /// is written down as a function of no parameters. [`Residue::as_unit`]
+    /// puts them after the ones that were buried.
+    pub specialised: Vec<FuncDef>,
     /// Evaluation steps spent. Deterministic for a given unit and budget.
     pub fuel_spent: u64,
     /// The deepest stratum anything in the residue still reaches.
@@ -95,7 +103,9 @@ impl Residue {
     /// The declarations come from the unit that was buried. Burial reduces
     /// demands and never touches a `struct`, a function or a global, so
     /// carrying them across loses nothing and an unreduced call still has
-    /// something to name.
+    /// something to name. What burial adds is [`Residue::specialised`], and it
+    /// adds them at the end so that a [`FuncId`] means the same thing in the
+    /// residue as it did in the unit.
     ///
     /// # Panics
     ///
@@ -112,9 +122,11 @@ impl Residue {
             self.demands.len(),
             buried.demands.len()
         );
+        let mut funcs = buried.funcs.clone();
+        funcs.extend(self.specialised.iter().cloned());
         Unit {
             structs: buried.structs.clone(),
-            funcs: buried.funcs.clone(),
+            funcs,
             globals: buried.globals.clone(),
             demands: self
                 .demands
@@ -389,6 +401,9 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64, answers: &Answers) -> Result<Re
         holes: Vec::new(),
         deposits: Vec::new(),
         asked: HashMap::new(),
+        specialised: Vec::new(),
+        minted: HashMap::new(),
+        starved: None,
     };
     let mut demands = Vec::with_capacity(unit.demands.len());
     // In source order, which §6.2 fixes: two burials of the same input produce
@@ -403,6 +418,7 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64, answers: &Answers) -> Result<Re
     let depth = demands.iter().fold(Depth::PURE, |acc, d| acc.join(d.depth));
     Ok(Residue {
         demands,
+        specialised: b.specialised,
         named: b.named,
         deposits: b.deposits,
         holes: b.holes,
@@ -510,6 +526,19 @@ struct Burial<'a> {
     holes: Vec<Cairn>,
     /// What the program deposited, in source order.
     deposits: Vec<Cairn>,
+    /// The functions minted for calls that starved. §6.5.
+    specialised: Vec<FuncDef>,
+    /// The same functions, by what they were specialised to, so that a
+    /// function specialised twice to the same constants is minted once. A
+    /// recursive interpreter reaches the same state from more than one place
+    /// and a residue that held a copy for each would grow with the guest
+    /// rather than with what is left of it.
+    minted: HashMap<(FuncId, Vec<Literal>), FuncId>,
+    /// The block the body just starved in, on the way out of [`Burial::block`].
+    ///
+    /// A side channel because a block's residue is not its value: the value is
+    /// what starved and the residue is the statements around it.
+    starved: Option<Block>,
     /// The holes already dug, by the question each one asks.
     ///
     /// §6.3 makes the `call` the identity and not the node. A node carries the
@@ -973,7 +1002,7 @@ impl Burial<'_> {
                     return Err(Halt { span: x.span, kind, grinding: None });
                 }
             },
-            Kind::Func(id) => self.apply(*id, &values)?,
+            Kind::Func(id) => self.apply(*id, &values, args, x)?,
             _ => None,
         };
         if let Some(v) = folded {
@@ -997,7 +1026,19 @@ impl Burial<'_> {
     }
 
     /// Evaluate a function body against known arguments.
-    fn apply(&mut self, id: FuncId, args: &[Val]) -> Result<Option<Val>, Halt> {
+    ///
+    /// A body that finishes gives the call its value. A body that starves
+    /// gives it the reduced body instead, minted as a function of no
+    /// parameters — §6.5. The call site's argument expressions come along so
+    /// that the arguments can be written down as the bindings the reduced body
+    /// still names.
+    fn apply(
+        &mut self,
+        id: FuncId,
+        args: &[Val],
+        exprs: &[Expr],
+        site: &Expr,
+    ) -> Result<Option<Val>, Halt> {
         let Some(f) = self.unit.func(id) else { return Ok(None) };
         if args.iter().any(Val::is_stuck) || args.len() != f.params.len() {
             return Ok(None);
@@ -1015,19 +1056,232 @@ impl Burial<'_> {
             return Err(Halt { span: f.span, kind, grinding: None });
         }
         self.grind.push(Grind { span: f.span, what: Open::Call(id) });
+        // Whatever block the caller was in is not this one. It goes back
+        // afterwards: the caller's own statement is still being evaluated.
+        let outer = self.starved.take();
         let fell = self.block(&f.body, &mut frame)?;
         self.grind.pop();
         let out = match self.flow.take() {
-            Some(Flow::Returned(v)) => v,
             // A `break` outside a loop is not a program this can run.
-            Some(Flow::Broke | Flow::Continued) => return Ok(None),
+            Some(Flow::Broke | Flow::Continued) => {
+                self.starved = outer;
+                return Ok(None);
+            }
+            Some(Flow::Returned(v)) => v,
             None => fell,
         };
-        Ok(if out.is_stuck() { None } else { Some(out) })
+        let body = self.starved.take();
+        self.starved = outer;
+        if !out.is_stuck() {
+            return Ok(Some(out));
+        }
+        // Nothing reduced to show for it: the body starved somewhere no block
+        // could be built for, so the residue would be the body as written and
+        // the call is the shorter way to say that.
+        let Some(body) = body else { return Ok(None) };
+        Ok(self.specialise(id, args, exprs, site, body, out.depth))
     }
 
+    /// §6.5: what a starved call residualises as.
+    ///
+    /// Every argument is a value — [`Burial::apply`] gives up otherwise — so
+    /// the reduced body takes no parameters and the arguments become the first
+    /// of its bindings. It keeps the locals table it had, which is why nothing
+    /// is renamed: the body is still in the frame it was written for.
+    fn specialise(
+        &mut self,
+        id: FuncId,
+        args: &[Val],
+        exprs: &[Expr],
+        site: &Expr,
+        body: Block,
+        depth: Depth,
+    ) -> Option<Val> {
+        let f = self.unit.func(id).expect("apply found it");
+        let mut stmts: Vec<Stmt> = Vec::with_capacity(f.params.len() + body.stmts.len());
+        for ((slot, v), e) in f.params.iter().zip(args).zip(exprs) {
+            stmts.push(Stmt::Let { local: *slot, value: Self::residual(v.clone(), e) });
+        }
+        stmts.extend(body.stmts);
+        let mut body = Block { stmts, tail: body.tail, span: body.span };
+        Self::prune(&mut body);
+        // Nothing was reduced, so there is nothing to specialise to, and
+        // minting a function here would mint another one for it next time.
+        // §6.5's staging law with nothing granted is what that would break:
+        // a residue has to be what burying it again leaves.
+        if body == f.body {
+            return None;
+        }
+
+        let key = Self::constants(args).map(|k| (id, k));
+        let found = key.as_ref().and_then(|k| self.minted.get(k)).copied();
+        let minted = if let Some(minted) = found {
+            minted
+        } else {
+            let minted = FuncId(
+                u32::try_from(self.unit.funcs.len() + self.specialised.len()).unwrap_or(u32::MAX),
+            );
+            if let Some(k) = key {
+                self.minted.insert(k, minted);
+            }
+            let name = self.apart(&f.name, minted);
+            self.specialised.push(FuncDef {
+                name,
+                params: Vec::new(),
+                ret: f.ret.clone(),
+                ret_depth: depth,
+                asserted_ret: None,
+                latent: f.latent,
+                asserted_latent: None,
+                locals: f.locals.clone(),
+                body,
+                span: f.span,
+            });
+            minted
+        };
+        let ty = Type::Fn {
+            params: Vec::new(),
+            latent: f.latent,
+            result: Box::new(f.ret.clone()),
+            result_depth: depth,
+        };
+        let callee = Expr { kind: ExprKind::Func(minted), ty, depth: Depth::PURE, span: site.span };
+        let kind = ExprKind::Call { callee: Box::new(callee), args: Vec::new() };
+        Some(Self::rebuild(kind, site, depth))
+    }
+
+    /// A name for a minted function that no other function in the residue has.
+    ///
+    /// The number alone is already unique, since it is the function's own
+    /// position. The loop is for the program that wrote that name first.
+    fn apart(&self, from: &str, minted: FuncId) -> String {
+        let mut name = format!("{from}__{}", minted.0);
+        while self.unit.funcs.iter().any(|f| f.name == name)
+            || self.specialised.iter().any(|f| f.name == name)
+        {
+            name.push('_');
+        }
+        name
+    }
+
+    /// The constants a body was specialised to, when every argument is one.
+    ///
+    /// Only these are memoised. An argument with no literal form — an answer,
+    /// a shade — is not one this can compare, and minting a second function
+    /// for it makes the residue larger rather than wrong.
+    fn constants(args: &[Val]) -> Option<Vec<Literal>> {
+        args.iter()
+            .map(|v| match &v.kind {
+                Kind::Known(l) => Some(l.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Drop the bindings the reduced body does not read.
+    ///
+    /// Only the ones bound to something already written down. A binding whose
+    /// value still has a question in it is kept whatever names it: dropping it
+    /// would drop the question with it, and the residue would stop asking
+    /// something the program asks.
+    fn prune(body: &mut Block) {
+        let mut read: HashSet<u32> = HashSet::new();
+        if let Some(t) = &body.tail {
+            Self::reads(t, &mut read);
+        }
+        let mut kept: Vec<Stmt> = Vec::new();
+        for s in body.stmts.iter().rev() {
+            if let Stmt::Let { local, value } = s
+                && !read.contains(&local.0)
+                && matches!(value.kind, ExprKind::Literal(_))
+            {
+                continue;
+            }
+            match s {
+                Stmt::Let { value, .. } | Stmt::Expr(value) => Self::reads(value, &mut read),
+                Stmt::Declare { .. } => {}
+            }
+            kept.push(s.clone());
+        }
+        kept.reverse();
+        body.stmts = kept;
+    }
+
+    /// Every local an expression names.
+    fn reads(x: &Expr, into: &mut HashSet<u32>) {
+        match &x.kind {
+            ExprKind::Local(id) => {
+                into.insert(id.0);
+            }
+            ExprKind::Literal(_)
+            | ExprKind::Global(_)
+            | ExprKind::Func(_)
+            | ExprKind::Prim(_)
+            | ExprKind::Break
+            | ExprKind::Continue => {}
+            ExprKind::Call { callee, args } => {
+                Self::reads(callee, into);
+                for a in args {
+                    Self::reads(a, into);
+                }
+            }
+            ExprKind::Unary { operand, .. } | ExprKind::Rite { operand, .. } => {
+                Self::reads(operand, into);
+            }
+            ExprKind::Binary { lhs, rhs, .. } => {
+                Self::reads(lhs, into);
+                Self::reads(rhs, into);
+            }
+            ExprKind::Select { cond, then, otherwise } => {
+                Self::reads(cond, into);
+                Self::reads(then, into);
+                Self::reads(otherwise, into);
+            }
+            ExprKind::Block(b) => {
+                for s in &b.stmts {
+                    match s {
+                        Stmt::Let { value, .. } | Stmt::Expr(value) => Self::reads(value, into),
+                        Stmt::Declare { .. } => {}
+                    }
+                }
+                if let Some(t) = &b.tail {
+                    Self::reads(t, into);
+                }
+            }
+            ExprKind::Loop { body, step } => {
+                Self::reads(body, into);
+                if let Some(s) = step {
+                    Self::reads(s, into);
+                }
+            }
+            ExprKind::Descend { body, .. } => Self::reads(body, into),
+            ExprKind::Assign { place, value } => {
+                into.insert(place.local.0);
+                Self::reads(value, into);
+            }
+            ExprKind::Return(v) => {
+                if let Some(v) = v {
+                    Self::reads(v, into);
+                }
+            }
+            ExprKind::Field { base, .. } => Self::reads(base, into),
+            ExprKind::Index { base, index } => {
+                Self::reads(base, into);
+                Self::reads(index, into);
+            }
+        }
+    }
+
+    /// §6.5: a block reduces its statements in order and stops at the first
+    /// one that starves. What it leaves behind is the bindings that finished,
+    /// then that statement and every statement after it, unreduced.
+    ///
+    /// The residue goes into [`Burial::starved`] rather than coming back as a
+    /// value, because a block's value is what starved in it and its residue is
+    /// the statements around that.
     fn block(&mut self, b: &Block, env: &mut Env) -> Result<Val, Halt> {
-        for s in &b.stmts {
+        let mut kept: Vec<Stmt> = Vec::new();
+        for (i, s) in b.stmts.iter().enumerate() {
             let v = match s {
                 Stmt::Let { local, value } => {
                     let v = self.expr(value, env)?;
@@ -1035,7 +1289,14 @@ impl Burial<'_> {
                     if let Some(slot) = env.get_mut(local.0 as usize) {
                         *slot = Some(v.clone());
                     }
-                    if stuck { v } else { Self::unit() }
+                    if stuck {
+                        v
+                    } else {
+                        // A binding the unreduced statements below can still
+                        // name. Dropping it would leave them naming nothing.
+                        kept.push(Stmt::Let { local: *local, value: Self::residual(v, value) });
+                        Self::unit()
+                    }
                 }
                 // Nothing to evaluate. The local stays empty until something
                 // is written to it, and reading it before that collapses,
@@ -1063,13 +1324,119 @@ impl Burial<'_> {
             // after it depends on a world that has not answered yet. A jump
             // takes it too, and carries its own value.
             if v.is_stuck() || self.flow.is_some() {
+                // A `return` that carries something that is not here left the
+                // block by returning, so the residue ends by returning it and
+                // nothing below it is in the residue at all. Which statement
+                // the `return` was written inside does not matter: it leaves
+                // the function either way.
+                let returned = matches!(&self.flow, Some(Flow::Returned(r)) if r.is_stuck());
+                if returned {
+                    kept.push(Self::returning(v.clone(), s, b.span));
+                    return Ok(self.residue(kept, None, b, &v));
+                }
+                if v.is_stuck() && self.flow.is_none() {
+                    kept.push(Self::halted(v.clone(), s));
+                    kept.extend(b.stmts[i + 1..].iter().cloned());
+                    return Ok(self.residue(kept, b.tail.clone(), b, &v));
+                }
                 return Ok(v);
             }
         }
         match &b.tail {
-            Some(t) => self.expr(t, env),
+            Some(t) => {
+                let v = self.expr(t, env)?;
+                if v.is_stuck() && self.flow.is_none() {
+                    let tail = Some(Box::new(Self::residual(v.clone(), t)));
+                    return Ok(self.residue(kept, tail, b, &v));
+                }
+                Ok(v)
+            }
             None => Ok(Self::unit()),
         }
+    }
+
+    /// What a block that did not finish residualises as.
+    ///
+    /// It is the block, and not the one statement that starved inside it: a
+    /// block holds the bindings that statement reads and the `return` that
+    /// stops the ones below it from happening. Reducing it to the bare
+    /// expression that starved loses both, and the residue then does things
+    /// the program does not.
+    ///
+    /// The same block goes to [`Burial::apply`], which is the only thing that
+    /// wants it as a block rather than as an expression.
+    fn residue(&mut self, stmts: Vec<Stmt>, tail: Option<Box<Expr>>, b: &Block, v: &Val) -> Val {
+        // A block is worth what its tail is worth, and a block with no tail is
+        // worth `U0` — which is what lowering the residue back will say, and
+        // the two have to agree or the second burial specialises what the
+        // first one already did.
+        let (ty, depth) = match &tail {
+            Some(t) => (t.ty.clone(), t.depth),
+            None => (Type::Unit, Depth::PURE),
+        };
+        let block = Block { stmts, tail, span: b.span };
+        self.starved = Some(block.clone());
+        let kind = ExprKind::Block(block);
+        let e = Expr { kind, ty, depth, span: b.span };
+        // The value is still what starved. That is what the expression around
+        // this block is waiting on, and it is not what the block is worth.
+        Val { kind: Kind::Stuck(Box::new(e)), ty: v.ty.clone(), depth: v.depth }
+    }
+
+    /// Whether a residual block's last word is a `return`.
+    fn ends_returning(x: &Expr) -> bool {
+        let ExprKind::Block(b) = &x.kind else {
+            return matches!(x.kind, ExprKind::Return(_));
+        };
+        if b.tail.is_some() {
+            return false;
+        }
+        match b.stmts.last() {
+            Some(Stmt::Expr(last)) => Self::ends_returning(last),
+            _ => false,
+        }
+    }
+
+    /// The statement that starved, reduced as far as it went.
+    fn halted(v: Val, s: &Stmt) -> Stmt {
+        match s {
+            Stmt::Let { local, value } => {
+                Stmt::Let { local: *local, value: Self::residual(v, value) }
+            }
+            Stmt::Declare { local } => Stmt::Declare { local: *local },
+            Stmt::Expr(x) => Stmt::Expr(Self::residual(v, x)),
+        }
+    }
+
+    /// `return e`, where `e` is what the block was carrying out of the
+    /// function when it starved.
+    fn returning(v: Val, s: &Stmt, span: Span) -> Stmt {
+        let span = match s {
+            Stmt::Expr(x) => x.span,
+            _ => span,
+        };
+        let here = Expr {
+            kind: ExprKind::Literal(Literal::Unit),
+            ty: Type::Unit,
+            depth: Depth::PURE,
+            span,
+        };
+        let inner = match s {
+            Stmt::Expr(x) => Self::residual(v, x),
+            Stmt::Let { value, .. } => Self::residual(v, value),
+            Stmt::Declare { .. } => here,
+        };
+        // A `return` whose operand has no value form residualises as the
+        // `return` it was, and a block that already ends by returning says it
+        // where it happens. Either way, saying it again would say it twice.
+        let inner = match inner.kind {
+            ExprKind::Return(Some(e)) => *e,
+            ExprKind::Block(_) if Self::ends_returning(&inner) => return Stmt::Expr(inner),
+            _ => inner,
+        };
+        let depth = inner.depth;
+        let kind = ExprKind::Return(Some(Box::new(inner)));
+        Stmt::Expr(Expr { kind, ty: Type::Unit, depth, span })
     }
 
     /// Unroll a loop as far as it will go, and abandon the unrolling whole if
