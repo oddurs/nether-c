@@ -14,10 +14,9 @@
    amber, and the nine strata sweep between them at one lightness, so depth
    reads as *hue* and never as "harder to see". Nothing is at full chroma.
 
-   Space is the cell: twelve pixels, the advance of the face this site is set
-   in. Every margin and rule is a count of them and nothing lands on a half.
+   Space follows a twelve-pixel grid, independent of the font's advance.
 
-   Type is the cell doubled and trebled. There are four sizes, because a face
+   Type follows the eight-pixel drawing cell. There are four sizes, because a face
    drawn on an eight-pixel grid has exactly four at which a pixel of it is a
    whole number of the screen's.
 
@@ -39,9 +38,8 @@
 }
 
 /* --------------------------------------------------------------------------
-   Everything is eighty columns of fixed-width text, because that is what a
-   text screen was, and because a specification that needs more than eighty
-   columns is usually saying too much.
+   The page is capped at eighty spacing cells. The font keeps its own fixed
+   advance; reading width does not depend on squeezing the drawings.
    -------------------------------------------------------------------------- */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -99,9 +97,10 @@ body {
   background: transparent;
   color: var(--ink);
   font-family: "Nether 8", ui-monospace, monospace;
-  /* Twice the cell, so every pixel of the face lands on two of the screen's
-     and nothing is ever asked to draw half of one. The scale is 8, 16, 24, 32
-     and there is nothing in between it. */
+  /* Twice the drawing cell, so every pixel of the face lands on two of the
+     screen's and nothing is ever asked to draw half of one. The face advances
+     seven pixels per cell: six for ink and one blank metric bearing. The
+     scale is 8, 16, 24, 32 and there is nothing in between it. */
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: none;
@@ -170,6 +169,25 @@ hr.heavy { border-top: 3px double var(--accent); }
 }
 .gauge span.lit { opacity: 1; }
 
+/* The specification is a reference, not a chapter book. Every section keeps
+   the whole contents list at its head so a reader can move directly to the
+   rule they need. */
+nav.contents {
+  margin: 0 0 1.25rem;
+  padding: .45rem .7rem;
+  border: 1px solid var(--dim);
+}
+nav.contents p { margin: 0 0 .3rem; color: var(--dim); }
+nav.contents ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18ch, 1fr));
+  gap: .2rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+nav.contents li[aria-current="page"] { color: var(--ink); font-weight: bold; }
+
 td.shaft { min-width: 12ch; }
 td.shaft span {
   display: inline-block;
@@ -218,6 +236,7 @@ h1 {
   text-transform: uppercase;
 }
 h1::before { content: "\2588\2588 "; }
+h1::before, h2::before, h3::before { margin-right: .5ch; }
 
 h2 {
   margin: 2.25rem 0 .75rem;
@@ -444,6 +463,7 @@ img.banner { width: 100%; max-width: 396px; margin: 0 auto; }
 /* The mark. Drawn at three times the cell and shown at exactly that, because
    a bitmap resampled to 1.4 pixels per pixel is an argument against itself. */
 img.mark { display: block; width: 96px; height: 120px; margin: 0 auto 1rem; image-rendering: pixelated; }
+img.hero { display: block; width: 100%; max-width: 600px; height: auto; margin: 0 auto 1.25rem; image-rendering: pixelated; }
 img.rule   { width: 100%; max-width: 396px; margin: 1rem auto; }
 /* The specimen is drawn at three times the cell and must not be resampled to
    anything else: a bitmap face shown at 1.4 pixels per pixel is an argument

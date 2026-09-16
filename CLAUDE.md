@@ -172,8 +172,8 @@ advantages is marketing.
   This is a check rather than a request. `.githooks/commit-msg` refuses a
   message that does it — a `Co-authored-by:`, an `Assisted-by:`, a session URL,
   a 🤖 — and `tests/attribution/run` refuses a tree or a branch that does, in
-  `scripts/task test`. `CLAUDE.md` is exempt as a *filename*, because this is
-  the file that states the ban.
+  `scripts/task test`. `CLAUDE.md` and `AGENTS.md` are exempt as *filenames*,
+  because they state the ban.
 
 ## COMMITS
 

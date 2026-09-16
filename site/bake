@@ -460,6 +460,21 @@ def navbar(current: str, depth: int) -> str:
     )
 
 
+def contents(sections: list[dict[str, object]], current: str) -> str:
+    """The whole specification beside every section, not a next-page maze."""
+    items = []
+    for section in sections:
+        label = f'§{section["section"]} {esc(str(section["title"]))}'
+        if section["slug"] == current:
+            items.append(f'<li aria-current="page">{label}</li>')
+        else:
+            items.append(f'<li><a href="{section["slug"]}.html">{label}</a></li>')
+    return (
+        '<nav class="contents" aria-label="Specification contents">'
+        '<p>Contents</p><ol>' + "".join(items) + "</ol></nav>"
+    )
+
+
 SITE_NAME = "Nether C"
 
 
@@ -533,23 +548,10 @@ def build() -> dict[Path, str]:
         "The specification", index_body, current="spec", depth=1
     )
 
-    # each section
-    for n, s in enumerate(sections):
-        prev_s = sections[n - 1] if n else None
-        next_s = sections[n + 1] if n + 1 < len(sections) else None
-        foot = ['<hr class="thin"><nav class="bar">']
-        foot.append(
-            f'<a href="{prev_s["slug"]}.html">&larr; {esc(prev_s["title"])}</a>'
-            if prev_s
-            else '<span class="sep">&larr; start</span>'
-        )
-        foot.append('<span class="spacer"></span>')
-        foot.append(
-            f'<a href="{next_s["slug"]}.html">{esc(next_s["title"])} &rarr;</a>'
-            if next_s
-            else '<span class="sep">end &rarr;</span>'
-        )
-        foot.append("</nav>")
+    # Each section carries the whole contents list. The old previous/next bar
+    # made navigation a forced march through the draft instead of letting a
+    # reader choose the section they need.
+    for s in sections:
         # The section's own depth, computed from the section. A reader should
         # be able to tell how far down a page goes before reading it, which is
         # the thing the language spends nine strata on.
@@ -565,7 +567,7 @@ def build() -> dict[Path, str]:
             + "</div>"
         )
         files[SITE / "spec" / f'{s["slug"]}.html'] = page(
-            f'{s["section"]} {s["title"]}', head + s["html"] + "".join(foot),
+            f'{s["section"]} {s["title"]}', head + contents(sections, s["slug"]) + s["html"],
             current="spec", depth=1,
         )
 

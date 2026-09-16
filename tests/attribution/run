@@ -2,7 +2,8 @@
 """
 attribution — the work is published under the owner's name.
 
-`CLAUDE.md` bans attributing work to a tool, a model or an assistant: not in
+`CLAUDE.md` and `AGENTS.md` ban attributing work to a tool, a model or an
+assistant: not in
 commits, trailers, pull requests, comments, docs or release notes. The
 commit-msg hook checks a message as it is written. This checks everything that
 is already here, because a rule enforced only at the door is a rule that was
@@ -24,8 +25,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# A vendor or a model, anywhere — except `CLAUDE.md`, which is a filename this
-# repository cites constantly and is the very file stating the ban.
+# A vendor or a model, anywhere — except the instruction-file names, which the
+# repository cites constantly and which state the ban.
 NAMED = re.compile(
     r"(?i)\b(?:claude(?!\.md\b)|anthropic|copilot|chatgpt|openai|gemini)\b"
 )
@@ -75,8 +76,8 @@ def main() -> int:
         rel = path.relative_to(ROOT)
         # The ban's own statement and its enforcement have to name what they
         # ban. Nothing else may.
-        if str(rel) in {"CLAUDE.md", "CONTRIBUTING.md", ".githooks/commit-msg",
-                        "tests/attribution/run"}:
+        if str(rel) in {"CLAUDE.md", "AGENTS.md", "CONTRIBUTING.md",
+                        ".githooks/commit-msg", "tests/attribution/run"}:
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -106,7 +107,7 @@ def main() -> int:
 
     if bad:
         print("", file=sys.stderr)
-        print("The work is published under the owner's name. CLAUDE.md, NEVER.", file=sys.stderr)
+        print("The work is published under the owner's name. AGENTS.md, NEVER.", file=sys.stderr)
         return 1
 
     print(f"attribution: {len(files())} file(s) and this branch's commits name no tool")
