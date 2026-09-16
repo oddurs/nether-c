@@ -179,6 +179,9 @@ Bytes expression(Bytes s, I64 p, Bytes env, I64 ambient, Bytes memory, Bool chec
   }
   if (token(s, next) == b"(") {
     Bytes args = arguments(s, token_end(s, next), env, ambient, memory, checking);
+    if (len(lookup(env, t)) > 0) {
+      return replace_value(args, problem(b"binding is not callable", start));
+    }
     Bytes r = invoke(s, t, found(args), ambient, memory_of(args), checking, start);
     return relocate(r, cursor(args));
   }
@@ -215,6 +218,7 @@ Bytes arguments(Bytes s, I64 p, Bytes env, I64 ambient, Bytes memory, Bool check
     return result(token_end(s, cursor(r)), packet(found(r)), memory_of(r));
   }
   I64 next = expect(s, cursor(r), b",");
+  if (token(s, next) == b")") { return result(malformed_source(s), found(r), memory_of(r)); }
   Bytes tail = arguments(s, next, env, ambient, memory_of(r), checking);
   return replace_value(tail, concat(packet(found(r)), found(tail)));
 }
@@ -262,7 +266,11 @@ Bytes invoke(Bytes s, Bytes name, Bytes args, I64 ambient,
   if (len(bad) > 0) { return result(p, bad, memory); }
   I64 f = location(memory, name);
   if (f < 0) { return result(p, prelude(name, args, ambient, checking, p), memory); }
-  I64 start = expect(s, name_end(s, type_end(s, f)), b"(");
+  I64 after_name = name_end(s, type_end(s, f));
+  if (token(s, after_name) != b"(") {
+    return result(p, problem(b"binding is not callable", p), memory);
+  }
+  I64 start = token_end(s, after_name);
   Bytes bound = parameters(s, start, args, b"", memory);
   if (failed(found(bound))) { return bound; }
   I64 after = cursor(bound);
@@ -400,7 +408,9 @@ Bytes placeholder_parameters(Bytes s, I64 p)
   Bytes v = declared_value(s, p);
   I64 next = name_end(s, type_end(s, p));
   if (token(s, next) == b")") { return packet(v); }
-  return concat(packet(v), placeholder_parameters(s, expect(s, next, b",")));
+  I64 following = expect(s, next, b",");
+  if (token(s, following) == b")") { return slice(s, -1, 0); }
+  return concat(packet(v), placeholder_parameters(s, following));
 }
 I64 function_ambient(Bytes s, I64 p)
 {

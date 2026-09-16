@@ -7,9 +7,8 @@
 
 Bool at(Bytes source, I64 from, Bytes needle)
 {
-  I64 end = from + len(needle);
-  if (from < 0 || end > len(source)) { return false; }
-  return slice(source, from, end) == needle;
+  if (from < 0 || from > len(source) - len(needle)) { return false; }
+  return slice(source, from, from + len(needle)) == needle;
 }
 
 Bool white(Bytes source, I64 from)
@@ -67,7 +66,7 @@ I64 skip_block(Bytes source, I64 from)
 // absent. It is the only search primitive the parser needs.
 I64 seek(Bytes source, I64 from, Bytes needle)
 {
-  if (from + len(needle) > len(source)) {
+  if (from > len(source) - len(needle)) {
     return len(source);
   } else if (at(source, from, needle)) {
     return from;

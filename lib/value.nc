@@ -13,17 +13,28 @@ Bytes decimal(I64 n)
   return concat(decimal(n / 10), slice(b"0123456789", n % 10, n % 10 + 1));
 }
 
+// Accumulate negatively: I64's minimum has no positive counterpart.
+// Check before multiplying, so wrapping arithmetic cannot forge a length.
 I64 number_from(Bytes s, I64 p, I64 n)
 {
   if (p == len(s)) { return n; }
   I64 d = seek(b"0123456789", 0, slice(s, p, p + 1));
   if (d == 10) { return malformed_source(s); }
-  return number_from(s, p + 1, n * 10 + d);
+  if (n < -922337203685477580 || (n == -922337203685477580 && d > 8)) {
+    return malformed_source(s);
+  }
+  return number_from(s, p + 1, n * 10 - d);
 }
 I64 number(Bytes s)
 {
-  if (starts_with(s, b"-")) { return -number_from(s, 1, 0); }
-  return number_from(s, 0, 0);
+  Bool negative = starts_with(s, b"-");
+  I64 start = 0;
+  if (negative) { start = 1; }
+  if (start == len(s)) { return malformed_source(s); }
+  I64 n = number_from(s, start, 0);
+  if (negative) { return n; }
+  if (n < -9223372036854775807) { return malformed_source(s); }
+  return -n;
 }
 
 Bytes packet(Bytes s) { concat(decimal(len(s)), concat(b":", s)) }

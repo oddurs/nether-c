@@ -60,6 +60,13 @@ failures collapse through an invalid slice. Expression statements deposit
 native Str, Bytes or I64 values; U0 deposits nothing. A refused `must` becomes
 an Error, never an empty successful value.
 
+Calls resolve lexical bindings before global functions or the prelude. A local
+value shadowing a function makes that name non-callable; it never falls through
+to the shadowed function. Argument and parameter lists reject trailing commas.
+Decimal record fields require digits and reject overflow before arithmetic can
+wrap, including at the asymmetric I64 minimum. Cursor bounds are checked before
+adding an offset to a length.
+
 Checking is a separate pass using typed placeholder answers and fresh memory.
 It validates all declarations before evaluation and never makes a prelude
 request or deposit.
@@ -78,9 +85,9 @@ spend:
 
 | Program | Original | Indexed, with shared memory |
 | --- | ---: | ---: |
-| `hello.nc` | 1,300,946 | 1,064,424 |
-| `build.nc` | 20,340,206 | 4,654,746 |
-| `stamp.nc` | 7,759,045 | 1,885,775 |
+| `hello.nc` | 1,300,946 | 1,137,914 |
+| `build.nc` | 20,340,206 | 4,993,540 |
+| `stamp.nc` | 7,759,045 | 2,013,720 |
 
 The test budgets leave headroom while guarding against rescanning regressions.
 No new dependency or trusted-core code is needed for the improvement. Memory
