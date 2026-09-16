@@ -209,6 +209,60 @@ relies on.
 > not contain it, so the count is small: the transcripts in
 > [§8.2](08-rites.md#82-bury) are what an implementation actually prints.
 
+**A call that starved.** Burial reduces applications ([APP],
+[section 02](02-calculus.md)), and an application can fail to produce a value
+in two ways. They residualise differently, and the difference is what a residue
+can be specialised to.
+
+An argument that is still waiting takes the call with it. The residue is the
+call as it was written, its arguments reduced as far as they went:
+[§6.2](#62-demand)'s `compile(src)` is `compile(src)`, because inlining the
+body would only put the same hole inside it.
+
+When every argument is a value, burial evaluates the body. If the body
+finishes, the call is what it produced. If the body starves, the residue is
+**the body, reduced as far as those arguments permitted**, and not the call.
+The arguments were all values, so the reduced body needs none of them: it is
+written down as a function of no parameters and the call site names that.
+
+> An implementation MUST residualise a starved call whose arguments are all
+> values as its reduced body. Leaving the call as written is also a program
+> and also correct, and it is not a residue: the next burial would redo the
+> work this one already did, and nothing could ever be specialised to
+> anything.
+
+A block reduces its statements in order and stops at the first one that
+starves. Its residue is the bindings that finished, then that statement and
+every statement after it, unreduced. A statement that finished and bound
+nothing is not in the residue — it has already happened, and what it deposited
+is already in the trace.
+
+**What this is for.** Bury an interpreter against a program it is to
+interpret, with the program's own questions unanswered, and the residue does
+not name the interpreter's entry point. The syntax read before the first
+unanswered question is not read again. That is the first Futamura projection,
+and it is a consequence of this section rather than a feature of its own: a
+specialiser is what a partial evaluator is when it is pointed at an
+interpreter.
+
+It is specialised up to that first question and no further. An `if` whose
+condition waits on the world residualises whole with both arms unreduced, as
+above, so an interpreter that branches on an answer it has not got goes on
+interpreting from there. Reducing inside an arm that may not be
+taken would carry it further and is exactly what [§6.2](#62-demand)'s
+guarantee forbids, because such an arm could reach the world and leave a
+witness for something the program never asked for.
+
+> Whether an arm that may not be taken may be reduced on the condition that it
+> asks the world nothing — no hole, no deposit — is open, and is item 0251.
+> Until it is settled, a first projection stops at the first unanswered
+> question on its path.
+
+**What it costs.** A specialised body can be larger than the general one, and
+there is one per call site that starved, each carrying the constants it was
+specialised to. `opaque` ([§6.4](#64-starvation-and-fuel)) is the programmer's
+control over that, and is the reason that sentence is in §6.4.
+
 ## 6.6 Exhumation
 
 **Exhumation** grants a capability, answers the holes it can, records every

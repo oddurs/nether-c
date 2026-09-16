@@ -430,7 +430,7 @@ a GIF, so it did not even change colour when it stopped being true. The two
 blocks below are read out of <code>cairn/items/</code> when the page is baked,
 and the build fails the day the board moves and the page does not.</p>
 
-<figure class="listing"><figcaption>the descent, from cairn/items/</figcaption><pre><code>depth 7 of 9   52 hole(s) still owed
+<figure class="listing"><figcaption>the descent, from cairn/items/</figcaption><pre><code>depth 7 of 9   54 hole(s) still owed
 
   <span class="d0"> 1</span>  The Codex             buried      
   <span class="d0"> 2</span>  The Lamp              buried      
@@ -440,7 +440,7 @@ and the build fails the day the board moves and the page does not.</p>
   <span class="d0"> 6</span>  The Rites             buried      
   <span class="d0"> 7</span>  The World             buried      
   <span class="d5"> 8</span>  The Necropolis        still owed  4 hole(s)
-  <span class="d5"> 9</span>  Self-Burial           still owed  3 hole(s)
+  <span class="d5"> 9</span>  Self-Burial           still owed  5 hole(s)
 </code></pre></figure>
 
 <p>Every stratum in <a href="spec/09-prelude.html">&sect;09</a> has a provider.
@@ -448,17 +448,17 @@ Every rite in <a href="spec/08-rites.html">&sect;08</a> is built. A trace that
 reached stratum 7 replays byte for byte, and one that reached stratum 8 refuses
 to claim it can. What is left is the part you can look at.</p>
 
-<figure class="listing"><figcaption>what the world still owes</figcaption><pre><code>holes 52
+<figure class="listing"><figcaption>what the world still owes</figcaption><pre><code>holes 54
 
   hole <span class="d0"> 1</span>  The trace graph browser                     <span class="d0">stratum 0</span>  necropolis
   hole <span class="d0"> 2</span>  Provenance walk                             <span class="d0">stratum 0</span>  necropolis
   hole <span class="d0"> 3</span>  Proof: a stranger explains a hole           <span class="d0">stratum 0</span>  necropolis
   hole <span class="d0"> 4</span>  The playground editor                       <span class="d0">stratum 0</span>  necropolis
-  hole <span class="d0"> 5</span>  The first projection                        <span class="d0">stratum 0</span>  futamura
-  hole <span class="d4"> 6</span>  A pilot: build something real with it       <span class="d4">stratum 4</span>  after
-  hole <span class="d0"> 7</span>  Benchmark burial, and fail the build when…  <span class="d0">stratum 0</span>  quickening
-  hole <span class="d0"> 8</span>  Profile a real burial and say where the t…  <span class="d0">stratum 0</span>  quickening
-  ... and 44 more, in the roadmap
+  hole <span class="d0"> 5</span>  Decide whether an untaken arm may be redu…  <span class="d0">stratum 0</span>  futamura
+  hole <span class="d0"> 6</span>  Burial specialises a starved call           <span class="d0">stratum 0</span>  futamura
+  hole <span class="d0"> 7</span>  The first projection                        <span class="d0">stratum 0</span>  futamura
+  hole <span class="d4"> 8</span>  A pilot: build something real with it       <span class="d4">stratum 4</span>  after
+  ... and 46 more, in the roadmap
 </code></pre></figure>
 
 <p>Those are holes in the ordinary sense of the word here: the work is
