@@ -214,14 +214,17 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`#########·` 83% · 19 of 23 done · due 2027-07-15
+`#########·` 83% · 20 of 24 done · due 2027-07-15
 
 ### unmarked
 
-- [ ] [`0075`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0075-the-trace-graph-browser.md) The trace graph browser <sup>feature · p0 · 0</sup>
 - [ ] [`0076`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0076-provenance-walk.md) Provenance walk <sup>feature · p0 · 0</sup>
 - [ ] [`0077`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0077-the-playground-editor.md) The playground editor <sup>feature · p1 · 0</sup>
 - [ ] [`0078`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0078-proof-a-stranger-explains-a-hole.md) Proof: a stranger explains a hole <sup>chore · p0</sup>
+
+### descending
+
+- [ ] [`0075`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0075-the-trace-graph-browser.md) The trace graph browser <sup>feature · p0 · 0</sup>
 
 ### buried
 
@@ -244,6 +247,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0229`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0229-the-diagrams-that-teach-were-too-small-to-read.md) The diagrams that teach were too small to read <sup>bug · p1 · 0</sup>
 - [x] [`0237`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0237-the-release-workflow-ships-nothing-and-its-gate-cannot-fail.md) The release workflow ships nothing, and its gate cannot fail <sup>bug · p0 · 4</sup>
 - [x] [`0238`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0238-a-pull-request-should-land-itself.md) A pull request should land itself <sup>feature · p1 · 4</sup>
+- [x] [`0243`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0243-expose-canonical-trace-objects-to-the-browser.md) Expose canonical trace objects to the browser <sup>feature · p2 · 0</sup>
 
 ## face — The Face
 

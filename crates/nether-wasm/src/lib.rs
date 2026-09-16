@@ -33,7 +33,7 @@
 use core::fmt::Write as _;
 
 use nether_core::{Depth, check, report};
-use nether_ledger::{Cairn, Node, Stored, Value};
+use nether_ledger::{Node, Stored, Value};
 use nether_syntax::{lower, parse, print};
 
 /// The budget, as §8.2 gives `bury` one.
@@ -134,7 +134,8 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     };
 
     let printed = print(&residue.as_unit(&unit));
-    let residue_cairn = Stored::Value(Value::Bytes(printed.clone().into_bytes())).cairn();
+    let printed_value = Stored::Value(Value::Bytes(printed.clone().into_bytes()));
+    let residue_cairn = printed_value.cairn();
     // Burial holds no capability, so there are no witnesses and §7.3.2's join
     // is the residue's depth alone.
     let trace = Stored::Node(Node::Trace {
@@ -147,88 +148,59 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         depth: residue.depth.get(),
     });
 
-    told(&Buried {
-        cairn: trace.cairn(),
-        residue: residue_cairn,
-        source: source_cairn,
-        depth: residue.depth.get(),
-        nodes: residue.named.len() + 2,
-        fuel_spent: residue.fuel_spent,
-        holes: holes(&residue),
-        printed,
-    })
-}
-
-/// One hole, as the page reads it.
-struct Hole {
-    cairn: Cairn,
-    said: String,
-    stratum: u8,
-    capability: Option<&'static str>,
-}
-
-/// Every hole the burial left, with the question it asks.
-fn holes(residue: &nether_bury::Residue) -> Vec<Hole> {
-    residue
+    let holes: Vec<_> = residue
         .holes
         .iter()
         .filter_map(|h| {
-            let Some(Stored::Node(Node::Hole { call, stratum, .. })) =
-                residue.named.iter().find(|(c, _)| c == h).map(|(_, s)| s)
-            else {
+            let Some(Stored::Node(Node::Hole { call, stratum, .. })) = residue.get(*h) else {
                 return None;
             };
-            Some(Hole {
-                cairn: *h,
-                said: format!("{}({} argument(s))", call.function, call.args.len()),
-                stratum: *stratum,
-                capability: Depth::new(*stratum)
-                    .and_then(nether_core::Capability::at)
-                    .map(nether_core::Capability::name),
-            })
-        })
-        .collect()
-}
-
-/// What one burial produced.
-struct Buried {
-    cairn: Cairn,
-    residue: Cairn,
-    source: Cairn,
-    depth: u8,
-    nodes: usize,
-    fuel_spent: u64,
-    holes: Vec<Hole>,
-    printed: String,
-}
-
-/// JSON, written by hand. There is no serialiser in this repository.
-fn told(b: &Buried) -> String {
-    let holes: Vec<String> = b
-        .holes
-        .iter()
-        .map(|h| {
-            let cap = h.capability.map_or_else(|| "null".to_owned(), quoted);
-            format!(
-                "{{\"cairn\":\"{}\",\"call\":{},\"stratum\":{},\"capability\":{cap}}}",
-                h.cairn,
-                quoted(&h.said),
-                h.stratum
-            )
+            let cap = Depth::new(*stratum)
+                .and_then(nether_core::Capability::at)
+                .map(nether_core::Capability::name)
+                .map_or_else(|| "null".to_owned(), quoted);
+            Some(format!(
+                "{{\"cairn\":\"{h}\",\"call\":{},\"stratum\":{stratum},\"capability\":{cap}}}",
+                quoted(&format!("{}({} argument(s))", call.function, call.args.len()))
+            ))
         })
         .collect();
+    // Transport the frozen ledger encoding, not a second value format.
+    // Include source, residue and trace explicitly: `named` holds evaluation's
+    // objects, not the envelope. Sorting also deduplicates shared values.
+    let mut objects: Vec<_> = residue.named.iter().map(|(id, object)| (*id, object)).collect();
+    for object in [&named, &printed_value, &trace] {
+        objects.push((object.cairn(), object));
+    }
+    objects.sort_unstable_by_key(|(id, _)| *id);
+    objects.dedup_by_key(|(id, _)| *id);
+    let objects = objects
+        .iter()
+        .map(|(id, object)| format!("[\"{id}\",\"{}\"]", hex(&object.encode())))
+        .collect::<Vec<_>>()
+        .join(",");
     format!(
         "{{\"cairn\":\"{}\",\"residue\":\"{}\",\"source\":\"{}\",\"depth\":{},\"nodes\":{},\
-         \"fuel_spent\":{},\"holes\":[{}],\"printed\":{}}}",
-        b.cairn,
-        b.residue,
-        b.source,
-        b.depth,
-        b.nodes,
-        b.fuel_spent,
+         \"fuel_spent\":{},\"holes\":[{}],\"printed\":{},\"objects\":[{objects}]}}",
+        trace.cairn(),
+        residue_cairn,
+        source_cairn,
+        residue.depth.get(),
+        residue.named.len() + 2,
+        residue.fuel_spent,
         holes.join(","),
-        quoted(&b.printed)
+        quoted(&printed)
     )
+}
+
+fn hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8] = b"0123456789abcdef";
+    bytes
+        .iter()
+        .flat_map(|b| {
+            [char::from(DIGITS[(b >> 4) as usize]), char::from(DIGITS[(b & 15) as usize])]
+        })
+        .collect()
 }
 
 /// What went wrong, in the shape the page already reads.
