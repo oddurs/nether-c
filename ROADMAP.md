@@ -44,7 +44,7 @@ Buried. The front page declares rather than explains: nine doctrine passages, ea
 
 ## codex — The Codex
 
-`#######···` 69% · 20 of 29 done · due 2026-10-15
+`########··` 72% · 21 of 29 done · due 2026-10-15
 
 Buried. Twelve specification sections, every design question settled and every rejected alternative recorded in 90.2, every code sample a fixture in tests/transcripts, and the Decay Rule proven by a pull request that was refused. Only one claim in the specification is frozen: there is no run.
 
@@ -52,7 +52,6 @@ Buried. Twelve specification sections, every design question settled and every r
 
 - [ ] [`0255`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0255-spec-two-identical-sends-are-one-hole.md) Spec: two identical sends are one hole <sup>spec · p0 · 0</sup>
 - [ ] [`0256`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0256-spec-seal-and-hex-carry-a-deep-value-to-depth-0.md) Spec: seal and hex carry a deep value to depth 0 <sup>spec · p1 · 0</sup>
-- [ ] [`0257`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0257-spec-a-look-with-no-world-call-is-neither-evaluable-a-hole-nor-starved.md) Spec: a look with no world-call is neither evaluable, a hole, nor starved <sup>spec · p0 · 0</sup>
 - [ ] [`0258`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0258-spec-fuel-cannot-exhaust-at-the-same-point-on-two-implementations.md) Spec: fuel cannot exhaust at the same point on two implementations <sup>spec · p0 · 0</sup>
 - [ ] [`0259`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0259-spec-a-trace-that-has-answered-nothing-has-two-depths.md) Spec: a trace that has answered nothing has two depths <sup>spec · p1 · 0</sup>
 - [ ] [`0260`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0260-spec-5-4-does-not-state-the-loop-rule-the-checker-enforces.md) Spec: §5.4 does not state the loop rule the checker enforces <sup>spec · p1 · 0</sup>
@@ -82,6 +81,7 @@ Buried. Twelve specification sections, every design question settled and every r
 - [x] [`0083`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0083-the-decay-rule-ci-fails-if-the-trusted-core-grows.md) The Decay Rule: CI fails if the trusted core grows <sup>chore · p1 · 0</sup>
 - [x] [`0094`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0094-decide-what-a-prelude-function-does-when-it-cannot-answer.md) Decide: what a prelude function does when it cannot answer <sup>spec · p0</sup>
 - [x] [`0254`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0254-spec-an-ambient-depth-is-a-number-so-descend-net-grants-the-disk.md) Spec: an ambient depth is a number, so descend net grants the disk <sup>spec · p0 · 0</sup>
+- [x] [`0257`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0257-spec-a-look-with-no-world-call-is-neither-evaluable-a-hole-nor-starved.md) Spec: a look with no world-call is neither evaluable, a hole, nor starved <sup>spec · p0 · 0</sup>
 
 ## lamp — The Lamp
 

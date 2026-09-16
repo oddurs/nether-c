@@ -173,6 +173,29 @@ than report a number: a shade from stratum 3 looked at under `descend net` is
 not a shallower scope, and an implementation that prints *at depth 5* has told
 the reader their scope is deep enough.
 
+### What the rule buys, and what it does not
+
+It is a rule about the program's text, and it is worth being exact about that,
+because a reader meets it among the capabilities and will take it for one.
+
+What it buys is two things. [LOOK] concludes `τ @ max(d, d′)`, so opening a
+shade does not launder it: the value comes out at the depth it went in, and
+everything built from it is that deep. And a `descend` naming the stratum
+stands at every point in the source where the value is observed, which is what
+a reader auditing a program actually reads.
+
+What it does not buy is a capability at burial. Nothing about `look` reaches
+the world — the value is in hand already — so no grant gates it, and
+[§6.1](06-evaluation.md#61-burial) says so in as many words. A writer who wants
+to open a shade writes the `descend` and burial evaluates it, whatever the
+invocation held.
+
+So `shade` is what lets a deep value be held, passed and stored at depth 0
+without its depth spreading to everything it touches, and `look` is what costs
+naming the stratum again to get it back. Neither is an authority, and §1.4's
+witness for the stratum was written when the value was first fetched — once,
+by whoever held the capability then.
+
 This rule is **settled**. Two alternatives were considered and rejected —
 re-staining the entire enclosing scope, and tainting only the binding — and
 both are recorded in [§90.2](90-rationale.md#902-rejected-alternatives).

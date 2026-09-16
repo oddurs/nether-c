@@ -2,8 +2,9 @@
 id: 257
 title: 'Spec: a look with no world-call is neither evaluable, a hole, nor starved'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 created: 2026-09-16
 updated: 2026-09-16
 priority: p0
@@ -59,7 +60,19 @@ The first is almost certainly right, and it is not what §6.1 says.
 
 ## Acceptance criteria
 
-- [ ] §6.1 says whether a grant gates a call or a depth
-- [ ] §1.6 says what the Orpheus rule buys and what it does not
-- [ ] A transcript buries `descend net { look s }` with no grant
-- [ ] §90.2's binding-taint entry is consistent with the answer
+- [x] §6.1 says whether a grant gates a call or a depth
+- [x] §1.6 says what the Orpheus rule buys and what it does not
+- [x] A transcript buries a call-free descent with no grant, and the item records why the `look` instance is not reachable in one burial
+- [x] §90.2's binding-taint entry is consistent with the answer
+
+## 2026-09-16
+
+A grant gates a call, not a depth. An expression that reaches no prelude function is evaluated whatever its depth, so descend disk { 1 + 1 } is 2 with nothing granted and the fourth outcome never has to exist. The rejected alternative — a deep, ungranted, call-free expression residualising as the descent written out — would have refused to fold arithmetic because somebody wrote descend around it.
+
+## 2026-09-16
+
+The consequence for §1.6 is now stated rather than left to be found: look is checked and never granted. What shade buys is that a deep value can be held at depth 0 without staining what holds it; what look costs is naming the stratum again in the source. Neither is an authority, and the witness was written when the value was fetched.
+
+## 2026-09-16
+
+The look instance of the gap is not reachable in a single burial, and the criterion was rewritten rather than faked. A shade with an origin past 0 needs a world call to have been answered, and that needs the grant — so with nothing granted the call is a hole and the look starves on it, which is the ordinary path. The gap is reachable only through a descent that reaches no prelude function, which is what tests/programs/peek.nc is. It becomes reachable for a look once exhume can re-bury a residue with fewer grants than the burial that made it.
