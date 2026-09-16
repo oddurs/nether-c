@@ -2,8 +2,9 @@
 id: 252
 title: Burial specialises a starved call
 type: feature
-status: unmarked
+status: buried
 milestone: futamura
+assignee: Oddur Sigurdsson
 created: 2026-09-16
 updated: 2026-09-16
 priority: p1
@@ -11,7 +12,8 @@ effort: l
 stratum: 0
 area: crates/nether-bury
 proof: Burying lib/interpreter.nc against build.nc leaves a residue whose demands do not name `interpret`
-part_of: [80]
+part_of:
+- 80
 ---
 
 ## Problem
@@ -77,13 +79,17 @@ and interprets from there, which is what §6.5 claims and no more.
 
 ## Acceptance criteria
 
-- [ ] `block` and `apply` residualise as §6.5 requires
-- [ ] The interpreter buried against `build.nc` leaves no demand naming `interpret`
-- [ ] The printed residue parses, checks and re-buries to the result the
+- [x] `block` and `apply` residualise as §6.5 requires
+- [x] The interpreter buried against `build.nc` leaves no demand naming `interpret`
+- [x] The printed residue parses, checks and re-buries to the result the
       unspecialised route gives, deposits included
-- [ ] `scripts/task check` passes, with `.decay-ceiling` justified in the PR body
+- [x] `scripts/task check` passes, with `.decay-ceiling` justified in the PR body
 
 ## Evidence to close
 
 Record the tested commit, the residue's line count against the 1,163 lines the
 unspecialised route produces, and the fuel both routes spend.
+
+## 2026-09-16
+
+Done. block builds the residue §6.5 describes and hands it to apply, which mints a parameterless function for a starved body and names it at the call site; the arguments become its first bindings, the locals table is the one the body was written for, and nothing is renamed. Memoised on (FuncId, argument literals). Bindings bound to something already written down and read by nothing in the reduced body are dropped: the residue is 36,780 bytes with that and 46,307 without, and the pruning is where 85 of this change's lines went. Two things had to be got exactly right or the residue stopped being a fixpoint: a call whose body did not actually reduce is not minted, and a residual block carries the type lowering gives it -- its tail's, or U0 when it has none -- rather than the type of the value that starved inside it. Measured on lib/interpreter.nc + value.nc + evaluate.nc against tests/programs/build.nc with read("main.nc") unanswered: 21 minted functions, residue 1,433 lines against the 1,163 the unspecialised route leaves, and 4,993,540 steps either way. The demand is interpret__98(), not interpret(...). Two bugs were found on the way and fixed in their own pull requests: lower gave up after eight fixpoint passes so a call chain longer than that settled on the wrong result depth (#172 area, fixed here in crates/nether-syntax/src/lower.rs with the regression test), and a Bytes literal had no spelling for a byte above 0x7e (0253, #173 and #174). crates/nether-bury/tests/projection.rs carries the proof, including the assertion that the residue still interprets past the unanswered question, which is 0251's boundary. scripts/task check passes in full. The trusted core rises 8042 -> 8306.
