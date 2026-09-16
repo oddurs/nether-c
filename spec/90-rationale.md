@@ -495,6 +495,31 @@ The cost is a keyword. `opaque` is the only construct in Nether C that exists to
 make the compiler do *less*, which is an odd thing to have to teach, and it will
 be the first thing a newcomer mistakes for an optimisation hint.
 
+### Leaving a starved call as the call it was written as
+
+The first implementation of burial did this. A call whose body could not be
+finished residualised as the call, and the reduction the body had already gone
+through was thrown away. It is a defensible rule: the residue is smaller, it
+reads like the program somebody wrote, and it is never wrong — burying the
+residue simply does the work again.
+
+Rejected because it makes a first projection impossible, and a language whose
+whole claim is that burial is partial evaluation cannot leave the projection
+out. Measured on this repository's own bootstrap — `lib/interpreter.nc`
+joined with `lib/value.nc` and `lib/evaluate.nc`, buried against `build.nc`
+with `read("main.nc")` unanswered — the residue was 1,163 lines whose only
+demand was `interpret(b"…the whole of build.nc…")`. The 4,993,540 steps that
+had read and checked the guest were in the trace and not in the residue, so
+the next burial spent them again. Nothing had been specialised to anything.
+
+The cost is size, and it is not small. The same burial under
+[§6.5](06-evaluation.md#65-residue)'s rule mints one function per starved call
+site — 21 of them, and a residue of 1,478 lines against 1,163 — because each
+carries the constants it was specialised to, the guest's source among them.
+An implementation can drop the bindings nothing in the residual body reads,
+and should; what it cannot do is drop the shape, and a programmer who wants
+the smaller residue back has to ask for it with `opaque`.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
