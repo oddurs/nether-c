@@ -14,21 +14,22 @@ site/src/index.html § Where it actually is #1	console	checked	d838eaf97e53718b
 spec/00-overview.md § 0.7 A first program #1	c	pinned	d92d2096e7e25092
 spec/00-overview.md § 0.7 A first program #2	console	checked	7f9a7bf849a83e2b
 spec/01-strata.md § 1.3 Descent #1	c	pinned	39d95c03c09e3f8c
+spec/01-strata.md § 1.3 Descent #2	c	pinned	e337c335bb4da37b
 spec/01-strata.md § 1.5 Seal #1	c	pinned	32212f92be2604ee
 spec/01-strata.md § 1.6 Shade, and the Orpheus rule #1	c	pinned	42acff8a32601370
 spec/01-strata.md § 1.6 Shade, and the Orpheus rule #2	text	pinned	448359f29ad0b97f
 spec/02-calculus.md § 2.1 Judgement form #1	text	pinned	0597a19f1d266527
-spec/02-calculus.md § 2.2 The rules #1	text	pinned	d1e54373b8e0ddac
+spec/02-calculus.md § 2.2 The rules #1	text	pinned	5378993e7fb44171
 spec/02-calculus.md § 2.3 What each rule is doing #1	c	pinned	8f6164dc55253768
 spec/02-calculus.md § 2.4 Metatheory #1	c	pinned	f59540d28b03c35e
 spec/03-lexical.md § 3.2 Comments #1	c	pinned	583a67ed3002e592
 spec/03-lexical.md § 3.3 Identifiers #1	text	pinned	a847859bb6afdffe
 spec/03-lexical.md § 3.4 Keywords #1	text	pinned	f6e139d170fc9105
-spec/03-lexical.md § 3.5 Depth annotations #1	text	pinned	f3d54dbae87a451e
+spec/03-lexical.md § 3.5 Depth annotations #1	text	pinned	d7b3b15050d1b93e
 spec/03-lexical.md § 3.6 Literals #1	text	pinned	96540658f0135d4b
 spec/03-lexical.md § 3.7 Punctuation #1	text	pinned	25fd164649674a25
 spec/04-grammar.md § 4.1 Compilation unit #1	ebnf	pinned	d8137d228d3b4996
-spec/04-grammar.md § 4.2 Declarations #1	ebnf	pinned	82a7b0222c7269d4
+spec/04-grammar.md § 4.2 Declarations #1	ebnf	pinned	2a7a09dda03af328
 spec/04-grammar.md § 4.3 Types #1	ebnf	pinned	f3e5d72d58b38266
 spec/04-grammar.md § 4.3 Types #2	c	pinned	39c51d9906affdd0
 spec/04-grammar.md § 4.4 Statements #1	ebnf	pinned	30a4f3e68261c45a

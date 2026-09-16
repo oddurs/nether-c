@@ -70,15 +70,25 @@ scope, not keywords. A program MAY shadow them, and SHOULD NOT.
 ## 3.5 Depth annotations
 
 ```
-depth_annotation := "@" ( "0".."8" )
+depth_annotation  := "@" ( "0".."8" )
+latent_annotation := "@" ( "0".."8" | "{" stratum { "," stratum } "}" )
+stratum           := "1".."8"
 ```
 
 A depth annotation may appear:
 
-- after a type, binding tighter than anything else: `Bytes@3`, `I64@0`;
-- after a function signature, giving its latent depth: `Bytes read(Str p) @3`.
+- after a type, binding tighter than anything else: `Bytes@3`, `I64@0`. It is
+  one digit, because a value depth is one number;
+- after a function signature, giving its latent set:
+  `Bytes read(Str p) @3`, or `Bytes sync(Str p, Str u) @{3,5}` for a body that
+  asks its caller for two.
 
-It MUST NOT appear anywhere else. In particular there is no depth annotation
+The braced form spells a set of two or more, ascending and without repeats, and
+holds no `0`: stratum 0 is held everywhere, so naming it in a set says nothing,
+and `@{3}` and `@3` would be two spellings of one thing. `@0` is the bare form
+and is how a function says it asks for nothing.
+
+Neither MUST appear anywhere else. In particular there is no depth annotation
 on an expression — depth is inferred for expressions and only ever *asserted*
 on declarations. An annotation that disagrees with inference is an error, not
 a coercion.

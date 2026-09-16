@@ -74,7 +74,7 @@ typedef_decl  := &quot;typedef&quot; type identifier &quot;;&quot; ;
 func_decl     := type identifier &quot;(&quot; [ params ] &quot;)&quot; [ latent ] block ;
 params        := param { &quot;,&quot; param } ;
 param         := type identifier ;
-latent        := &quot;@&quot; digit ;
+latent        := &quot;@&quot; ( digit | &quot;{&quot; digit { &quot;,&quot; digit } &quot;}&quot; ) ;
 
 let_decl      := type identifier [ &quot;=&quot; expr ] &quot;;&quot; ;</code></pre></figure><p>A <code>let_decl</code> at unit level is a declaration; the same production inside a block is a statement. A unit-level one MUST have its initialiser: a global with no value is a value nothing can supply, since there is no statement above it to assign one.</p><p>A block-level one may go without, and that is the only way to construct an aggregate: declare it, then write its fields. What may be written, and for how long, is <a href="05-types.html#54-mutation">§5.4</a>.</p><h2 id="43-types"><a href="#43-types">4.3 Types</a></h2><figure class="listing"><figcaption>grammar</figcaption><pre><code>type          := type_atom { &quot;[&quot; [ int_literal ] &quot;]&quot; } [ &quot;@&quot; digit ] ;
 

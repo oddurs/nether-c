@@ -16,10 +16,15 @@ bury : Source × Capabilities × Fuel → Trace
 ```
 
 Burial evaluates every expression it can and stops at every expression it
-cannot. It can evaluate an expression when the expression's depth is within
-the granted capabilities and every subexpression it depends on has a value. It
-cannot when the expression needs the world and the world has not been granted.
-Every such point becomes a **hole**.
+cannot. It can evaluate a call when the capability that grants the call's
+stratum is among the granted ones and every argument has a value. It cannot
+when the world has not granted that capability, and every such point becomes a
+**hole**.
+
+Granted capabilities are a set and one grants no other, on
+[§2.1](02-calculus.md#21-judgement-form)'s reasoning. A burial holding `net`
+does not answer a `read`: the read is a hole owed to `disk`, and an exhumation
+that grants `disk` is what fills it.
 
 A trace is complete and immutable. Burial MUST NOT modify a trace it was
 given; every burial produces a new trace with a new cairn.

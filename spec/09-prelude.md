@@ -24,6 +24,11 @@ is here: to be read.
 These are the names `descend` accepts. An implementation MUST NOT define
 others.
 
+Each grants its own stratum and no other. The table is a bijection — one
+capability per stratum, one stratum per capability — which is what lets
+[§2.1](02-calculus.md#21-judgement-form) treat a set of capabilities and a set
+of strata as the same object.
+
 | Capability | Stratum | Grants |
 | --- | ---: | --- |
 | `store` | 1 | reading the ledger by cairn |

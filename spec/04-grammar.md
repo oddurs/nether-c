@@ -43,7 +43,7 @@ typedef_decl  := "typedef" type identifier ";" ;
 func_decl     := type identifier "(" [ params ] ")" [ latent ] block ;
 params        := param { "," param } ;
 param         := type identifier ;
-latent        := "@" digit ;
+latent        := "@" ( digit | "{" digit { "," digit } "}" ) ;
 
 let_decl      := type identifier [ "=" expr ] ";" ;
 ```

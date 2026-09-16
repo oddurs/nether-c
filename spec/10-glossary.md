@@ -8,8 +8,9 @@ status: draft
 
 Every term used normatively elsewhere, defined once.
 
-**Ambient depth** (δ) — the deepest stratum whose capability is currently
-held. 0 at the top level; raised only by `descend`.
+**Ambient capabilities** (δ) — the set of strata whose capabilities are
+currently held. Holds 0 and nothing else at the top level; added to only by
+`descend`, which adds the one it names.
 [§2.1](02-calculus.md#21-judgement-form)
 
 **Answer** — what a function returns when the world is entitled to say no:
@@ -75,8 +76,9 @@ arrow type and written as a trailing `@n` on its signature.
 **Ledger** — the content-addressed store of nodes. Immutable, append-only, not
 garbage-collected. [§7](07-ledger.md)
 
-**Look** — to open a shade. Well-typed only where the ambient depth is at
-least the shade's origin depth: the Orpheus rule.
+**Look** — to open a shade. Well-typed only where the ambient capabilities
+hold the stratum the shade came out of, and not merely a deeper one: the
+Orpheus rule.
 [§1.6](01-strata.md#16-shade-and-the-orpheus-rule)
 
 **Node** — the unit the ledger stores, addressed by its cairn: a literal, an
