@@ -6,8 +6,8 @@
 
 use nether_bury::{Grinding, Halt, HaltKind, MAX_FRAMES, Residue};
 use nether_core::{
-    BinOp, Block, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, GlobalId, Literal,
-    LocalDef, LocalId, Rite, Span, Stmt, Type, Unit, report,
+    BinOp, Block, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, GlobalId, Held,
+    Literal, LocalDef, LocalId, Rite, Span, Stmt, Type, Unit, report,
 };
 use nether_ledger::Cairn;
 
@@ -68,7 +68,7 @@ fn spinning() -> Unit {
 fn falling() -> Unit {
     let arrow = Type::Fn {
         params: vec![Type::Int],
-        latent: Depth::PURE,
+        latent: Held::NONE,
         result: Box::new(Type::Int),
         result_depth: Depth::PURE,
     };
@@ -92,7 +92,7 @@ fn falling() -> Unit {
             ret: Type::Int,
             ret_depth: Depth::PURE,
             asserted_ret: None,
-            latent: Depth::PURE,
+            latent: Held::NONE,
             asserted_latent: None,
             locals: vec![LocalDef {
                 name: "n".into(),
@@ -119,7 +119,7 @@ fn falling() -> Unit {
 fn counting(from: i64) -> Unit {
     let arrow = Type::Fn {
         params: vec![Type::Int],
-        latent: Depth::PURE,
+        latent: Held::NONE,
         result: Box::new(Type::Int),
         result_depth: Depth::PURE,
     };
@@ -158,7 +158,7 @@ fn counting(from: i64) -> Unit {
             ret: Type::Int,
             ret_depth: Depth::PURE,
             asserted_ret: None,
-            latent: Depth::PURE,
+            latent: Held::NONE,
             asserted_latent: None,
             locals: vec![LocalDef {
                 name: "n".into(),

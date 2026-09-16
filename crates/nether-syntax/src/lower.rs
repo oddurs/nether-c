@@ -22,7 +22,7 @@ use std::collections::HashMap;
 
 // Lowering is recursive and has no bound of its own: it walks what `parse`
 // produced, and `parse` will not produce anything deeper than `MAX_NESTING`.
-use nether_core::{self as ir, Asserted, Capability, Depth, Prim, Refusal, Rite, Span, UnOp};
+use nether_core::{self as ir, Asserted, Capability, Depth, Held, Prim, Refusal, Rite, Span, UnOp};
 
 use crate::ast;
 use crate::lex::{Fault, FaultKind};
@@ -187,7 +187,7 @@ impl<'a> Lowering<'a> {
         for (i, f) in declarations.iter().enumerate() {
             let params = f.params.iter().map(|p| self.ty(&p.ty)).collect();
             let ret = self.ty(&f.ret);
-            let latent = f.latent.and_then(Depth::new).unwrap_or(Depth::PURE);
+            let latent = Self::written(f.latent.as_deref()).unwrap_or(Held::NONE);
             let arrow = ir::Type::Fn {
                 params,
                 latent,
@@ -313,7 +313,7 @@ impl<'a> Lowering<'a> {
             ret_depth: ret_depth.join(Self::returns(&body)),
             asserted_ret: Self::asserted(&f.ret),
             latent: Self::needs(&body),
-            asserted_latent: f.latent.and_then(Depth::new),
+            asserted_latent: Self::written(f.latent.as_deref()),
             locals: std::mem::take(&mut self.locals),
             body,
             span: f.span,
@@ -332,25 +332,32 @@ impl<'a> Lowering<'a> {
         block_children(block).iter().fold(Depth::PURE, |acc, x| walk(x, acc))
     }
 
-    /// The least ambient depth at which this body checks: what an application
-    /// in it asked for and the surface could not give. [ABS].
-    fn needs(block: &ir::Block) -> Depth {
-        fn walk(x: &ir::Expr, ambient: Depth, acc: Depth) -> Depth {
+    /// The latent set written after a signature, if one was.
+    ///
+    /// §3.5 spells it `@0`, `@3` or `@{3,5}`. A `0` among several is refused
+    /// by the parser, so a set here holds only strata that mean something.
+    fn written(digits: Option<&[u8]>) -> Option<Held> {
+        let digits = digits?;
+        Some(digits.iter().filter_map(|n| Depth::new(*n)).fold(Held::NONE, Held::with))
+    }
+
+    /// The least set, by inclusion, at which this body checks: what an
+    /// application in it asked for and the surface could not give. [ABS].
+    fn needs(block: &ir::Block) -> Held {
+        fn walk(x: &ir::Expr, ambient: Held, acc: Held) -> Held {
             let mut acc = acc;
             if let ir::ExprKind::Call { callee, .. } = &x.kind {
                 if let ir::Type::Fn { latent, .. } = callee.ty {
-                    if latent > ambient {
-                        acc = acc.join(latent);
-                    }
+                    acc = acc.union(latent.without(ambient));
                 }
             }
             let inside = match &x.kind {
-                ir::ExprKind::Descend { capability, .. } => ambient.join(capability.stratum()),
+                ir::ExprKind::Descend { capability, .. } => ambient.with(capability.stratum()),
                 _ => ambient,
             };
             children(x).iter().fold(acc, |a, c| walk(c, inside, a))
         }
-        block_children(block).iter().fold(Depth::PURE, |acc, x| walk(x, Depth::PURE, acc))
+        block_children(block).iter().fold(Held::NONE, |acc, x| walk(x, Held::NONE, acc))
     }
 
     fn bind(
@@ -1001,5 +1008,10 @@ fn prim_arrow(p: Prim, args: &[ir::Type]) -> ir::Type {
     };
     // Every prelude function hands back what it went and got, so its two
     // depths are the same one.
-    T::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() }
+    T::Fn {
+        params,
+        latent: Held::of(p.latent()),
+        result: Box::new(result),
+        result_depth: p.latent(),
+    }
 }

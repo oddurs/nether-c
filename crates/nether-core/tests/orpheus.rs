@@ -6,8 +6,8 @@
 //! fixture and a change to either side fails the build.
 
 use nether_core::{
-    BinOp, Block, Capability, Demand, Depth, Expr, ExprKind, FaultKind, FuncDef, FuncId, Literal,
-    LocalDef, LocalId, Prim, Rite, Span, Stmt, Type, Unit, check, report,
+    BinOp, Block, Capability, Demand, Depth, Expr, ExprKind, FaultKind, FuncDef, FuncId, Held,
+    Literal, LocalDef, LocalId, Prim, Rite, Span, Stmt, Type, Unit, check, report,
 };
 
 // ── the file §1.6's error is about ──────────────────────────────────────────
@@ -54,7 +54,12 @@ fn shade_of_bytes(origin: Depth) -> Type {
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
     pure(
         ExprKind::Prim(p),
-        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+        Type::Fn {
+            params,
+            latent: Held::of(p.latent()),
+            result: Box::new(result),
+            result_depth: p.latent(),
+        },
     )
 }
 
@@ -127,7 +132,7 @@ fn stamp(stmts: Vec<Stmt>, locals: Vec<LocalDef>, latent: Depth) -> Unit {
             ret: Type::Unit,
             ret_depth: Depth::PURE,
             asserted_ret: None,
-            latent,
+            latent: Held::of(latent),
             asserted_latent: None,
             locals: all,
             body: Block { stmts: body, tail: None, span: Span::default() },
@@ -168,7 +173,7 @@ fn the_error_is_the_one_printed_in_the_codex() {
     let unit = stamp(vec![the_statement(the_look())], Vec::new(), Depth::PURE);
     let faults = check(&unit);
     assert_eq!(faults.len(), 1, "{faults:?}");
-    assert_eq!(faults[0].kind, FaultKind::Orpheus { origin: Depth::NET, ambient: Depth::PURE });
+    assert_eq!(faults[0].kind, FaultKind::Orpheus { origin: Depth::NET, held: Held::NONE });
 
     let printed = report(&faults[0].diagnostic(), &source(), "stamp.nc");
     assert_eq!(printed.trim_end(), the_error_in_the_codex());
@@ -234,7 +239,7 @@ fn a_shade_may_be_stored_passed_compared_and_sealed() {
         ret: Type::Unit,
         ret_depth: Depth::PURE,
         asserted_ret: None,
-        latent: Depth::PURE,
+        latent: Held::of(Depth::PURE),
         asserted_latent: None,
         locals: vec![LocalDef {
             name: "s".into(),
@@ -249,7 +254,7 @@ fn a_shade_may_be_stored_passed_compared_and_sealed() {
         ExprKind::Func(FuncId(1)),
         Type::Fn {
             params: vec![shade_of_bytes(Depth::NET)],
-            latent: Depth::PURE,
+            latent: Held::of(Depth::PURE),
             result: Box::new(Type::Unit),
             result_depth: Depth::PURE,
         },
@@ -281,15 +286,22 @@ fn one_stratum_short_is_short() {
     let unit = stamp(vec![the_statement(not_far_enough)], Vec::new(), Depth::PURE);
     assert_eq!(
         check(&unit).into_iter().map(|f| f.kind).collect::<Vec<_>>(),
-        vec![FaultKind::Orpheus { origin: Depth::NET, ambient: Depth::DISK }]
+        vec![FaultKind::Orpheus { origin: Depth::NET, held: Held::of(Depth::DISK) }]
     );
 }
 
 #[test]
-fn deeper_than_the_origin_is_fine() {
+fn deeper_than_the_origin_is_not_the_origin() {
+    // `net!` is 6 and the shade came from 5. δ is a set and [LOOK]'s premise
+    // is `d ∈ δ`, so a deeper descent is no more the right one than a
+    // shallower one: going back down means going back to where it came from.
+    // 0254.
     let deeper = descend(Capability::NetWrite, the_look());
     let unit = stamp(vec![the_statement(deeper)], Vec::new(), Depth::PURE);
-    assert!(check(&unit).is_empty());
+    assert_eq!(
+        check(&unit).into_iter().map(|f| f.kind).collect::<Vec<_>>(),
+        vec![FaultKind::Orpheus { origin: Depth::NET, held: Held::of(Depth::NET_WRITE) }]
+    );
 }
 
 // ── the two forms that were rejected ────────────────────────────────────────
@@ -318,7 +330,7 @@ fn it_does_not_stain_the_enclosing_scope() {
     let asks_for_nothing = stamp(stmts, Vec::new(), Depth::PURE);
     assert_eq!(
         check(&asks_for_nothing).into_iter().map(|f| f.kind).collect::<Vec<_>>(),
-        vec![FaultKind::Stated { derived: Depth::DISK, stated: Depth::PURE }]
+        vec![FaultKind::StatedLatent { derived: Held::of(Depth::DISK), stated: Held::NONE }]
     );
 }
 
@@ -339,7 +351,7 @@ fn it_does_not_taint_the_binding() {
     );
     assert_eq!(
         check(&unit).into_iter().map(|f| f.kind).collect::<Vec<_>>(),
-        vec![FaultKind::Orpheus { origin: Depth::NET, ambient: Depth::PURE }]
+        vec![FaultKind::Orpheus { origin: Depth::NET, held: Held::NONE }]
     );
 }
 

@@ -10,7 +10,7 @@ use core::fmt;
 /// [`Ord`] and the join is [`Depth::join`]. Nothing in this crate can produce a
 /// depth outside the range, which is what lets the ledger encode one in a byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Depth(u8);
+pub struct Depth(pub(crate) u8);
 
 impl Depth {
     /// Arithmetic, data, functions. Nothing is owed.
@@ -67,6 +67,90 @@ impl Depth {
 impl fmt::Display for Depth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+/// `δ`: the strata whose capabilities are held. `spec/02-calculus.md` §2.1.
+///
+/// A set, because authority is which doors are open and that does not compose
+/// by maximum: `disk!` is stratum 4 and `net` is 5, so an order fit for
+/// comparing two histories would make *may fetch a URL* mean *may delete a
+/// file*. Stratum 0 is in it always — nothing grants it and nothing needs it —
+/// which is what lets [APP] and [LOOK] be stated without a special case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Held(u16);
+
+impl Held {
+    /// Nothing but stratum 0, which is everywhere.
+    pub const NONE: Self = Self(1);
+
+    /// Stratum 0 and `d`.
+    #[must_use]
+    pub const fn of(d: Depth) -> Self {
+        Self(1 | (1 << d.0))
+    }
+
+    /// This set with `d` in it too. [DESCEND].
+    #[must_use]
+    pub const fn with(self, d: Depth) -> Self {
+        Self(self.0 | (1 << d.0))
+    }
+
+    /// Everything in either. What [ABS] accumulates over a body.
+    #[must_use]
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Everything in this and not in `other`. What an application is missing.
+    #[must_use]
+    pub const fn without(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
+
+    /// Whether `d` is held. [LOOK]'s premise, `d ∈ δ`.
+    #[must_use]
+    pub const fn holds(self, d: Depth) -> bool {
+        self.0 & (1 << d.0) != 0
+    }
+
+    /// Whether everything here is held there. [APP]'s premise, `dƒ ⊆ δ`.
+    #[must_use]
+    pub const fn subset_of(self, other: Self) -> bool {
+        self.0 & !other.0 == 0
+    }
+
+    /// Nothing but stratum 0.
+    #[must_use]
+    pub const fn is_none(self) -> bool {
+        self.0 == Self::NONE.0
+    }
+
+    /// The deepest stratum in it, which is 0 when it holds nothing else.
+    ///
+    /// Bit 0 is always set, so the log is defined and the result is in range.
+    #[must_use]
+    pub fn deepest(self) -> Depth {
+        Depth(u8::try_from(self.0.ilog2()).unwrap_or(Depth::MAX.0))
+    }
+
+    /// Every stratum in it but 0, shallowest first. Only `Display` needs it.
+    fn strata(self) -> impl Iterator<Item = Depth> {
+        (1..=Depth::MAX.0).filter(move |n| self.0 & (1 << n) != 0).map(Depth)
+    }
+}
+
+impl fmt::Display for Held {
+    /// The spelling `spec/03-lexical.md` §3.5 gives: `@0`, `@3`, `@{3,5}`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut it = self.strata();
+        let Some(first) = it.next() else { return f.write_str("0") };
+        let Some(second) = it.next() else { return write!(f, "{first}") };
+        write!(f, "{{{first},{second}")?;
+        for d in it {
+            write!(f, ",{d}")?;
+        }
+        f.write_str("}")
     }
 }
 

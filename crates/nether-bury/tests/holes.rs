@@ -8,7 +8,8 @@
 
 use nether_bury::{Residue, bury};
 use nether_core::{
-    BinOp, Capability, Demand, Depth, Expr, ExprKind, Literal, Prim, Rite, Span, Type, Unit, check,
+    BinOp, Capability, Demand, Depth, Expr, ExprKind, Held, Literal, Prim, Rite, Span, Type, Unit,
+    check,
 };
 use nether_ledger::{Cairn, Node, Stored, Value};
 
@@ -37,7 +38,12 @@ fn answer_bytes() -> Type {
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
     pure(
         ExprKind::Prim(p),
-        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+        Type::Fn {
+            params,
+            latent: Held::of(p.latent()),
+            result: Box::new(result),
+            result_depth: p.latent(),
+        },
     )
 }
 

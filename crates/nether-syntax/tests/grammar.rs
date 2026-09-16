@@ -293,3 +293,26 @@ fn a_prefix_chain_and_a_nested_type_are_bounded_too() {
     let ty = format!("{}I64{} a = 1;\n", "Answer<".repeat(n), ">".repeat(n));
     assert_eq!(parses(&ty).expect_err("too deep")[0].kind, FaultKind::TooDeep);
 }
+
+// ── §3.5: a latent set ──────────────────────────────────────────────────────
+
+#[test]
+fn a_signature_can_ask_for_two_capabilities() {
+    let src = "U0 sync(Str p, Str u) @{3,5}\n{\n}\n";
+    let unit = parses(src).expect("a latent set parses");
+    assert_eq!(unit.items.len(), 1);
+}
+
+#[test]
+fn a_latent_set_is_ascending_without_repeats_and_holds_no_zero() {
+    // §3.5. `@{3}` and `@3` would be two spellings of one thing, a `0` in a
+    // set says nothing, and one order is one spelling. 0254.
+    for src in [
+        "U0 f() @{3}\n{\n}\n",
+        "U0 f() @{5,3}\n{\n}\n",
+        "U0 f() @{3,3}\n{\n}\n",
+        "U0 f() @{0,3}\n{\n}\n",
+    ] {
+        assert!(parses(src).is_err(), "this should not parse: {src}");
+    }
+}

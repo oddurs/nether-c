@@ -28,7 +28,7 @@
 
 use core::fmt;
 
-use crate::depth::{Capability, Depth};
+use crate::depth::{Capability, Depth, Held};
 use crate::ir::{Block, Expr, ExprKind, LocalId, Proj, Rite, Span, Stmt};
 use crate::prim::Prim;
 use crate::report::{Cause, Diagnostic};
@@ -67,15 +67,32 @@ pub enum FaultKind {
         /// `dƒ`, the latent depth of the arrow: what applying it reaches.
         needed: Depth,
         /// `δ`.
-        ambient: Depth,
+        held: Held,
     },
     /// [LOOK]: the Orpheus rule. You may carry a shade up out of any stratum;
     /// you may only look at it by going back down.
     Orpheus {
         /// The stratum the shade came from.
         origin: Depth,
-        /// `δ`, which is not deep enough.
-        ambient: Depth,
+        /// `δ`, which does not hold it.
+        held: Held,
+    },
+    /// The IR states a latent set the eleven rules do not produce. [ABS]'s
+    /// half of `Stated`, and not a mistake a program can make.
+    StatedLatent {
+        /// What the rules give.
+        derived: Held,
+        /// What the node claims.
+        stated: Held,
+    },
+    /// A latent set written after a signature that inference disagrees with.
+    /// [ABS]'s half of `Asserted`. §5.6: a written depth is a checked
+    /// assertion, not a coercion.
+    AssertedLatent {
+        /// What the rules give.
+        derived: Held,
+        /// What the programmer wrote.
+        asserted: Held,
     },
     /// The IR states a depth the eleven rules do not produce. Not a mistake a
     /// program can make: a mistake whatever built the IR made.
@@ -142,11 +159,16 @@ impl Fault {
     /// else, which is the whole reason it is hard to phrase.
     fn cause(&self) -> Option<Cause> {
         let blame = self.blame.as_ref()?;
-        let FaultKind::Asserted { derived, .. } = self.kind else { return None };
-        Some(Cause {
-            span: blame.span,
-            label: format!("`{}` reaches stratum {derived}", blame.what),
-        })
+        let label = match self.kind {
+            FaultKind::Asserted { derived, .. } => {
+                format!("`{}` reaches stratum {derived}", blame.what)
+            }
+            FaultKind::AssertedLatent { derived, .. } => {
+                format!("`{}` reaches stratum {}", blame.what, derived.deepest())
+            }
+            _ => return None,
+        };
+        Some(Cause { span: blame.span, label })
     }
 
     /// The line after the gap, which says what to do rather than what is wrong.
@@ -163,10 +185,15 @@ impl Fault {
             FaultKind::Asserted { derived, .. } => {
                 Some(format!("inference is not a coercion. Write `@{derived}`, or write nothing."))
             }
+            FaultKind::AssertedLatent { derived, .. } => {
+                Some(format!("inference is not a coercion. Write `@{derived}`, or write nothing."))
+            }
             FaultKind::Frozen { .. } => Some(
                 "a value that has been named cannot change; make another one instead.".to_string(),
             ),
-            FaultKind::Stated { .. } | FaultKind::Malformed(_) => None,
+            FaultKind::Stated { .. } | FaultKind::StatedLatent { .. } | FaultKind::Malformed(_) => {
+                None
+            }
         }
     }
 }
@@ -174,17 +201,34 @@ impl Fault {
 impl fmt::Display for Fault {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            FaultKind::Ungranted { needed, ambient } => {
-                write!(f, "this reaches stratum {needed}, and depth {ambient} is held here")
+            FaultKind::Ungranted { needed, held } if held.is_none() => {
+                write!(f, "this reaches stratum {needed}, and depth 0 is held here")
             }
-            FaultKind::Orpheus { origin, ambient } => {
-                write!(f, "cannot look at a shade from stratum {origin} at depth {ambient}")
+            FaultKind::Ungranted { needed, held } => match Capability::at(needed) {
+                Some(c) => write!(f, "this reaches stratum {needed}; `{c}` is not in {held}"),
+                None => write!(f, "this reaches stratum {needed}, which is not in {held}"),
+            },
+            // §1.6: where something is held and it is the wrong one, say so
+            // rather than report a number. A shade from stratum 3 looked at
+            // under `descend net` is not a shallower scope, and "at depth 5"
+            // would tell the reader their scope is deep enough.
+            FaultKind::Orpheus { origin, held } if held.is_none() => {
+                write!(f, "cannot look at a shade from stratum {origin} at depth 0")
+            }
+            FaultKind::Orpheus { origin, held } => {
+                write!(f, "cannot look at a shade from stratum {origin}; {held} is held here")
             }
             FaultKind::Stated { derived, stated } => {
                 write!(f, "the rules give depth {derived}; this node says {stated}")
             }
+            FaultKind::StatedLatent { derived, stated } => {
+                write!(f, "the rules give @{derived}; this node says @{stated}")
+            }
             FaultKind::Asserted { derived, asserted } => {
                 write!(f, "annotated @{asserted}; inference gives {derived}")
+            }
+            FaultKind::AssertedLatent { derived, asserted } => {
+                write!(f, "annotated @{asserted}; inference gives @{derived}")
             }
             FaultKind::Frozen { .. } => {
                 f.write_str("this was named, and a name cannot change what it names")
@@ -210,7 +254,7 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
     // A unit-level binding may name one declared before it and not one
     // declared after, so declaration order is checking order.
     for g in &unit.globals {
-        let derived = c.expr(&g.value, Depth::PURE);
+        let derived = c.expr(&g.value, Held::NONE);
         c.globals.push(derived);
         let blame = c.blame(&g.value, derived);
         c.asserted(g.span, derived, g.asserted, blame);
@@ -220,7 +264,7 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
     }
     // [DEMAND] keeps the depth and throws the value away: `demand e : U0@d`.
     for d in &unit.demands {
-        c.expr(&d.value, Depth::PURE);
+        c.expr(&d.value, Held::NONE);
     }
     c.faults
 }
@@ -250,7 +294,7 @@ struct Checker<'a> {
     /// and it is a question for its callers rather than a fault here.
     ///
     /// `None` at the top level of a file, where there is nobody to ask.
-    needs: Option<Depth>,
+    needs: Option<Held>,
 }
 
 impl<'a> Checker<'a> {
@@ -270,7 +314,7 @@ impl<'a> Checker<'a> {
     fn blame(&self, x: &Expr, depth: Depth) -> Option<Blame> {
         if let ExprKind::Call { callee, .. } = &x.kind {
             if let Type::Fn { latent, .. } = callee.ty {
-                if latent == depth {
+                if depth != Depth::PURE && latent.holds(depth) {
                     if let Some(what) = self.name_of(callee) {
                         return Some(Blame { span: x.span, what });
                     }
@@ -339,6 +383,26 @@ impl<'a> Checker<'a> {
         self.asserted(span, derived, asserted, blame);
     }
 
+    /// The same, for the set [ABS] gives. §2.1: `dƒ` is a set and `d_r` is a
+    /// number, so they are checked by two functions rather than one.
+    fn against_latent(
+        &mut self,
+        span: Span,
+        derived: Held,
+        stated: Held,
+        asserted: Option<Held>,
+        blame: Option<Blame>,
+    ) {
+        if derived != stated {
+            self.fault(span, FaultKind::StatedLatent { derived, stated });
+        }
+        if let Some(asserted) = asserted {
+            if asserted != derived {
+                self.fault_blaming(span, FaultKind::AssertedLatent { derived, asserted }, blame);
+            }
+        }
+    }
+
     fn asserted(
         &mut self,
         span: Span,
@@ -386,22 +450,22 @@ impl<'a> Checker<'a> {
         self.locals = vec![None; f.locals.len()];
         self.named = vec![None; f.locals.len()];
         self.returns = Depth::PURE;
-        self.needs = Some(Depth::PURE);
+        self.needs = Some(Held::NONE);
         for p in &f.params {
             self.bind(*p, Depth::PURE, f.span, None);
         }
 
-        let ret_depth = self.block(&f.body, Depth::PURE).join(self.returns);
-        let latent = self.needs.take().unwrap_or(Depth::PURE);
+        let ret_depth = self.block(&f.body, Held::NONE).join(self.returns);
+        let latent = self.needs.take().unwrap_or(Held::NONE);
 
         let returned = self.blame_block(&f.body, ret_depth);
         self.against(f.span, ret_depth, f.ret_depth, f.asserted_ret, returned);
-        let asked = self.blame_block(&f.body, latent);
-        self.against(f.span, latent, f.latent, f.asserted_latent, asked);
+        let asked = self.blame_block(&f.body, latent.deepest());
+        self.against_latent(f.span, latent, f.latent, f.asserted_latent, asked);
         self.func = None;
     }
 
-    fn block(&mut self, block: &Block, ambient: Depth) -> Depth {
+    fn block(&mut self, block: &Block, ambient: Held) -> Depth {
         for s in &block.stmts {
             match s {
                 Stmt::Let { local, value } => {
@@ -423,7 +487,7 @@ impl<'a> Checker<'a> {
     }
 
     #[expect(clippy::too_many_lines, reason = "eleven rules, and an arm for each")]
-    fn expr(&mut self, x: &Expr, ambient: Depth) -> Depth {
+    fn expr(&mut self, x: &Expr, ambient: Held) -> Depth {
         let derived = match &x.kind {
             // [LIT], and the forms that carry nothing out: `break` and
             // `continue` hand no value to anybody. This is why pure code
@@ -497,17 +561,18 @@ impl<'a> Checker<'a> {
                         (latent, result_depth)
                     } else {
                         self.malformed(callee.span, "this is applied and is not a function");
-                        (Depth::PURE, Depth::PURE)
+                        (Held::NONE, Depth::PURE)
                     };
-                if latent > ambient {
+                if !latent.subset_of(ambient) {
                     // Inside a function body this is not a fault: it is what
                     // the function asks of whoever calls it. At the top level
                     // of a file there is nobody to ask.
                     if let Some(needs) = self.needs {
-                        self.needs = Some(needs.join(latent));
+                        self.needs = Some(needs.union(latent));
                     } else {
                         let blame = self.name_of(callee).map(|what| Blame { span: x.span, what });
-                        let kind = FaultKind::Ungranted { needed: latent, ambient };
+                        let needed = latent.without(ambient).deepest();
+                        let kind = FaultKind::Ungranted { needed, held: ambient };
                         self.fault_blaming(x.span, kind, blame);
                     }
                 }
@@ -517,7 +582,7 @@ impl<'a> Checker<'a> {
             // [DESCEND]. The only rule that raises δ, and only inside its own
             // premise. Nothing lowers δ; nothing lowers d.
             ExprKind::Descend { capability, body } => {
-                self.expr(body, ambient.join(capability.stratum()))
+                self.expr(body, ambient.with(capability.stratum()))
             }
 
             ExprKind::Rite { rite, operand } => self.rite(x, *rite, operand, ambient),
@@ -619,7 +684,7 @@ impl<'a> Checker<'a> {
     }
 
     /// [SEAL], [SHADE], [LOOK] and [OPAQUE].
-    fn rite(&mut self, x: &Expr, rite: Rite, operand: &Expr, ambient: Depth) -> Depth {
+    fn rite(&mut self, x: &Expr, rite: Rite, operand: &Expr, ambient: Held) -> Depth {
         let d = self.expr(operand, ambient);
         // `seal` and `shade` take the value itself; `look` and `opaque` pass
         // one through without giving it a name of its own.
@@ -643,9 +708,10 @@ impl<'a> Checker<'a> {
                     // propagate, and it does not stain the enclosing scope —
                     // and a latent depth inferred from a `look` would be that
                     // staining, one scope out.
-                    if origin > ambient {
+                    if !ambient.holds(origin) {
                         let blame = self.blame(operand, origin);
-                        self.fault_blaming(x.span, FaultKind::Orpheus { origin, ambient }, blame);
+                        let kind = FaultKind::Orpheus { origin, held: ambient };
+                        self.fault_blaming(x.span, kind, blame);
                     }
                     // Deep for two independent reasons: where the value came
                     // from, and where the shade itself came from.
@@ -668,7 +734,7 @@ impl<'a> Checker<'a> {
         // depths are the same one. Nothing else in the language has to be.
         match &x.ty {
             Type::Fn { latent, result_depth, .. }
-                if *latent == p.latent() && *result_depth == p.latent() => {}
+                if *latent == Held::of(p.latent()) && *result_depth == p.latent() => {}
             Type::Fn { .. } => self.malformed(x.span, "this prelude function has another stratum"),
             _ => self.malformed(x.span, "a prelude function is a function"),
         }

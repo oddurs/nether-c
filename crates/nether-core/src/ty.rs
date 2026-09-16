@@ -7,7 +7,7 @@
 
 use core::fmt;
 
-use crate::depth::Depth;
+use crate::depth::{Depth, Held};
 
 /// A type.
 ///
@@ -60,8 +60,9 @@ pub enum Type {
     Fn {
         /// The parameter types, in order.
         params: Vec<Type>,
-        /// `dƒ`: what a caller must already hold to apply it. [APP]'s premise.
-        latent: Depth,
+        /// `dƒ`: the capabilities a caller must already hold to apply it.
+        /// [APP]'s premise, `dƒ ⊆ δ`.
+        latent: Held,
         /// What applying it produces.
         result: Box<Type>,
         /// `d_r`: the depth of what comes back. [APP] joins this, not `dƒ`.
@@ -182,7 +183,7 @@ mod tests {
     fn signatures_print_the_way_they_are_written() {
         let read = Type::Fn {
             params: vec![Type::Str],
-            latent: Depth::DISK,
+            latent: Held::of(Depth::DISK),
             result: Box::new(Type::Answer(Box::new(Type::Bytes))),
             result_depth: Depth::DISK,
         };
@@ -193,7 +194,7 @@ mod tests {
     fn a_function_that_descends_for_itself_asks_for_nothing() {
         let load = Type::Fn {
             params: vec![Type::Str],
-            latent: Depth::PURE,
+            latent: Held::of(Depth::PURE),
             result: Box::new(Type::Bytes),
             result_depth: Depth::DISK,
         };

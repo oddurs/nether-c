@@ -18,8 +18,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use nether_core::{
     BinOp, Block, Capability, Demand, Depth, Expr, ExprKind, Field, FuncDef, FuncId, GlobalDef,
-    GlobalId, Literal, LocalDef, LocalId, Place, Prim, Proj, Refusal, Rite, Span, Stmt, StructDef,
-    Type, UnOp, Unit,
+    GlobalId, Held, Literal, LocalDef, LocalId, Place, Prim, Proj, Refusal, Rite, Span, Stmt,
+    StructDef, Type, UnOp, Unit,
 };
 
 // ── the sample unit ─────────────────────────────────────────────────────────
@@ -82,7 +82,12 @@ fn answer_bytes() -> Type {
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
     pure(
         ExprKind::Prim(p),
-        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+        Type::Fn {
+            params,
+            latent: Held::of(p.latent()),
+            result: Box::new(result),
+            result_depth: p.latent(),
+        },
     )
 }
 
@@ -373,8 +378,8 @@ fn head_len() -> FuncDef {
         ret: Type::Int,
         ret_depth: Depth::PURE,
         asserted_ret: None,
-        latent: Depth::PURE,
-        asserted_latent: Some(Depth::PURE),
+        latent: Held::of(Depth::PURE),
+        asserted_latent: Some(Held::of(Depth::PURE)),
         locals: vec![LocalDef {
             name: "h".into(),
             ty: Type::Struct("Header".into()),
@@ -414,8 +419,8 @@ fn load() -> FuncDef {
         ret: answer_bytes(),
         ret_depth: Depth::DISK,
         asserted_ret: None,
-        latent: Depth::DISK,
-        asserted_latent: Some(Depth::DISK),
+        latent: Held::of(Depth::DISK),
+        asserted_latent: Some(Held::of(Depth::DISK)),
         locals,
         body: load_body(),
         span: span(),
@@ -433,7 +438,7 @@ fn sample() -> Unit {
                 ExprKind::Func(FuncId(1)),
                 Type::Fn {
                     params: vec![Type::Str, row()],
-                    latent: Depth::DISK,
+                    latent: Held::of(Depth::DISK),
                     result: Box::new(answer_bytes()),
                     result_depth: Depth::DISK,
                 },

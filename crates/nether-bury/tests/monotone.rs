@@ -21,8 +21,8 @@
 
 use nether_bury::bury;
 use nether_core::{
-    BinOp, Capability, Demand, Depth, Expr, ExprKind, Literal, Prim, Rite, Span, Type, UnOp, Unit,
-    check,
+    BinOp, Capability, Demand, Depth, Expr, ExprKind, Held, Literal, Prim, Rite, Span, Type, UnOp,
+    Unit, check,
 };
 use nether_ledger::Cairn;
 
@@ -93,7 +93,7 @@ impl Gen {
     fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
         let ty = Type::Fn {
             params,
-            latent: p.latent(),
+            latent: Held::of(p.latent()),
             result: Box::new(result),
             result_depth: p.latent(),
         };
@@ -108,7 +108,7 @@ impl Gen {
         Self::at(ExprKind::Call { callee: Box::new(callee), args }, result, depth)
     }
 
-    fn expr(&mut self, ambient: Depth, want: Want, fuel: usize) -> Expr {
+    fn expr(&mut self, ambient: Held, want: Want, fuel: usize) -> Expr {
         if fuel == 0 {
             return self.literal(want);
         }
@@ -122,16 +122,28 @@ impl Gen {
 
     /// The forms that work at any type: they take their operands at the type
     /// they are producing.
-    fn any_type(&mut self, ambient: Depth, want: Want, fuel: usize, roll: usize) -> Expr {
+    fn any_type(&mut self, ambient: Held, want: Want, fuel: usize, roll: usize) -> Expr {
         match roll {
             0 => self.literal(want),
 
-            // [DESCEND]: the only rule that raises the ambient, and only
+            // [DESCEND]: the only rule that adds to the ambient, and only
             // inside its own body. Two slots, because a corpus that never
             // leaves the surface proves nothing about depth.
+            //
+            // A quarter of them take any capability, which is what exercises
+            // a set holding several. The rest take one of the two the world
+            // questions below need: δ is a set, so a `descend entropy` no
+            // longer carries the disk with it, and a uniform draw over eight
+            // left the corpus almost entirely shallow.
             1 | 11 => {
-                let capability = Capability::ALL[self.rng.below(Capability::ALL.len())];
-                let body = self.expr(ambient.join(capability.stratum()), want, fuel);
+                let capability = if self.rng.below(4) == 0 {
+                    Capability::ALL[self.rng.below(Capability::ALL.len())]
+                } else if self.rng.below(2) == 0 {
+                    Capability::Disk
+                } else {
+                    Capability::Net
+                };
+                let body = self.expr(ambient.with(capability.stratum()), want, fuel);
                 let (ty, depth) = (body.ty.clone(), body.depth);
                 Self::at(ExprKind::Descend { capability, body: Box::new(body) }, ty, depth)
             }
@@ -153,7 +165,7 @@ impl Gen {
             // is rather than shaded and looked at illegally.
             3 => {
                 let inner = self.expr(ambient, want, fuel);
-                if inner.depth > ambient {
+                if !ambient.holds(inner.depth) {
                     return inner;
                 }
                 let origin = inner.depth;
@@ -191,7 +203,7 @@ impl Gen {
     }
 
     /// The forms that depend on what is being produced.
-    fn this_type(&mut self, ambient: Depth, want: Want, fuel: usize, roll: usize) -> Expr {
+    fn this_type(&mut self, ambient: Held, want: Want, fuel: usize, roll: usize) -> Expr {
         match (want, roll) {
             (Want::Int, 5 | 6) => {
                 let lhs = self.expr(ambient, Want::Int, fuel);
@@ -235,8 +247,12 @@ impl Gen {
             // A question for the world, where the ambient allows one. This is
             // where a generated program gets deep for a reason other than
             // having been told to.
-            (Want::Bytes, 5..=8) if ambient >= Depth::DISK => {
-                let p = if ambient >= Depth::NET && self.rng.below(2) == 0 {
+            (Want::Bytes, 5..=8) if ambient.holds(Depth::DISK) || ambient.holds(Depth::NET) => {
+                // δ is a set, so which one is held decides which is asked.
+                // Reading under `descend net` alone is the thing 0254 stopped.
+                let p = if !ambient.holds(Depth::DISK)
+                    || (ambient.holds(Depth::NET) && self.rng.below(2) == 0)
+                {
                     Prim::Get
                 } else {
                     Prim::Read
@@ -274,7 +290,7 @@ impl Gen {
             .map(|_| {
                 let want = wants[self.rng.below(wants.len())];
                 let fuel = 2 + self.rng.below(4);
-                Demand { value: self.expr(Depth::PURE, want, fuel), span: Span::default() }
+                Demand { value: self.expr(Held::NONE, want, fuel), span: Span::default() }
             })
             .collect();
         Unit { demands, ..Unit::default() }

@@ -44,7 +44,7 @@ Buried. The front page declares rather than explains: nine doctrine passages, ea
 
 ## codex — The Codex
 
-`#######···` 66% · 19 of 29 done · due 2026-10-15
+`#######···` 69% · 20 of 29 done · due 2026-10-15
 
 Buried. Twelve specification sections, every design question settled and every rejected alternative recorded in 90.2, every code sample a fixture in tests/transcripts, and the Decay Rule proven by a pull request that was refused. Only one claim in the specification is frozen: there is no run.
 
@@ -59,10 +59,6 @@ Buried. Twelve specification sections, every design question settled and every r
 - [ ] [`0261`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0261-spec-nothing-says-whether-a-deposit-made-twice-is-recorded-twice.md) Spec: nothing says whether a deposit made twice is recorded twice <sup>spec · p2 · 0</sup>
 - [ ] [`0262`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0262-spec-the-disk-is-the-one-bounded-capability-the-invocation-cannot-bound.md) Spec: the disk is the one bounded capability the invocation cannot bound <sup>spec · p1 · 0</sup>
 - [ ] [`0263`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0263-spec-a-program-can-inspect-an-answer-and-cannot-build-one.md) Spec: a program can inspect an Answer and cannot build one <sup>spec · p2 · 0</sup>
-
-### descending
-
-- [ ] [`0254`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0254-spec-an-ambient-depth-is-a-number-so-descend-net-grants-the-disk.md) Spec: an ambient depth is a number, so descend net grants the disk <sup>spec · p0 · 0</sup>
 
 ### buried
 
@@ -85,6 +81,7 @@ Buried. Twelve specification sections, every design question settled and every r
 - [x] [`0027`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0027-extract-every-spec-code-sample-into-tests-transcripts.md) Extract every spec code sample into tests/transcripts <sup>chore · p0</sup>
 - [x] [`0083`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0083-the-decay-rule-ci-fails-if-the-trusted-core-grows.md) The Decay Rule: CI fails if the trusted core grows <sup>chore · p1 · 0</sup>
 - [x] [`0094`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0094-decide-what-a-prelude-function-does-when-it-cannot-answer.md) Decide: what a prelude function does when it cannot answer <sup>spec · p0</sup>
+- [x] [`0254`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0254-spec-an-ambient-depth-is-a-number-so-descend-net-grants-the-disk.md) Spec: an ambient depth is a number, so descend net grants the disk <sup>spec · p0 · 0</sup>
 
 ## lamp — The Lamp
 

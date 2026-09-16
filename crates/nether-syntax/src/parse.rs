@@ -333,22 +333,52 @@ impl Parser<'_> {
             }
         }
         self.expect(Punct::RParen, "`)` to close the parameters")?;
-        // §3.5: a latent depth may be written with a space after the `@`, so
-        // it arrives either as one token or as two.
-        let latent = match self.peek() {
+        let latent = self.latent()?;
+        let body = self.block()?;
+        Ok(Item::Func(Func { ret, name, params, latent, body, span: self.since(from) }))
+    }
+
+    /// `latent := "@" ( digit | "{" digit { "," digit } "}" )`. §3.5.
+    ///
+    /// A latent annotation may be written with a space after the `@`, so it
+    /// arrives either as one token or as two. The braced form spells a set of
+    /// two or more, ascending and without repeats, and holds no `0`: stratum 0
+    /// is held everywhere, so naming it says nothing, and `@{3}` and `@3`
+    /// would be two spellings of one thing.
+    fn latent(&mut self) -> Parsed<Option<Vec<u8>>> {
+        match self.peek() {
             Some(TokenKind::Depth(d)) => {
                 let d = *d;
                 self.at += 1;
-                Some(d)
+                Ok(Some(vec![d]))
             }
             Some(TokenKind::Punct(Punct::At)) => {
                 self.at += 1;
-                Some(self.stratum()?)
+                if !self.eat(Punct::LBrace) {
+                    return Ok(Some(vec![self.stratum()?]));
+                }
+                let mut set: Vec<u8> = Vec::new();
+                loop {
+                    let span = self.span();
+                    let d = self.stratum()?;
+                    if d == 0 || set.last().is_some_and(|last| *last >= d) {
+                        self.faults.push(Fault { span, kind: FaultKind::NotAStratumSet });
+                        return Err(Given);
+                    }
+                    set.push(d);
+                    if !self.eat(Punct::Comma) {
+                        break;
+                    }
+                }
+                self.expect(Punct::RBrace, "`}` to close the latent set")?;
+                if set.len() < 2 {
+                    self.faults.push(Fault { span: self.span(), kind: FaultKind::NotAStratumSet });
+                    return Err(Given);
+                }
+                Ok(Some(set))
             }
-            _ => None,
-        };
-        let body = self.block()?;
-        Ok(Item::Func(Func { ret, name, params, latent, body, span: self.since(from) }))
+            _ => Ok(None),
+        }
     }
 
     fn stratum(&mut self) -> Parsed<u8> {
