@@ -519,3 +519,77 @@ ol.doctrine > li span { color: var(--dim); }
 .counter { display: flex; align-items: center; justify-content: center; gap: 1ch; margin: 1rem 0; color: var(--dim); font-size: 8px; }
 
 hr.gfx { height: 0; margin: 1.2rem 0; border: 0; }
+
+/* The necropolis: a neighbourhood of records, not a moving constellation.
+   All controls remain ordinary HTML. The SVG only connects their boxes. */
+body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap); }
+.necropolis [hidden] { display: none !important; }
+.necropolis h1 { font-size: 48px; line-height: 1.2; margin: var(--tight) 0; }
+.necropolis h2 { background: none; color: var(--ink); padding: 0; margin: 0 0 var(--hair); font-size: 24px; border: 0; }
+.necropolis h3 { color: var(--dim); font-size: 16px; margin: 0 0 var(--tight); }
+.necropolis p { margin: 0 0 var(--hair); }
+.necropolis button { font: inherit; color: var(--ink); background: var(--raised); border: 1px solid var(--dimmer); padding: 10px 16px; min-height: 44px; cursor: pointer; text-align: left; }
+.necropolis button:hover:not(:disabled) { border-color: var(--accent); background: var(--sunk); }
+.necropolis button:disabled { color: var(--dim); cursor: default; border-style: dotted; }
+.necropolis :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.necropolis pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; overflow-y: hidden; max-width: 100%; margin: var(--hair) 0; padding: var(--tight); background: var(--sunk); border: 1px solid var(--dimmer); }
+.necropolis code { background: transparent; padding: 0; }
+.nc-header { border-bottom: 1px solid var(--dimmer); padding-bottom: var(--tight); margin-bottom: var(--tight); }
+.nc-eyebrow, .nc-private, .nc-caption, .nc-footer { color: var(--dim); }
+.necropolis .nc-eyebrow { font-size: 16px; letter-spacing: .08em; }
+.nc-header h1 { color: var(--accent); }
+.nc-private { margin-top: var(--tight) !important; }
+.nc-source { border: 1px solid var(--dimmer); padding: var(--hair) var(--tight); background: var(--sunk); }
+.nc-source summary { cursor: pointer; min-height: 32px; color: var(--code); }
+.nc-source label { display: block; margin-top: var(--hair); }
+.nc-source textarea { display: block; width: 100%; min-height: 240px; resize: vertical; margin: var(--hair) 0; padding: var(--hair); border: 1px solid var(--dimmer); background: var(--ground); color: var(--ink); font: inherit; line-height: 1.6; }
+.nc-state { display: flex; align-items: center; justify-content: space-between; gap: var(--hair); padding: var(--tight) 0; color: var(--dim); }
+.nc-state p { margin: 0; }
+.nc-overview { display: flex; align-items: center; justify-content: space-between; gap: var(--tight); padding: var(--tight); border: 1px solid var(--dimmer); border-top: 3px solid var(--accent); background: var(--sunk); }
+.nc-overview h2 { overflow-wrap: anywhere; }
+.nc-roots { display: flex; flex-wrap: wrap; gap: var(--hair); max-width: 50%; }
+.necropolis .nc-root-hole { border-style: dashed; color: var(--accent); }
+.necropolis .nc-root-deposit { color: var(--code); }
+.nc-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: var(--hair); margin: var(--tight) 0; padding: 0; border: 0; background: none; }
+.nc-navigation span { margin-left: auto; color: var(--dim); }
+.nc-neighbourhood { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--step); align-items: center; min-height: 300px; padding: var(--tight) 0 var(--step); }
+.nc-neighbourhood > section { position: relative; z-index: 1; min-width: 0; }
+.nc-neighbours h3 { text-transform: uppercase; letter-spacing: .08em; }
+.nc-object { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; width: 100%; margin-bottom: var(--hair); }
+.nc-object .nc-edge-label { grid-column: 1 / -1; color: var(--dim); font-size: 16px; }
+.nc-object strong { color: var(--ink); }
+.nc-object code { color: var(--dim); }
+.nc-preview { grid-column: 1 / -1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 16px; }
+.nc-empty { color: var(--dim); border-top: 1px dotted var(--dimmer); padding-top: var(--hair); }
+.nc-selected { padding: var(--tight); border: 2px solid var(--accent); background: var(--sunk); box-shadow: 6px 6px 0 var(--raised); overflow-wrap: anywhere; }
+.nc-selected h2 { font-size: 32px; color: var(--accent); }
+.nc-selected .nc-eyebrow { font-size: 16px; }
+.necropolis [data-kind="Hole"] { border-style: dashed; border-color: var(--accent); }
+.necropolis [data-kind="Deposit"] { border-color: var(--code); }
+.necropolis [data-kind="Missing"], .necropolis [data-kind="Unavailable"] { border-style: dotted; border-color: var(--warn); }
+.nc-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.nc-wire { fill: none; stroke: var(--dimmer); stroke-width: 1.5; }
+.nc-wire[data-kind="Hole"] { stroke: var(--accent); stroke-dasharray: 5 5; }
+.nc-wire[data-kind="Deposit"] { stroke: var(--code); }
+.nc-inspector { padding: var(--tight); border: 1px solid var(--dimmer); background: var(--raised); }
+.nc-inspector-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--hair); margin-bottom: var(--hair); }
+.nc-inspector-heading h2 { margin: 0; }
+.nc-inspector > code { display: block; color: var(--dim); overflow-wrap: anywhere; margin-bottom: var(--tight); user-select: all; }
+.nc-inspector h3 { margin-top: var(--tight); margin-bottom: var(--hair); }
+.nc-inspector button + button { margin-left: var(--hair); }
+.nc-excerpt mark { background: var(--accent); color: var(--sunk); padding: 2px 0; }
+.nc-caption { margin-top: var(--tight) !important; }
+.nc-footer { margin-top: var(--step); padding-top: var(--tight); border-top: 1px solid var(--dimmer); }
+@media (max-width: 760px) {
+  body.necropolis { padding: var(--tight) var(--hair) var(--step); }
+  .necropolis h1 { font-size: 32px; }
+  .nc-neighbourhood { grid-template-columns: minmax(0, 1fr); gap: var(--tight); }
+  .nc-selected { order: -1; }
+  .nc-wires { display: none; }
+  .nc-overview, .nc-inspector-heading { align-items: flex-start; flex-direction: column; }
+  .nc-roots { max-width: 100%; }
+  .nc-inspector, .nc-overview { padding: var(--hair); }
+  .nc-navigation { gap: 8px; }
+  .nc-navigation button { padding: 8px; }
+  .nc-navigation span { width: 100%; margin: 0; }
+}
