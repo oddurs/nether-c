@@ -425,9 +425,9 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`··········` 0% · 0 of 1 done
+`##########` 100% · 1 of 1 done
 
-### descending
+### buried
 
-- [ ] [`0253`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0253-a-bytes-literal-cannot-spell-every-byte.md) A Bytes literal cannot spell every byte <sup>bug · p2</sup>
+- [x] [`0253`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0253-a-bytes-literal-cannot-spell-every-byte.md) A Bytes literal cannot spell every byte <sup>bug · p1 · 0</sup>
 

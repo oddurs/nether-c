@@ -72,3 +72,14 @@ fn a_residue_from_a_different_unit_is_refused() {
     let r = bury(&one, Cairn::of_encoded(b"one"), 100).expect("this finishes");
     let _ = r.as_unit(&two);
 }
+
+/// §3.6's byte escape exists for this. A `Bytes` value is not text, and the
+/// escape that names a scalar value spells two bytes as one character, which
+/// comes back as four.
+#[test]
+fn a_bytes_value_survives_whatever_bytes_are_in_it() {
+    residue_survives("demand b\"\u{e9}\";\n");
+    residue_survives("demand b\"\u{96ea}:\u{0}\\xff\";\n");
+    residue_survives("demand \"\u{e9}\u{96ea}\";\n");
+    residue_survives("demand concat(b\"\\x00\\xff\", b\"\\x80\");\n");
+}
