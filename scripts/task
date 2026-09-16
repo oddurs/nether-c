@@ -19,6 +19,7 @@ case "${1:-}" in
   test)
     cargo test --workspace
     "$0" workflow:check
+    "$0" graph:check
     # Every code sample in the documentation is a fixture. Documentation that
     # lies fails the build.
     python3 tests/transcripts/run
@@ -42,6 +43,9 @@ case "${1:-}" in
     ;;
   workflow:check)
     python3 tests/workflow/run
+    ;;
+  graph:check)
+    node --test tests/necropolis/graph.mjs
     ;;
   fuzz)
     # The soak. The short pass runs in `test` on every commit; this is the one
@@ -106,7 +110,8 @@ case "${1:-}" in
     ;;
   wasm)
     # The core, built for a browser, and copied to where the page loads it.
-    exec "$root/scripts/wasm"
+    "$root/scripts/wasm"
+    node --test tests/necropolis/wasm.mjs
     ;;
   check)
     "$0" fmt:check
@@ -155,7 +160,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|workflow:check|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check|release}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|workflow:check|graph:check|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check|release}" >&2
     exit 2
     ;;
 esac

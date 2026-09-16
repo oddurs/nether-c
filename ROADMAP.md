@@ -214,7 +214,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`#########·` 83% · 20 of 24 done · due 2027-07-15
+`#########·` 84% · 21 of 25 done · due 2027-07-15
 
 ### unmarked
 
@@ -248,6 +248,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0237`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0237-the-release-workflow-ships-nothing-and-its-gate-cannot-fail.md) The release workflow ships nothing, and its gate cannot fail <sup>bug · p0 · 4</sup>
 - [x] [`0238`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0238-a-pull-request-should-land-itself.md) A pull request should land itself <sup>feature · p1 · 4</sup>
 - [x] [`0243`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0243-expose-canonical-trace-objects-to-the-browser.md) Expose canonical trace objects to the browser <sup>feature · p2 · 0</sup>
+- [x] [`0244`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0244-navigate-trace-objects-and-inspect-their-recorded-contents.md) Navigate trace objects and inspect their recorded contents <sup>feature · p2 · 0</sup>
 
 ## face — The Face
 

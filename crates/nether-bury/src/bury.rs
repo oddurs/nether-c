@@ -191,7 +191,7 @@ pub enum HaltKind {
 /// is [`STACK`], and they are stated together because neither means anything
 /// alone: burial evaluates by recursion, so a frame here is a handful of the
 /// host's, and the limit is only a limit if the stack underneath it is known.
-pub const MAX_FRAMES: u32 = 2048;
+pub const MAX_FRAMES: u32 = if cfg!(target_family = "wasm") { 128 } else { 2048 };
 
 /// The stack a burial is given.
 ///
@@ -201,8 +201,9 @@ pub const MAX_FRAMES: u32 = 2048;
 /// about a hundred of those, which is not a depth a language can offer. So it
 /// runs on a stack of its own, sized for [`MAX_FRAMES`] with room to spare,
 /// and the number is written down here rather than inherited from whoever
-/// called.
-pub const STACK: usize = 64 << 20;
+/// called. The browser instead uses the module's 8 MiB linker stack and a
+/// conservative 128-frame limit; it cannot spawn a native thread.
+pub const STACK: usize = if cfg!(target_family = "wasm") { 8 << 20 } else { 64 << 20 };
 
 /// What burial was going round in when the fuel ran out.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -356,6 +357,9 @@ pub fn bury_with(
     answers: &Answers,
 ) -> Result<Residue, Halt> {
     let run = || burrow(unit, source, fuel, answers);
+    if cfg!(target_family = "wasm") {
+        return run();
+    }
     std::thread::scope(|s| {
         match std::thread::Builder::new().stack_size(STACK).spawn_scoped(s, run) {
             // A burial that panicked is a bug in this crate, and the caller

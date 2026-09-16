@@ -23,3 +23,32 @@ import API; accepting untrusted external objects would also require verifying
 their cairns with the existing Rust implementation, not handwritten JavaScript
 cryptography. Canonical bytes avoid a second Rust serializer for every node and
 value variant, at the cost of hex transport overhead and a small browser decoder.
+
+## Navigation and limits
+
+The initial example buries automatically. Open a hole or deposit, follow its
+labelled references, and use Back, Forward or Return to trace. Incoming edges
+mean “references this object”, not “produced this value”; the provenance walk
+is separate work. Shades show their origin and cairn, never an unwrapped value.
+
+Source can be edited in the disclosure above the trace. Each burial uses a
+fresh module worker; restarting or cancelling terminates the old worker.
+Diagnostics retain and explicitly label the previous successful trace.
+
+Browser limits: 256 KiB source, the default one-million-step fuel budget,
+128 evaluation frames, an 8 MiB module stack, and a 30-second worker deadline.
+The native burier retains its 2,048 frames and 64 MiB thread stack. Browser
+burial cannot spawn native threads: `.cargo/config.toml` supplies the module
+stack, and real-WASM tests verify the frame diagnostic instead of only testing
+the native build of `nether-wasm`.
+
+The view accepts at most 20,000 objects / 16 MiB canonical bytes. Relations
+start with twelve entries per side. Value previews are bounded; compound
+decoding stops at 4,096 entries or 128 nesting levels and labels the preview
+unavailable. The bytes remain in the local result; these are display limits,
+not invented values or modified cairns.
+
+Tests require Node 22 or newer, using only its standard library.
+`scripts/task graph:check` checks decoding and navigation; `scripts/task wasm`
+also instantiates the actual built module, buries real samples, and exercises
+limits and repeated burials. Both are required by `scripts/task check`.

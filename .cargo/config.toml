@@ -1,0 +1,3 @@
+[target.wasm32-unknown-unknown]
+# Must match nether_bury::STACK. Browser burial has no native thread stack.
+rustflags = ["-C", "link-arg=-zstack-size=8388608"]
