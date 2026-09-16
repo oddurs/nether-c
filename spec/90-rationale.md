@@ -125,6 +125,46 @@ a propagation, gives an error that names the exact fix, and keeps the myth
 intact. Orpheus could have kept her; what he could not do was look on the way
 up.
 
+### What a grant gates: a call, or a depth
+
+[§6.1](06-evaluation.md#61-burial) said burial could evaluate an expression
+"when the expression's depth is within the granted capabilities". Read as
+written, that leaves a whole class of expression with no outcome. `descend disk
+{ 1 + 1 }` under no grant is at depth 3 and not within nothing, so burial
+cannot evaluate it; [§6.3](06-evaluation.md#63-holes) forms a hole only from a
+prelude call with finished arguments, and there is no call; and
+[§6.4](06-evaluation.md#64-starvation-and-fuel) starves only what waits on a
+hole, and there is none. It has not collapsed either — it produces 2, and will
+the moment anybody asks. Three rules, no answer. `look` on a shade that already
+has a value is the same shape.
+
+The alternative was to make it a fourth outcome: an expression that is deep,
+ungranted and not a call is neither evaluated nor a hole, and
+[§6.5](06-evaluation.md#65-residue) would say it residualises as the descent
+written out, since there is nothing inside it to reduce. That is coherent and
+it buys nothing. The burial would be refusing to fold arithmetic on the grounds
+that somebody once wrote `descend disk` around it, and the residue it produced
+would fold on the next burial for a reason unrelated to anything the world
+said.
+
+So a grant gates a call. What is owed to the world is a question, and an
+expression that asks no question is not owed anything.
+
+That has a consequence for the Orpheus rule that is worth stating rather than
+leaving to be discovered, and [§1.6](01-strata.md#16-shade-and-the-orpheus-rule)
+now states it. `look` is checked and never granted: it costs the writer a
+`descend` and costs the operator nothing. The binding-taint form rejected below
+was turned down partly because "if looking is free, nothing has been carried",
+and looking is free of the world under either form. What is carried is not the
+cost of opening — it is that a deep value can be held, passed and stored at
+depth 0 without staining what holds it, and that opening it names the stratum
+again where a reader can see it.
+
+**What it cost.** A sentence admitting that one of the two escapes in the
+lattice is a discipline rather than a gate. That reads as a weakening and is
+not: the witness was written when the value was fetched, by whoever held the
+capability then, and nothing about looking at it later can un-write that.
+
 ### Stratum 8: refusing foreign code
 
 The purer design has no stratum 8. Every value in every trace would then have

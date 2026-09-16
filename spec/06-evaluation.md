@@ -26,6 +26,22 @@ Granted capabilities are a set and one grants no other, on
 does not answer a `read`: the read is a hole owed to `disk`, and an exhumation
 that grants `disk` is what fills it.
 
+A grant gates a **call**, and not a depth. An expression that reaches no
+prelude function is evaluated whatever depth it has, because there is nothing
+for the world to answer:
+
+```console
+$ nether bury peek.nc
+buried   peek.nc → f51bdfe5   depth 0   holes 0   2 nodes
+```
+
+`peek.nc` is `demand descend disk { 1 + 1 };`. It holds the disk and asks it
+nothing, so it is 2, and no capability was granted to get there. This is worth
+saying outright because it decides what
+[§1.6](01-strata.md#16-shade-and-the-orpheus-rule)'s `look` costs: `look s` on
+a shade that already has a value reaches nothing either, and burial evaluates
+it with nothing granted. What the Orpheus rule buys is settled there.
+
 A trace is complete and immutable. Burial MUST NOT modify a trace it was
 given; every burial produces a new trace with a new cairn.
 
