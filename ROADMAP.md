@@ -423,3 +423,11 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [ ] [`0226`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0226-the-implementation-agrees-with-the-model.md) The implementation agrees with the model <sup>chore · p1 · 0</sup>
 - [ ] [`0227`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0227-say-what-the-proofs-are-worth.md) Say what the proofs are worth <sup>docs · p2 · 0</sup>
 
+## Unscheduled
+
+`··········` 0% · 0 of 1 done
+
+### descending
+
+- [ ] [`0253`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0253-a-bytes-literal-cannot-spell-every-byte.md) A Bytes literal cannot spell every byte <sup>bug · p2</sup>
+

@@ -520,6 +520,32 @@ An implementation can drop the bindings nothing in the residual body reads,
 and should; what it cannot do is drop the shape, and a programmer who wants
 the smaller residue back has to ask for it with `opaque`.
 
+### A `Bytes` literal without a byte escape
+
+There was no `\x` until `demand b"\u{e9}"` was found to print as a residue that
+lowers to a different program. Three ways not to add one were considered.
+
+**Let a `bytes_literal` hold raw bytes.** The obvious answer, and the one C
+takes. Rejected because [§3.1](03-lexical.md#31-source-encoding) says a source
+file is UTF-8, and a lone `0xe2` is not. Relaxing that for the inside of one
+literal means a lexer that stops being able to work in `str`, an editor that
+shows the file as damaged, and a diff nobody can read.
+
+**Let `\u{…}` mean a byte inside `b"…"`.** No new syntax, and the printer
+already writes it. Rejected because the same escape would then mean a scalar
+value in one literal and a byte in the other, and `\u{1f480}` would be legal in
+one and an error in the other. An escape that means two things is read wrongly
+once and then trusted.
+
+**Take the variable-length `\x`.** C's spelling, so it would look familiar.
+Rejected because `b"\xeff"` is then one literal or two depending on how far the
+reader looks, and it is a bug people have actually written. Exactly two digits
+has one reading.
+
+The cost is a fourth thing to know about literals, and an asymmetry: `\x` is
+admissible in `b"…"` and not in `"…"`. The asymmetry is the type's, not the
+lexer's — a `Str` is UTF-8 and a `Bytes` is not — but it still has to be taught.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
