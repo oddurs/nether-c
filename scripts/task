@@ -25,7 +25,7 @@ case "${1:-}" in
     python3 tests/transcripts/run
     # The Decay Rule is only worth having if it actually fails.
     python3 tests/decay/run
-    # The complemented VGA palette clears WCAG AA on both grounds, or it changes.
+    # Shared colour roles clear WCAG AA on both grounds, or they change.
     python3 tests/contrast/run
     # Nothing on the site may point at something that is not there.
     python3 tests/links/run

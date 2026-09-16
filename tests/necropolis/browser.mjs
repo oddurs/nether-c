@@ -84,12 +84,16 @@ async function bury(source) {
   await until("document.getElementById('state').textContent.startsWith('Buried.') || !document.getElementById('diagnostic').hidden");
   assert.equal(await evaluate("document.getElementById('diagnostic').hidden"), true, await text("diagnostic"));
 }
-async function screenshot(name) {
+async function screenshot(name, selector) {
   if (!process.env.NETHER_SCREENSHOTS) return;
   await mkdir(process.env.NETHER_SCREENSHOTS, { recursive: true });
   const { cssContentSize: size } = await command("Page.getLayoutMetrics");
+  const clip = selector ? await evaluate(`(() => {
+    const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+    return { x: r.x + scrollX, y: r.y + scrollY, width: r.width, height: r.height, scale: 1 };
+  })()`) : { x: 0, y: 0, width: size.width, height: Math.min(size.height, 3000), scale: 1 };
   const { data } = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: true,
-    clip: { x: 0, y: 0, width: size.width, height: Math.min(size.height, 3000), scale: 1 } });
+    clip });
   await writeFile(join(process.env.NETHER_SCREENSHOTS, name + ".png"), Buffer.from(data, "base64"));
 }
 try {
@@ -116,8 +120,11 @@ try {
       await click("[data-lamp-toggle]");
       assert.equal(await evaluate("document.documentElement.dataset.lamp"), "lit");
       assert.equal(await evaluate("document.querySelector('[data-lamp-toggle]').getAttribute('aria-pressed')"), "true");
+      await until("[...document.images].every(i => i.complete && i.naturalWidth > 0)");
+      assert.ok(await evaluate("[...document.querySelectorAll('img[data-lit-src]')].every(i => i.getAttribute('src') === i.dataset.litSrc)"), "graphics follow the lamp");
       if (width === 1248 && path === "/site/") await screenshot("site-lamp-lit");
       await click("[data-lamp-toggle]");
+      await until("[...document.images].every(i => i.complete && i.naturalWidth > 0)");
       assert.deepEqual(await evaluate(`(() => {
         const c = document.createElement("canvas").getContext("2d");
         return [8, 16, 24, 32].map(size => {
@@ -132,6 +139,20 @@ try {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 11);
       } else {
         assert.equal(await evaluate("document.querySelector('img.hero').naturalWidth"), 600);
+        assert.ok(await evaluate("[...document.querySelectorAll('.swatches > div')].every(s => getComputedStyle(s, '::before').height === '32px' && getComputedStyle(s, '::before').backgroundColor !== 'rgba(0, 0, 0, 0)')"), "swatches show the live tokens");
+        await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+        await until("document.querySelector('img.hero').getAttribute('src').endsWith('-still.gif') && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
+        assert.match(await evaluate("document.querySelector('img.descent').getAttribute('src')"), /-still.gif$/);
+        if (width === 1248) await screenshot("strata-dark", "img.descent");
+        await click("[data-lamp-toggle]");
+        await until("document.querySelector('img.hero').getAttribute('src').endsWith('-lit-still.gif') && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
+        if (width === 1248) {
+          await screenshot("strata-light", "img.descent");
+          await screenshot("palette-light", ".swatches");
+        }
+        await click("[data-lamp-toggle]");
+        await command("Emulation.setEmulatedMedia", { features: [] });
+        await until("document.querySelector('img.hero').getAttribute('src').endsWith('/hero.gif') && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
         assert.ok(await evaluate("[...document.querySelectorAll('.desk-directory a')].every(a => document.getElementById(a.hash.slice(1)))"));
         await click(".complaints summary");
         assert.equal(await evaluate("document.querySelector('.complaints').open"), true);

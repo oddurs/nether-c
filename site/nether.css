@@ -7,12 +7,9 @@
 
    The system is three scales.
 
-   Colour is Oklch. A lightness, a chroma and an angle -- and two colours with
-   the same lightness look equally bright, which is the whole reason a ramp
-   built that way looks designed and one picked out of a box does not. The
-   scheme is a single axis: the ground is indigo, the complement of indigo is
-   amber, and the nine strata sweep between them at one lightness, so depth
-   reads as *hue* and never as "harder to see". Nothing is at full chroma.
+   Colour is Oklch. Indigo and rose form the dark room; porcelain and plum
+   form its light companion. Both are generated from semantic roles, not
+   inverted RGB values. Depth follows the same violet-to-rose path in each.
 
    Space follows a twelve-pixel grid, independent of the font's advance.
 
@@ -20,12 +17,9 @@
    drawn on an eight-pixel grid has exactly four at which a pixel of it is a
    whole number of the screen's.
 
-   What this replaced was the sixteen VGA colours, complemented -- a derivation
-   that was clever, that was somebody else's sixteen colours underneath, and
-   that was chosen for a text mode in the 1980s rather than for reading. Two
-   of the sixteen had no opposite inside the palette and had to be invented,
-   which was the first sign. tests/contrast/run holds every pair this file uses
-   to WCAG AA on both grounds, as it always did.
+   tests/contrast/run checks semantic text, raised surfaces, depth labels and
+   the colour tables in the shipped GIFs. The two rooms share roles, not RGB
+   complements.
    =========================================================================== */
 
 :root {
@@ -62,7 +56,7 @@ a.skip:focus {
 html {
   background: var(--ground) url("gfx/bg.gif") repeat;
 }
-html[data-lamp="lit"] { background-image: none; }
+html[data-lamp="lit"] { background-image: url("gfx/bg-lit.gif"); }
 
 /* One font, drawn in this repository, so the site reads the same on a machine
    with nothing installed. site/font.py makes it; there is no font library here
@@ -476,10 +470,11 @@ div.box.covenant p + p { color: var(--dim); margin-top: .5rem; }
 p.small { color: var(--dim); }
 div.box.shout strong { color: var(--warn); }
 
-dl.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9ch, 1fr)); gap: 2px; }
-dl.swatches div { padding: .35rem .4rem; color: #000; font-size: 8px; line-height: 1.2; }
+dl.swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(14ch, 1fr)); gap: .75rem; margin: 1rem 0; }
+dl.swatches div { padding: .75rem; color: var(--ink); background: var(--raised); border: 1px solid var(--dim); }
+dl.swatches div::before { content: ""; display: block; height: 2rem; margin-bottom: .75rem; background: var(--swatch); border: 1px solid var(--dim); }
 dl.swatches dt { font-weight: bold; }
-dl.swatches dd { opacity: .75; }
+dl.swatches dd { color: var(--dim); }
 
 /* --- the lamp ------------------------------------------------------------- */
 
@@ -547,6 +542,7 @@ img.banner { width: 100%; max-width: 396px; margin: 0 auto; }
 /* The mark. Drawn at three times the cell and shown at exactly that, because
    a bitmap resampled to 1.4 pixels per pixel is an argument against itself. */
 img.mark { display: block; width: 96px; height: 120px; margin: 0 auto 1rem; image-rendering: pixelated; }
+img.descent { display: block; width: 320px; max-width: 100%; height: auto; margin: 1rem auto; }
 img.hero { display: block; width: 100%; max-width: 600px; height: auto; margin: 0 auto 1.25rem; image-rendering: pixelated; }
 img.rule   { width: 100%; max-width: 396px; margin: 1rem auto; }
 /* The specimen is drawn at three times the cell and must not be resampled to
@@ -612,9 +608,6 @@ ol.doctrine > li span { color: var(--dim); }
    600px it scales down instead of overflowing, and stays blocky doing it. */
 .diagram { display: block; width: 600px; max-width: 100%; height: auto; margin: 1.5rem auto; }
 
-/* the descent column, floated like it is 1997 */
-.descent { float: right; width: 240px; max-width: 40%; height: auto; margin: 0 0 1rem 1.5ch; }
-@media (max-width: 640px) { .descent { float: none; display: block; max-width: 100%; margin: 0 auto 1rem; } }
 
 /* the badge shelf */
 .badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 1rem 0; }

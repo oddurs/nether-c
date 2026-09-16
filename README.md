@@ -147,25 +147,13 @@ in those words.
 
 ## ON THE PALETTE
 
-This is not decoration and it is not a joke. Sit with it.
+Indigo rooms and rose signals. The nine strata travel from periwinkle through
+violet to pink, with explicit numbers so colour is never the only cue.
 
-The graphics start with the sixteen-colour VGA palette and complement every
-single colour.
-
-**Fourteen of the sixteen land back inside the palette.** Complement blue, get
-yellow. Complement green, get light purple. Complement light grey, get dark
-grey. The VGA palette is very nearly its own opposite. That is either a fact
-about the 1980s or a fact about opposites and I have not decided which.
-
-Two colours have nowhere to go.
-
-Brown (`#AA5500`) complements to `#55AAFF`. Light blue (`#5555FF`) complements
-to `#AAAA00`. Neither of those is a VGA colour at all.
-
-We kept both. We named them **ROT** and **BILE**.
-
-Fourteen of sixteen. Not sixteen. It is the most honest thing about this
-project and every graphic on the site is drawn out of those exact values.
+Light mode is a separate composition: rose porcelain, lavender paper and plum
+ink, not an inversion. Interface tokens and both sets of GIF colour tables
+come from [site/design.py](site/design.py). Text contrast is checked in both
+modes; the pair changes if it fails, not the standard.
 
 ---
 

@@ -847,3 +847,21 @@ true.
 
 An inversion is a form of close reading. You cannot turn something over without
 first working out which way up it was.
+
+## 90.5 Two rooms, one colour vocabulary
+
+The interface uses indigo grounds and rose signals. Its light companion uses
+rose porcelain, lavender panels and plum ink. Both are authored in
+`site/design.py`; generated CSS, GIF colour tables and the cairn icon consume
+those roles. The nine depth colours follow a violet-to-rose path, but numbers
+and labels remain the authoritative cues.
+
+**Rejected:** complementing the RGB values or applying a filter to the page.
+Neither preserves readable contrast or gives the light room a character of
+its own. The old VGA swatches also described colours the interface no longer
+used; swatches now show live semantic tokens.
+
+**What it costs.** Two small colour tables and a second set of GIF files.
+The drawings, timing and encoders remain shared. Tests compare both shipped
+colour tables against the system and check text on plain and raised surfaces.
+The hero and descent have still counterparts for reduced-motion readers.

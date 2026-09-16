@@ -94,17 +94,17 @@ depth 3   disk
 <p>Nether C is in the <strong>public domain</strong>.
 Take it. It was always there.</p>
 <div class="badges">
-<img src="../gfx/badge-norun.gif" width="88" height="31" alt="There is no run">
-<img src="../gfx/badge-unlit.gif" width="88" height="31" alt="Best viewed unlit">
-<img src="../gfx/badge-handmade.gif" width="88" height="31" alt="No libraries, written from scratch">
-<img src="../gfx/badge-80col.gif" width="88" height="31" alt="80 columns">
-<img src="../gfx/badge-decay.gif" width="88" height="31" alt="The core only decays">
-<img src="../gfx/badge-public.gif" width="88" height="31" alt="Public domain, take it">
+<img src="../gfx/badge-norun.gif" data-dark-src="../gfx/badge-norun.gif" data-lit-src="../gfx/badge-norun-lit.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" data-dark-src="../gfx/badge-unlit.gif" data-lit-src="../gfx/badge-unlit-lit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" data-dark-src="../gfx/badge-handmade.gif" data-lit-src="../gfx/badge-handmade-lit.gif" width="88" height="31" alt="No libraries, written from scratch">
+<img src="../gfx/badge-80col.gif" data-dark-src="../gfx/badge-80col.gif" data-lit-src="../gfx/badge-80col-lit.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" data-dark-src="../gfx/badge-decay.gif" data-lit-src="../gfx/badge-decay-lit.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" data-dark-src="../gfx/badge-public.gif" data-lit-src="../gfx/badge-public-lit.gif" width="88" height="31" alt="Public domain, take it">
 </div>
 
 <div class="counter">
   <span>the world still owes</span>
-  <img src="../gfx/counter.gif" width="84" height="26" alt="Holes still owed, counted off the board">
+  <img src="../gfx/counter.gif" data-dark-src="../gfx/counter.gif" data-lit-src="../gfx/counter-lit.gif" width="84" height="26" alt="Holes still owed, counted off the board">
   <span>holes</span>
 </div>
 
@@ -123,10 +123,20 @@ There is no image library in this repository. There is not going to be one.</p>
   var root = document.documentElement;
   var btn = document.querySelector("[data-lamp-toggle]");
   var label = document.querySelector("[data-lamp-state]");
+  var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  function paintImages() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    document.querySelectorAll("img[data-dark-src]").forEach(function (img) {
+      var src = lit ? img.dataset.litSrc : img.dataset.darkSrc;
+      if (motion.matches && img.hasAttribute("data-still")) src = src.replace(".gif", "-still.gif");
+      if (img.getAttribute("src") !== src) img.setAttribute("src", src);
+    });
+  }
   function paint() {
     var lit = root.getAttribute("data-lamp") === "lit";
     if (label) label.textContent = lit ? "lit" : "out";
     if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+    paintImages();
   }
   if (btn) {
     btn.addEventListener("click", function () {
@@ -137,6 +147,7 @@ There is no image library in this repository. There is not going to be one.</p>
     });
   }
   paint();
+  motion.addEventListener("change", paintImages);
 })();
 </script>
 
