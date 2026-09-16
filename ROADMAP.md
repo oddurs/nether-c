@@ -299,7 +299,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## quickening — The Quickening
 
-`##········` 14% · 1 of 7 done · due 2027-12-01
+`###·······` 25% · 2 of 8 done · due 2027-12-01
 
 ### unmarked
 
@@ -313,6 +313,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 ### buried
 
 - [x] [`0241`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0241-make-the-pr-path-fast-and-enforce-its-boundaries.md) Make the PR path fast and enforce its boundaries <sup>chore · p2 · 0</sup>
+- [x] [`0242`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0242-harden-interpreter-literal-and-call-boundaries.md) Harden interpreter literal and call boundaries <sup>bug · p2 · 0</sup>
 
 ## cortege — The Cortege
 

@@ -4,7 +4,7 @@
 //! The host parses the interpreter and an entry point, never its guest bytes.
 //! The unchanged samples exercise deposits, answered holes and Orpheus checking.
 
-use nether_bury::{Answers, Residue, bury, bury_with};
+use nether_bury::{Answers, HaltKind, Residue, bury, bury_with};
 use nether_core::{ExprKind, Literal, check};
 use nether_ledger::{Cairn, Node, Stored, Value};
 use nether_syntax::{lower, parse, print};
@@ -138,6 +138,8 @@ U0 prove() {{
   rest(concat(packet(payload), packet(b"tail"))) == packet(b"tail");
   decimal(-9223372036854775807 - 1);
   decimal(9223372036854775807);
+  number(decimal(-9223372036854775807 - 1));
+  number(decimal(9223372036854775807));
 }}
 demand prove();"#
     );
@@ -148,8 +150,72 @@ demand prove();"#
             Value::Bool(true),
             Value::Bytes(b"-9223372036854775808".to_vec()),
             Value::Bytes(b"9223372036854775807".to_vec()),
+            Value::Int(i64::MIN),
+            Value::Int(i64::MAX),
         ]
     );
+}
+
+#[test]
+fn decimal_records_reject_missing_digits_and_overflow() {
+    for input in
+        ["", "-", "+1", "1x", "9223372036854775808", "-9223372036854775809", "18446744073709551616"]
+    {
+        let source = format!("{INTERPRETER}\ndemand number({});", bytes_literal(input.as_bytes()));
+        let unit = lower(&parse(source.as_bytes()).unwrap()).unwrap();
+        let halt = bury(&unit, Cairn::of_encoded(source.as_bytes()), 1_000_000)
+            .expect_err("malformed decimal must collapse");
+        assert!(matches!(halt.kind, HaltKind::Collapsed(_)), "{input:?}: {halt:?}");
+    }
+}
+
+#[test]
+fn cursor_bounds_do_not_wrap_before_they_are_checked() {
+    let source = format!(
+        r#"{INTERPRETER}
+U0 prove() {{
+  at(b"abc", -1, b"a");
+  at(b"abc", 9223372036854775807, b"a");
+  at(b"abc", 3, b"");
+  at(b"abc", 3, b"a");
+  at(b"abc", 2, b"c");
+  seek(b"abc", 9223372036854775807, b"a");
+  seek(b"abc", 0, b"longer");
+}}
+demand prove();"#
+    );
+    assert_eq!(
+        said(&source),
+        vec![
+            Value::Bool(false),
+            Value::Bool(false),
+            Value::Bool(true),
+            Value::Bool(false),
+            Value::Bool(true),
+            Value::Int(3),
+            Value::Int(3)
+        ]
+    );
+}
+
+#[test]
+fn calls_respect_lexical_bindings_and_reject_non_functions() {
+    for program in [
+        "Bytes f = b\"x\"; demand f();",
+        "Bytes f() { b\"global\" } Bytes g(Bytes f) { f() } demand g(b\"local\");",
+        "Bytes f() { Bytes concat = b\"local\"; concat(b\"a\", b\"b\") } demand f();",
+    ] {
+        let program = format!("U0 before() {{ \"must not deposit\"; }} demand before(); {program}");
+        let residue = guest(&program, &Answers::none());
+        assert!(residue.holes.is_empty());
+        assert!(residue.deposits.is_empty());
+        let values = results(&residue);
+        assert_eq!(values[0].0, "Error", "{program}");
+        assert!(
+            String::from_utf8_lossy(&values[0].2).starts_with("binding is not callable"),
+            "{values:?}"
+        );
+    }
 }
 
 #[test]
@@ -439,6 +505,10 @@ fn invalid_or_unsupported_input_cannot_report_success() {
         "Bytes@9 a = b\"a\";",
         "Bytes@-1 a = b\"a\";",
         "U0 f(] { }",
+        "Bytes f(Bytes x) { x } demand f(b\"x\",);",
+        "Bytes f(Bytes x,) { x } demand f(b\"x\");",
+        "demand f(b\"x\"); Bytes f(Bytes x,) { x }",
+        "U0 f() { \"backslash\\\nnewline\"; } demand f();",
     ] {
         let source =
             format!("{INTERPRETER}\ndemand interpret({});", bytes_literal(program.as_bytes()));
