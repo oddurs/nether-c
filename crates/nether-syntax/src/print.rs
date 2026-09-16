@@ -302,8 +302,8 @@ fn literal(l: &Literal) -> String {
         Literal::Unit => "{ }".into(),
         Literal::Bool(b) => b.to_string(),
         Literal::Int(n) => n.to_string(),
-        Literal::Str(s) => quoted(s.as_bytes(), false),
-        Literal::Bytes(b) => quoted(b, true),
+        Literal::Str(s) => spelled(s),
+        Literal::Bytes(b) => quoted(b),
         Literal::Refusal(r) => r.name().to_string(),
         // §3.6: `#` and sixty-four lowercase hex digits, which is what the
         // rites print. §6.5 needs this: a residue is a program, and a burial
@@ -319,9 +319,14 @@ fn literal(l: &Literal) -> String {
     }
 }
 
-/// A string or bytes literal, escaped the way §3.6 escapes one.
-fn quoted(bytes: &[u8], raw: bool) -> String {
-    let mut out = String::from(if raw { "b\"" } else { "\"" });
+/// A bytes literal, escaped the way §3.6 escapes one.
+///
+/// A byte outside printable ASCII is `\xNN` and not `\u{…}`: the escape that
+/// names a scalar value would be encoded on the way back in, and two bytes
+/// written as one character come back as four. §6.5 requires that lowering
+/// what was printed gives back the same program.
+fn quoted(bytes: &[u8]) -> String {
+    let mut out = String::from("b\"");
     for b in bytes {
         match b {
             b'\n' => out.push_str("\\n"),
@@ -332,8 +337,34 @@ fn quoted(bytes: &[u8], raw: bool) -> String {
             b'"' => out.push_str("\\\""),
             0x20..=0x7e => out.push(char::from(*b)),
             other => {
-                let _ = write!(out, "\\u{{{other:x}}}");
+                let _ = write!(out, "\\x{other:02x}");
             }
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A string literal, escaped the way §3.6 escapes one.
+///
+/// By character rather than by byte, because a `Str` is UTF-8 and the source
+/// it is printed into is too (§3.1). A character that is already text is
+/// written as itself; a control character has no printable form and is
+/// `\u{…}`, which is what that escape is for.
+fn spelled(text: &str) -> String {
+    let mut out = String::from("\"");
+    for c in text.chars() {
+        match c {
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            '\0' => out.push_str("\\0"),
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ if c.is_control() => {
+                let _ = write!(out, "\\u{{{:x}}}", c as u32);
+            }
+            _ => out.push(c),
         }
     }
     out.push('"');

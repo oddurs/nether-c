@@ -2,9 +2,8 @@
 id: 253
 title: A Bytes literal cannot spell every byte
 type: bug
-status: descending
+status: buried
 assignee: Oddur Sigurdsson
-claimed: 2026-09-16
 created: 2026-09-16
 updated: 2026-09-16
 priority: p1
@@ -63,3 +62,7 @@ Two PRs. The specification first, because §3.6 has no production for this and
    byte it cannot write literally, and `residue_is_source.rs` gets the case
    above. Nothing else changes: `\u{…}` keeps meaning a scalar value in both
    kinds of literal.
+
+## 2026-09-16
+
+Fixed. The lexer builds a literal as bytes rather than as text, reads \xNN as one byte and refuses it in a Str; the printer writes \xNN for every byte a bytes literal cannot hold literally, and writes a Str by character so that a scalar is written as itself rather than as its encoding one byte at a time. residue_is_source.rs covers e9, a multi-byte character, an embedded zero, 0x80 and 0xff in both literal kinds, and the lexical tests cover two digits exactly, the third digit being the next character, and the four refusals. scripts/task check passes in full. The trusted core rises 7996 -> 8042: the escape needed a second accumulator in the lexer and a second escaper in the printer, because a Str and a Bytes no longer escape the same way.

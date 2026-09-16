@@ -111,7 +111,9 @@ impl Fault {
             FaultKind::StrayCarriageReturn => {
                 Some("§3.1: a line ends with U+000A, and U+000D is only allowed before one.")
             }
-            FaultKind::UnknownEscape => Some(r#"the escapes are \n \t \r \0 \\ \" and \u{…}."#),
+            FaultKind::UnknownEscape => {
+                Some(r#"the escapes are \n \t \r \0 \\ \" and \u{…}, and \xNN in a b"…"."#)
+            }
             FaultKind::NotAnI64 => Some("there is one integer type, and this is outside it."),
             FaultKind::NotACairn(_) => Some(
                 "§3.6 gives a cairn one spelling, and it is the one `nether lamp` \
@@ -341,9 +343,13 @@ impl Scanner<'_> {
     }
 
     /// A string or bytes literal. The opening quote is at `self.at`.
+    ///
+    /// Bytes, not characters, because §3.6's `\x` spells a byte and a `Bytes`
+    /// value is not required to be UTF-8. A `Str` is, and gets there by
+    /// admitting no escape that could produce anything else.
     fn string(&mut self, from: usize, raw: bool) -> Result<(), Fault> {
         self.at += 1;
-        let mut out = String::new();
+        let mut out: Vec<u8> = Vec::new();
         loop {
             let Some(c) = self.peek() else {
                 return Err(self.fault(from, FaultKind::UnterminatedString));
@@ -354,32 +360,69 @@ impl Scanner<'_> {
                 // A string that runs off the end of its line is a missing
                 // quote, and saying so here beats saying it four lines later.
                 '\n' => return Err(self.fault(from, FaultKind::UnterminatedString)),
-                '\\' => out.push(self.escape(from)?),
-                _ => out.push(c),
+                '\\' => self.escape(from, raw, &mut out)?,
+                _ => out.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes()),
             }
         }
-        let kind = if raw { TokenKind::Bytes(out.into_bytes()) } else { TokenKind::Str(out) };
+        let kind = if raw {
+            TokenKind::Bytes(out)
+        } else {
+            // Every character came from the source, which §3.1 makes UTF-8,
+            // or from an escape that names a scalar value. `\x` is the one
+            // that would not, and it is not admissible here.
+            match String::from_utf8(out) {
+                Ok(text) => TokenKind::Str(text),
+                Err(_) => return Err(self.fault(from, FaultKind::UnknownEscape)),
+            }
+        };
         self.push(from, kind);
         Ok(())
     }
 
-    /// One escape, after the backslash. §3.6.
-    fn escape(&mut self, from: usize) -> Result<char, Fault> {
+    /// One escape, after the backslash, written into what the literal holds.
+    /// §3.6.
+    fn escape(&mut self, from: usize, raw: bool, out: &mut Vec<u8>) -> Result<(), Fault> {
         let here = self.at;
         let Some(c) = self.peek() else {
             return Err(self.fault(from, FaultKind::UnterminatedString));
         };
         self.at += c.len_utf8();
-        Ok(match c {
+        let scalar = match c {
             'n' => '\n',
             't' => '\t',
             'r' => '\r',
             '0' => '\0',
             '\\' => '\\',
             '"' => '"',
-            'u' => return self.unicode_escape(here),
+            'u' => self.unicode_escape(here)?,
+            // §3.6: a byte escape is admissible in a bytes literal and not in
+            // a string, because a `Str` is UTF-8 and this spells values it
+            // cannot hold.
+            'x' if raw => {
+                let byte = self.byte_escape(here)?;
+                out.push(byte);
+                return Ok(());
+            }
             _ => return Err(self.fault(here, FaultKind::UnknownEscape)),
-        })
+        };
+        out.extend_from_slice(scalar.encode_utf8(&mut [0; 4]).as_bytes());
+        Ok(())
+    }
+
+    /// `\xNN`, where the digits are hexadecimal and name one byte.
+    ///
+    /// Exactly two of them. A variable-length one makes `\xeff` two literals
+    /// depending on how far the reader is willing to look. §3.6.
+    fn byte_escape(&mut self, from: usize) -> Result<u8, Fault> {
+        let digits_from = self.at;
+        for _ in 0..2 {
+            if !self.peek().is_some_and(|c| c.is_ascii_hexdigit()) {
+                return Err(self.fault(from, FaultKind::UnknownEscape));
+            }
+            self.at += 1;
+        }
+        u8::from_str_radix(&self.text[digits_from..self.at], 16)
+            .map_err(|_| self.fault(from, FaultKind::UnknownEscape))
     }
 
     /// `\u{…}`, where the digits are hexadecimal and name a scalar value.

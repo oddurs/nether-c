@@ -332,3 +332,16 @@ fn a_cairn_is_not_an_identifier_and_an_identifier_is_not_a_cairn() {
     let tokens = lex(NAME.as_bytes()).expect("a bare hex word lexes");
     assert!(matches!(tokens[0].kind, TokenKind::Ident(_)), "{:?}", tokens[0]);
 }
+
+/// §3.6: `\xNN` is one byte, exactly two digits, and only in a bytes literal.
+#[test]
+fn a_byte_escape_is_two_digits_and_only_in_bytes() {
+    assert_eq!(kinds(r#"b"\xe2\x80\x94""#), vec![TokenKind::Bytes("\u{2014}".as_bytes().to_vec())]);
+    // Exactly two: the third digit is the letter that follows the escape.
+    assert_eq!(kinds(r#"b"\xeff""#), vec![TokenKind::Bytes(b"\xeff".to_vec())]);
+    // A byte that is not text at all, which is the case `\u{…}` cannot spell.
+    assert_eq!(kinds(r#"b"\x80""#), vec![TokenKind::Bytes(vec![0x80])]);
+    for bad in [r#"b"\xg0""#, r#"b"\xe""#, r#"b"\x""#, r#""\xe2""#] {
+        assert_eq!(fault(bad), FaultKind::UnknownEscape, "accepted {bad}");
+    }
+}
