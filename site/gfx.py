@@ -28,12 +28,12 @@ OUT = ROOT / "site" / "gfx"
 
 # ── the palette ─────────────────────────────────────────────────────────────
 #
-# Sixteen slots, because that is what a GIF colour table is here, filled from
+# Thirty-two colour slots, filled from
 # site/design.py so that a drawing and the page it sits on are made of the same
 # colours. The names are the roles they were always playing; what each one
 # resolves to now comes out of Oklch rather than out of a 1980s text mode.
 
-from design import NETHER, RAMPS  # noqa: E402 -- a sibling, not a dependency
+from design import NETHER, LIT, RAMPS  # noqa: E402 -- a sibling, not a dependency
 
 
 def _rgb(value: str) -> tuple[int, int, int]:
@@ -41,41 +41,26 @@ def _rgb(value: str) -> tuple[int, int, int]:
     return tuple(int(raw[i:i + 2], 16) for i in (0, 2, 4))
 
 
-_RAMP = RAMPS["nether"]
-PALETTE = [
-    _rgb(NETHER["ground"]),   #  0 VOID    -- the page's own ground
-    _rgb(NETHER["ink"]),      #  1 BONE
-    _rgb(NETHER["accent"]),   #  2 SULPHUR -- the lamp
-    _rgb(NETHER["alt"]),      #  3 LILAC
-    _rgb(NETHER["warn"]),     #  4 SALMON
-    _rgb(_RAMP[4]),           #  5 ICE
-    _rgb(NETHER["good"]),     #  6 LIME
-    _rgb(NETHER["dimmer"]),   #  7 ASH
-    _rgb(NETHER["dim"]),      #  8 SMOKE
-    _rgb(NETHER["quote"]),    #  9 PLUM
-    _rgb(_RAMP[0]),           # 10 BLOOD
-    _rgb(_RAMP[2]),           # 11 MOSS
-    _rgb(NETHER["raised"]),   # 12 DEEP    -- one step up from the ground
-    _rgb(NETHER["code"]),     # 13 TEAL
-    _rgb(_RAMP[6]),           # 14 ROT
-    _rgb(_RAMP[1]),           # 15 BILE
-    # Sixteen names were never nine strata, so `DEPTH` used to be six colours
-    # with three of them repeated. The table is thirty-two entries now and the
-    # nine have their own, which is the difference between a picture of the
-    # ramp and an approximation of it.
-    *[_rgb(c) for c in _RAMP],  # 16..24 the strata, in order
-]
-DEPTH = list(range(16, 25))
+def palette(mode: str = "nether") -> list[tuple[int, int, int]]:
+    """The same role indices in both modes; geometry never depends on colour."""
+    theme = NETHER if mode == "nether" else LIT
+    ramp = RAMPS[mode]
+    colours = [
+        theme["ground"], theme["ink"], theme["accent"], theme["alt"],
+        theme["warn"], ramp[4], theme["good"], theme["dimmer"],
+        theme["dim"], theme["quote"], ramp[0], ramp[2],
+        theme["raised"], theme["code"], ramp[6], ramp[1], *ramp,
+    ]
+    return [_rgb(c) for c in colours + [theme["ground"]] * (32 - len(colours))]
 
-# The header declares a table of thirty-two, so thirty-two is what has to be
-# written. A short table is not a smaller table: everything after it shifts by
-# three bytes an entry and the file stops being a GIF.
-PALETTE += [PALETTE[0]] * (32 - len(PALETTE))
+
+PALETTE = palette()
+DEPTH = list(range(16, 25))
 
 VOID, BONE, SULPHUR, LILAC, SALMON, ICE, LIME, ASH = range(8)
 SMOKE, PLUM, BLOOD, MOSS, DEEP, TEAL, ROT, BILE = range(8, 16)
 
-# The depth ramp: stratum 0 is sulphur, stratum 8 is lilac.
+# The depth ramp: indigo through violet to rose, in both modes.
 
 # ── LZW, as the GIF specification describes it ──────────────────────────────
 
@@ -372,15 +357,16 @@ def hero() -> tuple[list[Frame], list[int]]:
                   21 + round(math.sin(a) * (4 + n % 3)),
                   SULPHUR if n % 2 else ICE)
         frames.append(magnify(f, 3))
-    return frames, [7] * len(frames)
+    return frames, [14] * len(frames)
 
 
-def write_gif(path: Path, frames: list[Frame], delays: list[int], loop: bool = True) -> bytes:
+def write_gif(path: Path, frames: list[Frame], delays: list[int], loop: bool = True,
+              mode: str = "nether") -> bytes:
     w, h = frames[0].w, frames[0].h
     out = bytearray(b"GIF89a")
     out += w.to_bytes(2, "little") + h.to_bytes(2, "little")
     out += bytes([0b1111_0100, 0, 0])  # global colour table, 32 entries
-    for r, g, b in PALETTE:
+    for r, g, b in palette(mode):
         out += bytes((r, g, b))
 
     if loop:
@@ -616,58 +602,33 @@ def counter(text: str) -> tuple[list[Frame], list[int]]:
 
 
 def descent_animated() -> tuple[list[Frame], list[int]]:
-    """A trace falling through a recessed nine-stratum shaft.
-
-    Each shelf stays lit after the trace crosses it. The picture makes the
-    monotonicity law visible: descent has a direction, and none of the nine
-    shelves ever unlights on the way down.
-    """
-    w, band = 120, 15
-    h = 9 * band + 2
+    """Nine suspended shelves. The trace descends; crossed shelves stay lit."""
     frames = []
-    for step in range(11):
-        f = Frame(w, h, VOID)
-        here = min(step, 8)
-
-        # The shaft walls narrow the field without turning the diagram into a
-        # decorative frame. A few seams make it stone rather than a UI panel.
-        f.rect(13, 1, 1, h - 2, DEEP)
-        f.rect(w - 14, 1, 1, h - 2, DEEP)
-        for y in range(5, h - 4, 11):
-            f.rect(10, y, 4, 1, ASH)
-            f.rect(w - 14, y + 3, 4, 1, ASH)
-
-        for d in range(9):
-            y = 1 + d * band
-            lit = d <= here
-            colour = DEPTH[d] if lit else ASH
-            face = DEEP if not lit else SMOKE
-            # A shallow tray for every stratum: illuminated top, dark face,
-            # and a one-pixel fall into the next shelf.
-            f.rect(17, y + 1, 86, 1, colour)
-            f.rect(18, y + 2, 84, 7, face)
-            f.rect(18, y + 3, 1, 6, BONE if lit else DEEP)
-            f.rect(102, y + 2, 1, 7, VOID)
-            f.rect(19, y + 8, 83, 1, ASH)
-            f.rect(22, y + 4, 76, 1, colour if lit else DEEP)
-            f.text(5, y + 3, str(d), colour)
-
-        # The falling trace is a cube rather than a marker: every depth is a
-        # value's recorded history, not a point moving on a chart.
-        y = 1 + here * band
-        if step <= 8:
-            trace_cube(f, 82, y + 2, step)
-        else:
-            # At the bottom, the trace is permanently marked by the hole the
-            # ledger cannot fill: foreign code reaches the unrecorded.
-            f.rect(85, y + 5, 9, 5, PLUM)
-            f.rect(87, y + 6, 5, 3, VOID)
-            f.set(84, y + 7, LILAC)
-            f.set(94, y + 7, LILAC)
-
-        f.frame_box(0, 0, w, h, ASH, SMOKE)
+    labels = ["PURE", "STORE", "ENV", "READ", "WRITE", "FETCH", "SEND", "DRAW", "FFI"]
+    for tick in range(33):
+        f = Frame(160, 172, VOID)
+        f.text(5, 4, "DEPTH / STRATA", SMOKE)
+        # A quiet vertical shaft behind the floating slabs.
+        f.rect(49, 17, 1, 145, ASH)
+        f.rect(151, 17, 1, 145, DEEP)
+        here = tick // 4
+        for depth, label in enumerate(labels):
+            y = 18 + depth * 16
+            colour = DEPTH[depth] if depth <= here else ASH
+            f.text(3, y + 4, str(depth), colour)
+            f.text(13, y + 4, label, colour)
+            block(f, 62, y, 80, 3, 5, DEEP, DEEP, ASH)
+            # One colour per shelf, shared with the spec's depth labels.
+            f.rect(58, y + 5, 80, 1, colour)
+            f.rect(58, y + 6, 2, 3, colour)
+            if depth <= here:
+                f.rect(68, y + 2, 54, 1, colour)
+                f.set(146, y + 6, colour)
+        # Four positions between shelves, a calm hold on the final record.
+        trace_cube(f, 127, 17 + tick * 4, here)
+        f.text(5, 162, "NO RETURN SERVICE", SMOKE)
         frames.append(f)
-    return frames, [30] * 9 + [110, 110]
+    return frames, [12] * 32 + [160]
 
 
 def orpheus() -> tuple[list[Frame], list[int]]:
@@ -866,7 +827,14 @@ def main() -> int:
     work: list[tuple[str, bytes, str]] = []
     for name, make in GRAPHICS.items():
         frames, delays = make()
-        work.append((name, write_gif(OUT / name, frames, delays), f"{len(frames)} frame(s)"))
+        for mode, suffix in (("nether", ""), ("lit", "-lit")):
+            filename = name.replace(".gif", suffix + ".gif")
+            work.append((filename, write_gif(OUT / filename, frames, delays, mode=mode),
+                         f"{len(frames)} frame(s)"))
+            if name in ("hero.gif", "descending.gif"):
+                still = filename.replace(".gif", "-still.gif")
+                work.append((still, write_gif(OUT / still, [frames[-1]], [0],
+                                             loop=False, mode=mode), "still"))
     work.append(("card.png", write_png(og_card(), scale=6), "1200x630"))
 
     for name, data, note in work:

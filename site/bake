@@ -495,7 +495,7 @@ def page(title: str, body: str, *, current: str, depth: int, directory: str = ""
             f'<a href="{up}index.html#{anchor}"><span aria-hidden="true">{n:02}</span> {label}</a>'
             for n, (anchor, label) in enumerate(entries)
         ) + "</nav>"
-    return (
+    output = (
         tpl.replace("{{TITLE}}", esc(title))
         .replace("{{FULLTITLE}}", full)
         .replace("{{UP}}", up)
@@ -503,6 +503,12 @@ def page(title: str, body: str, *, current: str, depth: int, directory: str = ""
         .replace("{{DIRECTORY}}", directory)
         .replace("{{BODY}}", body)
     )
+    def themed_image(match: re.Match[str]) -> str:
+        before, src, after = match.groups()
+        lit = src.replace(".gif", "-lit.gif")
+        still = ' data-still' if Path(src).name in ("hero.gif", "descending.gif") else ""
+        return f'<img{before}src="{src}" data-dark-src="{src}" data-lit-src="{lit}"{still}{after}>'
+    return re.sub(r'<img\b([^>]*?)src="([^"]+\.gif)"([^>]*)>', themed_image, output)
 
 
 def build() -> dict[Path, str]:

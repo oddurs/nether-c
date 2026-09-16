@@ -7,27 +7,27 @@
  */
 
 :root {
-  --sunk: #000014;
-  --ground: #03062B;
-  --raised: #0A153E;
-  --ink: #FCF4E6;
-  --dim: #899DD1;
-  --dimmer: #4D6197;
-  --accent: #FFD755;
-  --alt: #C9ACFE;
-  --warn: #FF7F77;
-  --good: #68E68A;
-  --code: #13E5B4;
-  --quote: #01CAFE;
-  --d0: #FDD343;
-  --d1: #C4DD4B;
-  --d2: #70E479;
-  --d3: #05DCB1;
-  --d4: #18CCD2;
-  --d5: #16BDED;
-  --d6: #54A7FE;
-  --d7: #858CFE;
-  --d8: #B362FE;
+  --sunk: #050412;
+  --ground: #0E0C22;
+  --raised: #1B1933;
+  --ink: #F4EAFB;
+  --dim: #AAA7C6;
+  --dimmer: #716C90;
+  --accent: #FD95DC;
+  --alt: #B1B7FD;
+  --warn: #FFA28A;
+  --good: #75D1C5;
+  --code: #A8D2FE;
+  --quote: #D1AFE2;
+  --d0: #98BFFE;
+  --d1: #A3B7FE;
+  --d2: #ADAFFE;
+  --d3: #BAA5FE;
+  --d4: #C79BFA;
+  --d5: #D491ED;
+  --d6: #DF89DE;
+  --d7: #E881CB;
+  --d8: #F079B6;
 
   --cell: 12px;
   --hair: calc(1 * var(--cell));
@@ -42,27 +42,27 @@
   --type-sign: 32px;
 }
 
-/* The lamp, lit: the same hues with the sun on them. */
+/* The lamp, lit: rose porcelain, lavender paper and plum ink. */
 :root[data-lamp="lit"] {
-  --sunk: #FFFDFA;
-  --ground: #FBF6EE;
-  --raised: #DEE4F5;
-  --ink: #0A1331;
-  --dim: #3F4E76;
-  --dimmer: #717FA5;
-  --accent: #825103;
-  --alt: #591F97;
-  --warn: #AC011A;
-  --good: #03672D;
-  --code: #055E49;
-  --quote: #045B74;
-  --d0: #846A05;
-  --d1: #606F03;
-  --d2: #04731F;
-  --d3: #016852;
-  --d4: #035D60;
-  --d5: #045269;
-  --d6: #02447D;
-  --d7: #3214A2;
-  --d8: #4D007C;
+  --sunk: #FCF8FF;
+  --ground: #FAEDF7;
+  --raised: #E4E4F8;
+  --ink: #242240;
+  --dim: #54537B;
+  --dimmer: #707097;
+  --accent: #942578;
+  --alt: #4B3F98;
+  --warn: #9D3533;
+  --good: #115C55;
+  --code: #2F4578;
+  --quote: #6D457E;
+  --d0: #355FA4;
+  --d1: #4456A3;
+  --d2: #514DA0;
+  --d3: #5D449A;
+  --d4: #663A91;
+  --d5: #6F3085;
+  --d6: #762677;
+  --d7: #7C1A66;
+  --d8: #800953;
 }

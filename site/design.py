@@ -11,27 +11,10 @@ a ramp built this way looks designed and one picked out of a box does not.
     python3 site/design.py            the whole system, with its contrast
     python3 site/design.py --css      write site/tokens.css
 
-Three scales and nothing else.
-
-**Colour** is Oklch: a lightness, a chroma and an angle. Two colours with the
-same lightness look equally bright, which is the whole reason a ramp built this
-way looks designed and one picked out of a box does not. The scheme is one
-axis -- the ground is indigo, the complement of indigo is amber, and the nine
-strata sweep between them at constant lightness, so depth reads as *hue* and
-never as "harder to see". Nothing is at full chroma. Full chroma is a 1980s
-text mode and this is not one.
-
-**Space** is the cell. Every measure on the page is a whole number of them and
-nothing lands on a half.
-
-**Type** is the cell, doubled and trebled. There are four sizes, because a face
-drawn on an eight-pixel grid has exactly four at which a pixel of it is a whole
-number of the screen's.
-
-The scheme is one axis. The ground is indigo; the complement of indigo is
-amber; and the nine strata sweep from the amber end to the violet end at a
-constant lightness, so depth reads as *hue* and never as "harder to see".
-Nothing is at full chroma. Full chroma is a 1980s text mode, and this is not.
+Colour is role-based: indigo rooms, rose signals, and a violet-to-pink depth
+ramp. The light palette is rose porcelain and lavender paper with plum ink,
+not an inversion. Both palettes feed CSS, GIF colour tables and the favicon.
+Space follows a twelve-pixel grid; type follows an eight-pixel drawing grid.
 """
 
 from __future__ import annotations
@@ -43,10 +26,10 @@ from pathlib import Path
 TOKENS = Path(__file__).resolve().parent / "tokens.css"
 
 #: The hue the whole scheme is built on, in degrees. Indigo.
-GROUND_HUE = 268.0
+GROUND_HUE = 285.0
 
-#: Its complement, which is where the lamp is.
-LAMP_HUE = (GROUND_HUE + 180.0) % 360.0
+#: Rose light, not the arithmetic complement of the ground.
+LAMP_HUE = 340.0
 
 
 def srgb(lightness: float, chroma: float, hue: float) -> str:
@@ -91,87 +74,47 @@ def _convert(lightness: float, chroma: float, hue: float) -> str | None:
     return "#{:02X}{:02X}{:02X}".format(*out)
 
 
-def strata(
-    lightness: float = 0.88,
-    chroma: float = 0.16,
-    dim: float = 0.22,
-    rise: float = 0.08,
-) -> list[str]:
-    """The nine. One lightness, one chroma, and the hue does the talking.
-
-    From gold to violet, the long way round, losing a little lightness and
-    gaining a little chroma on the way down.
-
-    It held one lightness at first, on the reasoning that depth ought not to
-    mean "harder to see". That produced nine interchangeable pastels: correct,
-    and dead. Held all the way, the deep end bleaches out -- the most saturated
-    hues sRGB has at high lightness are the pale ones, so d6, d7 and d8 came
-    out washed while d0 was vivid.
-
-    Falling a little and saturating a little keeps every step above 5:1 and
-    lets depth look like depth, which is what the nine are for.
-    """
-    first, last = LAMP_HUE + 4.0, GROUND_HUE + 37.0
-    return [
-        srgb(
-            lightness - dim * n / 8,
-            chroma + rise * n / 8,
-            first + (last - first) * n / 8,
-        )
-        for n in range(9)
-    ]
+def strata(lightness: float = 0.80, chroma: float = 0.12,
+           dim: float = 0.07, rise: float = 0.04) -> list[str]:
+    """Indigo through violet to rose. Numbers carry depth; colour reinforces it."""
+    return [srgb(lightness - dim * n / 8, chroma + rise * n / 8,
+                 260 + 90 * n / 8) for n in range(9)]
 
 
-#: Everything the stylesheet names, and what each one is for.
+# Shared roles, separately composed for night and daylight.
 NETHER = {
-    # The dark, three deep. It is indigo rather than black on purpose: black
-    # has no colour in it, so nothing put on it is *related* to it, and the
-    # page reads as a terminal rather than as a place.
-    "sunk": srgb(0.085, 0.070, GROUND_HUE),
-    "ground": srgb(0.155, 0.075, GROUND_HUE),
-    "raised": srgb(0.215, 0.080, GROUND_HUE),
-    # What is written on it. The ink is warm, so it sits with the lamp rather
-    # than against it.
-    "ink": srgb(0.970, 0.020, 80.0),
-    "dim": srgb(0.700, 0.080, GROUND_HUE),
-    "dimmer": srgb(0.500, 0.090, GROUND_HUE),
-    # The lamp, and the one thing opposite it.
-    "accent": srgb(0.890, 0.220, 92.0),
-    "alt": srgb(0.800, 0.170, 300.0),
-    # The three that mean something.
-    "warn": srgb(0.740, 0.190, 25.0),
-    "good": srgb(0.830, 0.170, 150.0),
-    "code": srgb(0.820, 0.190, 170.0),
-    "quote": srgb(0.780, 0.150, 225.0),
+    "sunk": srgb(0.12, 0.035, GROUND_HUE),
+    "ground": srgb(0.17, 0.045, GROUND_HUE),
+    "raised": srgb(0.23, 0.050, GROUND_HUE),
+    "ink": srgb(0.95, 0.025, 310),
+    "dim": srgb(0.74, 0.045, 290),
+    "dimmer": srgb(0.55, 0.055, 290),
+    "accent": srgb(0.80, 0.150, LAMP_HUE),
+    "alt": srgb(0.80, 0.100, 280),
+    "warn": srgb(0.80, 0.120, 35),
+    "good": srgb(0.80, 0.090, 185),
+    "code": srgb(0.85, 0.080, 250),
+    "quote": srgb(0.80, 0.080, 315),
 }
 
-#: The surface. The same hues with the sun on them: the lightnesses invert
-#: about the middle and the chroma comes down, because a colour that reads as
-#: quiet on a dark ground shouts on a light one.
 LIT = {
-    "sunk": srgb(0.995, 0.006, 80.0),
-    "ground": srgb(0.975, 0.012, 80.0),
-    "raised": srgb(0.920, 0.024, GROUND_HUE),
-    "ink": srgb(0.200, 0.060, GROUND_HUE),
-    "dim": srgb(0.430, 0.070, GROUND_HUE),
-    "dimmer": srgb(0.600, 0.060, GROUND_HUE),
-    "accent": srgb(0.480, 0.140, 70.0),
-    "alt": srgb(0.400, 0.180, 300.0),
-    "warn": srgb(0.470, 0.190, 25.0),
-    "good": srgb(0.450, 0.140, 150.0),
-    "code": srgb(0.430, 0.130, 170.0),
-    "quote": srgb(0.440, 0.150, 225.0),
+    "sunk": srgb(0.985, 0.010, 310),
+    "ground": srgb(0.960, 0.018, 335),
+    "raised": srgb(0.925, 0.027, GROUND_HUE),
+    "ink": srgb(0.270, 0.055, GROUND_HUE),
+    "dim": srgb(0.460, 0.065, GROUND_HUE),
+    "dimmer": srgb(0.560, 0.060, GROUND_HUE),
+    "accent": srgb(0.470, 0.170, LAMP_HUE),
+    "alt": srgb(0.430, 0.140, GROUND_HUE),
+    "warn": srgb(0.480, 0.140, 25),
+    "good": srgb(0.430, 0.070, 185),
+    "code": srgb(0.400, 0.090, 265),
+    "quote": srgb(0.460, 0.100, 315),
 }
 
+RAMPS = {"nether": strata(), "lit": strata(0.49, 0.12, dim=0.09, rise=0.04)}
 
-#: A ramp for each ground. One is bright and one is not, because the job is
-#: the same on both: nine hues at a single lightness, all legible, none of them
-#: louder than its neighbour.
-RAMPS = {"nether": strata(), "lit": strata(0.535, 0.150, dim=0.20, rise=0.06)}
-
-#: Space, in cells. The face advances six of its eight pixels, and at a body
-#: size of sixteen that is twelve -- so a cell is 12px and every margin,
-#: padding and rule on the site is a count of them.
+# Spacing is independent of the font's seven-pixel advance.
 CELL = 12
 SPACE = {"hair": 1, "tight": 2, "snug": 3, "step": 4, "gap": 6, "room": 10}
 
@@ -222,7 +165,7 @@ def tokens() -> str:
         lines.append(f"  --{key}: calc({count} * var(--cell));")
     for key, size in TYPE.items():
         lines.append(f"  --type-{key}: {size}px;")
-    lines += ["}", "", "/* The lamp, lit: the same hues with the sun on them. */",
+    lines += ["}", "", "/* The lamp, lit: rose porcelain, lavender paper and plum ink. */",
               ':root[data-lamp="lit"] {']
     for key, value in LIT.items():
         lines.append(f"  --{key}: {value};")
@@ -232,20 +175,31 @@ def tokens() -> str:
     return "\n".join(lines)
 
 
+def icon() -> str:
+    """The cairn mark uses the same ground and depth ramp as the page."""
+    rows = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">',
+            f'  <rect width="16" height="16" fill="{NETHER["ground"]}"/>']
+    for (x, y, width, height), depth in zip(
+        ((6, 2, 4, 2), (5, 5, 6, 2), (3, 8, 10, 2), (2, 11, 12, 3)), (0, 3, 5, 8)
+    ):
+        rows.append(f'  <rect x="{x}" y="{y}" width="{width}" height="{height}" fill="{RAMPS["nether"][depth]}"/>')
+    return "\n".join(rows + ["</svg>", ""])
+
+
 def main() -> int:
     if "--css" in sys.argv:
-        out = TOKENS.read_text(encoding="utf-8") if TOKENS.exists() else None
-        made = tokens()
-        if out == made:
-            print(f"design: site/{TOKENS.name} is up to date")
-            return 0
-        if "--check" in sys.argv:
-            print(f"design: site/{TOKENS.name} is stale", file=sys.stderr)
-            print("        run scripts/task design and commit the result", file=sys.stderr)
-            return 1
-        TOKENS.write_text(made, encoding="utf-8")
-        print(f"design: wrote site/{TOKENS.name}  {len(made)} bytes")
-        return 0
+        stale = []
+        for path, made in ((TOKENS, tokens()), (TOKENS.with_name("icon.svg"), icon())):
+            if path.exists() and path.read_text(encoding="utf-8") == made:
+                continue
+            if "--check" in sys.argv:
+                stale.append(path.name)
+            else:
+                path.write_text(made, encoding="utf-8")
+                print(f"design: wrote site/{path.name}")
+        if stale:
+            print("design: stale " + ", ".join(stale) + "; run scripts/task design", file=sys.stderr)
+        return int(bool(stale))
 
     for label, table in (("the nether", NETHER), ("the surface", LIT)):
         print(f"\n{label}")

@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 """
-contrast — the complemented VGA palette was not designed for legibility.
-
-Sixteen colours chosen in the 1980s for a 640x480 text mode, complemented, are
-under no obligation to clear WCAG. Several pairs did not, and the rule the
-roadmap set was that where a pair fails, **the pair changes, not the standard**.
+contrast — semantic colours stay readable in both rooms.
 
 This encodes every foreground/background pair the stylesheet actually uses and
 checks both palettes against WCAG 2.1 AA: 4.5:1 for text, 3:1 for large text
@@ -31,7 +27,7 @@ sys.path.insert(0, str(ROOT / "site"))
 from design import LIT as _LIT, NETHER as _NETHER, RAMPS  # noqa: E402
 
 NETHER = dict(_NETHER, **{f"d{n}": c for n, c in enumerate(RAMPS["nether"])})
-TEMPLE = dict(_LIT, **{f"d{n}": c for n, c in enumerate(RAMPS["lit"])})
+SURFACE = dict(_LIT, **{f"d{n}": c for n, c in enumerate(RAMPS["lit"])})
 
 # (what it is, foreground token, background token, minimum ratio)
 PAIRS = [
@@ -59,15 +55,12 @@ PAIRS = [
     ("rules and borders",  "dim",     "ground", 3.0),
 ]
 
-# The palette swatches on the front page: label ink over the colour it names.
-SWATCHES = [
-    ("#FFFFFF", "#000000"), ("#FFFF55", "#000000"), ("#FF55FF", "#000000"),
-    ("#FF5555", "#000000"), ("#55FFFF", "#000000"), ("#55FF55", "#000000"),
-    ("#AAAAAA", "#000000"), ("#555555", "#FFFFFF"), ("#AA00AA", "#FFFFFF"),
-    ("#AA0000", "#FFFFFF"), ("#00AA00", "#000000"), ("#00AAAA", "#000000"),
-    ("#0000AA", "#FFFFFF"), ("#000000", "#FFFFFF"), ("#55AAFF", "#000000"),
-    ("#AAAA00", "#000000"),
-]
+# Every depth label and raised panel uses the same readable semantic tokens.
+PAIRS += [(f"stratum {n} on {bg}", f"d{n}", bg, 4.5)
+          for n in range(9) for bg in ("ground", "raised")]
+PAIRS += [(f"{fg} on raised", fg, "raised", 4.5)
+          for fg in ("ink", "dim", "accent", "alt", "warn", "good", "code", "quote")]
+PAIRS += [("focus and control edges", "dimmer", "ground", 3.0)]
 
 
 def luminance(hex_colour: str) -> float:
@@ -110,15 +103,25 @@ def check_css_declares(palette_name: str, tokens: list[str]) -> list[str]:
 def main() -> int:
     failures: list[str] = []
     failures += check_palette("nether (lamp out)", NETHER)
-    failures += check_palette("temple (lamp lit)", TEMPLE)
-
-    print("\n  palette swatches")
-    for fg, bg in SWATCHES:
-        r = ratio(fg, bg)
-        ok = r >= 4.5
-        print(f"    {'ok  ' if ok else 'FAIL'}  {r:5.2f} / 4.5   {bg} label on {fg}")
-        if not ok:
-            failures.append(f"swatch: {bg} on {fg} is {r:.2f}")
+    failures += check_palette("surface (lamp lit)", SURFACE)
+    # Compare the actual colour tables that browsers receive, not just imports.
+    import gfx
+    names = list(gfx.GRAPHICS) + ["specimen.gif", "hero-still.gif", "descending-still.gif"]
+    for name in names:
+        lit = (name.replace("-still.gif", "-lit-still.gif") if "-still.gif" in name
+               else name.replace(".gif", "-lit.gif"))
+        dark_bytes = (ROOT / "site" / "gfx" / name).read_bytes()
+        light_bytes = (ROOT / "site" / "gfx" / lit).read_bytes()
+        for mode, data in (("nether", dark_bytes), ("lit", light_bytes)):
+            expected = b"".join(bytes(c) for c in gfx.palette(mode))
+            if data[:6] != b"GIF89a" or data[13:109] != expected:
+                failures.append(f"{name}: {mode} GIF palette differs from the system")
+        if dark_bytes[109:] != light_bytes[109:]:
+            failures.append(f"{name}: theme changes the drawing instead of its palette")
+    frames, delays = gfx.descent_animated()
+    if len(frames) != 33 or len(delays) != 33 or delays[-1] <= max(delays[:-1]):
+        failures.append("the descent needs smooth steps and a final hold")
+    print(f"graphics: {len(names)} drawings share both system palettes")
 
     print("\n  stylesheet declares every token")
     missing = check_css_declares("tokens", sorted({t for _, f, b, _ in PAIRS for t in (f, b)}))

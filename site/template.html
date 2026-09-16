@@ -98,10 +98,20 @@ There is no image library in this repository. There is not going to be one.</p>
   var root = document.documentElement;
   var btn = document.querySelector("[data-lamp-toggle]");
   var label = document.querySelector("[data-lamp-state]");
+  var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  function paintImages() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    document.querySelectorAll("img[data-dark-src]").forEach(function (img) {
+      var src = lit ? img.dataset.litSrc : img.dataset.darkSrc;
+      if (motion.matches && img.hasAttribute("data-still")) src = src.replace(".gif", "-still.gif");
+      if (img.getAttribute("src") !== src) img.setAttribute("src", src);
+    });
+  }
   function paint() {
     var lit = root.getAttribute("data-lamp") === "lit";
     if (label) label.textContent = lit ? "lit" : "out";
     if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+    paintImages();
   }
   if (btn) {
     btn.addEventListener("click", function () {
@@ -112,6 +122,7 @@ There is no image library in this repository. There is not going to be one.</p>
     });
   }
   paint();
+  motion.addEventListener("change", paintImages);
 })();
 </script>
 

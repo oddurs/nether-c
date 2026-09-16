@@ -253,7 +253,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## face — The Face
 
-`####······` 40% · 4 of 10 done · due 2027-08-01
+`#####·····` 45% · 5 of 11 done · due 2027-08-01
 
 ### unmarked
 
@@ -270,6 +270,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0246`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0246-recover-and-publish-the-site-and-both-bitmap-faces.md) Recover and publish the site and both bitmap faces <sup>chore · p2 · 0</sup>
 - [x] [`0247`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0247-give-the-site-a-terminal-shell-and-a-peculiar-front-desk.md) Give the site a terminal shell and a peculiar front desk <sup>feature · p2 · 0</sup>
 - [x] [`0248`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0248-let-the-site-and-code-explain-nether-c-on-its-own-terms.md) Let the site and code explain Nether C on its own terms <sup>docs · p2 · 0</sup>
+- [x] [`0249`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0249-give-the-nether-a-coherent-indigo-and-rose-palette.md) Give the nether a coherent indigo and rose palette <sup>feature · p2 · 0</sup>
 
 ## futamura — Self-Burial
 

@@ -352,7 +352,7 @@ def sheet(glyphs: dict[str, tuple[str, ...]]) -> str:
     return "\n".join(out)
 
 
-def specimen(glyphs: dict[str, tuple[str, ...]]):
+def specimen(glyphs: dict[str, tuple[str, ...]], mode: str = "nether"):
     """The specimen, drawn with the face itself, as a GIF for the site."""
     sys.path.insert(0, str(ROOT / "site"))
     import gfx  # noqa: E402  — a sibling, not a dependency
@@ -365,14 +365,14 @@ def specimen(glyphs: dict[str, tuple[str, ...]]):
     for i, (_, rows) in enumerate(items):
         ox = (gap + (i % across) * (CELL + gap)) * scale
         oy = (gap + (i // across) * (CELL + gap)) * scale
-        colour = 2 + (i // across) % 6
+        colour = gfx.DEPTH[(i // across) % 9]
         for r, bits in enumerate(rows):
             for c, on in enumerate(bits):
                 if on == "#":
                     for dy in range(scale):
                         for dx in range(scale):
                             frame.set(ox + c * scale + dx, oy + r * scale + dy, colour)
-    return gfx.write_gif(OUT / "gfx" / "specimen.gif", [frame], [0], loop=False)
+    return gfx.write_gif(OUT / "gfx" / "specimen.gif", [frame], [0], loop=False, mode=mode)
 
 
 # ── the face ────────────────────────────────────────────────────────────────
@@ -705,6 +705,7 @@ def main() -> int:
     work = [
         (OUT / "nether.woff", woff(build(G)), f"{len(G)} glyphs"),
         (OUT / "gfx" / "specimen.gif", specimen(G), "the specimen"),
+        (OUT / "gfx" / "specimen-lit.gif", specimen(G, "lit"), "the lit specimen"),
     ]
 
     stale = []
