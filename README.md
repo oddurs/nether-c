@@ -27,7 +27,7 @@ Nothing in the ledger is ever revised.
 
 That is the entire language. Everything below is consequence.
 
-> HolyC compiles the future. Nether C compiles the past.
+> The program has already happened. Read what it left.
 
 ---
 
@@ -44,8 +44,8 @@ reaches. Nothing lowers it. There is no `ascend`. Going down is a decision and
 it is the last one you get to make about that value.
 
 **3. Nothing down here changes.**
-TempleOS let every task write to all of memory at all times. We kept the
-sharing. We removed the writing. Immutability is not a safety feature here. It
+The ledger is shared, but its contents cannot be revised.
+Immutability is not a safety feature here. It
 is what the word *nether* means.
 
 **4. You never make a value. You find it.**
@@ -61,10 +61,9 @@ with your first thirty seconds in the language. It is the largest tax in the
 design. We charge it anyway.
 
 **6. Randomness is the deepest recordable sin.**
-In TempleOS entropy was the Oracle — revelation, arriving from above, the
-highest channel in the system. Here it is stratum 7. Nearly the bottom. It is
-the one act that makes a program impossible to re-derive. Same mechanism.
-Opposite orientation. Read that again.
+Entropy is stratum 7. Nearly the bottom. Drawn bytes must be recorded: the
+source alone cannot tell you what they were. You can replay the answer, but
+you cannot derive it again.
 
 **7. Every answer the world gives is written down before you get it.**
 Not afterwards. Not usually. **Before.** A witness that is recorded after the
@@ -72,9 +71,8 @@ value is returned is a witness that can be lost, and a ledger with a gap in it
 supports nothing.
 
 **8. The trusted core only ever gets smaller.**
-Terry fixed the size of his system by covenant and never changed it. We
-inverted that too. `.decay-ceiling` holds a number. Today the number is
-**64**. The build fails if the core exceeds it. Lowering it is an ordinary
+`.decay-ceiling` holds the current limit. The build fails if the core exceeds
+it. Lowering it is an ordinary
 commit. Raising it requires an argument in public.
 
 Below, things only decay.
@@ -112,8 +110,7 @@ did.
 It left a deposit. Reading it is a second act and a person had to choose to
 perform it.
 
-This is the direct inversion of HolyC, where a bare string is a call to
-`PrintF`. The gesture is identical. The semantics are its opposite.
+The expression leaves a record. It does not reach your terminal.
 
 ---
 
@@ -152,8 +149,8 @@ in those words.
 
 This is not decoration and it is not a joke. Sit with it.
 
-TempleOS was 640×480 and sixteen colours, fixed by covenant, forever. Nether C
-takes those sixteen colours and complements every single one of them.
+The graphics start with the sixteen-colour VGA palette and complement every
+single colour.
 
 **Fourteen of the sixteen land back inside the palette.** Complement blue, get
 yellow. Complement green, get light purple. Complement light grey, get dark
@@ -312,7 +309,6 @@ You cannot turn a thing over without first working out which way up it was.
 
 ## LICENCE
 
-Public domain, via the [Unlicense](LICENSE). The same terms TempleOS shipped
-under.
+Public domain, via the [Unlicense](LICENSE).
 
 Take it. It was always there.

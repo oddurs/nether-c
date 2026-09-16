@@ -177,10 +177,9 @@ Bytes draw(I64 n)                      @7;
 `draw` is the only source of nondeterminism in the language, and it is nearly
 the deepest thing in it.
 
-> In TempleOS, entropy was the Oracle — revelation, arriving from above. Here
-> it is stratum 7: the deepest recordable thing, and the one act that means a
-> program can never be re-derived, only replayed. The inversion is exact and
-> it is the reason the lattice is oriented the way it is.
+> Entropy is stratum 7: the deepest recordable thing. Once drawn bytes affect
+> a trace, the source alone is not enough to re-derive it. Replay needs the
+> recorded answer.
 
 A trace that called `draw` records the drawn bytes as a witness, so replay is
 exact. What is lost is re-derivation: burying the same source again produces a

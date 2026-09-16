@@ -30,16 +30,9 @@ Nether C makes that question the only question. There is one mechanism, and
 the line between what is settled and what is pending is a first-class,
 inspectable, addressable thing.
 
-The design is an inversion of HolyC, in which every commitment collapses
-toward the present moment of total trust: the command line is the compiler,
-top-level statements run as they are read, a bare string prints, and every
-task holds every privilege over all of memory at all times. Nether C takes
-each of those commitments and turns it over. The reasoning for each inversion,
-and what it cost, is in [section 90](90-rationale.md), which is not normative.
-
-The comparison is a reading aid, not the argument. If Nether C only makes
-sense to a reader who already knows TempleOS, the design is a costume, and
-this document has failed.
+The design's history, rejected alternatives, and costs are in
+[section 90](90-rationale.md), which is not normative. This specification
+stands on its own: no knowledge of another language is required.
 
 ## 0.2 The thesis, in one sentence
 

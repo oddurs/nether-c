@@ -192,8 +192,5 @@ An expression statement whose value is not `U0` **deposits** that value into
 the trace, tagged with its source span. It is not printed; nothing in Nether C
 is printed. See [§6.8](06-evaluation.md#68-what-burial-prints).
 
-This is the direct inversion of HolyC, in which a bare string is a call to
-`PrintF`. The syntax is the same gesture; the semantics are its opposite.
-
 An implementation MUST NOT warn about a discarded value in this position. It
 is not discarded.

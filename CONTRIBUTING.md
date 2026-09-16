@@ -144,8 +144,8 @@ list of commit subjects.
 
 ## The Decay Rule
 
-TempleOS was fixed at a size given by covenant and never grew. Nether C inverts
-that: **the trusted core may only ever get smaller.**
+**The trusted core may only ever get smaller.** Keep the code that every
+guarantee rests on small enough to inspect.
 
 `.decay-ceiling` records the current line count of `crates/`. `scripts/decay`
 fails the build if the count exceeds it. Lowering the ceiling is an ordinary

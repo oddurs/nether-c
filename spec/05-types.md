@@ -25,9 +25,8 @@ integer promotion and no implicit narrowing. Arithmetic wraps; an
 implementation MUST NOT make overflow undefined, because a canonical encoding
 cannot be built on top of behaviour that varies by compiler.
 
-> HolyC made everything an `I64` and let everything coerce into everything.
-> Nether C keeps the one integer type and removes every coercion. The
-> inversion is not the width; it is the silence.
+> One integer width does not mean one interchangeable type. Conversions must
+> be explicit; the language does not silently reinterpret a value.
 
 ## 5.1.1 Answers and refusals
 
@@ -158,12 +157,9 @@ This is also what makes a `for` loop work. Its step assigns the counter, which
 is a local and has not been named, so the loop advances without anything in the
 ledger changing.
 
-> In TempleOS every task could write to all of memory at all times. Nether C
-> keeps the total sharing and removes the writing.
->
 > The line is drawn at the ledger rather than at the function body, and it is
-> worth being exact about why. What the inversion is about is *shared,
-> addressable, permanent* memory — the thing every task could reach. A counter
+> worth being exact about why. The protected state is *shared,
+> addressable, permanent* memory. A counter
 > in a loop is none of those: nothing else can see it, it has no name, and it
 > stops existing when the block does. Forbidding it would buy nothing and cost
 > the language its loops.

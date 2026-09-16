@@ -2,9 +2,8 @@
 """
 font — an 8x8 bitmap face, and the TrueType writer that ships it.
 
-There is no font library here, for the same reason there is no image library:
-a project that inverts TempleOS should not be assembled out of other people's
-parts. TempleOS had one 8x8 fixed-width font and that was the whole of it.
+One 8x8 fixed-width face, with its drawings and file format kept together.
+There is no font library here: the writer is small enough to inspect in full.
 
 The site used to name a stack of fonts it hoped the reader already had, which
 meant it rendered differently on every machine. A project whose whole claim is
