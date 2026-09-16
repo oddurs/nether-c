@@ -7,7 +7,7 @@ milestone: after
 depends_on:
 - 215
 created: 2026-09-11
-updated: 2026-09-13
+updated: 2026-09-15
 priority: p1
 effort: xl
 area: crates/nether-ledger
@@ -35,3 +35,20 @@ deliberately rather than discovered.
 - [ ] How does a human name a package they have not seen? Cairns are not memorable
 - [ ] Version ranges have no meaning when a dependency is a hash. Is that a feature?
 - [ ] Who hosts the store, and what happens when they stop (see 'A public store')
+
+## Delivery plan — 2026-09-15
+
+### Starting point and scope
+
+A cairn establishes byte identity, not availability, trust or a human name. 0215 specifies exchange; offline resolution requires dependencies already present.
+
+### Steps
+
+1. Specify package roots, dependency closure, entrypoints and compatibility against spec/07-ledger.md before implementation.
+2. Decide explicit aliases and exact-cairn references; keep version-range solving and a central registry out of the first format.
+3. Build offline resolution with missing, corrupt and incompatible dependency diagnostics; use independently populated stores.
+
+### Acceptance and evidence
+
+- [ ] Two disconnected machines with the same verified dependency closure resolve identical cairns. Missing bytes fail explicitly; a hash alone cannot fetch a package.
+- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.

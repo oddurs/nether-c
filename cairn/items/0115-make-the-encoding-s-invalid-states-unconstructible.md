@@ -5,12 +5,12 @@ type: feature
 status: unmarked
 milestone: after
 created: 2026-09-11
-updated: 2026-09-12
+updated: 2026-09-15
 priority: p2
 effort: m
 area: crates/nether-ledger
 stratum: '0'
-proof: Every invariant in 7.1.1 is unrepresentable in the type, and put needs no validation pass
+proof: Every invariant in 7.1.1 is enforced by safe construction APIs, put needs no validation round-trip, and hostile decoding still rejects invalid bytes
 ---
 
 ## Problem
@@ -26,8 +26,9 @@ it is a check at the door rather than a door that does not open.
 ## Proposal
 
 Move the invariants into the types. Private fields with constructors that
-return `Result`, so an empty struct name is a compile-time impossibility rather
-than a runtime refusal, and `put` can drop its round trip.
+return `Result`, so an empty struct name cannot survive successful construction,
+and `put` can drop its round trip. Construction still validates runtime input;
+private fields prevent callers bypassing that validation.
 
 ## What it costs
 
@@ -52,3 +53,20 @@ Also moved out of The Core Calculus, and the reason is not that it was in the wa
 The trigger to pick it up: the domain separator has not moved for a release, or a second implementation exists and 0105's conformance suite is holding the format still.
 
 0114's validation in put closes the hole meanwhile. It is a check at the door rather than a door that cannot open, and that is the right amount of safety for a format that is still being written.
+
+## Delivery plan — 2026-09-15
+
+### Starting point and scope
+
+Private constructors can make invalid values unrepresentable after construction; rejecting an empty runtime string is not a compile-time proof. Existing put validation stays until equivalence is established.
+
+### Steps
+
+1. Respect the recorded stability trigger: one release without a domain-separator change or independent conformance holding the format steady.
+2. Map every §7.1.1 invariant to a validated type/constructor, then inventory all construction and decoding paths.
+3. Migrate incrementally with malformed-input and canonical-byte fixtures; remove put's round-trip only after all safe construction paths enforce the same invariants.
+
+### Acceptance and evidence
+
+- [ ] No public safe API constructs an invalid encoded state, and hostile bytes still fail decoding. Record API churn and core-line cost; do not weaken validation to meet the allocation goal.
+- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.

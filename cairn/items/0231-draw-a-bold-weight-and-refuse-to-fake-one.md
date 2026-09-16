@@ -5,7 +5,7 @@ type: feature
 status: unmarked
 milestone: face
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-15
 priority: p0
 effort: l
 area: site/font.py
@@ -37,9 +37,10 @@ is a bug report; a smeared one is a thing people assume was intended.
 
 ## Watch out for
 
-The advance. The face is monospace at six columns, and a bold that is wider
+The advance. The face is monospace at seven columns, and a bold that is wider
 than its regular breaks every listing and every diagram on the site. Two
-pixels of stem have to fit inside the same six columns.
+pixels of stem have to fit inside the same six ink columns and preserve the
+seventh column's metric bearing.
 
 ## Acceptance criteria
 
@@ -47,3 +48,20 @@ pixels of stem have to fit inside the same six columns.
 - [ ] `font-synthesis: none` in the stylesheet
 - [ ] The advance is identical to the regular's
 - [ ] A check that the two faces have the same glyph set
+
+## Delivery plan — 2026-09-15
+
+### Starting point and scope
+
+The regular face now advances seven pixels: six ink columns plus one metric bearing (site/font.py). There is still only a normal WOFF; bold rules remain in site/nether.css. Keep this a weight addition, not another regular-face redesign.
+
+### Steps
+
+1. Freeze the current glyph set and regular metrics as the comparison baseline.
+2. Draw bold glyphs individually, preserving counters and the seven-pixel advance; do not mechanically dilate every bitmap.
+3. Generate a separate 700 face, disable synthesis and extend tests/font/run plus real-browser width/load checks.
+
+### Acceptance and evidence
+
+- [ ] Both weights cover the same codepoints and measure identically for mixed punctuation, narrow and wide glyph runs. Review both palettes at actual CSS sizes; regular outlines remain unchanged.
+- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
