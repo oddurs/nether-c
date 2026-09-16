@@ -214,7 +214,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`#########·` 84% · 21 of 25 done · due 2027-07-15
+`#########·` 85% · 22 of 26 done · due 2027-07-15
 
 ### unmarked
 
@@ -222,7 +222,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [ ] [`0077`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0077-the-playground-editor.md) The playground editor <sup>feature · p1 · 0</sup>
 - [ ] [`0078`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0078-proof-a-stranger-explains-a-hole.md) Proof: a stranger explains a hole <sup>chore · p0</sup>
 
-### descending
+### starved
 
 - [ ] [`0075`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0075-the-trace-graph-browser.md) The trace graph browser <sup>feature · p0 · 0</sup>
 
@@ -249,6 +249,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0238`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0238-a-pull-request-should-land-itself.md) A pull request should land itself <sup>feature · p1 · 4</sup>
 - [x] [`0243`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0243-expose-canonical-trace-objects-to-the-browser.md) Expose canonical trace objects to the browser <sup>feature · p2 · 0</sup>
 - [x] [`0244`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0244-navigate-trace-objects-and-inspect-their-recorded-contents.md) Navigate trace objects and inspect their recorded contents <sup>feature · p2 · 0</sup>
+- [x] [`0245`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0245-verify-and-finish-the-trace-browser-interface.md) Verify and finish the trace browser interface <sup>feature · p2 · 0</sup>
 
 ## face — The Face
 

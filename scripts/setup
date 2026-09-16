@@ -23,5 +23,7 @@ if command -v rustup >/dev/null 2>&1; then
     && echo "setup: wasm32-unknown-unknown installed"
 fi
 command -v python3 >/dev/null 2>&1 || echo "setup: python3 not found; site/bake needs it"
+command -v node >/dev/null 2>&1 || echo "setup: install Node 22+ for the browser tests"
+echo "setup: browser checks need Chrome/Chromium; NETHER_CHROME can name its executable"
 
 echo "setup: done. Try 'scripts/agent doctor'."

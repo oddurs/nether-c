@@ -7,7 +7,11 @@ export const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2
 
 export function decode(encoded) {
   if (encoded.length % 2 || !HEX.test(encoded)) throw Error("Invalid object encoding");
-  const bytes = Uint8Array.from(encoded.match(/../g) || [], (b) => parseInt(b, 16));
+  const bytes = new Uint8Array(encoded.length / 2);
+  const nibble = (c) => c <= 57 ? c - 48 : c - 87;
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = (nibble(encoded.charCodeAt(i * 2)) << 4) | nibble(encoded.charCodeAt(i * 2 + 1));
+  }
   let p = 0;
   const take = (n) => {
     if (!Number.isSafeInteger(n) || n < 0 || n > bytes.length - p) throw Error("Truncated object");
@@ -116,7 +120,7 @@ export function preview(o, limit = 160) {
   else if (o.kind === "Answer") s = `${o.data.kind === "Refusal" ? "refused" : "given"}: ${preview(o.data, limit)}`;
   else if (o.kind === "Literal") s = preview(o.value, limit);
   else if (o.kind === "Array" || o.kind === "Struct") s = `${o.name || "Array"} · ${o.data.length} entries`;
-  else if (o.kind === "Trace") s = `depth ${o.depth} · ${o.holes.length} holes · ${o.deposits.length} deposits`;
+  else if (o.kind === "Trace") s = `depth ${o.depth} · ${o.holes.length} hole${o.holes.length === 1 ? "" : "s"} · ${o.deposits.length} deposit${o.deposits.length === 1 ? "" : "s"}`;
   else s = String(o.data ?? o.kind);
   return s.length > limit ? s.slice(0, limit) + "…" : s;
 }

@@ -47,6 +47,9 @@ case "${1:-}" in
   graph:check)
     node --test tests/necropolis/graph.mjs
     ;;
+  browser:check)
+    node tests/necropolis/browser.mjs
+    ;;
   fuzz)
     # The soak. The short pass runs in `test` on every commit; this is the one
     # you leave going. NETHER_FUZZ_ROUNDS sets the length.
@@ -123,6 +126,7 @@ case "${1:-}" in
     "$0" design:check
     "$0" font:check
     "$0" wasm
+    "$0" browser:check
     "$0" decay
     # Skipped when it is not installed, which is for a contributor who has
     # not got it rather than for CI. CI installs it and lets the install fail.
@@ -160,7 +164,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|workflow:check|graph:check|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check|release}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|workflow:check|graph:check|browser:check|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check|release}" >&2
     exit 2
     ;;
 esac
