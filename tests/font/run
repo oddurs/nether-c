@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every glyph the site puts on a page is in the face that ships with it.
+"""Every glyph the site puts in front of a reader is in the face that ships.
 
 The face is not a guess at what might be wanted. This reads the built site and
 the specification, collects every codepoint that will actually be rendered, and
@@ -26,7 +26,7 @@ IGNORED = set("\n\r\t ﻿")
 
 
 def rendered() -> set[str]:
-    """Every character the site and the specification put in front of a reader."""
+    """Every character the pages and CSS-generated labels ask the face for."""
     seen: set[str] = set()
     for page in sorted(ROOT.glob("site/**/*.html")) + sorted(ROOT.glob("spec/*.md")):
         text = page.read_text(encoding="utf-8")
@@ -34,6 +34,11 @@ def rendered() -> set[str]:
             text = re.sub(r"<(script|style)\b.*?</\1>", " ", text, flags=re.S | re.I)
             text = html.unescape(re.sub(r"<[^>]+>", " ", text))
         seen |= set(text)
+    for sheet in ROOT.glob("site/**/*.css"):
+        # CSS consumes the following whitespace as part of a hexadecimal escape.
+        # The heading prefixes are text just as surely as a letter in a page is.
+        for code in re.findall(r"\\([0-9a-fA-F]{1,6})(?:\s)?", sheet.read_text(encoding="utf-8")):
+            seen.add(chr(int(code, 16)))
     return seen - IGNORED
 
 
@@ -100,10 +105,62 @@ def main() -> int:
             print(f"  U+{code:04X}  {why}", file=sys.stderr)
         return 1
 
+    bad_metrics = metrics(shipped)
+    if bad_metrics:
+        print("font: the face is not a consistently spaced mono face:", file=sys.stderr)
+        for why in bad_metrics:
+            print(f"  {why}", file=sys.stderr)
+        return 1
+
     spare = len(have) - len(want)
     print(f"font: {len(want)} glyph(s) rendered, all present, {spare} spare")
     print(f"font: {len(have)} outline(s) decode to the pixels they were drawn from")
     return 0
+
+
+def metrics(shipped: dict[bytes, bytes]) -> list[str]:
+    """The spacing contract is as real as the outlines.
+
+    The drawing grid is eight pixels wide, while six pixels plus one blank
+    bearing make its fixed advance. Every glyph must advance identically: pair
+    kerning would make a listing lie about its columns. Reading hmtx back from
+    the WOFF catches a writer change; reading G catches a future glyph that
+    draws past its ink field.
+    """
+    sys.path.insert(0, str(ROOT / "site"))
+    import font as source  # noqa: E402 — the thing under test, not a dependency
+
+    bad = []
+    if (source.INK_COLS, source.ADVANCE_COLS) != (6, 7):
+        bad.append("the face must keep six ink columns and a seven-column mono advance")
+    (count,) = struct.unpack(">H", shipped[b"maxp"][4:6])
+    widths = [struct.unpack(">Hh", shipped[b"hmtx"][i * 4:i * 4 + 4])[0]
+              for i in range(count)]
+    if len(widths) != count or any(width != source.ADVANCE for width in widths):
+        bad.append(f"hmtx does not give all {count} glyphs the {source.ADVANCE}-unit advance")
+    (maximum,) = struct.unpack(">H", shipped[b"hhea"][10:12])
+    if maximum != source.ADVANCE:
+        bad.append(f"hhea says the maximum advance is {maximum}, not {source.ADVANCE}")
+    (fixed,) = struct.unpack(">I", shipped[b"post"][12:16])
+    if fixed != 1:
+        bad.append("post does not mark the face fixed-pitch")
+    for ch, rows in source.G.items():
+        if any(bit == "#" for row in rows for bit in row[source.INK_COLS:]):
+            bad.append(f"U+{ord(ch):04X} draws past the six-column mono cell")
+    for gid, ch in enumerate(sorted(source.G), 1):
+        columns = [x for row in source.G[ch] for x, bit in enumerate(row) if bit == "#"]
+        expected = min(columns, default=0) * source.PIXEL
+        (_, bearing) = struct.unpack(">Hh", shipped[b"hmtx"][gid * 4:gid * 4 + 4])
+        if bearing != expected:
+            bad.append(f"U+{ord(ch):04X} loses its drawn left bearing")
+    if b"kern" in shipped or b"GPOS" in shipped:
+        bad.append("pair positioning must not change fixed columns")
+    sys.path.insert(0, str(ROOT / "site"))
+    import gfx
+    for ch, rows in gfx.FONT.items():
+        if len(rows) != 7 or any(len(row) != 5 or set(row) - {".", "#"} for row in rows):
+            bad.append(f"display {ch!r} escapes its five-by-seven drawing cell")
+    return bad
 
 
 def unmapped(shipped: dict[bytes, bytes]) -> list[tuple[int, int, int]]:

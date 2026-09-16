@@ -253,7 +253,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## face — The Face
 
-`··········` 0% · 0 of 6 done · due 2027-08-01
+`###·······` 25% · 2 of 8 done · due 2027-08-01
 
 ### unmarked
 
@@ -263,6 +263,11 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [ ] [`0234`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0234-read-the-face-at-the-sizes-it-is-read-at.md) Read the face at the sizes it is read at <sup>chore · p1 · 0</sup>
 - [ ] [`0235`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0235-ship-the-face-as-something-somebody-else-can-use.md) Ship the face as something somebody else can use <sup>chore · p2 · 0</sup>
 - [ ] [`0236`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0236-decide-whether-the-headings-are-the-same-face.md) Decide whether the headings are the same face <sup>spec · p2 · 0</sup>
+
+### buried
+
+- [x] [`0239`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0239-give-nether-8-deliberate-side-bearings.md) Give Nether 8 deliberate side bearings <sup>bug · p0 · 0</sup>
+- [x] [`0246`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0246-recover-and-publish-the-site-and-both-bitmap-faces.md) Recover and publish the site and both bitmap faces <sup>chore · p2 · 0</sup>
 
 ## futamura — Self-Burial
 

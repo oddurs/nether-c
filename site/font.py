@@ -30,9 +30,8 @@ OUT = ROOT / "site"
 
 # ── the grid ────────────────────────────────────────────────────────────────
 #
-# Eight by eight, because that was the covenant. One em is the cell, so eighty
-# columns is exactly six hundred and forty pixels and the type scale is 8, 16,
-# 24, 32 with nothing in between.
+# Eight by eight, because that was the covenant. One em is the drawing cell;
+# the advance is separate. The type scale is 8, 16, 24, 32.
 #
 # Rows 0..6 sit above the baseline and row 7 below it, which gives a seven-row
 # capital and one row of descender — the same proportion the 5x7 face in
@@ -42,12 +41,11 @@ CELL = 8
 UPEM = 1024
 PIXEL = UPEM // CELL  # 128 font units to the pixel
 
-# Six of the eight columns are ink and two are the gap, so the advance is six
-# and not the whole em. A square cell would be right if the page were a 640x480
-# screen; it is not, and a face whose advance equals its height sets eighty
-# columns half again as wide as anything reads at.
-ADVANCE_COLS = 6
-ADVANCE = ADVANCE_COLS * PIXEL  # 768
+# Six drawing columns plus one blank bearing make the fixed cell. The bearing
+# belongs to the metric, not to a destructive transform of the drawings.
+INK_COLS = 6
+ADVANCE_COLS = INK_COLS + 1
+ADVANCE = ADVANCE_COLS * PIXEL  # 896
 DESCENT_ROWS = 1
 ASCENT = (CELL - DESCENT_ROWS) * PIXEL  # 896
 DESCENT = DESCENT_ROWS * PIXEL  # 128
@@ -208,8 +206,15 @@ def build(glyphs: dict[str, tuple[str, ...]]) -> bytes:
 
     data = b""
     loca = [0]
+    bearings = []
+    extents = []
     for ch in order:
-        data += outline(glyphs[ch]) if ch is not None else b""
+        glyph = outline(glyphs[ch]) if ch is not None else b""
+        # Preserve each drawing's inset. A zero bearing would shift narrow
+        # punctuation left even though the outline itself is correctly drawn.
+        bearings.append(struct.unpack(">h", glyph[2:4])[0] if glyph else 0)
+        extents.append(struct.unpack(">h", glyph[6:8])[0] if glyph else 0)
+        data += glyph
         loca.append(len(data))
 
     # `loca` is short format when every offset is even and fits in a u16 when
@@ -222,16 +227,17 @@ def build(glyphs: dict[str, tuple[str, ...]]) -> bytes:
     head = struct.pack(
         ">IIIIHHQQhhhhHHhhh",
         0x00010000, 0x00010000, 0, 0x5F0F3CF5,
-        0b0000_0000_0000_1011,  # baseline at y=0, lsb at x=0, integer ppem
+        0b0000_0000_0000_1011,  # baseline at y=0, lsb equals xMin, integer ppem
         UPEM, 0, 0,             # created, modified: zero, so the file is reproducible
-        0, -DESCENT, UPEM, ASCENT,
+        0, -DESCENT, max(extents), ASCENT,
         0, 8, 2, 0 if short else 1, 0,
     )
     hhea = struct.pack(">IhhhHhhhhhhhhhhhH", 0x00010000, ASCENT, -DESCENT, 0,
-                       ADVANCE, 0, 0, CELL * PIXEL, 1, 0, 0, 0, 0, 0, 0, 0, count)
+                       ADVANCE, min(bearings), ADVANCE - max(extents),
+                       max(extents), 1, 0, 0, 0, 0, 0, 0, 0, count)
     maxp = struct.pack(">IHHHHHHHHHHHHHH", 0x00010000, count, 4 * CELL * CELL,
                        CELL * CELL, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0)
-    hmtx = struct.pack(">Hh", ADVANCE, 0) * count
+    hmtx = b"".join(struct.pack(">Hh", ADVANCE, bearing) for bearing in bearings)
     # `post` version 3.0: no glyph names. isFixedPitch is 1, because it is.
     post = struct.pack(">IIhhIIIII", 0x00030000, 0, -PIXEL, PIXEL, 1, 0, 0, 0, 0)
 
@@ -372,11 +378,11 @@ def specimen(glyphs: dict[str, tuple[str, ...]]):
 
 # ── the face ────────────────────────────────────────────────────────────────
 #
-# Six columns wide and seven rows tall, in an eight by eight cell: the same
-# proportion as the 5x7 face in gfx.py, one column and one row larger. Capitals
-# and ascenders fill rows 0 to 6, the x-height is rows 2 to 6, and descenders
-# drop into row 7. Strokes are one pixel, because at sixteen pixels a cell is
-# doubled and two would be a slab.
+# Six columns of ink, one column of bearing, and seven rows tall in an eight by
+# eight drawing cell: the same proportion as the 5x7 face in gfx.py, one
+# column and one row larger. Capitals and ascenders fill rows 0 to 6, the
+# x-height is rows 2 to 6, and descenders drop into row 7. Strokes are one
+# pixel, because at sixteen pixels a cell is doubled and two would be a slab.
 
 G: dict[str, tuple[str, ...]] = {}
 
@@ -459,7 +465,7 @@ g(">", ".#......", "..#.....", "...#....", "....#...",
         "...#....", "..#.....", ".#......", "........")
 g("?", ".####...", "#....#..", ".....#..", "...##...",
         "..#.....", "........", "..#.....", "........")
-g("@", ".####...", "#....#..", "#.###.#.", "#.#.#.#.",
+g("@", ".####...", "#....#..", "#.###...", "#.#.#...",
         "#.####..", "#.......", ".####...", "........")
 
 # ── capitals ────────────────────────────────────────────────────────────────
@@ -664,14 +670,18 @@ g("\u2264", "........", "...##...", ".##.....", "#.......",
              ".##.....", "...##...", "######..", "........")
 g("\u2265", "........", "##......", "..##....", "....##..",
              "..##....", "##......", "######..", "........")
-g("\u2295", "........", ".#####..", "#..#..#.", "#.###.#.",
-             "#..#..#.", ".#####..", "........", "........")
+g("\u2295", "........", ".####...", "#..#.#..", "#.###...",
+             "#..#.#..", ".####...", "........", "........")
 g("\u22a2", "#.......", "#.......", "#.......", "#####...",
              "#.......", "#.......", "#.......", "........")
-g("\u2460", "........", ".#####..", "#..#..#.", "#..#..#.",
-             "#..#..#.", ".#####..", "........", "........")
+g("\u2460", "........", ".####...", "#..#.#..", "#..#.#..",
+             "#..#.#..", ".####...", "........", "........")
 g("\u2500", "........", "........", "........", "........",
              "######..", "........", "........", "........")
+g("\u25a0", "........", "######..", "######..", "######..",
+             "######..", "######..", "######..", "........")
+g("\u25b8", "........", "#.......", ".##.....", "...##...",
+             ".##.....", "#.......", "........", "........")
 g("\u2514", "..#.....", "..#.....", "..#.....", "..#.....",
              "..####..", "........", "........", "........")
 g("\u2588", "######..", "######..", "######..", "######..",

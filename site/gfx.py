@@ -16,6 +16,7 @@ Everything it emits is committed. Nothing here downloads anything.
 from __future__ import annotations
 
 import binascii
+import math
 import struct
 import sys
 import zlib
@@ -286,6 +287,94 @@ def cairn() -> tuple[list[Frame], list[int]]:
     return [frame], [0]
 
 
+def magnify(source: Frame, scale: int) -> Frame:
+    """Integer enlargement is the only enlargement a pixel drawing gets."""
+    out = Frame(source.w * scale, source.h * scale, VOID)
+    for y in range(source.h):
+        for x in range(source.w):
+            colour = source.px[y * source.w + x]
+            if colour != VOID:
+                out.rect(x * scale, y * scale, scale, scale, colour)
+    return out
+
+
+def block(f: Frame, x: int, y: int, w: int, h: int, d: int,
+          top: int, face: int, side: int) -> None:
+    """A small oblique block: top, face, and the side the light does not get."""
+    for row in range(d):
+        f.rect(x - row, y + row, w, 1, top)
+    f.rect(x - d + 1, y + d, w, h, face)
+    for row in range(h):
+        f.rect(x - d + w, y + d + row, d, 1, side)
+
+
+def trace_cube(f: Frame, x: int, y: int, phase: int) -> None:
+    """A wire cairn: the trace is present, but never quite stays put."""
+    glow = ICE if phase % 3 else SULPHUR
+    for ox, oy in ((0, 0), (-4, -3)):
+        f.rect(x + ox, y + oy, 8, 1, glow)
+        f.rect(x + ox, y + oy + 7, 8, 1, glow)
+        f.rect(x + ox, y + oy, 1, 8, glow)
+        f.rect(x + ox + 7, y + oy, 1, 8, glow)
+    for ax, ay, bx, by in ((0, 0, -4, -3), (7, 0, 3, -3),
+                           (0, 7, -4, 4), (7, 7, 3, 4)):
+        steps = max(abs(bx - ax), abs(by - ay))
+        for n in range(steps + 1):
+            f.set(x + ax + (bx - ax) * n // steps, y + ay + (by - ay) * n // steps, glow)
+    f.set(x + 3, y + 3, LILAC)
+
+
+def hero() -> tuple[list[Frame], list[int]]:
+    """A cairn over a shaft; the trace circles, and the unanswered stays open."""
+    w, h, frames = 200, 64, []
+    for phase in range(12):
+        f = Frame(w, h, VOID)
+        for n in range(38):
+            x = (n * 37 + phase * (1 + n % 3)) % w
+            y = 3 + (n * 19) % 43
+            if not 77 < x < 124 or y < 24:
+                f.set(x, y, DEEP if n % 4 else ASH)
+        for x in range(-40, 241, 20):
+            for y in range(43, 60):
+                xx = 100 + (x - 100) * (y - 39) // 23
+                if (y + phase) % 3 == 0:
+                    f.set(xx, y, DEEP)
+        for y in (45, 50, 56, 62):
+            f.rect(20 + (y - 43) * 2, y, 160 - (y - 43) * 4, 1, ASH)
+        f.rect(76, 51, 48, 2, ASH)
+        f.rect(81, 53, 38, 1, SMOKE)
+        f.rect(87, 54, 26, 1, DEEP)
+        f.rect(94, 55, 12, 1, SMOKE)
+        block(f, 82, 43, 36, 5, 5, ASH, DEEP, VOID)
+        block(f, 88, 35, 24, 6, 4, SMOKE, ASH, DEEP)
+        block(f, 94, 28, 13, 5, 3, ASH, SMOKE, DEEP)
+        f.rect(89, 39, 18, 1, SULPHUR)
+        pulse = phase % 6
+        f.rect(98, 32, 5, 4, PLUM)
+        f.rect(99, 33, 3, 2, VOID)
+        if pulse in (0, 1):
+            f.rect(97, 31, 7, 1, LILAC)
+            f.set(96, 33, LILAC)
+            f.set(105, 33, LILAC)
+        angle = math.tau * phase / 12
+        cx = 100 + round(math.cos(angle) * 33)
+        cy = 21 + round(math.sin(angle) * 7)
+        for dot in range(18):
+            orbit = math.tau * dot / 18
+            ox = 100 + round(math.cos(orbit) * 33)
+            oy = 21 + round(math.sin(orbit) * 7)
+            if (dot + phase) % 3 == 0:
+                f.set(ox, oy, TEAL)
+        trace_cube(f, cx - 4, cy - 4, phase)
+        for n in range(5):
+            a = angle + n * math.tau / 5
+            f.set(100 + round(math.cos(a) * (17 + n * 3)),
+                  21 + round(math.sin(a) * (4 + n % 3)),
+                  SULPHUR if n % 2 else ICE)
+        frames.append(magnify(f, 3))
+    return frames, [7] * len(frames)
+
+
 def write_gif(path: Path, frames: list[Frame], delays: list[int], loop: bool = True) -> bytes:
     w, h = frames[0].w, frames[0].h
     out = bytearray(b"GIF89a")
@@ -384,8 +473,8 @@ FONT: dict[str, list[str]] = {
     "T": ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
     "U": ["#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
     "V": ["#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."],
-    "W": ["#...#", "#...#", "#...#", "#...#", "#.#.#", "##.##", "#...#"],
-    "X": ["#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#"],
+    "W": ["#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", ".#.#."],
+    "X": ["#...#", ".#.#.", "..#..", "..#..", "..#..", ".#.#.", "#...#"],
     "Y": ["#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."],
     "Z": ["#####", "....#", "...#.", "..#..", ".#...", "#....", "#####"],
     "0": [".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."],
@@ -527,11 +616,11 @@ def counter(text: str) -> tuple[list[Frame], list[int]]:
 
 
 def descent_animated() -> tuple[list[Frame], list[int]]:
-    """A value falling through the strata, and never coming back.
+    """A trace falling through a recessed nine-stratum shaft.
 
-    It leaves the band it passed stained behind it. That is the monotonicity
-    law of spec 1.2 drawn rather than stated: no step lowers a depth, and
-    there is no `ascend`.
+    Each shelf stays lit after the trace crosses it. The picture makes the
+    monotonicity law visible: descent has a direction, and none of the nine
+    shelves ever unlights on the way down.
     """
     w, band = 120, 15
     h = 9 * band + 2
@@ -539,24 +628,42 @@ def descent_animated() -> tuple[list[Frame], list[int]]:
     for step in range(11):
         f = Frame(w, h, VOID)
         here = min(step, 8)
+
+        # The shaft walls narrow the field without turning the diagram into a
+        # decorative frame. A few seams make it stone rather than a UI panel.
+        f.rect(13, 1, 1, h - 2, DEEP)
+        f.rect(w - 14, 1, 1, h - 2, DEEP)
+        for y in range(5, h - 4, 11):
+            f.rect(10, y, 4, 1, ASH)
+            f.rect(w - 14, y + 3, 4, 1, ASH)
+
         for d in range(9):
             y = 1 + d * band
             lit = d <= here
             colour = DEPTH[d] if lit else ASH
-            f.rect(1, y, w - 2, band - 1, colour)
-            # a dotted floor between strata
-            for x in range(1, w - 1, 3):
-                f.set(x + (d % 3), y + band - 2, VOID)
-            f.text(5, y + 4, str(d), VOID if lit else SMOKE)
+            face = DEEP if not lit else SMOKE
+            # A shallow tray for every stratum: illuminated top, dark face,
+            # and a one-pixel fall into the next shelf.
+            f.rect(17, y + 1, 86, 1, colour)
+            f.rect(18, y + 2, 84, 7, face)
+            f.rect(18, y + 3, 1, 6, BONE if lit else DEEP)
+            f.rect(102, y + 2, 1, 7, VOID)
+            f.rect(19, y + 8, 83, 1, ASH)
+            f.rect(22, y + 4, 76, 1, colour if lit else DEEP)
+            f.text(5, y + 3, str(d), colour)
 
-        # the thing that is falling
+        # The falling trace is a cube rather than a marker: every depth is a
+        # value's recorded history, not a point moving on a chart.
         y = 1 + here * band
         if step <= 8:
-            f.rect(w - 26, y + 4, 10, 7, VOID)
-            f.rect(w - 25, y + 5, 8, 5, BONE)
+            trace_cube(f, 82, y + 2, step)
         else:
-            # it stopped, and the trail above it stays lit for good
-            f.text(w - 38, y + 4, "HERE", VOID)
+            # At the bottom, the trace is permanently marked by the hole the
+            # ledger cannot fill: foreign code reaches the unrecorded.
+            f.rect(85, y + 5, 9, 5, PLUM)
+            f.rect(87, y + 6, 5, 3, VOID)
+            f.set(84, y + 7, LILAC)
+            f.set(94, y + 7, LILAC)
 
         f.frame_box(0, 0, w, h, ASH, SMOKE)
         frames.append(f)
@@ -734,6 +841,7 @@ GRAPHICS = {
     "lamp.gif": lamp,
     "counter.gif": lambda: counter(f"{owed():06d}"),
     "cairn.gif": cairn,
+    "hero.gif": hero,
     "badge-unlit.gif": lambda: badge("BEST VIEWED", "UNLIT", SULPHUR, BONE),
     "badge-handmade.gif": lambda: badge("NO LIBRARIES", "FROM SCRATCH", LIME, BONE),
     "badge-public.gif": lambda: badge("PUBLIC DOMAIN", "TAKE IT", ICE, BONE),

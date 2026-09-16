@@ -98,6 +98,34 @@ try {
   await command("Page.enable"); await command("Runtime.enable"); await command("Network.enable");
   await command("Page.bringToFront");
   await command("Emulation.setFocusEmulationEnabled", { enabled: true });
+  for (const width of [1248, 390]) {
+    await command("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width < 500 });
+    for (const path of ["/site/", "/site/spec/00-overview.html"]) {
+      await command("Page.navigate", { url: origin + path });
+      await until("document.readyState === 'complete' && location.pathname === " + JSON.stringify(path));
+      await evaluate("document.fonts.ready");
+      assert.equal(await evaluate('document.fonts.check(\'16px "Nether 8"\')'), true);
+      assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), path + " overflows at " + width);
+      assert.ok(await evaluate("[...document.images].every(i => i.complete && i.naturalWidth > 0)"), "missing site graphic");
+      assert.deepEqual(await evaluate(`(() => {
+        const c = document.createElement("canvas").getContext("2d");
+        return [8, 16, 24, 32].map(size => {
+          c.font = size + 'px "Nether 8"';
+          return c.measureText(".").actualBoundingBoxLeft === -size / 4
+            && ["W", "i", ".", " ", "■", "▸"].every(ch => c.measureText(ch).width === size * 7 / 8);
+        });
+      })()`), [true, true, true, true], "fixed advance at every pixel size");
+      if (path.includes("/spec/")) {
+        assert.equal(await evaluate("document.querySelectorAll('nav.contents li').length"), 12);
+        assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
+        assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 11);
+      } else {
+        assert.equal(await evaluate("document.querySelector('img.hero').naturalWidth"), 600);
+      }
+      await screenshot((path.includes("/spec/") ? "spec-" : "site-") + width);
+    }
+  }
+  console.log("browser: site graphics, spec contents and fixed font metrics at desktop/mobile sizes");
   await command("Emulation.setDeviceMetricsOverride", { width: 1248, height: 1000, deviceScaleFactor: 1, mobile: false });
   await command("Page.navigate", { url: origin + "/web/necropolis/" });
   await until("document.getElementById('state')?.textContent.startsWith('Buried.')");
