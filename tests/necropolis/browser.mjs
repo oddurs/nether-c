@@ -98,7 +98,7 @@ try {
   await command("Page.enable"); await command("Runtime.enable"); await command("Network.enable");
   await command("Page.bringToFront");
   await command("Emulation.setFocusEmulationEnabled", { enabled: true });
-  for (const width of [1248, 390]) {
+  for (const width of [1248, 768, 390, 320]) {
     await command("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width < 500 });
     for (const path of ["/site/", "/site/spec/00-overview.html"]) {
       await command("Page.navigate", { url: origin + path });
@@ -107,6 +107,17 @@ try {
       assert.equal(await evaluate('document.fonts.check(\'16px "Nether 8"\')'), true);
       assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), path + " overflows at " + width);
       assert.ok(await evaluate("[...document.images].every(i => i.complete && i.naturalWidth > 0)"), "missing site graphic");
+      assert.equal(await evaluate("document.querySelector('.directory-drawer').open"), width > 1050);
+      await evaluate("document.querySelector('.directory-drawer summary').focus()");
+      await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r" });
+      await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter" });
+      assert.equal(await evaluate("document.querySelector('.directory-drawer').open"), width <= 1050);
+      await click(".directory-drawer summary");
+      await click("[data-lamp-toggle]");
+      assert.equal(await evaluate("document.documentElement.dataset.lamp"), "lit");
+      assert.equal(await evaluate("document.querySelector('[data-lamp-toggle]').getAttribute('aria-pressed')"), "true");
+      if (width === 1248 && path === "/site/") await screenshot("site-lamp-lit");
+      await click("[data-lamp-toggle]");
       assert.deepEqual(await evaluate(`(() => {
         const c = document.createElement("canvas").getContext("2d");
         return [8, 16, 24, 32].map(size => {
@@ -121,10 +132,29 @@ try {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 11);
       } else {
         assert.equal(await evaluate("document.querySelector('img.hero').naturalWidth"), 600);
+        assert.ok(await evaluate("[...document.querySelectorAll('.desk-directory a')].every(a => document.getElementById(a.hash.slice(1)))"));
+        await click(".complaints summary");
+        assert.equal(await evaluate("document.querySelector('.complaints').open"), true);
+        assert.match(await evaluate("document.querySelector('.complaints').textContent"), /No complaint was sent/);
+        await click(".complaints summary");
       }
       await screenshot((path.includes("/spec/") ? "spec-" : "site-") + width);
+      if (path.includes("/spec/")) {
+        await evaluate("document.querySelector('.directory-drawer').open = true");
+        await click('nav.contents a[href="02-calculus.html"]');
+        await until("location.pathname === '/site/spec/02-calculus.html' && document.readyState === 'complete'");
+        assert.match(await evaluate("document.querySelector('nav.contents [aria-current]').textContent"), /calculus/);
+      } else {
+        await click('.arrival-actions a[href="#first-program"]');
+        assert.equal(await evaluate("location.hash"), "#first-program");
+      }
     }
   }
+  await command("Emulation.setScriptExecutionDisabled", { value: true });
+  await command("Page.navigate", { url: origin + "/site/spec/00-overview.html" });
+  await until("location.pathname === '/site/spec/00-overview.html' && document.readyState === 'complete'");
+  assert.equal(await evaluate("document.querySelector('.directory-drawer').open"), true, "directory works without JavaScript");
+  await command("Emulation.setScriptExecutionDisabled", { value: false });
   console.log("browser: site graphics, spec contents and fixed font metrics at desktop/mobile sizes");
   await command("Emulation.setDeviceMetricsOverride", { width: 1248, height: 1000, deviceScaleFactor: 1, mobile: false });
   await command("Page.navigate", { url: origin + "/web/necropolis/" });

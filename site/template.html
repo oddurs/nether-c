@@ -28,10 +28,12 @@ try {
 } catch (e) {}
 </script>
 </head>
-<body>
+<body class="terminal">
 
 <a class="skip" href="#main">Skip to the text</a>
 
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<header class="terminal-header">
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -41,17 +43,27 @@ try {
 </pre>
 <p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
 
-<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
-
-<hr class="heavy">
+</header>
 
 {{NAV}}
 
+<div class="terminal-workspace">
+<aside class="directory">
+<details open class="directory-drawer">
+<summary>Directory</summary>
+{{DIRECTORY}}
+<p class="directory-note">You are here.<br>Here is below.</p>
+</details>
+</aside>
+<div class="reading-pane">
+<div class="pane-title"><span>{{TITLE}}</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
 {{BODY}}
 </main>
+</div>
+</div>
 
-<hr class="thin">
+<div class="terminal-status"><span>END OF BUFFER</span><a href="#main">Back to text ^</a></div>
 
 <footer>
 <p>Nether C is in the <strong>public domain</strong>, which is the licence
@@ -81,6 +93,8 @@ There is no image library in this repository. There is not going to be one.</p>
 <script>
 /* The whole of the site's JavaScript. */
 (function () {
+  var directory = document.querySelector(".directory-drawer");
+  if (directory && window.matchMedia("(max-width: 1050px)").matches) directory.open = false;
   var root = document.documentElement;
   var btn = document.querySelector("[data-lamp-toggle]");
   var label = document.querySelector("[data-lamp-state]");

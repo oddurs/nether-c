@@ -450,12 +450,13 @@ def navbar(current: str, depth: int) -> str:
     items = []
     for name, href in links:
         cur = ' aria-current="page"' if name == current else ""
-        items.append(f'<a href="{href}"{cur}>{name}</a>')
+        label = "front desk" if name == "index" else "manual"
+        items.append(f'<a href="{href}"{cur}>{label}</a>')
     items.append(f'<a href="{REPO}" target="_blank" rel="noreferrer noopener">source</a>')
     items.append(f'<a href="{REPO}/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a>')
-    body = '<span class="sep">|</span>'.join(items)
+    body = "".join(items)
     return (
-        f'<nav class="bar">{body}<span class="spacer"></span>'
+        f'<nav class="bar" aria-label="Primary">{body}<span class="spacer"></span>'
         f'<button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>'
     )
 
@@ -471,24 +472,35 @@ def contents(sections: list[dict[str, object]], current: str) -> str:
             items.append(f'<li><a href="{section["slug"]}.html">{label}</a></li>')
     return (
         '<nav class="contents" aria-label="Specification contents">'
-        '<p>Contents</p><ol>' + "".join(items) + "</ol></nav>"
+        '<p>spec/</p><ol role="list">' + "".join(items) + "</ol></nav>"
     )
 
 
 SITE_NAME = "Nether C"
 
 
-def page(title: str, body: str, *, current: str, depth: int) -> str:
+def page(title: str, body: str, *, current: str, depth: int, directory: str = "") -> str:
     tpl = (SITE / "template.html").read_text(encoding="utf-8")
     up = "../" if depth else ""
     # The front page is already called Nether C; appending the site name to it
     # gave every tab "Nether C — Nether C".
     full = title if title == SITE_NAME else f"{title} &mdash; {SITE_NAME}"
+    if not directory:
+        entries = [
+            ("start", "Start here"), ("first-program", "First burial"),
+            ("nine-strata", "Nine strata"), ("six-rites", "The six rites"),
+            ("specification", "Specification"), ("status", "Project status"),
+        ]
+        directory = '<nav class="desk-directory" aria-label="Front desk contents">' + "".join(
+            f'<a href="{up}index.html#{anchor}"><span aria-hidden="true">{n:02}</span> {label}</a>'
+            for n, (anchor, label) in enumerate(entries)
+        ) + "</nav>"
     return (
         tpl.replace("{{TITLE}}", esc(title))
         .replace("{{FULLTITLE}}", full)
         .replace("{{UP}}", up)
         .replace("{{NAV}}", navbar(current, depth))
+        .replace("{{DIRECTORY}}", directory)
         .replace("{{BODY}}", body)
     )
 
@@ -545,7 +557,8 @@ def build() -> dict[Path, str]:
         "will change without a version bump.</div>"
     )
     files[SITE / "spec" / "index.html"] = page(
-        "The specification", index_body, current="spec", depth=1
+        "The specification", index_body, current="spec", depth=1,
+        directory=contents(sections, ""),
     )
 
     # Each section carries the whole contents list. The old previous/next bar
@@ -567,8 +580,8 @@ def build() -> dict[Path, str]:
             + "</div>"
         )
         files[SITE / "spec" / f'{s["slug"]}.html'] = page(
-            f'{s["section"]} {s["title"]}', head + contents(sections, s["slug"]) + s["html"],
-            current="spec", depth=1,
+            f'{s["section"]} {s["title"]}', head + s["html"],
+            current="spec", depth=1, directory=contents(sections, s["slug"]),
         )
 
     return files
