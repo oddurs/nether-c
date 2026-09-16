@@ -104,9 +104,10 @@ cairn_literal  := "#" lowerhex{64}
 lowerhex       := digit | "a".."f"
 
 str_literal    := '"' ( str_char | escape )* '"'
-bytes_literal  := "b" str_literal
+bytes_literal  := "b" '"' ( str_char | escape | byte_escape )* '"'
 
 escape         := "\\" ( "n" | "t" | "r" | "0" | "\\" | '"' | "u{" hexdigit+ "}" )
+byte_escape    := "\\x" hexdigit hexdigit
 ```
 
 There are no floating-point literals. Floating-point arithmetic is not in the
@@ -134,6 +135,18 @@ ledger while it is being read.
 The literal exists because [§6.5](06-evaluation.md#65-residue) requires a
 residue to be a program. A burial that folds `seal` has a cairn to write down,
 and a value the language cannot spell is a residue that does not parse.
+
+`\x` is in `bytes_literal` for the same reason and not in `str_literal` for a
+different one. A source file is UTF-8 ([§3.1](#31-source-encoding)), so the byte `0xe2`
+cannot be written on its own, and `\u{e2}` is the character U+00E2 — two bytes
+when it is encoded, which is not what a `Bytes` value holding one byte wants
+said about it. `\xe2` is that byte. It takes exactly two hexadecimal digits,
+because a variable-length one makes `\xef` followed by the letter `f` two
+different literals depending on how far the reader is willing to look.
+
+A `Str` is UTF-8 ([§5.1](05-types.md#51-base-types)), so a byte escape there
+would spell values the type cannot hold, and the two escapes would then mean
+different things in the two literals. `\u{…}` means a scalar value in both.
 
 The three spellings do not hold the same range, because they are not spelling
 the same thing.
