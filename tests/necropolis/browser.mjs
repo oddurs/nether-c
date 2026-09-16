@@ -243,5 +243,7 @@ try {
   chrome.kill();
   await new Promise((resolve) => { if (chrome.exitCode !== null) resolve(); else chrome.once("exit", resolve); });
   await new Promise((resolve) => server.close(resolve));
-  await rm(profile, { recursive: true, force: true });
+  // Chrome's helpers can finish profile writes after the parent exits.
+  // Retry transient directory races, but still fail if cleanup cannot finish.
+  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
