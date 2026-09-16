@@ -299,7 +299,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## quickening — The Quickening
 
-`··········` 0% · 0 of 6 done · due 2027-12-01
+`##········` 14% · 1 of 7 done · due 2027-12-01
 
 ### unmarked
 
@@ -309,6 +309,10 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [ ] [`0201`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0201-the-store-s-read-path-does-not-go-to-disk-twice.md) The store's read path does not go to disk twice <sup>feature · p1 · 1</sup>
 - [ ] [`0202`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0202-encoding-allocates-once.md) Encoding allocates once <sup>chore · p2 · 0</sup>
 - [ ] [`0203`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0203-a-fuel-budget-that-means-something.md) A fuel budget that means something <sup>spec · p2 · 0</sup>
+
+### buried
+
+- [x] [`0241`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0241-make-the-pr-path-fast-and-enforce-its-boundaries.md) Make the PR path fast and enforce its boundaries <sup>chore · p2 · 0</sup>
 
 ## cortege — The Cortege
 

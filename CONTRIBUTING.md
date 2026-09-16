@@ -38,6 +38,7 @@ scripts/agent start spec/0031-failure-handling
 cd ../.worktrees/nether-c/spec/0031-failure-handling
 scripts/agent commit "spec(prelude): give starvation a recovery form"
 scripts/agent pr
+scripts/agent wait
 scripts/agent done
 ```
 
@@ -77,8 +78,11 @@ scripts/task check
 ```
 
 which is format, lint with warnings denied, tests, build, `site/bake --check`,
-the Decay Rule, and `cairn check`. `scripts/agent pr` runs it for you and
-refuses to push if it fails.
+the Decay Rule, and `cairn check`. `scripts/agent pr` runs it once through
+the pre-push hook and refuses to push if it fails. It requires installed hooks
+and a clean feature worktree, including untracked files. Retrying reuses the
+open PR rather than creating another one. The hook checks the exact checked-out
+commit; it refuses pushes of other branches or commits.
 
 CI runs exactly the same command, so the two cannot drift.
 
@@ -94,6 +98,26 @@ branch is deleted. If CI fails it sits there until it is fixed.
 
 `scripts/agent pr --draft` opens it without arming anything, which is how to
 say *not yet*.
+
+`scripts/agent wait` waits for checks, then verifies that the PR actually
+merged at your local HEAD. Green checks alone are not a merge. Failed checks,
+a changed PR head, or a merge that does not complete are reported as failures.
+
+`scripts/agent done` removes only a clean worktree whose exact HEAD was merged.
+It never force-removes a worktree, and refuses one holding a `.nether` ledger.
+A dirty primary checkout is left untouched and reported; there is no implicit
+stash, reset or forced pull. Build caches are ignored and may be removed with
+the worktree. Keep unrelated valuable files outside it.
+
+`scripts/agent policy` audits the live server settings without changing them.
+Publishing runs this audit too and stops if protection has drifted or cannot
+be verified. GitHub is the authority: local hooks are early feedback, not a
+replacement for server protection. No extra approval, bot, service, or merge
+workflow is needed. Ordinary feature pushes are checked once locally and once
+on the PR; the existing main check still verifies the resulting squash.
+
+`scripts/task workflow:check` tests the guards in disposable Git repositories
+with an offline GitHub fixture. It is included in the normal test suite.
 
 `main` is protected on the server, and the rule this repository keeps repeating
 is now true rather than aspirational:
@@ -134,6 +158,7 @@ Below, things only decay.
 
 Do not create ad-hoc `TODO`, `PLAN` or `NOTES` files, and do not leave `TODO`
 comments in code. Create a cairn item so the work appears on the board.
+Create and claim it inside the feature worktree, not the primary checkout.
 
 ```sh
 cairn next                 # what is ready

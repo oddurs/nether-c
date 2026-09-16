@@ -2,15 +2,32 @@
 # main only ever advances through a merged pull request.
 set -eu
 
-remote_ref_default=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || echo main)
+remote_ref_default=$(./scripts/agent default-branch)
+head=$(git rev-parse HEAD)
+branch=$(git symbolic-ref --quiet --short HEAD)
 
-while read -r _local_ref _local_sha remote_ref _remote_sha; do
+while read -r _local_ref local_sha remote_ref _remote_sha; do
   case "$remote_ref" in
     "refs/heads/$remote_ref_default")
       echo "pre-push: refusing to push to $remote_ref_default." >&2
       echo "          Open a pull request:  scripts/agent pr" >&2
       exit 1 ;;
   esac
+  case "$remote_ref" in
+    refs/heads/*)
+      [ "$local_sha" = "$head" ] && [ "$remote_ref" = "refs/heads/$branch" ] || {
+        echo "pre-push: push the checked-out branch and HEAD, one branch at a time" >&2
+        exit 1
+      }
+      ./scripts/agent guard
+      ./scripts/agent clean
+      ;;
+  esac
 done
 
-exec ./scripts/task check
+./scripts/task check
+./scripts/agent clean
+[ "$head" = "$(git rev-parse HEAD)" ] || {
+  echo "pre-push: HEAD changed during checks; retry against the new commit" >&2
+  exit 1
+}

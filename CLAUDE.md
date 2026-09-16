@@ -87,18 +87,25 @@ If they insist, it is a specification change and it needs an argument in
 
 ```sh
 cairn next                       # what is ready
-cairn claim --next               # take it
 scripts/agent start spec/0031-failure-handling
 cd ../.worktrees/nether-c/spec/0031-failure-handling
+cairn claim 0031                 # claim inside the worktree
 # ... work ...
 scripts/agent commit "spec(prelude): give starvation a recovery form"
 scripts/agent pr
+scripts/agent wait
 scripts/agent done
 ```
 
 One unit of work. One worktree. One branch. One pull request. Never work in the
 primary checkout. Never commit to `main` — the hook refuses and the server
 refuses, and working around either is a bug in your approach, not in them.
+
+`pr` checks once, reuses an open PR and arms auto-merge for the exact pushed
+commit. `wait` confirms that commit actually merged; green checks alone are
+not completion. `done` refuses dirty worktrees, additional unmerged commits
+and ledger data, and leaves a dirty primary checkout untouched. The live server
+rules can be audited with `scripts/agent policy`. See `CONTRIBUTING.md`.
 
 ## THE SEAM
 

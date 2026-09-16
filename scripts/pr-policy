@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Read-only audit of the server rules that local hooks cannot enforce."""
+
+import json
+import subprocess
+import sys
+from urllib.parse import quote
+
+
+def violations(repo, protection):
+    checks = protection.get("required_status_checks") or {}
+    reviews = protection.get("required_pull_request_reviews")
+    expected = {
+        "auto-merge enabled": repo.get("allow_auto_merge"),
+        "squash merging enabled": repo.get("allow_squash_merge"),
+        "merge commits disabled": repo.get("allow_merge_commit") is False,
+        "rebase merging disabled": repo.get("allow_rebase_merge") is False,
+        "merged branches deleted": repo.get("delete_branch_on_merge"),
+        "pull requests required": isinstance(reviews, dict),
+        "administrator rules enforced": protection.get("enforce_admins", {}).get("enabled"),
+        "up-to-date branches required": checks.get("strict"),
+        "required check bound to GitHub Actions": any(
+            c.get("context") == "required" and c.get("app_id") == 15368
+            for c in checks.get("checks", [])
+        ),
+        "linear history required": protection.get("required_linear_history", {}).get("enabled"),
+        "force pushes disabled": protection.get("allow_force_pushes", {}).get("enabled") is False,
+        "branch deletion disabled": protection.get("allow_deletions", {}).get("enabled") is False,
+        "conversations resolved": protection.get("required_conversation_resolution", {}).get("enabled"),
+        "no PR bypass allowances": not any(
+            (reviews or {}).get("bypass_pull_request_allowances", {}).values()
+        ),
+    }
+    return [rule for rule, holds in expected.items() if not holds]
+
+
+def api(path):
+    return json.loads(subprocess.check_output(["gh", "api", path], text=True))
+
+
+def main():
+    try:
+        repo = api("repos/{owner}/{repo}")
+        branch = quote(repo["default_branch"], safe="")
+        protection = api(f"repos/{{owner}}/{{repo}}/branches/{branch}/protection")
+        errors = violations(repo, protection)
+    except (subprocess.CalledProcessError, ValueError, KeyError) as error:
+        print(f"policy: cannot verify server protection: {error}", file=sys.stderr)
+        return 1
+    if errors:
+        for error in errors:
+            print(f"policy: requires {error}", file=sys.stderr)
+        return 1
+    print("policy: checked PRs, squash-only, auto-merge; administrators included")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

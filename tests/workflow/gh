@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Offline GitHub fixture: real Git, no network or repository mutations."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+path = Path(os.environ["WORKFLOW_FIXTURE"])
+state = json.loads(path.read_text())
+args = sys.argv[1:]
+with path.with_suffix(".log").open("a") as log:
+    log.write(json.dumps(args) + "\n")
+if state.get("fail") == args[:2]:
+    sys.exit(1)
+if args[0] == "api":
+    if "/protection" in args[1]:
+        print(json.dumps(state["protection"]))
+    else:
+        print(json.dumps(state["repo"]))
+elif args[:2] == ["pr", "list"]:
+    print(state.get("existing", ""))
+elif args[:2] == ["pr", "create"]:
+    state["existing"] = "1 OPEN " + str("--draft" in args).lower()
+    path.write_text(json.dumps(state))
+elif args[:2] == ["pr", "view"]:
+    fields = args[args.index("--json") + 1]
+    head = state.get("head") or subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    if fields == "url":
+        print("https://example.invalid/pull/1")
+    elif fields == "state,headRefOid,isDraft":
+        print(f"{state.get('state', 'OPEN')}\t{head}\tfalse")
+    else:
+        print(f"{state.get('state', 'OPEN')}\t{head}")
+elif args[:2] == ["pr", "checks"]:
+    state["state"] = "MERGED"
+    path.write_text(json.dumps(state))
+elif args[:2] not in (["pr", "merge"], ["pr", "ready"]):
+    raise SystemExit(f"unexpected gh call: {args}")

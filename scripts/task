@@ -18,6 +18,7 @@ case "${1:-}" in
     ;;
   test)
     cargo test --workspace
+    "$0" workflow:check
     # Every code sample in the documentation is a fixture. Documentation that
     # lies fails the build.
     python3 tests/transcripts/run
@@ -38,6 +39,9 @@ case "${1:-}" in
     ;;
   build)
     cargo build --workspace
+    ;;
+  workflow:check)
+    python3 tests/workflow/run
     ;;
   fuzz)
     # The soak. The short pass runs in `test` on every commit; this is the one
@@ -151,7 +155,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check|release}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|workflow:check|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check|release}" >&2
     exit 2
     ;;
 esac

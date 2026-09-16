@@ -258,6 +258,7 @@ scripts/agent start spec/0031-failure-handling   # also spelled: descend
 cd ../.worktrees/nether-c/spec/0031-failure-handling
 scripts/agent commit "spec(prelude): give starvation a recovery form"
 scripts/agent pr
+scripts/agent wait                               # checks, then verified merge
 scripts/agent done                               # also spelled: surface
 ```
 
