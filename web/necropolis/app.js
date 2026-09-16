@@ -21,6 +21,7 @@ function visit(id) {
   shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
   render();
   $("selected-title").focus({ preventScroll: true });
+  if (matchMedia("(max-width: 760px)").matches) $("selected").scrollIntoView({ block: "nearest" });
 }
 
 function relations(target, edges) {
@@ -39,7 +40,12 @@ function relations(target, edges) {
   }
   if (edges.length > shown[target]) container.append(button(
     `Show ${Math.min(PAGE_SIZE, edges.length - shown[target])} more (${edges.length} total)`,
-    () => { shown[target] += PAGE_SIZE; render(); }, "nc-more"));
+    () => {
+      const firstNew = shown[target];
+      shown[target] += PAGE_SIZE;
+      render();
+      container.querySelectorAll(".nc-object")[firstNew]?.focus();
+    }, "nc-more"));
 }
 
 function inspect(object) {
@@ -134,7 +140,7 @@ function bury() {
       navigation = new Navigation(graph.root);
       shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
       $("trace-title").textContent = `Trace ${short(graph.root)}`;
-      $("summary").textContent = `depth ${data.depth} · ${data.holes.length} holes · ${graph.encoded.size} objects · ${data.fuel_spent.toLocaleString()} steps`;
+      $("summary").textContent = `depth ${data.depth} · ${data.holes.length} hole${data.holes.length === 1 ? "" : "s"} · ${graph.encoded.size} objects · ${data.fuel_spent.toLocaleString()} steps`;
       const root = graph.get(graph.root);
       $("roots").replaceChildren();
       for (const [label, ids] of [["hole", root.holes], ["deposit", root.deposits]]) {

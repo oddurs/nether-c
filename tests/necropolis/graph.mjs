@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decode, Graph, Navigation, hex, preview, references, sourceExcerpt } from "../../web/necropolis/graph.js";
+import { Necropolis } from "../../web/necropolis/necropolis.js";
 
 const u64 = (n) => BigInt.asUintN(64, BigInt(n)).toString(16).padStart(16, "0");
 const text = (s) => { const b = new TextEncoder().encode(s); return u64(b.length) + hex(b); };
@@ -79,4 +80,29 @@ test("navigation branches discard forward history without duplicating the curren
 test("previews are bounded and binary bytes are never silently repaired", () => {
   assert.match(preview(decode("03" + u64(2) + "ff00")), /hex ff00/);
   assert.ok(preview(decode("04" + text("a".repeat(10000)))).length <= 161);
+});
+
+test("the memory bridge releases buffers even when burial or JSON decoding throws", () => {
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  const freed = [];
+  const exports = { memory, nether_alloc: () => 16, nether_free: (p, n) => freed.push([p, n]),
+    nether_bury: () => { throw Error("trap"); } };
+  assert.throws(() => new Necropolis(exports).bury("abc"), /trap/);
+  assert.deepEqual(freed, [[16, 3]]);
+  freed.length = 0;
+  exports.nether_bury = () => {
+    new DataView(memory.buffer).setUint32(32, 1, true);
+    new Uint8Array(memory.buffer)[36] = 123;
+    return 32;
+  };
+  assert.throws(() => new Necropolis(exports).bury("abc"), SyntaxError);
+  assert.deepEqual(freed, [[16, 3], [32, 5]]);
+});
+
+test("oversized compound previews remain explicitly unavailable", () => {
+  const encoded = "11" + u64(4097) + "00".repeat(4097);
+  const g = new Graph({ cairn: id(9), objects: [[id(9), trace], [id(3), encoded]] });
+  assert.equal(g.get(id(3)).kind, "Unavailable");
+  assert.match(g.get(id(3)).data, /4096/);
+  assert.equal(g.encoded.get(id(3)), encoded);
 });

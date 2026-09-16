@@ -1,0 +1,189 @@
+// Real Chrome, real module worker, real WASM. CDP over an isolated pipe;
+// no driver package, no external server, no user browser profile.
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createServer } from "node:http";
+import { access, mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { delimiter, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = fileURLToPath(new URL("../../", import.meta.url));
+const candidates = process.env.NETHER_CHROME ? [process.env.NETHER_CHROME] : [
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  ...process.env.PATH.split(delimiter).flatMap((p) => ["google-chrome", "chromium", "chromium-browser"].map((n) => join(p, n)))
+];
+let binary;
+for (const candidate of candidates) { try { await access(candidate); binary = candidate; break; } catch {} }
+assert.ok(binary, "Install Chrome/Chromium or set NETHER_CHROME to its executable");
+const profile = await mkdtemp(join(tmpdir(), "nether-browser-"));
+let denyWasm = false;
+const server = createServer(async (request, response) => {
+  try {
+    const url = new URL(request.url, "http://localhost");
+    const path = resolve(root, "." + decodeURIComponent(url.pathname));
+    if (!path.startsWith(resolve(root) + sep)) throw Error("outside root");
+    if (denyWasm && path.endsWith(".wasm")) { response.writeHead(503).end(); return; }
+    const file = path.endsWith(sep) || url.pathname.endsWith("/") ? join(path, "index.html") : path;
+    const type = file.endsWith(".wasm") ? "application/wasm" : file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : file.endsWith(".html") ? "text/html" : "application/octet-stream";
+    const bytes = await readFile(file);
+    response.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
+    response.end(bytes);
+  } catch { response.writeHead(404).end(); }
+});
+await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+const origin = `http://127.0.0.1:${server.address().port}`;
+const chrome = spawn(binary, ["--headless=new", "--remote-debugging-pipe", "--no-first-run",
+  "--no-default-browser-check", "--disable-background-networking", "--disable-dev-shm-usage",
+  ...(process.env.CI || process.getuid?.() === 0 ? ["--no-sandbox"] : []), `--user-data-dir=${profile}`, "about:blank"],
+  { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] });
+let serial = 0, buffer = "", session;
+const pending = new Map(), exceptions = [], requests = [];
+let stderr = "";
+chrome.stderr.on("data", (b) => { stderr = (stderr + b).slice(-4000); });
+chrome.stdio[4].on("data", (chunk) => {
+  buffer += chunk.toString();
+  let end;
+  while ((end = buffer.indexOf("\0")) >= 0) {
+    const message = JSON.parse(buffer.slice(0, end)); buffer = buffer.slice(end + 1);
+    if (message.id && pending.has(message.id)) {
+      const { resolve, reject, timer } = pending.get(message.id);
+      clearTimeout(timer); pending.delete(message.id);
+      if (message.error) reject(Error(JSON.stringify(message.error))); else resolve(message.result);
+    } else if (message.method === "Runtime.exceptionThrown") exceptions.push(message.params);
+    else if (message.method === "Network.requestWillBeSent") requests.push(message.params.request);
+  }
+});
+function command(method, params = {}, page = true) {
+  return new Promise((resolve, reject) => {
+    const id = ++serial;
+    const timer = setTimeout(() => { pending.delete(id); reject(Error(`Chrome timeout: ${method}\n${stderr}`)); }, 20000);
+    pending.set(id, { resolve, reject, timer });
+    chrome.stdio[3].write(JSON.stringify({ id, method, params, ...(page && session ? { sessionId: session } : {}) }) + "\0");
+  });
+}
+async function evaluate(expression) {
+  const result = await command("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+  if (result.exceptionDetails) throw Error(JSON.stringify(result.exceptionDetails));
+  return result.result.value;
+}
+async function until(expression) {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    try { if (await evaluate(expression)) return; } catch (e) {
+      if (!/context|Cannot find/.test(e.message)) throw e;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw Error(`Page timeout: ${expression}\n${await evaluate("document.body.innerText")}`);
+}
+const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+const text = (id) => evaluate(`document.getElementById(${JSON.stringify(id)}).textContent`);
+async function bury(source) {
+  await evaluate(`document.querySelector('.nc-source').open = true; document.getElementById('source').value = ${JSON.stringify(source)}; document.getElementById('bury').click()`);
+  await until("document.getElementById('state').textContent.startsWith('Buried.') || !document.getElementById('diagnostic').hidden");
+  assert.equal(await evaluate("document.getElementById('diagnostic').hidden"), true, await text("diagnostic"));
+}
+async function screenshot(name) {
+  if (!process.env.NETHER_SCREENSHOTS) return;
+  await mkdir(process.env.NETHER_SCREENSHOTS, { recursive: true });
+  const { cssContentSize: size } = await command("Page.getLayoutMetrics");
+  const { data } = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: true,
+    clip: { x: 0, y: 0, width: size.width, height: Math.min(size.height, 3000), scale: 1 } });
+  await writeFile(join(process.env.NETHER_SCREENSHOTS, name + ".png"), Buffer.from(data, "base64"));
+}
+try {
+  const { targetId } = await command("Target.createTarget", { url: "about:blank" }, false);
+  ({ sessionId: session } = await command("Target.attachToTarget", { targetId, flatten: true }, false));
+  await command("Page.enable"); await command("Runtime.enable"); await command("Network.enable");
+  await command("Page.bringToFront");
+  await command("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await command("Emulation.setDeviceMetricsOverride", { width: 1248, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await command("Page.navigate", { url: origin + "/web/necropolis/" });
+  await until("document.getElementById('state')?.textContent.startsWith('Buried.')");
+  await evaluate("document.fonts.ready");
+  assert.match(await text("summary"), /1 hole/);
+  assert.equal(await text("selected-title"), "Trace");
+  await until("document.querySelectorAll('.nc-wire').length > 0");
+  await screenshot("trace-desktop");
+  console.log("browser: real worker burial and desktop graph");
+
+  const rootId = await text("identity");
+  await click(".nc-root-hole");
+  assert.equal(await text("selected-title"), "Hole");
+  assert.match(await text("detail"), /read\("main.nc"\)/);
+  assert.match(await evaluate("document.querySelector('.nc-excerpt mark').textContent"), /read/);
+  const holeId = await text("identity");
+  await screenshot("hole-desktop");
+  await click('#outgoing [data-kind="Str"]');
+  assert.match(await text("detail"), /main.nc/);
+  await evaluate("document.getElementById('back').focus()");
+  assert.equal(await evaluate("document.activeElement.id"), "back");
+  await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+  await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+  await until(`document.getElementById('identity').textContent === ${JSON.stringify(holeId)}`);
+  assert.equal(await text("identity"), holeId);
+  await click("#forward"); assert.equal(await text("selected-title"), "Str");
+  await click("#home"); assert.equal(await text("identity"), rootId);
+  await click(".nc-root-deposit"); await click('#outgoing [data-kind="Bytes"]');
+  assert.match(await text("detail"), /a deposit that happened/);
+  console.log("browser: hole, argument, source span, deposit and keyboard history");
+
+  await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  await click(".nc-root-hole");
+  assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), "mobile overflows horizontally");
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.nc-wires')).display"), "none");
+  assert.equal(await evaluate("getComputedStyle(document.getElementById('selected')).order"), "-1");
+  await screenshot("hole-mobile");
+  console.log("browser: 390px layout, same relationships, no horizontal overflow");
+
+  await bury('U0 f() { "é雪"; "<img src=x onerror=alert(1)>"; } demand f();');
+  await click(".nc-root-deposit:nth-child(2)");
+  await click('#outgoing [data-kind="Str"]');
+  assert.match(await text("detail"), /<img src=x/);
+  assert.equal(await evaluate("document.querySelectorAll('#detail img').length"), 0);
+  console.log("browser: hostile source and values are text, never markup");
+
+  await bury(`U0 f() { ${Array.from({ length: 30 }, (_, i) => `${i};`).join(" ")} } demand f();`);
+  assert.equal(await evaluate("document.querySelectorAll('#outgoing .nc-object').length"), 12);
+  await click("#outgoing .nc-more");
+  assert.equal(await evaluate("document.querySelectorAll('#outgoing .nc-object').length"), 24);
+  assert.equal(await evaluate("document.activeElement.className"), "nc-object");
+  await click("#outgoing .nc-more");
+  assert.equal(await evaluate("document.querySelectorAll('#outgoing .nc-object').length"), 32);
+  console.log("browser: large neighbourhoods expand in bounded steps and retain focus");
+
+  const previous = await text("trace-title");
+  await evaluate("document.getElementById('source').value = 'demand missing;'; document.getElementById('bury').click()");
+  await until("!document.getElementById('diagnostic').hidden");
+  assert.equal(await text("trace-title"), previous);
+  assert.match(await text("state"), /previous trace/);
+  await evaluate("document.getElementById('source').value = 'demand 1;'; document.getElementById('bury').click(); document.getElementById('cancel').click()");
+  assert.match(await text("state"), /Cancelled/);
+  assert.equal(await text("trace-title"), previous);
+  await evaluate("document.getElementById('source').value = 'demand 1;'; document.getElementById('bury').click(); document.getElementById('source').value = 'demand 2;'; document.getElementById('bury').click()");
+  await until("document.getElementById('state').textContent.startsWith('Buried.')");
+  await click('#outgoing .nc-object');
+  assert.match(await text("detail"), /demand 2;/);
+  console.log("browser: failure preserves the prior trace; cancel/restart discards stale work");
+
+  await bury("");
+  assert.match(await text("summary"), /0 holes/);
+  assert.equal(await evaluate("document.querySelectorAll('#roots button').length"), 0);
+  denyWasm = true;
+  await click("#bury");
+  await until("!document.getElementById('diagnostic').hidden");
+  assert.match(await text("diagnostic"), /Burial unavailable/);
+  denyWasm = false;
+  await bury("demand 3;");
+  assert.deepEqual(exceptions, [], "uncaught browser exceptions");
+  assert.ok(requests.every((r) => r.url.startsWith(origin) || r.url.startsWith("data:")), "page made an external request");
+  assert.ok(requests.every((r) => r.method === "GET"), "page sent data");
+  console.log("browser: empty trace, module-load failure and recovery; no external requests");
+} finally {
+  for (const { timer } of pending.values()) clearTimeout(timer);
+  chrome.kill();
+  await new Promise((resolve) => { if (chrome.exitCode !== null) resolve(); else chrome.once("exit", resolve); });
+  await new Promise((resolve) => server.close(resolve));
+  await rm(profile, { recursive: true, force: true });
+}

@@ -527,6 +527,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .necropolis h1 { font-size: 48px; line-height: 1.2; margin: var(--tight) 0; }
 .necropolis h2 { background: none; color: var(--ink); padding: 0; margin: 0 0 var(--hair); font-size: 24px; border: 0; }
 .necropolis h3 { color: var(--dim); font-size: 16px; margin: 0 0 var(--tight); }
+.necropolis h1::before, .necropolis h2::before, .necropolis h3::before { content: none; }
 .necropolis p { margin: 0 0 var(--hair); }
 .necropolis button { font: inherit; color: var(--ink); background: var(--raised); border: 1px solid var(--dimmer); padding: 10px 16px; min-height: 44px; cursor: pointer; text-align: left; }
 .necropolis button:hover:not(:disabled) { border-color: var(--accent); background: var(--sunk); }
@@ -579,7 +580,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .nc-inspector button + button { margin-left: var(--hair); }
 .nc-excerpt mark { background: var(--accent); color: var(--sunk); padding: 2px 0; }
 .nc-caption { margin-top: var(--tight) !important; }
-.nc-footer { margin-top: var(--step); padding-top: var(--tight); border-top: 1px solid var(--dimmer); }
+.nc-footer { margin-top: var(--step); padding-top: var(--tight); border-top: 1px solid var(--dimmer); font-size: 16px; }
 @media (max-width: 760px) {
   body.necropolis { padding: var(--tight) var(--hair) var(--step); }
   .necropolis h1 { font-size: 32px; }
