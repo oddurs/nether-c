@@ -109,6 +109,90 @@ body {
 
 ::selection { background: var(--accent); color: var(--ground); }
 
+/* The public terminal: directory and document, not a simulated shell. */
+body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
+.terminal-title, .pane-title, .terminal-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: .5ch 2ch;
+  padding: .5rem .75rem;
+}
+.terminal-title { background: var(--accent); color: var(--ground); }
+.terminal-header {
+  padding: 1.5rem .75rem;
+  border: 1px solid var(--dim);
+  border-top: 0;
+  background: var(--ground);
+}
+.terminal-workspace {
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  border: 1px solid var(--dim);
+  border-top: 0;
+  background: var(--ground);
+}
+.directory { padding: 1rem .75rem; border-right: 1px solid var(--dim); }
+.directory-drawer {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.directory summary { color: var(--accent); cursor: pointer; padding: .5rem 0; }
+.directory nav.contents { border: 0; padding: 0; margin: .5rem 0; }
+.directory nav.contents ol { display: block; }
+.directory nav.contents li { margin: 0; }
+.directory a, .directory li[aria-current] {
+  display: block;
+  padding: .5rem .25rem;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+.directory a:hover, .directory a:focus-visible {
+  background: var(--accent);
+  color: var(--ground);
+}
+.directory li[aria-current] { border-left: 3px solid var(--accent); background: var(--raised); }
+.desk-directory span { color: var(--dim); }
+.directory-note { margin: 2rem 0 0; color: var(--dim); }
+.reading-pane { min-width: 0; }
+.pane-title { border-bottom: 1px solid var(--dim); color: var(--dim); overflow-wrap: anywhere; }
+.terminal main { padding: 1.25rem; }
+.terminal main :is(h1, h2, h3, h4) { scroll-margin-top: 1rem; }
+.terminal nav.bar { border: 1px solid var(--dim); gap: .25rem; padding: .35rem; }
+.terminal nav.bar a { display: inline-block; padding: .5rem .75rem; text-decoration: none; }
+.terminal .lamp { min-height: 40px; }
+.terminal-status { border: 1px solid var(--dim); border-top: 0; color: var(--dim); }
+.arrival { border: 1px solid var(--dim); text-align: center; margin-bottom: 1rem; }
+.arrival .panel-label { padding: .5rem; background: var(--raised); color: var(--dim); text-align: left; }
+.arrival h1 { margin: 0 0 1rem; }
+.arrival h1::before { content: none; }
+.arrival > p:not(.panel-label) { padding: 0 .75rem; }
+.arrival-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; }
+.arrival-actions a { padding: .5rem 0; }
+.desk-notice { color: var(--dim); }
+.complaints { border: 1px dashed var(--dim); padding: .75rem; margin: 1rem 0 2rem; }
+.complaints summary { cursor: pointer; color: var(--alt); }
+.complaints[open] summary { margin-bottom: 1rem; }
+.complaints p:last-child { margin-bottom: 0; }
+summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 1050px) {
+  .terminal-workspace { grid-template-columns: minmax(0, 1fr); }
+  .directory { border-right: 0; border-bottom: 1px solid var(--dim); padding: .5rem .75rem; }
+  .directory-drawer { position: static; max-height: none; }
+  .directory-note { display: none; }
+  .desk-directory, .directory nav.contents ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+}
+@media (max-width: 500px) {
+  body.terminal { padding: .5rem; }
+  .terminal main { padding: .75rem; }
+  .terminal nav.bar a { padding: .5rem; }
+  .terminal-title, .pane-title, .terminal-status { padding: .5rem; }
+  .arrival .panel-label { overflow-wrap: anywhere; }
+}
+
 /* --- the sign over the door ---------------------------------------------- */
 
 pre.sign {

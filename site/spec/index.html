@@ -28,10 +28,12 @@ try {
 } catch (e) {}
 </script>
 </head>
-<body>
+<body class="terminal">
 
 <a class="skip" href="#main">Skip to the text</a>
 
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<header class="terminal-header">
 <pre class="sign" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
@@ -41,17 +43,27 @@ try {
 </pre>
 <p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
 
-<div class="marquee" aria-hidden="true"><span>&nbsp;&nbsp;&nbsp;THE PROGRAM HAS ALREADY RUN&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;YOU ARE READING WHAT IS LEFT OF IT&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;DEPTH ONLY EVER INCREASES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;NOTHING DOWN HERE CHANGES&nbsp;&nbsp;&nbsp;&bull;&nbsp;&nbsp;&nbsp;THERE IS NO RUN&nbsp;&nbsp;&nbsp;</span></div>
+</header>
 
-<hr class="heavy">
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../spec/index.html" aria-current="page">manual</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
-<nav class="bar"><a href="../index.html">index</a><span class="sep">|</span><a href="../spec/index.html" aria-current="page">spec</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><span class="sep">|</span><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
-
+<div class="terminal-workspace">
+<aside class="directory">
+<details open class="directory-drawer">
+<summary>Directory</summary>
+<nav class="contents" aria-label="Specification contents"><p>spec/</p><ol role="list"><li><a href="00-overview.html">§00 Overview</a></li><li><a href="01-strata.html">§01 The strata</a></li><li><a href="02-calculus.html">§02 The calculus of depth</a></li><li><a href="03-lexical.html">§03 Lexical structure</a></li><li><a href="04-grammar.html">§04 Grammar</a></li><li><a href="05-types.html">§05 Types and the data model</a></li><li><a href="06-evaluation.html">§06 Burial, holes and replay</a></li><li><a href="07-ledger.html">§07 The ledger</a></li><li><a href="08-rites.html">§08 The rites</a></li><li><a href="09-prelude.html">§09 The prelude</a></li><li><a href="10-glossary.html">§10 Glossary</a></li><li><a href="90-rationale.html">§90 Rationale</a></li></ol></nav>
+<p class="directory-note">You are here.<br>Here is below.</p>
+</details>
+</aside>
+<div class="reading-pane">
+<div class="pane-title"><span>The specification</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
 <h1>The specification</h1><p>The specification is written in Markdown in <a href="https://github.com/oddurs/nether-c/tree/main/spec">spec/</a> and is canonical there. These pages are baked from it by <a href="https://github.com/oddurs/nether-c/blob/main/site/bake">site/bake</a>, which is one file of standard library Python and has no dependencies. If these pages ever disagree with the Markdown, the Markdown is right and continuous integration is broken.</p><div class="scroll"><table><thead><tr><th>&sect;</th><th>Section</th><th>Depth</th><th>Status</th></tr></thead><tbody><tr><td class="d0"><a href="00-overview.html">00</a></td><td><a href="00-overview.html">Overview</a></td><td class="shaft"><span class="d0" style="width:11%">0</span></td><td>draft</td></tr><tr><td class="d3"><a href="01-strata.html">01</a></td><td><a href="01-strata.html">The strata</a></td><td class="shaft"><span class="d3" style="width:44%">3</span></td><td>draft</td></tr><tr><td class="d3"><a href="02-calculus.html">02</a></td><td><a href="02-calculus.html">The calculus of depth</a></td><td class="shaft"><span class="d3" style="width:44%">3</span></td><td>draft</td></tr><tr><td class="d0"><a href="03-lexical.html">03</a></td><td><a href="03-lexical.html">Lexical structure</a></td><td class="shaft"><span class="d0" style="width:11%">0</span></td><td>draft</td></tr><tr><td class="d5"><a href="04-grammar.html">04</a></td><td><a href="04-grammar.html">Grammar</a></td><td class="shaft"><span class="d5" style="width:66%">5</span></td><td>draft</td></tr><tr><td class="d0"><a href="05-types.html">05</a></td><td><a href="05-types.html">Types and the data model</a></td><td class="shaft"><span class="d0" style="width:11%">0</span></td><td>draft</td></tr><tr><td class="d3"><a href="06-evaluation.html">06</a></td><td><a href="06-evaluation.html">Burial, holes and replay</a></td><td class="shaft"><span class="d3" style="width:44%">3</span></td><td>draft</td></tr><tr><td class="d0"><a href="07-ledger.html">07</a></td><td><a href="07-ledger.html">The ledger</a></td><td class="shaft"><span class="d0" style="width:11%">0</span></td><td>draft</td></tr><tr><td class="d0"><a href="08-rites.html">08</a></td><td><a href="08-rites.html">The rites</a></td><td class="shaft"><span class="d0" style="width:11%">0</span></td><td>draft</td></tr><tr><td class="d8"><a href="09-prelude.html">09</a></td><td><a href="09-prelude.html">The prelude</a></td><td class="shaft"><span class="d8" style="width:99%">8</span></td><td>draft</td></tr><tr><td class="d0"><a href="10-glossary.html">10</a></td><td><a href="10-glossary.html">Glossary</a></td><td class="shaft"><span class="d0" style="width:11%">0</span></td><td>draft</td></tr><tr><td class="d0"><a href="90-rationale.html">90</a></td><td><a href="90-rationale.html">Rationale</a></td><td class="shaft"><span class="d0" style="width:11%">0</span></td><td>non-normative</td></tr></tbody></table></div><div class="box shout"><strong>Nothing here is frozen</strong> except one thing: there is no <code>run</code>. Everything else is a draft and will change without a version bump.</div>
 </main>
+</div>
+</div>
 
-<hr class="thin">
+<div class="terminal-status"><span>END OF BUFFER</span><a href="#main">Back to text ^</a></div>
 
 <footer>
 <p>Nether C is in the <strong>public domain</strong>, which is the licence
@@ -81,6 +93,8 @@ There is no image library in this repository. There is not going to be one.</p>
 <script>
 /* The whole of the site's JavaScript. */
 (function () {
+  var directory = document.querySelector(".directory-drawer");
+  if (directory && window.matchMedia("(max-width: 1050px)").matches) directory.open = false;
   var root = document.documentElement;
   var btn = document.querySelector("[data-lamp-toggle]");
   var label = document.querySelector("[data-lamp-state]");
