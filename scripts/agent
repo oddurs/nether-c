@@ -20,13 +20,30 @@ repo=$(basename "$primary")
 trees=$(cd "$primary/.." && pwd)/.worktrees/$repo
 
 default_branch() {
-  git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' \
-    || git config --get init.defaultBranch 2>/dev/null \
-    || echo main
+  if ref=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null); then
+    printf '%s\n' "${ref#origin/}"
+  else
+    echo main
+  fi
 }
 
 die() { echo "agent: $*" >&2; exit 1; }
 say() { printf '\033[2m→\033[0m %s\n' "$*"; }
+
+cmd_guard() {
+  branch=$(git symbolic-ref --quiet --short HEAD) || die "detached HEAD; use a feature worktree"
+  [ "$branch" != "$(default_branch)" ] || die "no commits or branch pushes on $(default_branch); start a worktree"
+  [ "$root" != "$primary" ] || die "the primary checkout is not a workspace; use scripts/agent start"
+}
+
+cmd_clean() {
+  [ -z "$(git status --porcelain --untracked-files=all)" ] || {
+    git status --short
+    die "uncommitted work; commit it or preserve it before continuing"
+  }
+}
+
+cmd_policy() { python3 "$root/scripts/pr-policy"; }
 
 # ── doctor ───────────────────────────────────────────────────────────────────
 cmd_doctor() {
@@ -94,17 +111,32 @@ cmd_start() {
 cmd_check() { exec "$root/scripts/task" check; }
 
 cmd_commit() {
+  cmd_guard
   msg=${1:-}
   [ -n "$msg" ] || die "usage: scripts/agent commit \"type(scope): subject\""
   git commit -m "$msg"
 }
 
 cmd_pr() {
+  case "${1:-}" in ''|--draft) ;; *) die "usage: scripts/agent pr [--draft]" ;; esac
+  cmd_guard
+  cmd_clean
   base=$(default_branch)
   branch=$(git rev-parse --abbrev-ref HEAD)
-  [ "$branch" = "$base" ] && die "refusing to open a PR from $base"
-  say "running checks"
-  "$root/scripts/task" check
+  head=$(git rev-parse HEAD)
+  [ "$(git config --get core.hooksPath)" = .githooks ] || die "install hooks with scripts/setup"
+  cmd_policy
+  # An API failure must not look like an absent PR. Retrying reuses an open PR;
+  # a branch whose earlier PR is closed or merged starts a new unit of work.
+  existing=$(gh pr list --head "$branch" --base "$base" --state all --json number,state,isDraft \
+    --jq '.[0] | if . == null then "" else "\(.number) \(.state) \(.isDraft)" end')
+  case "$existing" in
+    *' CLOSED '*|*' MERGED '*) die "this branch already has a finished PR; start a new worktree" ;;
+  esac
+  if [ "${1:-}" = --draft ]; then
+    case "$existing" in *' false') die "existing PR is ready; --draft will not silently change it" ;; esac
+  fi
+  # pre-push is the one local full gate. Do not run it a second time here.
   say "pushing $branch"
   git push -u origin "$branch"
   # `--fill-first`, not `--fill`. With one commit they agree; with more than
@@ -112,11 +144,17 @@ cmd_pr() {
   # merge takes its subject from the title, so what lands on `main` is
   # `fix/0164-the-attribution-ban` rather than a Conventional Commit. The
   # commit-msg hook never sees it, because the server does the squash.
-  say "opening pull request"
-  if [ "${1:-}" = "--draft" ]; then
-    gh pr create --fill-first --draft --base "$base"
-  else
-    gh pr create --fill-first --base "$base"
+  if [ -z "$existing" ]; then
+    say "opening pull request"
+    if [ "${1:-}" = --draft ]; then
+      gh pr create --fill-first --draft --base "$base" --head "$branch"
+    else
+      gh pr create --fill-first --base "$base" --head "$branch"
+    fi
+  elif [ "${1:-}" != --draft ]; then
+    case "$existing" in *' true') gh pr ready "$branch" ;; esac
+  fi
+  if [ "${1:-}" != --draft ]; then
     # Arm auto-merge: the server lands it the moment `required` goes green, and
     # deletes the branch. Waiting for somebody to press the button means the
     # merge happens when a human next looks rather than when the work is ready.
@@ -128,16 +166,37 @@ cmd_pr() {
     #
     # `--draft` is how to say not yet.
     say "arming auto-merge"
-    if gh pr merge --auto --squash; then
-      say "armed: it lands when required goes green, and deletes its branch"
-    else
-      say "could not arm auto-merge -- merge it by hand once it is green"
-    fi
+    gh pr merge "$branch" --auto --squash --match-head-commit "$head"
+    say "armed: use scripts/agent wait to confirm the merge"
   fi
   gh pr view --json url --jq .url
 }
 
+cmd_wait() {
+  cmd_guard
+  cmd_clean
+  branch=$(git symbolic-ref --short HEAD)
+  head=$(git rev-parse HEAD)
+  state=$(gh pr view "$branch" --json state,headRefOid,isDraft --jq '[.state,.headRefOid,.isDraft] | @tsv')
+  [ "$state" = "$(printf 'MERGED\t%s\tfalse' "$head")" ] && { say "merged $head"; return; }
+  [ "$state" = "$(printf 'OPEN\t%s\tfalse' "$head")" ] || die "PR is not ready at local HEAD: $state"
+  gh pr checks "$branch" --watch --fail-fast --interval 10
+  # Green checks and a merged PR are different facts. Give the server time to
+  # apply auto-merge, but never claim completion just because checks passed.
+  attempt=0
+  while [ "$attempt" -lt 24 ]; do
+    state=$(gh pr view "$branch" --json state,headRefOid --jq '[.state,.headRefOid] | @tsv')
+    [ "$state" = "$(printf 'MERGED\t%s' "$head")" ] && { say "merged $head"; return; }
+    [ "$state" = "$(printf 'OPEN\t%s' "$head")" ] || die "PR changed while waiting: $state"
+    sleep 5
+    attempt=$((attempt + 1))
+  done
+  die "checks passed but PR is not merged; inspect gh pr view before cleanup"
+}
+
 cmd_sync() {
+  cmd_guard
+  cmd_clean
   base=$(default_branch)
   say "fetching origin"
   git fetch --quiet origin
@@ -146,12 +205,16 @@ cmd_sync() {
 }
 
 cmd_done() {
+  cmd_guard
+  cmd_clean
+  [ ! -e "$root/.nether" ] || die "this worktree holds a ledger; preserve .nether before cleanup"
   branch=$(git rev-parse --abbrev-ref HEAD)
   base=$(default_branch)
   [ "$branch" = "$base" ] && die "nothing to finish: already on $base"
 
-  state=$(gh pr view "$branch" --json state --jq .state 2>/dev/null || echo NONE)
-  [ "$state" = "MERGED" ] || die "pull request for $branch is $state, not MERGED"
+  head=$(git rev-parse HEAD)
+  state=$(gh pr view "$branch" --json state,headRefOid --jq '[.state,.headRefOid] | @tsv')
+  [ "$state" = "$(printf 'MERGED\t%s' "$head")" ] || die "local HEAD is not the merged PR head: $state"
 
   dest=$(git rev-parse --show-toplevel)
   say "leaving $dest"
@@ -161,12 +224,18 @@ cmd_done() {
   # every git command after it fails with "Unable to read current working
   # directory" -- including the branch delete and the prune, silently.
   cd "$primary"
-  git worktree remove "$dest" --force
-  git branch -D "$branch" >/dev/null 2>&1 || true
+  git worktree remove "$dest"
+  # Compare-and-delete only the exact head proved merged above. Never delete
+  # a branch advanced by another process between verification and cleanup.
+  git update-ref -d "refs/heads/$branch" "$head"
   git worktree prune
-  rmdir "$(dirname "$dest")" 2>/dev/null || true
   git fetch --prune --quiet origin
-  git merge --ff-only --quiet "origin/$base" 2>/dev/null || true
+  if [ -z "$(git status --porcelain --untracked-files=all)" ] \
+    && [ "$(git symbolic-ref --quiet --short HEAD)" = "$base" ]; then
+    git merge --ff-only --quiet "origin/$base"
+  else
+    say "primary checkout left untouched: it is dirty or not on $base"
+  fi
 
   printf '\nsurfaced. %s is gone.\n\n  cd %s\n\n' "$branch" "$primary"
 }
@@ -180,11 +249,16 @@ cmd_list() {
 }
 
 case "${1:-}" in
+  guard)             cmd_guard ;;
+  clean)             cmd_clean ;;
+  default-branch)    default_branch ;;
+  policy)            cmd_policy ;;
   doctor)            shift; cmd_doctor "$@" ;;
   start|descend)     shift; cmd_start  "$@" ;;
   check)             shift; cmd_check  "$@" ;;
   commit)            shift; cmd_commit "$@" ;;
   pr)                shift; cmd_pr     "$@" ;;
+  wait)              shift; cmd_wait   "$@" ;;
   sync)              shift; cmd_sync   "$@" ;;
   done|surface)      shift; cmd_done   "$@" ;;
   list|strata)       shift; cmd_list   "$@" ;;
@@ -196,7 +270,9 @@ usage: scripts/agent <command>
   start <type>/<slug>       new branch + worktree, from origin/main   [descend]
   check                     scripts/task check
   commit "type: subject"    commit, conventionally
-  pr [--draft]              check, push, open the pull request
+  policy                    audit live GitHub merge protection (read-only)
+  pr [--draft]              check once, push, create/reuse PR, arm auto-merge
+  wait                      wait for checks and verify this HEAD merged
   sync                      rebase onto origin/main
   done                      confirm merged, remove worktree and branch [surface]
   list                      worktrees, branches, PR state              [strata]

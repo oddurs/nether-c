@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""Exercise the shipping workflow with real disposable Git repositories."""
+import importlib.machinery
+import importlib.util
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+loader = importlib.machinery.SourceFileLoader("policy", str(ROOT / "scripts/pr-policy"))
+spec = importlib.util.spec_from_loader("policy", loader)
+policy = importlib.util.module_from_spec(spec)
+loader.exec_module(policy)
+
+REPO = dict(default_branch="main", allow_auto_merge=True, allow_squash_merge=True,
+            allow_merge_commit=False, allow_rebase_merge=False, delete_branch_on_merge=True)
+PROTECTION = dict(
+    required_pull_request_reviews={"required_approving_review_count": 0},
+    required_status_checks={"strict": True, "checks": [{"context": "required", "app_id": 15368}]},
+    enforce_admins={"enabled": True}, required_linear_history={"enabled": True},
+    allow_force_pushes={"enabled": False}, allow_deletions={"enabled": False},
+    required_conversation_resolution={"enabled": True},
+)
+
+
+class Workflow(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="nether-workflow-")
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.primary = self.base / "primary"
+        self.tree = self.base / "feature"
+        self.remote = self.base / "remote.git"
+        self.fixture = self.base / "state.json"
+        self.state = dict(repo=REPO, protection=PROTECTION)
+        self.save()
+        bin_dir = self.base / "bin"
+        bin_dir.mkdir()
+        shutil.copy2(ROOT / "tests/workflow/gh", bin_dir / "gh")
+        (bin_dir / "gh").chmod(0o755)
+        # Neutralise inherited Git settings: tests must not target the caller's
+        # index, hooks or repository when invoked from a real hook.
+        self.env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        self.env.update(PATH=f"{bin_dir}:{os.environ['PATH']}", WORKFLOW_FIXTURE=str(self.fixture),
+                        GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+                        WORKFLOW_CHECKS=str(self.base / "checks"))
+        self.call(self.base, "git", "init", "--bare", "--initial-branch=main", str(self.remote))
+        self.call(self.base, "git", "init", "--initial-branch=main", str(self.primary))
+        self.call(self.primary, "git", "config", "user.name", "Workflow Test")
+        self.call(self.primary, "git", "config", "user.email", "workflow@example.invalid")
+        (self.primary / "scripts").mkdir()
+        (self.primary / ".githooks").mkdir()
+        for name in ["agent", "pr-policy"]:
+            shutil.copy2(ROOT / "scripts" / name, self.primary / "scripts" / name)
+        for name in ["pre-commit", "pre-push"]:
+            shutil.copy2(ROOT / ".githooks" / name, self.primary / ".githooks" / name)
+        task = self.primary / "scripts/task"
+        task.write_text('#!/bin/sh\nset -eu\nif [ "$1" = check ]; then\n'
+                        '  echo check >> "$WORKFLOW_CHECKS"\n'
+                        '  if [ "${WORKFLOW_MOVE_HEAD:-0}" = 1 ]; then git commit --allow-empty -m "chore: moved"; fi\n'
+                        '  [ "${WORKFLOW_CHECK_FAIL:-0}" = 0 ]\nfi\n')
+        task.chmod(0o755)
+        self.call(self.primary, "git", "add", ".")
+        self.call(self.primary, "git", "commit", "-m", "chore: fixture")
+        self.call(self.primary, "git", "remote", "add", "origin", str(self.remote))
+        self.call(self.primary, "git", "push", "-u", "origin", "main")
+        self.call(self.primary, "git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        self.call(self.primary, "git", "worktree", "add", "-b", "chore/test", str(self.tree))
+        self.call(self.tree, "git", "config", "core.hooksPath", ".githooks")
+
+    def save(self):
+        self.fixture.write_text(json.dumps(self.state))
+
+    def call(self, cwd, *args, ok=True, stdin=None):
+        result = subprocess.run(args, cwd=cwd, env=self.env, input=stdin, text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if ok:
+            self.assertEqual(result.returncode, 0, result.stdout)
+        else:
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+        return result.stdout
+
+    def agent(self, *args, ok=True, cwd=None):
+        return self.call(cwd or self.tree, "./scripts/agent", *args, ok=ok)
+
+    def log(self):
+        path = self.fixture.with_suffix(".log")
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+    def test_policy_passes_and_every_rule_fails_closed(self):
+        self.assertEqual(policy.violations(REPO, PROTECTION), [])
+        for key in REPO.keys() - {"default_branch"}:
+            changed = {**REPO, key: not REPO[key]}
+            self.assertTrue(policy.violations(changed, PROTECTION), key)
+        for key in PROTECTION:
+            changed = {k: v for k, v in PROTECTION.items() if k != key}
+            self.assertTrue(policy.violations(REPO, changed), key)
+        self.assertTrue(policy.violations(REPO, {**PROTECTION, "required_status_checks": {
+            "strict": True, "checks": [{"context": "required", "app_id": 1}]}}))
+
+    def test_main_and_primary_commits_are_refused(self):
+        self.call(self.primary, "git", "commit", "--allow-empty", "-m", "chore: denied", ok=False)
+        self.call(self.primary, "git", "switch", "-c", "chore/primary")
+        self.call(self.primary, "git", "commit", "--allow-empty", "-m", "chore: denied", ok=False)
+        self.call(self.tree, "git", "commit", "--allow-empty", "-m", "chore: allowed")
+
+    def test_detached_head_is_refused(self):
+        self.call(self.tree, "git", "switch", "--detach")
+        self.agent("guard", ok=False)
+
+    def test_main_push_and_missing_origin_head_are_refused(self):
+        self.call(self.tree, "git", "commit", "--allow-empty", "-m", "chore: pending")
+        self.call(self.tree, "git", "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+        self.assertEqual(self.agent("default-branch").strip(), "main")
+        self.call(self.tree, "git", "push", "origin", "HEAD:main", ok=False)
+
+    def test_wrong_pushed_commit_is_refused(self):
+        head = self.call(self.tree, "git", "rev-parse", "HEAD").strip()
+        self.call(self.tree, ".githooks/pre-push", stdin=f"refs/heads/other {head} refs/heads/other {'0' * 40}\n", ok=False)
+
+    def test_publish_checks_once_and_reuses_pr(self):
+        self.agent("pr")
+        self.assertEqual((self.base / "checks").read_text().splitlines(), ["check"])
+        self.agent("pr")
+        self.assertEqual(sum(args[:2] == ["pr", "create"] for args in self.log()), 1)
+        merges = [args for args in self.log() if args[:2] == ["pr", "merge"]]
+        self.assertEqual(len(merges), 2)
+        self.assertTrue(all("--match-head-commit" in args and "--auto" in args for args in merges))
+
+    def test_dirty_tree_cannot_publish_or_be_removed(self):
+        (self.tree / "precious").write_text("keep")
+        self.agent("pr", ok=False)
+        self.agent("done", ok=False)
+        self.assertEqual((self.tree / "precious").read_text(), "keep")
+        self.assertEqual(self.log(), [])
+
+    def test_checks_failure_never_creates_pr(self):
+        self.env["WORKFLOW_CHECK_FAIL"] = "1"
+        self.agent("pr", ok=False)
+        self.assertFalse(any(args[:2] == ["pr", "create"] for args in self.log()))
+
+    def test_moving_head_during_checks_blocks_push(self):
+        self.env["WORKFLOW_MOVE_HEAD"] = "1"
+        self.agent("pr", ok=False)
+        self.assertFalse(any(args[:2] == ["pr", "create"] for args in self.log()))
+
+    def test_api_failure_is_not_absence(self):
+        self.state["fail"] = ["pr", "list"]
+        self.save()
+        self.agent("pr", ok=False)
+        self.assertFalse((self.base / "checks").exists())
+
+    def test_missing_hooks_or_weakened_policy_blocks_publish(self):
+        self.call(self.tree, "git", "config", "core.hooksPath", "missing")
+        self.agent("pr", ok=False)
+        self.call(self.tree, "git", "config", "core.hooksPath", ".githooks")
+        self.state["repo"] = {**REPO, "allow_auto_merge": False}
+        self.save()
+        self.agent("pr", ok=False)
+        self.assertFalse((self.base / "checks").exists())
+
+    def test_draft_does_not_arm_merge(self):
+        self.agent("pr", "--draft")
+        self.assertFalse(any(args[:2] == ["pr", "merge"] for args in self.log()))
+
+    def test_closed_branch_is_not_republished(self):
+        self.state["existing"] = "1 MERGED false"
+        self.save()
+        self.agent("pr", ok=False)
+        self.assertFalse((self.base / "checks").exists())
+
+    def test_merge_failure_is_reported(self):
+        self.state["fail"] = ["pr", "merge"]
+        self.save()
+        self.agent("pr", ok=False)
+
+    def test_wait_verifies_merge_and_failed_checks_stop_it(self):
+        self.agent("wait")
+        self.state["fail"] = ["pr", "checks"]
+        self.save()
+        self.agent("wait", ok=False)
+
+    def test_done_rejects_unmerged_or_extra_local_commits(self):
+        self.agent("done", ok=False)
+        self.state.update(state="MERGED", head="0" * 40)
+        self.save()
+        self.agent("done", ok=False)
+        self.assertTrue(self.tree.exists())
+
+    def test_cleanup_preserves_dirty_primary(self):
+        (self.primary / "precious").write_text("keep")
+        self.state["state"] = "MERGED"
+        self.save()
+        output = self.agent("done")
+        self.assertIn("primary checkout left untouched", output)
+        self.assertFalse(self.tree.exists())
+        self.assertEqual((self.primary / "precious").read_text(), "keep")
+
+    def test_cleanup_preserves_ignored_ledger(self):
+        (self.tree / ".gitignore").write_text(".nether/\n")
+        self.call(self.tree, "git", "add", ".gitignore")
+        self.call(self.tree, "git", "commit", "-m", "chore: fixture ignore")
+        (self.tree / ".nether").mkdir()
+        (self.tree / ".nether/value").write_text("recorded")
+        self.state["state"] = "MERGED"
+        self.save()
+        self.agent("done", ok=False)
+        self.assertTrue((self.tree / ".nether/value").exists())
+
+
+if __name__ == "__main__":
+    unittest.main(argv=["workflow"], verbosity=2)
