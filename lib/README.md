@@ -94,6 +94,29 @@ No new dependency or trusted-core code is needed for the improvement. Memory
 is still a persistent byte-encoded table: lookup and copying are linear, not a
 claim to a general-purpose high-performance map.
 
+## The first projection
+
+`spec/06-evaluation.md` §6.5 residualises a starved call as its reduced body,
+so burying this unit against a guest written into it as a constant specialises
+it. Against `build.nc`, with `read("main.nc")` unanswered:
+
+| | Unspecialised | Specialised |
+| --- | ---: | ---: |
+| Residue | 1,163 lines | 1,433 lines |
+| Minted functions | 0 | 21 |
+| Steps | 4,993,540 | 4,993,540 |
+
+The demand is `interpret__98()` and not `interpret(b"…build.nc…")`. The guest's
+question survives with its path resolved, so the syntax read to find it is not
+read again, and `world_request` has come out as `read("main.nc")`.
+
+It is specialised up to that question and no further. An `if` whose condition
+waits on the world residualises with both arms unreduced, so the interpreter
+goes on interpreting from there — `block_value` still calls the general
+`block_value`. Reducing inside an arm that may not be taken is item 0251, and
+`crates/nether-bury/tests/projection.rs` asserts the boundary so that it
+cannot move without a test changing.
+
 ## Boundary
 
 This is the sample-program bootstrap, not a complete replacement for the Rust
