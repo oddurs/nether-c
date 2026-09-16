@@ -26,16 +26,15 @@ export class Necropolis {
   bury(source, fuel = 0) {
     const said = new TextEncoder().encode(source);
     const at = this.m.nether_alloc(said.length);
-    this.bytes.set(said, at);
-    const block = this.m.nether_bury(at, said.length, BigInt(fuel));
-    this.m.nether_free(at, said.length);
-
+    let block;
+    try {
+      this.bytes.set(said, at);
+      block = this.m.nether_bury(at, said.length, BigInt(fuel));
+    } finally { this.m.nether_free(at, said.length); }
     const len = new DataView(this.m.memory.buffer).getUint32(block, true);
-    const json = new TextDecoder().decode(
-      this.bytes.subarray(block + 4, block + 4 + len),
-    );
-    this.m.nether_free(block, len + 4);
-    return JSON.parse(json);
+    try {
+      return JSON.parse(new TextDecoder().decode(this.bytes.subarray(block + 4, block + 4 + len)));
+    } finally { this.m.nether_free(block, len + 4); }
   }
 }
 
