@@ -2,8 +2,10 @@
 id: 254
 title: 'Spec: an ambient depth is a number, so descend net grants the disk'
 type: spec
-status: unmarked
+status: descending
 milestone: codex
+assignee: Oddur Sigurdsson
+claimed: 2026-09-16
 created: 2026-09-16
 updated: 2026-09-16
 priority: p0
@@ -79,3 +81,11 @@ ways, and the answer decides whether the call runs or becomes a hole.
 - [ ] §8.3.2 is consistent with whichever was chosen
 - [ ] The calculus stays at eleven rules
 - [ ] §90.2 records the rejected reading
+
+## 2026-09-16
+
+δ is a set of strata, not a number. The capabilities are in bijection with the strata, so a set of one is a set of the other and nothing new enters the calculus: [APP] is dƒ ⊆ δ, [DESCEND] adds {s(κ)}, [LOOK] is d ∈ δ. Eleven rules, unchanged in count. Stratum 0 is in δ always, which is what lets both premises be stated without a special case.
+
+## 2026-09-16
+
+Three ways to keep one number were rejected and are in §90.2: declaring the subsumption outright, which leaves no invocation meaning 'fetch this URL and touch no files'; splitting the static check from the grant, which is sound and takes back the audit the fixed capability names exist for; and letting a function ask for at most one capability, which is an exception to remember rather than understand. The cost taken is a braced latent annotation, @{3,5}, and two nested descents where one used to do.

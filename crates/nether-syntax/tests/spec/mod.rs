@@ -45,6 +45,7 @@ pub enum Shape {
 pub const SAMPLES: &[(&str, Shape)] = &[
     ("00-overview.md § 0.7 A first program #1", Shape::Unit),
     ("01-strata.md § 1.3 Descent #1", Shape::Unit),
+    ("01-strata.md § 1.3 Descent #2", Shape::Unchecked("0254")),
     ("01-strata.md § 1.5 Seal #1", Shape::Unit),
     ("01-strata.md § 1.6 Shade, and the Orpheus rule #1", Shape::Illegal("the Orpheus error")),
     ("02-calculus.md § 2.3 What each rule is doing #1", Shape::Unit),

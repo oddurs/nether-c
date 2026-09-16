@@ -66,6 +66,12 @@ buried   build.nc → 76c4b655   depth 3   holes 1   4 nodes
   hole ①  read("main.nc")                stratum 3  disk
 ```
 
+`--grant` names exactly one capability and MAY be given any number of times.
+One implies no other, in either direction: `--grant net` does not permit a
+`read` and does not permit a `post`. An operator who wants a burial to read
+files and fetch URLs writes both, which is the whole of the audit
+([§2.1](02-calculus.md#21-judgement-form)).
+
 With no `--grant`, burial holds no capabilities and every world-touching
 expression becomes a hole. This is the default because it is the only default
 that cannot surprise anyone.

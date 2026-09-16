@@ -55,20 +55,40 @@ Bytes@3 src = descend disk { read("kernel.nc") };
 
 `descend κ { … }` is an **expression**. It acquires the capability named κ for
 the duration of the block, evaluates the block, and takes the value of the
-block's tail expression. The body is checked at depth `max(δ, stratum(κ))`,
-where `δ` is the ambient depth of the enclosing scope.
+block's tail expression. The body is checked holding `δ ∪ {s(κ)}`, where `δ`
+is what the enclosing scope holds.
+
+It acquires **that** capability and no other. The strata are ordered by how
+much of the world has been disturbed ([§1.8](#18-why-write-is-deeper-than-read)),
+which is an order for comparing two histories and not one for implying a
+permission: `net` is deeper than `disk!` and does not carry it.
+
+```c
+U0 stamp()
+{
+  descend net { must(write("kernel.nc", b"")) };   // rejected: this needs disk!
+}
+```
+
+An implementation MUST reject that, naming the capability that grants the
+stratum the call reaches. The program that means it nests:
+`descend net { descend disk! { … } }`, and says both out loud.
+
+Accepting the first would mean a reader could no longer learn what a program
+touches by reading its descents, which is the whole of why the names are fixed
+rather than open.
 
 A `descend` whose tail expression is `U0` may be used as a statement.
 
 - Descent is lexically scoped: the capability is not available outside the
   block, and neither are the block's local bindings. Only the tail value
   leaves, carrying its depth with it.
-- Descent is one-way *within* the block: no construct inside the block returns
-  the scope to a shallower depth.
-- Descents nest, and nesting takes the maximum. `descend disk { descend net {
-  … } }` has a body at depth 5.
-- A `descend` whose body reaches no deeper than the enclosing scope is legal
-  and has no effect. An implementation SHOULD warn about it.
+- Descent is one-way *within* the block: no construct inside the block gives
+  back a capability the block is holding.
+- Descents nest, and nesting accumulates. `descend disk { descend net { … } }`
+  has a body holding both, and still nothing else.
+- A `descend` for a capability the enclosing scope already holds is legal and
+  has no effect. An implementation SHOULD warn about it.
 
 The capability names and their strata are fixed by this specification and
 listed in [section 09](09-prelude.md). An implementation MUST NOT define
@@ -125,15 +145,17 @@ equality, and sealed. It MUST NOT be destructured, pattern-matched, or
 otherwise observed.
 
 `look s`, where `s : Shade<T>` originating at depth `d`, has type `T@d`, and
-is well-typed **only where the current descent depth is at least `d`**.
+is well-typed **only where the capability that grants stratum `d` is held**.
+That one: a shade out of stratum 3 opens under `descend disk`, and not under a
+`descend net` that happens to be deeper.
 
 > **The Orpheus rule.** You may carry a shade up out of any stratum. You may
 > only look at it by going back down.
 
-The check is local: it compares the shade's origin depth against the ambient
-depth at the point of the `look`. It does not propagate, it does not stain the
-enclosing scope, and it produces an error that names both numbers and the
-`descend` that would fix it.
+The check is local: it asks whether the shade's origin stratum is among the
+capabilities held at the point of the `look`. It does not propagate, it does
+not stain the enclosing scope, and it produces an error that names the origin,
+what is held, and the `descend` that would fix it.
 
 ```
 error: cannot look at a shade from stratum 5 at depth 0
@@ -144,6 +166,11 @@ error: cannot look at a shade from stratum 5 at depth 0
    |
    = the value is here, but you are not. Wrap the look in `descend net { … }`.
 ```
+
+Where something is held and it is the wrong one, the error MUST say so rather
+than report a number: a shade from stratum 3 looked at under `descend net` is
+not a shallower scope, and an implementation that prints *at depth 5* has told
+the reader their scope is deep enough.
 
 This rule is **settled**. Two alternatives were considered and rejected —
 re-staining the entire enclosing scope, and tainting only the binding — and

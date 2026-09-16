@@ -17,28 +17,43 @@ worked around rather than used.
 Γ ; δ ⊢ e : τ @ d
 ```
 
-Read: *in context Γ, holding capabilities down to depth δ, the expression e
-has type τ and depth d.*
+Read: *in context Γ, holding the capabilities δ, the expression e has type τ
+and depth d.*
 
 - **Γ** maps identifiers to depth-annotated types, `x : τ@d`.
-- **δ** is the **ambient depth**: the deepest stratum whose capability is
-  currently held. It is 0 at the top level of a file and is raised only by
-  `descend`.
+- **δ** is the **ambient capabilities**: the set of strata whose capabilities
+  are currently held. It holds 0 and nothing else at the top level of a file,
+  and is added to only by `descend`.
 - **d** is the **value depth**: how far into the world this value's history
   reaches.
 
-`d ≤ δ` is required where it is written, which is the premises of [APP] and
-[LOOK], and an implementation MUST reject any program in which either fails.
-It is not a property of every judgement: [DESCEND] is precisely the rule that
-concludes at the ambient depth it raised, so
-`descend disk { read(p) }` has depth 3 in a scope whose ambient depth is 0.
+δ is a set and d is a number, and the two are different kinds of thing on
+purpose. A value's depth is *how far it went*, which composes by maximum and
+fits in a byte. Authority is *which doors are open*, which does not: the
+capabilities are in bijection with the strata [§9.1](09-prelude.md#91-capabilities)
+names them for, and holding one holds no other. §1.8 orders the strata by how
+much of the world has been disturbed, and an order fit for comparing two
+histories is not one fit for implying one permission from another — under it
+`net` would imply `disk!`, and *may fetch a URL* would mean *may delete a
+file*.
+
+Stratum 0 is in δ always. Nothing grants it and nothing needs it, and having
+it there is what lets [APP] and [LOOK] be stated without a special case.
+
+`dƒ ⊆ δ` and `d ∈ δ` are required where they are written, which is the
+premises of [APP] and [LOOK], and an implementation MUST reject any program in
+which either fails. Neither is a property of every judgement: [DESCEND] is
+precisely the rule that concludes outside the capabilities it added, so
+`descend disk { read(p) }` has depth 3 in a scope holding nothing.
 What holds everywhere is [§2.4](#24-metatheory).
 
-Function types carry two depths, written `τ₁ --dƒ--> τ₂@d_r`.
+Function types carry a latent set and a return depth, written
+`τ₁ --dƒ--> τ₂@d_r`.
 
-- **dƒ** is the **latent depth**: what a caller must already hold to apply it.
-  In source syntax it is the trailing annotation on the signature
-  (`Bytes read(Str path) @3`).
+- **dƒ** is the **latent set**: the capabilities a caller must already hold to
+  apply it. In source syntax it is the trailing annotation on the signature —
+  `Bytes read(Str path) @3` for one, `@{3,5}` for two, `@0` for none
+  ([§3.5](03-lexical.md#35-depth-annotations)).
 - **d_r** is the depth of what comes back. It rides on the return type, where
   it is written at all (`Bytes@3 load(Str path)`), and like every other depth
   it is inferred unless written.
@@ -65,7 +80,7 @@ deep.
 
 
               Γ ; δ ⊢ f : (τ₁ --dƒ--> τ₂@d_r)@d_f      Γ ; δ ⊢ a : τ₁@d_a
-              dƒ ≤ δ
+              dƒ ⊆ δ
   [APP]     ────────────────────────────────────────────────────────────
               Γ ; δ ⊢ f a : τ₂ @ max(d_r, d_f, d_a)
 
@@ -75,7 +90,7 @@ deep.
               Γ ; δ ⊢ λx.b : (τ₁ --dƒ--> τ₂@d₂)@0
 
 
-              Γ ; max(δ, s(κ)) ⊢ e : τ@d
+              Γ ; δ ∪ {s(κ)} ⊢ e : τ@d
   [DESCEND] ──────────────────────────────────
               Γ ; δ ⊢ descend κ {e} : τ@d
 
@@ -90,7 +105,7 @@ deep.
               Γ ; δ ⊢ shade e : Shadeᵈ⟨τ⟩@0
 
 
-              Γ ; δ ⊢ s : Shadeᵈ⟨τ⟩@d′        d ≤ δ
+              Γ ; δ ⊢ s : Shadeᵈ⟨τ⟩@d′        d ∈ δ
   [LOOK]    ──────────────────────────────────────────
               Γ ; δ ⊢ look s : τ @ max(d, d′)
 
@@ -132,9 +147,9 @@ function fetched over the network is a deep value even before it is called),
 and the depth of the argument. Forgetting the middle one is the classic
 soundness hole in effect systems that carry effects only on arrows.
 
-The latent depth is the premise and not one of the three. A capability is what
-it takes to *reach* a stratum, and `dƒ` is what the function needs its caller
-to have reached already. The other three are facts about where values have
+The latent set is the premise and not one of the three. A capability is what it
+takes to *reach* a stratum, and `dƒ` is what the function needs its caller to
+hold already. The other three are facts about where values have
 been, and whoever took them there held the capability at the time: applying
 `len` to a depth-3 `Bytes` reaches nothing. That is why [PRIM] has no ambient
 premise either, and why §2.5 can say a shallow value combines with a deep one
@@ -143,14 +158,17 @@ without coercion.
 **[ABS]** is where both numbers come from, and the closure itself is pure:
 building a function that will touch the disk does not touch the disk.
 
-The body is checked at `dƒ` rather than at the ambient depth of wherever the
-function happened to be written, and `dƒ` is the *least* depth at which the
-body checks — what the function asks of whoever calls it. A body containing
-its own `descend` asks for nothing, because the descent supplies the depth
-from inside; a body that calls a prelude function bare asks for that stratum,
-which is how `Answer<Bytes> read(Str path) @3` works and why it is written
-that way in [section 09](09-prelude.md). Both are ordinary, and the choice
-between them is the choice of who holds the capability.
+The body is checked at `dƒ` rather than at the capabilities held wherever the
+function happened to be written, and `dƒ` is the *least* set, by inclusion, at
+which the body checks — what the function asks of whoever calls it. It is
+unique: it is exactly the capabilities the body reaches for bare, and a
+collection of demands has one union. A body containing its own `descend` asks
+for nothing, because the descent supplies the capability from inside; a body
+that calls a prelude function bare asks for that one, which is how
+`Answer<Bytes> read(Str path) @3` works and why it is written that way in
+[section 09](09-prelude.md). A body that calls two bare at different strata
+asks for both, and is written `@{3,5}`. All of it is ordinary, and the choice
+is the choice of who holds the capability.
 
 The body's own value depth `d₂` is what comes back, separately. Parameters are
 bound at depth 0: a parameter's real depth arrives at the call site, and [APP]
@@ -168,10 +186,10 @@ Bytes@3 b = descend disk { must(raw("kernel.nc")) };
 asks, and its callers descend instead. Neither launders anything: both hand
 back a `Bytes@3`, and nothing anywhere lowers a depth.
 
-**[DESCEND]** is the only rule that raises δ, and it raises it only inside its
-own premise. Nothing lowers δ. Nothing lowers `d`.
+**[DESCEND]** is the only rule that adds to δ, and it adds only inside its own
+premise. Nothing takes anything out of δ. Nothing lowers `d`.
 
-[ABS] does not raise δ; it starts a new one. A function body is checked once,
+[ABS] does not add to δ; it starts a new one. A function body is checked once,
 against its own signature, and not once for every place the function is
 called.
 
@@ -182,8 +200,11 @@ See [§1.5](01-strata.md#15-seal) for why this is sound.
 opaquely. The origin depth `d` is carried in the type as `Shadeᵈ⟨τ⟩`, which is
 what makes [LOOK] checkable.
 
-**[LOOK]** carries the entire Orpheus rule in one premise: `d ≤ δ`. You may
-look only where you already hold the capability the value came from. The
+**[LOOK]** carries the entire Orpheus rule in one premise: `d ∈ δ`. You may
+look only where you hold the capability the value came from — that one, and
+not merely one at least as deep. A shade out of stratum 3 opens under `descend
+disk` and nowhere else, which is what *going back down* says and what a
+comparison of two numbers did not. The
 result also inherits `d′`, the depth of the shade *value* — a shade that was
 itself fetched over the network is deep for two independent reasons.
 
@@ -223,10 +244,10 @@ actually reached, recorded with a witness for each stratum
 ([§1.4](01-strata.md#14-what-the-trace-records)). A bound is what a type
 offers before anything runs; a trace says what happened.
 
-> **Ambient soundness.** If `Γ ; δ ⊢ e : τ@d` then `d ≤ max(δ, g(e))`, where
-> `g(e)` is the deepest `s(κ)` over the `descend κ` expressions in `e` and,
-> transitively, in the body of everything `e` applies — and 0 when there are
-> none.
+> **Ambient soundness.** If `Γ ; δ ⊢ e : τ@d` then `d ≤ max(δ ∪ g(e))`, where
+> `g(e)` is the set of `s(κ)` over the `descend κ` expressions in `e` and,
+> transitively, in the body of everything `e` applies — and empty when there
+> are none.
 
 A value can never be deeper than the capabilities that were held while it was
 made — held at the point it was made, which is the ambient depth or a descent
@@ -237,8 +258,8 @@ either enclosing, or written in the expression, or written in the body of
 something the expression calls. Either way it can be found by construction,
 by following the calls.
 
-A judgement with `g(e) = 0` therefore does satisfy `d ≤ δ`, and that is most
-of them. The descent is the exception, and it is the only one.
+A judgement with `g(e)` empty therefore satisfies `d ≤ max δ`, and that is
+most of them. The descent is the exception, and it is the only one.
 
 ## 2.5 Subsumption, and its deliberate absence
 
@@ -246,6 +267,10 @@ There is no subsumption rule. `τ@0` is not a subtype of `τ@3`, and a value at
 depth 0 is not silently usable where a depth-3 value is expected — because
 nothing needs that: [PRIM] and [APP] already take the maximum, so a shallow
 value combines with a deep one without any coercion.
+
+Nor is one capability a subtype of another. δ is a set and `dƒ ⊆ δ` asks for
+membership, so holding `net` is not holding `disk!` and never becomes it —
+[§2.1](#21-judgement-form) is why, and it is the same refusal one level up.
 
 The reverse direction — using a deep value where a shallow one is required —
 is exactly what the language exists to prevent, and it is available only

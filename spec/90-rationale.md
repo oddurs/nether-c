@@ -546,6 +546,65 @@ The cost is a fourth thing to know about literals, and an asymmetry: `\x` is
 admissible in `b"…"` and not in `"…"`. The asymmetry is the type's, not the
 lexer's — a `Str` is UTF-8 and a `Bytes` is not — but it still has to be taught.
 
+### One number for how far a value went and for what you may do
+
+δ was a number: *the deepest stratum whose capability is currently held*.
+[APP]'s premise was `dƒ ≤ δ` and [DESCEND] raised δ to `max(δ, s(κ))`, so the
+same total order carried two unrelated jobs — how far a value's history
+reaches, and which capabilities are in hand.
+
+It does not survive the second one. `disk!` is stratum 4 and `net` is 5, so
+inside `descend net` the premise `4 ≤ 5` held, and the write in
+[§1.3](01-strata.md#13-descent)'s second sample was accepted. A reader auditing
+that program's descents would have been told it touches the network. §9.1 fixes the capability names precisely so
+that reading them is an audit; an order that implies one permission from
+another takes the audit back. §1.8 had already said the ordering was *how much
+of the world you have disturbed* and called the 4-before-5 placement
+"arguable" — fine for comparing two histories, and not a thing to rest
+authority on.
+
+Three ways to keep one number were considered.
+
+**Declare the subsumption and mean it.** Say in §1.1 and §8.2 that a grant at
+stratum *n* grants every capability at or below it, and that `--grant net` is
+`--grant disk!` as well. Honest, and it leaves no invocation that says *fetch
+this URL and touch no files* — which is the case the whole apparatus exists
+for. §8.3.2 spends a subsection bounding which host `net` may reach; under
+this reading it would be a fence beside an open gate.
+
+**Split the two gates.** Keep `dƒ ≤ δ` as a static declaration of reach and put
+the real authority in the grant, so `descend net { write(p, c) }` checks and
+then leaves a hole because `disk!` was not granted. It is sound — nothing
+happens that was not granted — and it costs the property that made the names
+worth fixing: the program text stops disclosing what the program reaches, and
+only the invocation knows.
+
+**Let a function ask for at most one capability.** Keep the arrow's `dƒ` a
+number and read the premise as membership, `κ(dƒ) ∈ δ`. A body that calls two
+prelude functions bare at different strata then has no derivation and must
+descend for one of them itself. Sound, no grammar change, and an exception
+that has to be remembered rather than understood — the same objection that
+killed a second binding form earlier in this section.
+
+What was taken instead: δ is a set of strata, `dƒ` is a set, and the premise is
+`dƒ ⊆ δ`. The capabilities are in bijection with the strata, so a set of one is
+a set of the other and no new object enters the calculus. [LOOK] gets the
+sharper rule as a consequence — `d ∈ δ`, so a shade out of stratum 3 opens
+under `descend disk` and not under a deeper `descend net`, which is what *going
+back down* always said and what a comparison of two numbers did not enforce.
+
+**What it cost.** A second spelling in the grammar: `@{3,5}` for a signature
+that asks for two, where a single digit used to cover everything
+([§3.5](03-lexical.md#35-depth-annotations)). A reader who knew `δ` as a number
+has to relearn it. And a program that reads and writes the disk now nests two
+descents where one used to do, since `disk` no longer arrives with `disk!` —
+which is the cost being paid for, stated as a cost.
+
+Also rejected: letting `descend` take a list, `descend disk, disk! { … }`, to
+buy that nesting back. It is a grammar change for an ergonomic one, nesting
+already says it, and [§1.3](01-strata.md#13-descent) is clearer when one
+`descend` means one capability.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
@@ -672,8 +731,10 @@ produced it and staging buys nothing. That is close to deleting
 [§1.3](01-strata.md#13-descent)'s one-way-out property.
 
 What replaced it is the narrowest premise that still stops the thing
-capabilities exist to stop: `dƒ ≤ δ`. A capability is required to reach a
-stratum, and the latent depth is the only term that reaches one.
+capabilities exist to stop: the latent term, and only that one. A capability is
+required to reach a stratum, and `dƒ` is the only term that reaches one. It was
+written `dƒ ≤ δ` until δ became a set; it is `dƒ ⊆ δ` now, and the entry below
+is why.
 
 ### Ambient soundness: two ways to keep the simpler statement
 
