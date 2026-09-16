@@ -57,7 +57,12 @@ fn compiles(name: &str) -> Result<nether_core::Unit, String> {
 
 #[test]
 fn the_interpreter_is_nether_c() {
-    let source = format!("{}\n{}", library("interpreter.nc"), library("evaluate.nc"));
+    let source = format!(
+        "{}\n{}\n{}",
+        library("interpreter.nc"),
+        library("value.nc"),
+        library("evaluate.nc")
+    );
     let ast = parse(source.as_bytes())
         .map_err(|f| format!("interpreter.nc does not parse: {f:?}"))
         .expect("interpreter.nc parses");
@@ -66,7 +71,9 @@ fn the_interpreter_is_nether_c() {
         .expect("interpreter.nc lowers");
     let faults = check(&unit);
     assert!(faults.is_empty(), "{faults:?}");
-    assert!(unit.funcs.len() >= 6, "the cursor is not the interpreter substrate");
+    for name in ["interpret", "index_program", "global_value", "result", "memory_of"] {
+        assert!(unit.funcs.iter().any(|f| f.name == name), "missing interpreter layer: {name}");
+    }
 }
 
 // ── the two that compile ────────────────────────────────────────────────────

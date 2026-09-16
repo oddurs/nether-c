@@ -260,7 +260,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## futamura — Self-Burial
 
-`###·······` 25% · 1 of 4 done · due 2027-09-01
+`####······` 40% · 2 of 5 done · due 2027-09-01
 
 Given a due date so the roadmap orders correctly against After the Burial. It is a target on a roadmap, not a promise: the third projection is the one claim here that might turn out to be false, and if it does it closes as unrecorded, in public.
 
@@ -273,6 +273,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 ### buried
 
 - [x] [`0079`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0079-the-interpreter-in-nether-c.md) The interpreter, in Nether C <sup>feature · p1 · 5</sup>
+- [x] [`0240`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0240-give-the-interpreter-a-memory.md) Give the interpreter a memory <sup>feature · p1 · 5</sup>
 
 ## after — After the Burial
 

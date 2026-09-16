@@ -12,16 +12,161 @@ use nether_syntax::{lower, parse, print};
 const INTERPRETER: &str = concat!(
     include_str!("../../../lib/interpreter.nc"),
     "\n",
+    include_str!("../../../lib/value.nc"),
+    "\n",
     include_str!("../../../lib/evaluate.nc")
 );
 const HELLO: &str = include_str!("../../../tests/programs/hello.nc");
 const BUILD: &str = include_str!("../../../tests/programs/build.nc");
 const STAMP: &str = include_str!("../../../tests/programs/stamp.nc");
 
+#[test]
+fn fixed_programs_have_a_bounded_burial_cost() {
+    // Before declaration indexing and shared memory: 1,300,946 / 20,340,206 /
+    // 7,759,045 steps. Leave headroom, but do not silently return to that cost.
+    for (label, program, budget) in
+        [("hello", HELLO, 1_250_000), ("build", BUILD, 6_000_000), ("stamp", STAMP, 2_500_000)]
+    {
+        let residue = guest(program, &Answers::none());
+        eprintln!("{label}: {} steps", residue.fuel_spent);
+        assert!(residue.fuel_spent < budget, "{label}: {} >= {budget}", residue.fuel_spent);
+    }
+}
+
+#[test]
+fn a_shared_global_is_evaluated_once_across_calls_and_demands() {
+    let program = r#"
+Bytes make() { "once"; b"x" }
+Bytes root = make();
+Bytes left = concat(root, b"L");
+Bytes right = concat(root, b"R");
+Bytes both() { concat(left, right) }
+demand both();
+demand root;
+demand both();
+"#;
+    let residue = guest(program, &Answers::none());
+    assert_eq!(deposits(&residue), vec![Value::Str("once".into())]);
+    assert_eq!(
+        results(&residue),
+        vec![
+            ("Bytes".into(), 0, b"xLxR".to_vec()),
+            ("Bytes".into(), 0, b"x".to_vec()),
+            ("Bytes".into(), 0, b"xLxR".to_vec()),
+        ]
+    );
+}
+
+#[test]
+fn cyclic_globals_name_the_binding_instead_of_exhausting_fuel() {
+    for (program, name) in [
+        ("Bytes self = self; demand self;", "self"),
+        ("Bytes a = b; Bytes b = a;", "a"),
+        ("Bytes f() { a } Bytes a = f(); demand a;", "a"),
+    ] {
+        let residue = guest(program, &Answers::none());
+        assert!(residue.holes.is_empty());
+        assert!(residue.deposits.is_empty());
+        let values = results(&residue);
+        assert_eq!(values[0].0, "Error");
+        assert!(
+            String::from_utf8_lossy(&values[0].2)
+                .starts_with(&format!("cyclic global: {name} at byte "))
+        );
+        assert!(residue.fuel_spent < 1_000_000);
+    }
+}
+
+#[test]
+fn checking_and_function_locals_cannot_fill_the_evaluation_cache() {
+    let program = r#"
+Bytes content = make();
+Bytes make() { "made"; b"world" }
+Bytes ignore(Bytes content) { b"unused parameter" }
+Bytes local() { Bytes content = b"local"; content }
+Bytes load() { content }
+U0 unused() { "unused"; }
+demand local(); demand load(); demand content;
+"#;
+    let residue = guest(program, &Answers::none());
+    assert_eq!(deposits(&residue), vec![Value::Str("made".into())]);
+    assert_eq!(
+        results(&residue),
+        vec![
+            ("Bytes".into(), 0, b"local".to_vec()),
+            ("Bytes".into(), 0, b"world".to_vec()),
+            ("Bytes".into(), 0, b"world".to_vec()),
+        ]
+    );
+}
+
+#[test]
+fn independent_interpretations_do_not_share_cached_globals() {
+    let program =
+        "Bytes make() { \"once per unit\"; b\"x\" } Bytes x = make(); demand x; demand x;";
+    let entry = format!(
+        "{INTERPRETER}\ndemand interpret({0}); demand interpret({0});",
+        bytes_literal(program.as_bytes())
+    );
+    assert_eq!(
+        said(&entry),
+        vec![Value::Str("once per unit".into()), Value::Str("once per unit".into())]
+    );
+}
+
+#[test]
+fn unreachable_code_is_checked_but_cannot_populate_runtime_memory() {
+    let program = "Bytes make() { \"made\"; b\"x\" } Bytes x = make(); U0 f() { return; x; } demand f(); demand x;";
+    let residue = guest(program, &Answers::none());
+    assert_eq!(deposits(&residue), vec![Value::Str("made".into())]);
+    assert_eq!(
+        results(&residue),
+        vec![("U0".into(), 0, vec![]), ("Bytes".into(), 0, b"x".to_vec())]
+    );
+    let broken = guest("U0 f() { return; missing; } demand f();", &Answers::none());
+    assert_eq!(results(&broken)[0].0, "Error");
+    assert!(deposits(&broken).is_empty());
+}
+
+#[test]
+fn record_encoding_handles_binary_payloads_and_signed_extremes() {
+    let source = format!(
+        r#"{INTERPRETER}
+U0 prove() {{
+  Bytes payload = concat(b"4:fake\0", slice(raw("é"), 0, 1));
+  head(packet(payload)) == payload;
+  rest(concat(packet(payload), packet(b"tail"))) == packet(b"tail");
+  decimal(-9223372036854775807 - 1);
+  decimal(9223372036854775807);
+}}
+demand prove();"#
+    );
+    assert_eq!(
+        said(&source),
+        vec![
+            Value::Bool(true),
+            Value::Bool(true),
+            Value::Bytes(b"-9223372036854775808".to_vec()),
+            Value::Bytes(b"9223372036854775807".to_vec()),
+        ]
+    );
+}
+
+#[test]
+fn invalid_utf8_guest_source_is_not_silently_repaired() {
+    let source = format!("{INTERPRETER}\ndemand interpret(slice(raw(\"é\"), 0, 1));");
+    let unit = lower(&parse(source.as_bytes()).unwrap()).unwrap();
+    let residue = bury(&unit, Cairn::of_encoded(source.as_bytes()), 1_000_000).unwrap();
+    assert_eq!(
+        results(&residue),
+        vec![("Error".into(), 0, b"source is not UTF-8 at byte 0".to_vec())]
+    );
+}
+
 fn guest(program: &str, answers: &Answers) -> Residue {
     let source = format!("{INTERPRETER}\ndemand interpret({});", bytes_literal(program.as_bytes()));
     let unit = lower(&parse(source.as_bytes()).expect("parse")).expect("lower");
-    assert!(check(&unit).is_empty());
+    assert!(check(&unit).is_empty(), "{:?}", check(&unit));
     bury_with(&unit, Cairn::of_encoded(source.as_bytes()), 100_000_000, answers).expect("bury")
 }
 
@@ -113,7 +258,7 @@ fn a_demanded_legal_look_waits_for_its_network_answer() {
 
 #[test]
 fn refused_read_is_not_a_successful_empty_file() {
-    let program = "demand must(descend disk { read(\"absent\") });";
+    let program = "Answer<Bytes> answer = descend disk { read(\"absent\") }; demand must(answer);";
     let pending = guest(program, &Answers::none());
     let Node::Hole { call, .. } = pending.questions()[0] else { panic!("file hole") };
     let answers = Answers::none().and(
@@ -170,6 +315,7 @@ fn semantic_errors_are_reported_before_any_deposit_or_world_request() {
         ("Bytes f(Bytes a) { a } demand f(b\"a\", b\"b\");", "too many arguments"),
         ("Bytes f(Bytes a) { a } demand f(\"wrong\");", "binding type mismatch"),
         ("Bytes a = b\"a\"; Bytes a = b\"b\";", "duplicate declaration"),
+        ("Bytes f(Bytes a, Bytes a) { a }", "duplicate parameter"),
         ("Bytes@0 a = must(descend disk { read(\"secret\") });", "depth assertion mismatch"),
         ("Bytes a = must(read(\"secret\"));", "request requires descend"),
         ("demand look(b\"not a shade\");", "look requires a Shade"),
@@ -290,6 +436,9 @@ fn invalid_or_unsupported_input_cannot_report_success() {
         "U0 f() { \"unclosed",
         "U0 f() { \"x\"; } demand f(); garbage",
         "U0 f() { \"\\q\"; } demand f();",
+        "Bytes@9 a = b\"a\";",
+        "Bytes@-1 a = b\"a\";",
+        "U0 f(] { }",
     ] {
         let source =
             format!("{INTERPRETER}\ndemand interpret({});", bytes_literal(program.as_bytes()));
@@ -366,6 +515,41 @@ fn source_then_file_answers_survive_printed_residue_and_reburial() {
     assert_eq!(results(&resumed), results(&direct));
     assert_eq!(results(&resumed), vec![("Bytes".into(), 3, b"obj:staged".to_vec())]);
     assert_eq!(deposits(&resumed), deposits(&direct));
+}
+
+#[test]
+fn an_answered_global_is_cached_after_printed_residue_resumes() {
+    let program = r#"
+Bytes make() { Bytes v = must(descend disk { read("input") }); "settled"; v }
+Bytes shared = make();
+demand concat(shared, shared);
+demand shared;
+"#;
+    let source = format!("{INTERPRETER}\ndemand interpret({});", bytes_literal(program.as_bytes()));
+    let unit = lower(&parse(source.as_bytes()).unwrap()).unwrap();
+    let pending = bury(&unit, Cairn::of_encoded(source.as_bytes()), 100_000_000).unwrap();
+    assert_eq!(pending.holes.len(), 1);
+    assert!(pending.deposits.is_empty());
+    let Node::Hole { call, .. } = pending.questions()[0] else { panic!("input hole") };
+    let answers = Answers::none().and(
+        call.clone(),
+        Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(b"ok".to_vec())))),
+    );
+    let printed = print(&pending.as_unit(&unit));
+    let resumed_unit = lower(&parse(printed.as_bytes()).unwrap()).unwrap();
+    assert!(check(&resumed_unit).is_empty());
+    let resumed =
+        bury_with(&resumed_unit, Cairn::of_encoded(printed.as_bytes()), 100_000_000, &answers)
+            .unwrap();
+    assert!(resumed.holes.is_empty());
+    assert_eq!(deposits(&resumed), vec![Value::Str("settled".into())]);
+    assert_eq!(
+        results(&resumed),
+        vec![("Bytes".into(), 3, b"okok".to_vec()), ("Bytes".into(), 3, b"ok".to_vec())]
+    );
+    let direct = guest(program, &answers);
+    assert_eq!(deposits(&resumed), deposits(&direct));
+    assert_eq!(results(&resumed), results(&direct));
 }
 
 #[test]

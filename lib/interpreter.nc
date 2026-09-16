@@ -3,15 +3,13 @@
 // The source is Bytes because the interpreter must be able to receive the
 // program from a disk hole. There is deliberately no host parser hiding behind
 // this file: every inspection below is a slice and a comparison the language
-// itself can bury. evaluate.nc supplies values, checking and demand evaluation.
+// itself can bury. value.nc owns records; evaluate.nc owns language semantics.
 
 Bool at(Bytes source, I64 from, Bytes needle)
 {
-  if (from < 0 || from + len(needle) > len(source)) {
-    return false;
-  } else {
-    return starts_with(slice(source, from, len(source)), needle);
-  }
+  I64 end = from + len(needle);
+  if (from < 0 || end > len(source)) { return false; }
+  return slice(source, from, end) == needle;
 }
 
 Bool white(Bytes source, I64 from)
