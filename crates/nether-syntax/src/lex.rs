@@ -41,6 +41,8 @@ pub enum FaultKind {
     NotAnI64,
     /// A `@` followed by a digit that is not a stratum.
     NotAStratum,
+    /// A braced latent set that is not two or more strata, ascending, no `0`.
+    NotAStratumSet,
     /// A `#` and something that is not sixty-four lowercase hex digits, and
     /// which of those it was. §3.6.
     NotACairn(&'static str),
@@ -82,6 +84,9 @@ impl fmt::Display for Fault {
             FaultKind::EmptyNumber => "this number has no digits",
             FaultKind::NotAnI64 => "this does not fit in an I64",
             FaultKind::NotAStratum => "a depth is 0 to 8",
+            FaultKind::NotAStratumSet => {
+                "a latent set is two or more of 1 to 8, ascending and without repeats"
+            }
             FaultKind::NotACairn(which) => {
                 return write!(f, "a cairn is sixty-four lowercase hex digits, and {which}");
             }

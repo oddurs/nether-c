@@ -141,7 +141,7 @@ fn a_latent_depth_is_inferred_from_a_body_that_did_not_descend() {
     let src = "Answer<Bytes> raw(Str p) { read(p) }\n";
     let unit = lower(&parse(src.as_bytes()).unwrap()).unwrap();
     assert!(check(&unit).is_empty());
-    assert_eq!(unit.funcs[0].latent, nether_core::Depth::DISK);
+    assert_eq!(unit.funcs[0].latent, nether_core::Held::of(nether_core::Depth::DISK));
     assert_eq!(unit.funcs[0].asserted_latent, None, "and nobody wrote it");
 }
 

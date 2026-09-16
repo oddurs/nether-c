@@ -11,7 +11,7 @@
 //! depths by its own route. Two implementations of §2.2 agreeing is worth more
 //! than one agreeing with itself.
 
-use nether_core::{Depth, ExprKind, Type, check};
+use nether_core::{Depth, ExprKind, Held, Type, check};
 use nether_syntax::{Fault, lower, parse, print};
 
 mod spec;
@@ -216,7 +216,7 @@ fn a_shade_takes_its_origin_from_what_it_holds() {
 #[test]
 fn a_function_that_descends_for_itself_asks_for_nothing() {
     let unit = ir("Bytes load(Str p) { descend disk { must(read(p)) } }\n");
-    assert_eq!(unit.funcs[0].latent, Depth::PURE);
+    assert_eq!(unit.funcs[0].latent, Held::NONE);
     assert_eq!(unit.funcs[0].ret_depth, Depth::DISK);
     clean(&unit);
 }
@@ -224,7 +224,7 @@ fn a_function_that_descends_for_itself_asks_for_nothing() {
 #[test]
 fn a_function_that_does_not_asks_its_caller() {
     let unit = ir("Answer<Bytes> raw(Str p) @3 { read(p) }\n");
-    assert_eq!(unit.funcs[0].latent, Depth::DISK);
+    assert_eq!(unit.funcs[0].latent, Held::of(Depth::DISK));
     clean(&unit);
 }
 

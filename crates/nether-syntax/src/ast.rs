@@ -78,7 +78,7 @@ pub struct Func {
     /// Its parameters, in order.
     pub params: Vec<Field>,
     /// The `@d` after the signature, if it was written.
-    pub latent: Option<u8>,
+    pub latent: Option<Vec<u8>>,
     /// The body.
     pub body: Block,
     /// The whole declaration.

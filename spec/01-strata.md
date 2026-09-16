@@ -64,18 +64,19 @@ which is an order for comparing two histories and not one for implying a
 permission: `net` is deeper than `disk!` and does not carry it.
 
 ```c
-U0 stamp()
-{
-  descend net { must(write("kernel.nc", b"")) };   // rejected: this needs disk!
-}
+Answer<U0> wrote = descend net { write("kernel.nc", b"") };   // needs disk!
 ```
 
-An implementation MUST reject that, naming the capability that grants the
-stratum the call reaches. The program that means it nests:
-`descend net { descend disk! { … } }`, and says both out loud.
+That descent supplies `net`, and the call needs `disk!`. At the top level of a
+file there is nobody to ask for it, so an implementation MUST reject this,
+naming the capability that grants the stratum the call reaches. The program
+that means it nests — `descend net { descend disk! { … } }` — and says both out
+loud.
 
-Accepting the first would mean a reader could no longer learn what a program
-touches by reading its descents, which is the whole of why the names are fixed
+Inside a function body the same expression is not an error: it is what the
+function asks of whoever calls it, and the signature comes out `@4`
+([ABS](02-calculus.md#22-the-rules)). Either way the capability is named
+somewhere a reader can find it, which is the whole of why the names are fixed
 rather than open.
 
 A `descend` whose tail expression is `U0` may be used as a statement.

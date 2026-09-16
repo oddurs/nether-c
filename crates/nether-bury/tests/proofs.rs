@@ -12,8 +12,8 @@ use std::time::Instant;
 
 use nether_bury::{Halt, Residue};
 use nether_core::{
-    BinOp, Block, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, Literal, LocalDef, LocalId, Span,
-    Stmt, Type, Unit, check,
+    BinOp, Block, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, Held, Literal, LocalDef, LocalId,
+    Span, Stmt, Type, Unit, check,
 };
 use nether_ledger::Cairn;
 
@@ -65,7 +65,7 @@ fn calls(x: &Expr) -> usize {
 fn fib_demanding(k: i64) -> Unit {
     let arrow = Type::Fn {
         params: vec![Type::Int],
-        latent: Depth::PURE,
+        latent: Held::NONE,
         result: Box::new(Type::Int),
         result_depth: Depth::PURE,
     };
@@ -103,7 +103,7 @@ fn fib_demanding(k: i64) -> Unit {
             ret: Type::Int,
             ret_depth: Depth::PURE,
             asserted_ret: None,
-            latent: Depth::PURE,
+            latent: Held::NONE,
             asserted_latent: None,
             locals: vec![LocalDef {
                 name: "n".into(),

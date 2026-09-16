@@ -5,7 +5,7 @@
 //! evaluated, and nothing is evaluated except what a demand transitively
 //! requires (`spec/06-evaluation.md` §6.2).
 
-use crate::depth::Depth;
+use crate::depth::{Depth, Held};
 use crate::ir::{Block, Expr, FuncId, GlobalId, LocalId, Span};
 use crate::ty::Type;
 
@@ -91,11 +91,11 @@ pub struct FuncDef {
     pub ret_depth: Depth,
     /// A depth the programmer wrote on the return type.
     pub asserted_ret: Asserted,
-    /// `dƒ`: what a caller must already hold. The least ambient depth at which
-    /// the body checks, which is 0 for a body that descends for itself.
-    pub latent: Depth,
-    /// The latent depth the programmer wrote after the signature.
-    pub asserted_latent: Asserted,
+    /// `dƒ`: what a caller must already hold. The least set, by inclusion, at
+    /// which the body checks — nothing, for a body that descends for itself.
+    pub latent: Held,
+    /// The latent set the programmer wrote after the signature.
+    pub asserted_latent: Option<Held>,
     /// Every binding in the body, parameters first.
     pub locals: Vec<LocalDef>,
     /// The body.

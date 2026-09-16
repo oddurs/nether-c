@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 
 use nether_core::{
     BinOp, Block, Capability, Demand, Depth, Expr, ExprKind, Fault, FaultKind, FuncDef, GlobalDef,
-    Literal, LocalDef, LocalId, Prim, Rite, Span, Stmt, Type, Unit, check,
+    Held, Literal, LocalDef, LocalId, Prim, Rite, Span, Stmt, Type, Unit, check,
 };
 
 // ── building ────────────────────────────────────────────────────────────────
@@ -38,7 +38,12 @@ fn answer_bytes() -> Type {
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
     pure(
         ExprKind::Prim(p),
-        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+        Type::Fn {
+            params,
+            latent: Held::of(p.latent()),
+            result: Box::new(result),
+            result_depth: p.latent(),
+        },
     )
 }
 
@@ -100,7 +105,7 @@ fn in_a_function(
             ret,
             ret_depth,
             asserted_ret: None,
-            latent,
+            latent: Held::of(latent),
             asserted_latent: None,
             locals,
             body: Block { stmts, tail: tail.map(Box::new), span: Span::default() },
@@ -184,7 +189,7 @@ fn app_refuses_what_was_never_granted() {
     // `read("k")` with no descent around it. δ is 0 at the top level of a file.
     assert_eq!(
         kinds(&demanding(read("k"))),
-        vec![FaultKind::Ungranted { needed: Depth::DISK, ambient: Depth::PURE }]
+        vec![FaultKind::Ungranted { needed: Depth::DISK, held: Held::NONE }]
     );
 }
 
@@ -201,7 +206,7 @@ fn app_joins_the_depth_of_the_function_value_itself() {
     // unbound local is the price of reaching the term at all.
     let arrow = Type::Fn {
         params: Vec::new(),
-        latent: Depth::PURE,
+        latent: Held::of(Depth::PURE),
         result: Box::new(Type::Int),
         result_depth: Depth::PURE,
     };
@@ -236,7 +241,7 @@ fn abs_gives_an_arrow_both_of_its_depths() {
 
     let arrow = Type::Fn {
         params: Vec::new(),
-        latent: Depth::PURE,
+        latent: Held::of(Depth::PURE),
         result: Box::new(Type::Bytes),
         result_depth: Depth::DISK,
     };
@@ -270,7 +275,7 @@ fn abs_asks_for_what_the_body_did_not_descend_for() {
 
     let arrow = Type::Fn {
         params: Vec::new(),
-        latent: Depth::DISK,
+        latent: Held::of(Depth::DISK),
         result: Box::new(Type::Bytes),
         result_depth: Depth::DISK,
     };
@@ -291,7 +296,7 @@ fn abs_asks_for_what_the_body_did_not_descend_for() {
     clean(&calling(true));
     assert_eq!(
         kinds(&calling(false)),
-        vec![FaultKind::Ungranted { needed: Depth::DISK, ambient: Depth::PURE }]
+        vec![FaultKind::Ungranted { needed: Depth::DISK, held: Held::NONE }]
     );
 }
 
@@ -319,10 +324,7 @@ fn descend_raises_the_ambient_only_inside_its_own_body() {
         ],
         ..Unit::default()
     };
-    assert_eq!(
-        kinds(&unit),
-        vec![FaultKind::Ungranted { needed: Depth::DISK, ambient: Depth::PURE }]
-    );
+    assert_eq!(kinds(&unit), vec![FaultKind::Ungranted { needed: Depth::DISK, held: Held::NONE }]);
 }
 
 /// [SEAL] — `seal e : Cairn@0`, whatever `e` cost.
@@ -377,10 +379,7 @@ fn look_is_legal_only_where_the_depth_is_already_held() {
         Some(looked_up_here),
         Depth::PURE,
     );
-    assert_eq!(
-        kinds(&surfaced),
-        vec![FaultKind::Orpheus { origin: Depth::NET, ambient: Depth::PURE }]
-    );
+    assert_eq!(kinds(&surfaced), vec![FaultKind::Orpheus { origin: Depth::NET, held: Held::NONE }]);
 
     // Legal by going back down.
     let looked_down_there = descend(
@@ -584,4 +583,50 @@ fn section_02_is_eleven_rules_and_every_one_of_them_is_derived_here() {
     );
     let covered: BTreeSet<String> = RULES.iter().map(|(r, _)| (*r).to_string()).collect();
     assert_eq!(covered, in_spec, "the rules in §2.2 and the rules proved here have parted");
+}
+
+// ── [APP]: `dƒ ⊆ δ`, not `dƒ ≤ δ` ───────────────────────────────────────────
+
+fn writing() -> Expr {
+    let path = pure(ExprKind::Literal(Literal::Str("kernel.nc".into())), Type::Str);
+    let bytes = pure(ExprKind::Literal(Literal::Bytes(Vec::new())), Type::Bytes);
+    let answer = Type::Answer(Box::new(Type::Unit));
+    call(
+        prim(Prim::Write, vec![Type::Str, Type::Bytes], answer.clone()),
+        vec![path, bytes],
+        answer,
+        Depth::DISK_WRITE,
+    )
+}
+
+#[test]
+fn a_deeper_descent_does_not_grant_a_shallower_capability() {
+    // §1.3. `disk!` is 4 and `net` is 5, so a comparison would have let this
+    // through, and a reader auditing the descents would have been told this
+    // program touches the network. 0254.
+    assert_eq!(
+        kinds(&demanding(descend(Capability::Net, writing()))),
+        vec![FaultKind::Ungranted { needed: Depth::DISK_WRITE, held: Held::of(Depth::NET) }]
+    );
+}
+
+#[test]
+fn the_capability_the_call_needs_is_the_one_that_grants_it() {
+    let both = descend(Capability::Net, descend(Capability::DiskWrite, writing()));
+    clean(&demanding(both));
+}
+
+#[test]
+fn a_body_asks_for_what_its_descent_did_not_supply() {
+    // Inside a function body an unmet capability is not a fault: it is what
+    // the function asks of whoever calls it. [ABS]. The descent supplies
+    // `net`, the write needs `disk!`, and the signature comes out `@4`.
+    let unit = in_a_function(
+        Vec::new(),
+        vec![Stmt::Expr(descend(Capability::Net, writing()))],
+        None,
+        Depth::DISK_WRITE,
+    );
+    clean(&unit);
+    assert_eq!(unit.funcs[0].latent, Held::of(Depth::DISK_WRITE));
 }

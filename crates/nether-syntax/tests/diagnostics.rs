@@ -130,7 +130,7 @@ fn a_latent_depth_that_disagrees_names_what_asked_for_it() {
                \x20 read(p)\n\
                }\n";
     let text = &diagnose(src)[0];
-    assert!(text.contains("annotated @0; inference gives 3"), "{text}");
+    assert!(text.contains("annotated @0; inference gives @3"), "{text}");
     assert!(text.contains(&format!("--> {PATH}:3:")), "the cause is not on line 3:\n{text}");
     assert!(text.contains("`read` reaches stratum 3"), "{text}");
 }

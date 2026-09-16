@@ -5,8 +5,8 @@
 
 use nether_bury::{Halt, HaltKind, Residue};
 use nether_core::{
-    BinOp, Block, Capability, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, Literal,
-    LocalDef, LocalId, Prim, Rite, Span, Stmt, Type, Unit, check,
+    BinOp, Block, Capability, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, Held,
+    Literal, LocalDef, LocalId, Prim, Rite, Span, Stmt, Type, Unit, check,
 };
 use nether_ledger::Cairn;
 
@@ -40,7 +40,12 @@ fn answer_bytes() -> Type {
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
     pure(
         ExprKind::Prim(p),
-        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+        Type::Fn {
+            params,
+            latent: Held::of(p.latent()),
+            result: Box::new(result),
+            result_depth: p.latent(),
+        },
     )
 }
 
@@ -317,7 +322,7 @@ fn contains_a_call(x: &Expr) -> bool {
 fn fib_demanding(k: i64) -> Unit {
     let arrow = Type::Fn {
         params: vec![Type::Int],
-        latent: Depth::PURE,
+        latent: Held::NONE,
         result: Box::new(Type::Int),
         result_depth: Depth::PURE,
     };
@@ -355,7 +360,7 @@ fn fib_demanding(k: i64) -> Unit {
             ret: Type::Int,
             ret_depth: Depth::PURE,
             asserted_ret: None,
-            latent: Depth::PURE,
+            latent: Held::NONE,
             asserted_latent: None,
             locals: vec![LocalDef {
                 name: "n".into(),
@@ -433,7 +438,7 @@ fn summing(n: i64, skip: bool) -> Unit {
 
     let arrow = Type::Fn {
         params: Vec::new(),
-        latent: Depth::PURE,
+        latent: Held::NONE,
         result: Box::new(Type::Int),
         result_depth: Depth::PURE,
     };
@@ -444,7 +449,7 @@ fn summing(n: i64, skip: bool) -> Unit {
             ret: Type::Int,
             ret_depth: Depth::PURE,
             asserted_ret: None,
-            latent: Depth::PURE,
+            latent: Held::NONE,
             asserted_latent: None,
             locals: vec![
                 LocalDef {

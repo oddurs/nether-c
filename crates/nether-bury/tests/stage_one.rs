@@ -17,7 +17,7 @@
 
 use nether_bury::{Residue, bury};
 use nether_core::{
-    Block, Capability, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, GlobalId,
+    Block, Capability, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, GlobalId, Held,
     Literal, LocalDef, LocalId, Prim, Span, Type, Unit, check,
 };
 use nether_ledger::{Cairn, Node, Value};
@@ -61,7 +61,12 @@ fn answer_bytes() -> Type {
 fn prim(p: Prim, params: Vec<Type>, result: Type) -> Expr {
     pure(
         ExprKind::Prim(p),
-        Type::Fn { params, latent: p.latent(), result: Box::new(result), result_depth: p.latent() },
+        Type::Fn {
+            params,
+            latent: Held::of(p.latent()),
+            result: Box::new(result),
+            result_depth: p.latent(),
+        },
     )
 }
 
@@ -84,7 +89,7 @@ fn binding(name: &str, ty: Type, value: Expr) -> GlobalDef {
 fn compile_arrow() -> Type {
     Type::Fn {
         params: vec![Type::Bytes],
-        latent: Depth::PURE,
+        latent: Held::NONE,
         result: Box::new(Type::Bytes),
         result_depth: Depth::PURE,
     }
@@ -104,7 +109,7 @@ fn compile() -> FuncDef {
         ret: Type::Bytes,
         ret_depth: Depth::PURE,
         asserted_ret: None,
-        latent: Depth::PURE,
+        latent: Held::NONE,
         asserted_latent: None,
         locals: vec![LocalDef {
             name: "s".into(),
