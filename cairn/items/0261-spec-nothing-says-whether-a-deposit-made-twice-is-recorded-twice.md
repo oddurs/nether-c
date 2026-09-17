@@ -2,10 +2,11 @@
 id: 261
 title: 'Spec: nothing says whether a deposit made twice is recorded twice'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-09-17
 priority: p2
 effort: s
 stratum: '0'
@@ -56,7 +57,11 @@ and leaving it costs a reproducibility claim.
 
 ## Acceptance criteria
 
-- [ ] §7.3.1 says whether the deposit list may repeat a cairn
-- [ ] §8.4 says what `lamp` prints for a repeated deposit
-- [ ] A transcript covers the loop above
-- [ ] §90.2 records the reading that was not taken
+- [x] §7.3.1 says whether the deposit list may repeat a cairn
+- [x] §8.4 says what `lamp` prints for a repeated deposit
+- [x] A transcript covers the loop above
+- [x] §90.2 records the reading that was not taken
+
+## 2026-09-17
+
+Settled as a list, with repeats, and the implementation had already chosen both readings -- which is what decided it. Burial recorded four deposits for the four-turn loop and nether lamp printed one tick, because lamp walked the graph and a Deposit made four times from one span is one node. §7.3.1 now states the rule for both of a trace's lists in one place: the deposit list holds one entry per deposit and may name the same cairn more than once, because the node is what the program said and the list is what it did; the hole list names each hole once, because a question asked twice from one place is one question. §8.4 says lamp renders one line per entry and shows it. §90.2 records the set reading and why it loses -- output that swallows repeats is not output, and it is 0255's argument about sends read again -- and prices the choice at thirty-two bytes per turn in one list, not a node per turn. crates/nether-cli/src/lamp.rs reads the trace's list instead of the graph; tests/programs/tick.nc is the fixture and spec/08-rites.md § 8.4 lamp #3 is an executed transcript over it. Taking only the first entry makes that transcript fail with one tick against four, so it discriminates. Trusted core 8464 -> 8473. scripts/task check passes in full. The hole half of §7.3.1 is true of the implementation for two statements and not for a loop: four posts from one span are still one hole, which is 0264.

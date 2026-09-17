@@ -202,6 +202,19 @@ $ nether lamp efed9b2a
 Hello from the nether
 ```
 
+A value deposited more than once is rendered more than once. The trace holds
+one entry per deposit ([§7.3.1](07-ledger.md#731-node-encoding)) and `lamp`
+renders one line per entry, so a loop that deposits on every turn reads as the
+program wrote it rather than as the ledger stored it:
+
+```console
+$ nether lamp 570b6de4
+tick
+tick
+tick
+tick
+```
+
 `--provenance` walks backwards instead: from a value to the nodes that
 produced it, to their inputs, to the literals and holes at the bottom.
 

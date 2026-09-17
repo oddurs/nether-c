@@ -704,6 +704,62 @@ spans, and charge fuel as though it had run sequentially, and produce the
 serial trace rather than whatever order the threads finished in. That was
 already true of the hole order; it is now also true of the budget.
 
+### The deposits as a set
+
+[§7.3.1](07-ledger.md#731-node-encoding) did not say whether a trace's deposit
+list could hold the same cairn twice, and a set was the cheaper reading: the
+deposits are the record of which values were deposited and where, a repeat
+adds nothing a reader did not already have, and a trace then does not grow
+with a loop's trip count.
+
+Rejected because [§8.4](08-rites.md#84-lamp) calls `lamp` "how a program's
+output is read", and output that swallows repeats is not output. `for (I64 i =
+0; i < 1000; i += 1) { "tick\n"; }` reading as one tick is a bug anybody would
+report, and the reason is the one
+[§6.3](06-evaluation.md#63-holes) gives for not merging two identical sends: a
+trace that describes fewer things than the program did is a trace that lies
+about what was done. A set also means a program cannot deposit the same value
+from the same span twice, which is a surprising thing to forbid in a language
+whose only output channel this is.
+
+Neither reading was obviously wrong, and leaving it unsaid was: the list is
+part of the `Trace`'s encoding, so the two readings give the artifact two
+different cairns, which is what §7.1 is frozen to prevent. The implementation
+had already chosen both — burial recorded four deposits for the loop above and
+`lamp` printed one tick — which is what an ambiguity looks like from inside.
+
+**What it costs.** Thirty-two bytes in one list per turn of a loop that
+deposits. Not a node each: the `Deposit` is one node however many times the
+trace names it.
+
+### The deposits as a set
+
+[§7.3.1](07-ledger.md#731-node-encoding) did not say whether a trace's deposit
+list could hold the same cairn twice, and a set was the cheaper reading: the
+deposits are the record of which values were deposited and where, a repeat
+adds nothing a reader did not already have, and a trace then does not grow
+with a loop's trip count.
+
+Rejected because [§8.4](08-rites.md#84-lamp) calls `lamp` "how a program's
+output is read", and output that swallows repeats is not output. `for (I64 i =
+0; i < 1000; i += 1) { "tick\n"; }` reading as one tick is a bug anybody would
+report, and the reason is the one
+[§6.3](06-evaluation.md#63-holes) gives for not merging two identical sends: a
+trace that describes fewer things than the program did is a trace that lies
+about what was done. A set also means a program cannot deposit the same value
+from the same span twice, which is a surprising thing to forbid in a language
+whose only output channel this is.
+
+Neither reading was obviously wrong, and leaving it unsaid was: the list is
+part of the `Trace`'s encoding, so the two readings give the artifact two
+different cairns, which is what §7.1 is frozen to prevent. The implementation
+had already chosen both — burial recorded four deposits for the loop above and
+`lamp` printed one tick — which is what an ambiguity looks like from inside.
+
+**What it costs.** Thirty-two bytes in one list per turn of a loop that
+deposits. Not a node each: the `Deposit` is one node however many times the
+trace names it.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
