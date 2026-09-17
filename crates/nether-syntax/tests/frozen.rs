@@ -169,3 +169,11 @@ fn a_loop_body_precedes_itself() {
 fn a_for_loop_still_advances_its_counter() {
     clean("U0 g(I64 n) @0 { I64 t; t = 0; for (I64 i = 0; i < n; i += 1) { t += i; } }\n");
 }
+
+/// The specification's own sample, refused. §5.4 writes this loop out because
+/// it is the case the sentence about arms does not reach; `tests/programs`
+/// keeps it so the sentence and the checker cannot drift apart.
+#[test]
+fn the_loop_the_specification_writes_out_is_refused() {
+    frozen(include_str!("../../../tests/programs/turn.nc"));
+}

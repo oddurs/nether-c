@@ -2,12 +2,13 @@
 id: 260
 title: 'Spec: §5.4 does not state the loop rule the checker enforces'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 depends_on:
 - 157
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-09-17
 priority: p1
 effort: s
 stratum: '0'
@@ -47,6 +48,10 @@ body, because the body runs again. Same reasoning as the arms, no new concept.
 
 ## Acceptance criteria
 
-- [ ] §5.4 states the back-edge rule
-- [ ] The loop above is a rejection in `tests/programs/`
-- [ ] `for (I64 i = 0; i < n; i += 1)` is still accepted, and §5.4 still says why
+- [x] §5.4 states the back-edge rule
+- [x] The loop above is a rejection in `tests/programs/`
+- [x] `for (I64 i = 0; i < n; i += 1)` is still accepted, and §5.4 still says why
+
+## 2026-09-17
+
+Written. §5.4 now says a loop body comes after itself, so a local named anywhere in one is named for the whole of it including the lines above the naming -- the second turn's assignment is after the first turn's naming, which is the arms' reasoning and no new concept. The paragraph ends by keeping the counter explicitly: i += 1 assigns a local that arithmetic never named, so the new rule has nothing to freeze, which is the same distinction three paragraphs up and the reason the rule is about naming rather than reading. tests/programs/turn.nc is the sample, refused by check with 'this was named, and a name cannot change what it names' at the assignment; crates/nether-syntax/tests/frozen.rs includes it so the sentence and the checker cannot drift. The sample is registered as 05-types.md § 5.4 Mutation #1, Shape::Illegal, and recorded in the transcript manifest. 0157's third criterion is now discharged for the back edge as well as the arms. crates/nether-core was already right and did not change: the checker walks a loop body once for what it names, throws the complaints away, then walks it for real. scripts/task check passes in full; the ceiling did not move.
