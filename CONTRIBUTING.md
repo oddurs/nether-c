@@ -214,6 +214,77 @@ Three things the specification asks of a change:
    item. `cairn list --view deep` is reviewed harder than everything else, and
    that is deliberate.
 
+## Drawing a glyph
+
+One day you will write a sentence with a character nobody has drawn, and the
+build will stop:
+
+```
+font: the site renders glyphs the regular does not have:
+  U+22A5  ⊥  UP TACK
+
+  draw them in site/font.py, or take them out of the page
+```
+
+That is `tests/font/run`, and it is correct: the face this site ships is drawn
+in this repository, so a character it does not have is a box on somebody's
+screen. You do not need to read the TrueType writer to fix it. The drawings
+are at the bottom of `site/font.py` and they are eight strings of eight
+characters, `#` for ink and `.` for nothing.
+
+```python
+g("⊥", "..#.....", "..#.....", "..#.....", "..#.....",
+        "..#.....", "..#.....", "#####...", "........")
+```
+
+Six things the grid asks of you:
+
+1. **Eight rows of eight.** `g` says so if they are not, and names the glyph.
+2. **Six columns of ink**, numbered 0 to 5. The seventh is the blank bearing
+   that makes the advance, and the eighth is not yours. Anything drawn past
+   column 5 fails the check.
+3. **Seven rows tall.** Rows 0 to 6 sit above the baseline and row 7 below it,
+   so a capital fills rows 0 to 6, the x-height is rows 2 to 6, and a
+   descender drops into row 7.
+4. **Name the character, not its number.** `g("⊥", …)`, not `g("\u22a5", …)`.
+   The file is UTF-8 and you should be able to see what you are drawing.
+5. **Draw it in both weights.** `g` is the regular and `b` is the bold, in a
+   section of its own further down. A stem that is one pixel in the regular is
+   two in the bold, drawn inward so the advance does not move — and where the
+   second pixel would close a counter or fill the gap between two strokes, it
+   does not. If a glyph genuinely cannot take more weight in six columns, add
+   it to `SAME` and it will be drawn once and used at both.
+6. **Look at it.** A font nobody has looked at is a font with a broken glyph
+   in it.
+
+```sh
+python3 site/font.py --sheet        # every glyph as text
+python3 site/font.py --sheet 700    # the same, for the bold
+```
+
+Then build what ships and run the checks:
+
+```sh
+scripts/task font     # writes site/nether.woff, site/nether-bold.woff and the specimen
+scripts/task check    # the whole thing
+```
+
+`scripts/task font` writes four files and they are all committed:
+`site/nether.woff`, `site/nether-bold.woff` and the two specimen GIFs. A
+binary in a diff is a bad review experience and these are in one anyway,
+because the thing a reviewer has to read is the bitmaps beside them and the
+files are a deterministic function of those — the same drawings give the same
+bytes on every machine, and `scripts/task font:check` rebuilds them and fails
+if what is committed differs. That is the opposite of
+`web/necropolis/nether.wasm`, which is never committed because a Rust release
+build is not byte-reproducible and a committed copy could only be checked by
+rebuilding it anyway.
+
+`scripts/task font` will refuse a bold that is wider than the regular, lighter
+than it, short of a counter it has, no heavier at all without saying so, or
+declared the same when it is not. Every one of those is a way a face goes
+quietly wrong and a reader finds out before you do.
+
 ## Reporting a security issue
 
 See [SECURITY.md](SECURITY.md). Do not open a public issue.
