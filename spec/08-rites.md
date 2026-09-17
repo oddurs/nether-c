@@ -254,7 +254,9 @@ depth 3   disk
 Holes are reported apart from witnesses, because they are not the same depth:
 a hole is a stratum the trace will need and a witness is one it reached
 ([§7.3.2](07-ledger.md#732-what-a-decoder-cannot-check)). A trace that has
-answered nothing has depth 0 and says what exhuming it will cost.
+answered nothing has *reached* nothing, and that is the line under the list
+rather than the number above it: the transcript is one of those traces — one
+`read`, still pending — and its number is what §7.3.2 says a trace's depth is.
 
 If the trace is marked as having reached stratum 8, `strata` MUST say so
 without being asked, and MUST report `replayable: no`. A witness deeper than

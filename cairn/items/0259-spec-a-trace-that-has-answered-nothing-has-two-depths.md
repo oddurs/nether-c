@@ -2,10 +2,11 @@
 id: 259
 title: 'Spec: a trace that has answered nothing has two depths'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-09-17
 priority: p1
 effort: s
 stratum: '0'
@@ -45,6 +46,10 @@ document that states the rule: one claim, two places, two shapes.
 
 ## Acceptance criteria
 
-- [ ] §8.6 does not restate what a trace's depth is; it links §7.3.2
-- [ ] §8.6's prose and its own transcript agree
-- [ ] A transcript covers `strata` on a trace with a hole and no witnesses
+- [x] §8.6 does not restate what a trace's depth is; it links §7.3.2
+- [x] §8.6's prose and its own transcript agree
+- [x] A transcript covers `strata` on a trace with a hole and no witnesses
+
+## 2026-09-17
+
+Fixed the sentence, not the number. §8.6 said 'a trace that has answered nothing has depth 0' four lines under its own transcript of exactly such a trace printing depth 3. §7.3.2 owns what a trace's depth is -- the join of its residue's depth and the greatest stratum of any witness it names -- and §8.6 was reaching for reached depth, which is the line it already prints underneath: 'of that, 0 (pure) has happened'. The sentence now says the trace has reached nothing, points at that line rather than the number, and links §7.3.2 instead of restating it. The third criterion needed nothing new: spec/08-rites.md § 8.6 strata #2 is a console block, so tests/transcripts/run executes it, and it is already a trace with one pending read and no witnesses. 71 samples, 15 executed, all passing; scripts/task check passes in full. No implementation changed -- the implementation was right and the prose was the thing disagreeing with it.
