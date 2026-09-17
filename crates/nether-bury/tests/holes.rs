@@ -472,3 +472,66 @@ fn a_read_asked_from_everywhere_still_takes_the_one_answer() {
     assert!(done.holes.is_empty(), "one answer serves every place that asked");
     assert_eq!(done.demands[0].kind, ExprKind::Literal(Literal::Bytes(b"kkk".to_vec())));
 }
+
+/// §6.2: left to right and innermost first, and the trace says so.
+///
+/// Three sections rest on this order — the order the holes are in, the span a
+/// shared hole keeps, and where a budget runs out — so it is specified rather
+/// than left to the implementation, and specified is worth a test.
+#[test]
+fn evaluation_goes_left_to_right_and_innermost_first() {
+    let arguments = lowered(
+        "demand concat(must(descend disk { read(\"a\") }),\n\
+         \x20             must(descend disk { read(\"b\") }));\n",
+    );
+    let r = bury(&arguments, source(), 100_000).expect("buries");
+    let order: Vec<Value> = r
+        .questions()
+        .iter()
+        .map(|node| {
+            let Node::Hole { call, .. } = node else { panic!("not a hole") };
+            r.value(call.args[0]).cloned().expect("an argument that is here")
+        })
+        .collect();
+    assert_eq!(order, vec![Value::Str("a".into()), Value::Str("b".into())]);
+
+    let nested = lowered(
+        "demand concat(concat(must(descend disk { read(\"in\") }), b\"x\"),\n\
+         \x20             must(descend disk { read(\"out\") }));\n",
+    );
+    let r = bury(&nested, source(), 100_000).expect("buries");
+    let order: Vec<Value> = r
+        .questions()
+        .iter()
+        .map(|node| {
+            let Node::Hole { call, .. } = node else { panic!("not a hole") };
+            r.value(call.args[0]).cloned().expect("an argument that is here")
+        })
+        .collect();
+    assert_eq!(order, vec![Value::Str("in".into()), Value::Str("out".into())]);
+}
+
+/// And the consequence §6.4 rests on: a budget that binds cuts in a place the
+/// order decides. One step short of what the whole thing costs is not "some
+/// node"; it is this node.
+#[test]
+fn a_budget_that_binds_cuts_where_the_order_says() {
+    let unit = lowered(
+        "demand concat(must(descend disk { read(\"a\") }),\n\
+         \x20             must(descend disk { read(\"b\") }));\n",
+    );
+    let whole = bury(&unit, source(), 100_000).expect("buries").fuel_spent;
+    let mut found = Vec::new();
+    for budget in 1..whole {
+        let Ok(r) = bury(&unit, source(), budget) else { continue };
+        found.push(r.holes.len());
+    }
+    // Never `b` before `a`: the count only ever goes up, and it goes up in
+    // the order the reads are written.
+    assert!(found.windows(2).all(|w| w[0] <= w[1]), "{found:?}");
+    let first = bury(&unit, source(), whole - 1);
+    if let Ok(r) = first {
+        let Node::Hole { call, .. } = r.questions()[0] else { panic!("not a hole") };
+        assert_eq!(r.value(call.args[0]), Some(&Value::Str("a".into())));
+    }
+}

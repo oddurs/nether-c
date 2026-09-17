@@ -69,10 +69,26 @@ but as a semantic guarantee, because evaluating an undemanded expression could
 reach the world and leave a witness for something the program never asked for.
 
 Where several `demand`s exist, they are evaluated in source order. Within a
-single demand, evaluation order is unspecified **except** that it MUST be
-deterministic for a given source and capability set: two burials of the same
-input MUST produce the same trace, including the order in which holes were
-discovered.
+single demand, evaluation is **left to right and innermost first**:
+
+- a call evaluates the expression naming the function, then its arguments in
+  order;
+- an operator evaluates its left operand and then its right;
+- a block evaluates its statements in order and then its tail;
+- `if` evaluates its condition and then only the arm the condition chose,
+  which is also what `&&` and `||` are ([section 04](04-grammar.md));
+- a loop evaluates its body and then its step, once per turn;
+- every other construct evaluates the one subexpression it has.
+
+This is specified rather than left to the implementation because burial puts
+the order in the trace three times over. The order holes were discovered in is
+a field of the trace ([§7.3](07-ledger.md#73-nodes)). Which of several places
+asked a shared question first decides the span the hole keeps
+([§6.3](#63-holes)). And which node is reached first decides where a fuel
+budget runs out ([§6.4](#64-starvation-and-fuel)), since a step is charged when
+evaluation of a node begins. Two burials of the same source and the same
+capabilities MUST produce the same trace, and a trace that holds the order
+cannot do that while the order is anyone's business.
 
 ## 6.3 Holes
 
@@ -173,6 +189,9 @@ Fuel accounting MUST be deterministic — the same source and capabilities must
 exhaust at exactly the same point on every implementation and every machine.
 That is a requirement about agreement between implementations and not only
 with oneself, which is why the step is defined here rather than left to one.
+It rests on the evaluation order in [§6.2](#62-demand) and not only on the
+definition of a step: a step is charged when evaluation of a node begins, so
+where a budget runs out is which node was reached first.
 
 Exhausting fuel is a diagnostic, not a crash. The implementation MUST report
 the source span at which fuel ran out and the shape of what was being

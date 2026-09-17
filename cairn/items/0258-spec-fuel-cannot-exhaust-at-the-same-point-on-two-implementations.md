@@ -2,8 +2,9 @@
 id: 258
 title: 'Spec: fuel cannot exhaust at the same point on two implementations'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 created: 2026-09-16
 updated: 2026-09-16
 priority: p0
@@ -56,6 +57,10 @@ same kind of bound.
 
 ## Acceptance criteria
 
-- [ ] §6.2 and §6.4 make one claim about evaluation order between them
-- [ ] 0204 is checked against whichever was chosen
-- [ ] §90.2 records the claim that was withdrawn
+- [x] §6.2 and §6.4 make one claim about evaluation order between them
+- [x] 0204 is checked against whichever was chosen
+- [x] §90.2 records the claim that was withdrawn
+
+## 2026-09-16
+
+Settled by specifying the order, not by weakening §6.4. §6.2 now says evaluation inside a demand is left to right and innermost first, with a bullet per construct: a call takes the expression naming the function and then its arguments in order, an operator its left then its right, a block its statements then its tail, an if its condition then only the arm it chose, a loop its body then its step. The reason is that the order is in the trace three times over, not twice as the item had it -- §7.3 puts the holes in the order they were discovered, §6.3 gives a shared hole the span of the first place that asked and calls which place that is a fact about the program, and §6.4 decides where a budget cuts. Weakening §6.4 to per-implementation determinism was the other option and is rejected in §90.2: the frame and space limits it would have been matched to decide whether a burial finishes, and §6.4 goes on to require two implementations not to disagree about the result when both of them do -- order is not like those limits, it is in the result. §6.4 now says out loud that it rests on §6.2. crates/nether-bury already evaluated in that order; two tests in holes.rs pin it, one on the order two reads are discovered in at the top level and nested, and one on a budget that binds cutting where the order says. Reversing the argument loop in call() fails the first, so it discriminates. 0204 is noted: a parallel burial must now charge fuel as though sequential as well as discovering holes and keeping spans in the serial order. scripts/task check passes; the ceiling did not move.
