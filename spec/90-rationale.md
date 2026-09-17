@@ -645,6 +645,31 @@ buy that nesting back. It is a grammar change for an ergonomic one, nesting
 already says it, and [§1.3](01-strata.md#13-descent) is clearer when one
 `descend` means one capability.
 
+### One hole for every identical call, whatever stratum it was
+
+The rule [§6.3](06-evaluation.md#63-holes) shipped with was simpler and read
+better: two holes with identical calls in one trace are the same hole, and the
+justification given for it was a read — asking the same file for its contents
+twice is one question.
+
+Rejected because it ranges over the other half of the lattice, where it is
+false. Two `post`s to the same address with the same body became one message
+and one witness, and [§1.8](01-strata.md#18-why-write-is-deeper-than-read)
+spends a section arguing that a write is deeper than a read precisely because
+it cannot be taken back. Two `draw(8)`s became the same eight bytes, which
+makes the one prelude function [§9.7](09-prelude.md#97-stratum-7-entropy) calls the only
+source of nondeterminism in the language a pure function of its argument
+within a trace. Neither was noticed because the rule was written with a read in
+front of it and proved with a read.
+
+The cost is that §6.3 is now two sentences where it was one, and that a call
+is no longer a name for a question — it is a name for a *kind* of question,
+which is why the answers to one have to be ordered. Addressing an answer by
+the span that asked would have kept the one-to-one and was rejected too: a
+span is a fact about one text, and [§6.5](06-evaluation.md#65-residue) requires
+a residue to be printed and lowered again, which gives every hole in it a new
+one.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by

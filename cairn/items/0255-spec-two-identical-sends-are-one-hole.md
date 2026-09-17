@@ -2,8 +2,10 @@
 id: 255
 title: 'Spec: two identical sends are one hole'
 type: spec
-status: unmarked
+status: descending
 milestone: codex
+assignee: Oddur Sigurdsson
+claimed: 2026-09-16
 created: 2026-09-16
 updated: 2026-09-16
 priority: p0
@@ -74,3 +76,7 @@ written. So `nether-bury` merges sends and draws now, and the proof that closed
 - [ ] Two `draw(8)` calls can produce different bytes
 - [ ] 0138's proof is restated over a stratum that still merges
 - [ ] §90.2 records the version that merged everything
+
+## 2026-09-16
+
+Specification half: §6.3 now merges only at a read stratum -- 1, 2, 3 and 5 -- and never at 4, 6, 7 or 8, resting the split on §1.8's own argument that those strata are ordered by what they disturb rather than what they learn. It also settles the question the split creates: the answers to one call are served in the order §6.2 fixes, the nth hole taking the nth answer, and an implementation must not address an answer by the span that asked -- a span is a fact about one text and §6.5 requires a residue to be printed and lowered again. §90.2 records the version that merged everything and why it survived review: the rule was written with a read in front of it and proved with a read. The burier still merges everything; that is the second half of this item.
