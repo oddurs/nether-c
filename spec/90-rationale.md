@@ -670,6 +670,40 @@ span is a fact about one text, and [§6.5](06-evaluation.md#65-residue) requires
 a residue to be printed and lowered again, which gives every hole in it a new
 one.
 
+### Evaluation order as the implementation's business
+
+[§6.2](06-evaluation.md#62-demand) left the order inside a demand unspecified
+and asked only that it be deterministic for a given source and capability set.
+That is the usual and usually correct thing to say: burial is pure, nothing a
+program can write observes the order, and an implementation that wants to
+evaluate arguments right to left should be allowed to.
+
+Rejected because burial writes the order down. A trace carries the holes in
+the order they were discovered ([§7.3](07-ledger.md#73-nodes)); a shared hole
+keeps the span of the first place that asked
+([§6.3](06-evaluation.md#63-holes)), and §6.3 calls which place that is "a fact
+about the program rather than about the implementation"; and a fuel budget
+runs out at whichever node was reached first, which
+[§6.4](06-evaluation.md#64-starvation-and-fuel) requires two implementations to
+agree on. Three sentences in three sections all rest on an order that a fourth
+declined to fix. The total fuel a finished burial spends is the same either
+way, which is why this survived: it is visible only under a budget that binds,
+and under a budget that binds is the case §6.4 exists for.
+
+The alternative was to weaken §6.4 to what §6.2 supported — fuel is
+deterministic for one implementation, the way the frame and space limits three
+paragraphs below it already are. Rejected because those limits decide whether a
+burial *finishes*, and §6.4 goes on to say that two implementations "MUST NOT
+disagree about the result when both of them finish". Order is not like that. It
+is in the result.
+
+**What it costs.** An implementation may no longer reorder evaluation for
+speed where the reordering could change which node is reached first, which is
+most reorderings. A parallel burial — 0204 — has to discover holes, keep
+spans, and charge fuel as though it had run sequentially, and produce the
+serial trace rather than whatever order the threads finished in. That was
+already true of the hole order; it is now also true of the budget.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
