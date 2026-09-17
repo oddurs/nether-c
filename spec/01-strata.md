@@ -124,6 +124,39 @@ file's contents hash to `a1f0c93d` tells you nothing about the file that you
 could not have computed yourself given the same bytes; it is a claim *about*
 the deep value, not the deep value.
 
+It is worth being exact about what that sentence does and does not say, because
+`seal` is the place a reader is most likely to expect more of depth than depth
+offers.
+
+> **Depth is a claim about where a value has been, and about nothing else.** It
+> says which strata a value's history reached and therefore what the trace owes
+> a witness for. It is not a claim about what a deep value can be made to
+> reveal, and Nether C has no rule that confines that.
+
+`seal` is the shortest demonstration. The cairn of a depth-3 file is at depth
+0, [§9.2](09-prelude.md#92-depth-0)'s `hex` turns it into a `Str` at depth 0,
+and [§5.3](05-types.md#53-equality) makes equality a comparison of cairns:
+
+```c
+Bytes@3 src = must(descend disk { read("secret") });
+Bool@0 is_the_one =
+  (seal src == #4d9f7b2e0c81a35f6d0e92b7c4a1f80d35e6b92c7f0a4d81b3e5c9270af61d84);
+```
+
+That decides something about a depth-3 value at depth 0, holding nothing and
+writing no witness for the comparison. Against a low-entropy secret — a
+version string, a four-digit number, a file that is one of three — guessing
+settles it.
+
+None of which is a hole in the rule above. Every step is a claim about the deep
+value rather than the deep value, the history is intact, and the trace still
+says the file was read. It is a hole in the rule a reader might have inferred
+instead, which is why the rule is written down here.
+
+A program that must not reveal a deep value is not a program this type system
+can check. [§90.3](90-rationale.md#903-things-nether-c-is-worse-at) says so
+beside the other things it is worse at.
+
 `seal` on a shade (§1.6) is legal and names the shade. A shade carries the
 stratum it came out of, and [§7.1](07-ledger.md#71-canonical-encoding) encodes
 that alongside what it holds, so `seal shade e` is not `seal e`. The cairn of
