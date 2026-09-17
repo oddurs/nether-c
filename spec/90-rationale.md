@@ -1017,3 +1017,46 @@ used; swatches now show live semantic tokens.
 The drawings, timing and encoders remain shared. Tests compare both shipped
 colour tables against the system and check text on plain and raised surfaces.
 The hero and descent have still counterparts for reduced-motion readers.
+
+## 90.6 One face, and where the lettering is not type
+
+Everything on the page that is text is `Nether 8`, the one 8×8 face
+`site/font.py` draws — the prose, the headings, the listings, the sign and the
+lamp. The headings are not a second face. They are the same letterforms at
+24px and 16px against a body at 16px, and what makes a heading look like one
+is around the letters rather than in them: colour, uppercase and letter-spacing
+on `h1`, a filled bar on `h2`, and the `██`, `■` and `▸` that precede the
+three of them.
+
+That reads as deliberate. It is, and this is where it was decided rather than
+left.
+
+The repository does hold a second alphabet, and it is not a counter-example.
+`site/gfx.py` has a 5×7 one of fifty-one characters — capitals, digits and a
+little punctuation — and it is drawn into GIF frames pixel by pixel at whatever
+scale the picture needs. It is lettering inside a drawing. It cannot be
+selected, searched, or read aloud, it has no lowercase, and nothing on the page
+sets text in it. Two alphabets, one of which is type and one of which is not.
+
+**Rejected:** a display face for the headings, drawn on a bigger grid. It is
+the obvious other answer and it costs three things. A second set of a hundred
+and thirty-eight glyphs, which is the smallest of them. A second `.woff` for a
+few dozen words per page. And a second grid — the face is a pixel face on an
+eight-unit cell and the type scale is 8, 16, 24, 32, whole multiples of it, so
+every pixel of a glyph lands on whole pixels of the screen. A display face
+drawn on twelve or on sixteen either brings a scale that is not a multiple of
+the body's, or is the body face larger, which is what is already there.
+
+The idiom settles the rest of it. These headings are DOS window title bars.
+A poster face would make them posters, and the front page would stop agreeing
+with the terminal it is describing.
+
+**What it costs.** A heading carries no information in its letterforms that a
+paragraph does not, so all of the hierarchy is in colour, case, spacing and
+three block characters. A reader who cannot distinguish `--accent` from
+`--ink` has the prefix and the bar, and that is the whole of it. It is thinner
+than a display face would be and it is the price of one face.
+
+A second *weight* is a different question, and it is item 0231: bold is the
+same letterforms drawn heavier, not a second face, and the browser must not be
+allowed to invent one.

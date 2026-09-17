@@ -2,10 +2,11 @@
 id: 236
 title: Decide whether the headings are the same face
 type: spec
-status: unmarked
+status: buried
 milestone: face
+assignee: Oddur Sigurdsson
 created: 2026-09-14
-updated: 2026-09-15
+updated: 2026-09-16
 priority: p2
 effort: s
 area: site/
@@ -36,5 +37,9 @@ Body/headings use Nether 8; graphics also use the separate 5x7 bitmap alphabet i
 
 ### Acceptance and evidence
 
-- [ ] The rationale accurately distinguishes live typography from raster lettering. A decision is sufficient; do not redraw glyphs or introduce another face without a separately scoped item.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] The rationale accurately distinguishes live typography from raster lettering. A decision is sufficient; do not redraw glyphs or introduce another face without a separately scoped item.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## 2026-09-16
+
+Decided: one face. spec/90-rationale.md §90.6 records it. Live text on both rooms is Nether 8 from site/font.py and nothing else -- prose, headings, listings, sign and lamp; the headings are the same letterforms at 24px and 16px against a 16px body, and the hierarchy is colour, uppercase and letter-spacing on h1, a filled bar on h2, and the block characters that precede all three. The 5x7 alphabet in site/gfx.py is not a second face: 51 characters, capitals and digits, drawn into GIF frames pixel by pixel; it is lettering inside a drawing and no rule sets text in it. Rejected: a display face on a bigger grid -- 138 more glyphs, a second .woff for a few dozen words a page, and a second grid, which is the decisive one, since the face is a pixel face on an eight-unit cell and the scale is 8/16/24/32, whole multiples of it. Limit: 0234 has not run, so there is no measured evidence of how the face reads at those sizes on a real screen; this decision is about which faces exist and not about whether 24px is the right heading size. A second weight is 0231 and unaffected. scripts/task check passes.
