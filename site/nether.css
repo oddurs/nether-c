@@ -71,6 +71,21 @@ html[data-lamp="lit"] { background-image: url("gfx/bg-lit.gif"); }
   font-display: block;
 }
 
+/* The bold is drawn, not derived. Seventeen rules below ask for one, and a
+   browser with only the regular makes its own by smearing each glyph sideways
+   and compositing it over itself -- on a face drawn as 8x8 pixels that turns
+   every one-pixel stem into one pixel and a fraction, the grid stops lining
+   up, and the letterform stops being the letterform. site/font.py draws the
+   second weight instead and refuses to ship one that is wider, lighter, or
+   short of a counter the regular has. */
+@font-face {
+  font-family: "Nether 8";
+  src: url("nether-bold.woff") format("woff");
+  font-weight: bold;
+  font-style: normal;
+  font-display: block;
+}
+
 /* The elements the user agent gives a font-family of its own.
    `font-family` inherits, but only where nothing else sets it -- and a browser
    sets it on every one of these before the page is read. So `body` naming the
@@ -97,6 +112,11 @@ body {
      scale is 8, 16, 24, 32 and there is nothing in between it. */
   font-size: 16px;
   line-height: 1.5;
+  /* A weight or a style this face does not have must fail visibly rather than
+     be invented. A missing bold that looks wrong is a bug report; a smeared
+     one is a thing people assume was intended. There is no italic and there
+     is not going to be one. */
+  font-synthesis: none;
   -webkit-font-smoothing: none;
   font-smooth: never;
 }

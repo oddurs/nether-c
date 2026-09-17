@@ -133,6 +133,29 @@ try {
             && ["W", "i", ".", " ", "■", "▸"].every(ch => c.measureText(ch).width === size * 7 / 8);
         });
       })()`), [true, true, true, true], "fixed advance at every pixel size");
+      // 0231: the bold is drawn, so it is a face the browser has rather than
+      // one it invents. A synthetic bold is wider, and on a site made of
+      // columns a wider bold moves every listing wherever a keyword is.
+      assert.equal(await evaluate('document.fonts.check(\'bold 16px "Nether 8"\')'), true, "the bold face is loaded");
+      assert.equal(await evaluate("getComputedStyle(document.body).fontSynthesis"), "none", "synthesis is off");
+      assert.deepEqual(await evaluate(`(() => {
+        const c = document.createElement("canvas").getContext("2d");
+        const text = "MUST bury 0x1f — strata@8";
+        return [8, 16, 24, 32].map(size => {
+          c.font = size + 'px "Nether 8"';
+          const plain = c.measureText(text).width;
+          c.font = 'bold ' + size + 'px "Nether 8"';
+          return c.measureText(text).width === plain && plain === text.length * size * 7 / 8;
+        });
+      })()`), [true, true, true, true], "a bold run measures what the same text measures unbolded");
+      assert.equal(await evaluate(`(() => {
+        const one = document.createElement("span"), two = document.createElement("strong");
+        one.textContent = two.textContent = "bury the whole of it 0123";
+        for (const el of [one, two]) { el.style.position = "absolute"; el.style.whiteSpace = "pre"; document.body.append(el); }
+        const same = one.getBoundingClientRect().width === two.getBoundingClientRect().width;
+        one.remove(); two.remove();
+        return same;
+      })()`), true, "a strong run is the same width in the page");
       if (path.includes("/spec/")) {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents li').length"), 12);
         assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);

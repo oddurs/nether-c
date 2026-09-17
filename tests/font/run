@@ -8,6 +8,11 @@ arrow, the build says which glyph to draw rather than a reader finding a box.
 
 It also reads the glyph back out of the font's own `cmap`, not out of
 site/font.py, so a face that was built wrong fails here too.
+
+Both weights, and the same checks on each, plus the ones that only mean
+anything between two faces: the same coverage, the same advance, and an `OS/2`
+that says which weight it is. A bold that is missing a glyph or a column wider
+than the regular breaks a listing in a way no single-face check can see.
 """
 
 import html
@@ -19,7 +24,10 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-FONT = ROOT / "site" / "nether.woff"
+FACES = {
+    "regular": (ROOT / "site" / "nether.woff", 400),
+    "bold": (ROOT / "site" / "nether-bold.woff", 700),
+}
 
 # What the browser never asks the face for.
 IGNORED = set("\n\r\t ﻿")
@@ -75,50 +83,112 @@ def cmap_of(table: bytes) -> set[int]:
 
 
 def main() -> int:
-    if not FONT.exists():
-        print("font: site/nether.woff is not built; run python3 site/font.py", file=sys.stderr)
-        return 1
-    shipped = tables(FONT.read_bytes())
-    have = cmap_of(shipped[b"cmap"])
-    want = rendered()
-    missing = sorted(c for c in want if ord(c) not in have)
-    if missing:
-        print("font: the site renders glyphs the face does not have:", file=sys.stderr)
-        for c in missing:
-            print(f"  U+{ord(c):04X}  {c}  {unicodedata.name(c, '?')}", file=sys.stderr)
-        print("\n  draw them in site/font.py, or take them out of the page", file=sys.stderr)
-        return 1
-    loose = unmapped(shipped)
-    if loose:
-        print("font: the cmap maps characters to glyphs the face does not have:",
-              file=sys.stderr)
-        for code, gid, total in loose:
-            print(f"  U+{code:04X} -> glyph {gid}, and there are {total}", file=sys.stderr)
-        print("\n  a browser throws out the whole face for this, and says nothing",
-              file=sys.stderr)
-        return 1
-    wrong = outlines(shipped, have)
-    if wrong:
-        print("font: the glyph outlines do not decode back to what was drawn:",
-              file=sys.stderr)
-        for code, why in wrong:
-            print(f"  U+{code:04X}  {why}", file=sys.stderr)
-        return 1
+    sys.path.insert(0, str(ROOT / "site"))
+    import font as source  # noqa: E402 — the thing under test, not a dependency
 
-    bad_metrics = metrics(shipped)
-    if bad_metrics:
-        print("font: the face is not a consistently spaced mono face:", file=sys.stderr)
-        for why in bad_metrics:
+    drawings = {"regular": source.G, "bold": source.bold()}
+    want = rendered()
+    built: dict[str, dict[bytes, bytes]] = {}
+
+    for weight, (path, expected) in FACES.items():
+        if not path.exists():
+            print(f"font: {path.relative_to(ROOT)} is not built; "
+                  "run python3 site/font.py", file=sys.stderr)
+            return 1
+        shipped = built[weight] = tables(path.read_bytes())
+        have = cmap_of(shipped[b"cmap"])
+        missing = sorted(c for c in want if ord(c) not in have)
+        if missing:
+            print(f"font: the site renders glyphs the {weight} does not have:",
+                  file=sys.stderr)
+            for c in missing:
+                print(f"  U+{ord(c):04X}  {c}  {unicodedata.name(c, '?')}", file=sys.stderr)
+            print("\n  draw them in site/font.py, or take them out of the page",
+                  file=sys.stderr)
+            return 1
+        loose = unmapped(shipped)
+        if loose:
+            print(f"font: the {weight} cmap maps characters to glyphs it does not have:",
+                  file=sys.stderr)
+            for code, gid, total in loose:
+                print(f"  U+{code:04X} -> glyph {gid}, and there are {total}", file=sys.stderr)
+            print("\n  a browser throws out the whole face for this, and says nothing",
+                  file=sys.stderr)
+            return 1
+        wrong = outlines(shipped, have, drawings[weight])
+        if wrong:
+            print(f"font: the {weight} outlines do not decode back to what was drawn:",
+                  file=sys.stderr)
+            for code, why in wrong:
+                print(f"  U+{code:04X}  {why}", file=sys.stderr)
+            return 1
+        bad_metrics = metrics(shipped, drawings[weight], expected)
+        if bad_metrics:
+            print(f"font: the {weight} is not a consistently spaced mono face:",
+                  file=sys.stderr)
+            for why in bad_metrics:
+                print(f"  {why}", file=sys.stderr)
+            return 1
+
+    drawn = source.weigh()
+    if drawn:
+        print("font: the bold does not answer to the regular:", file=sys.stderr)
+        for why in drawn:
             print(f"  {why}", file=sys.stderr)
         return 1
 
+    apart = between(built["regular"], built["bold"])
+    if apart:
+        print("font: the two weights are not the same face:", file=sys.stderr)
+        for why in apart:
+            print(f"  {why}", file=sys.stderr)
+        return 1
+
+    have = cmap_of(built["regular"][b"cmap"])
     spare = len(have) - len(want)
-    print(f"font: {len(want)} glyph(s) rendered, all present, {spare} spare")
-    print(f"font: {len(have)} outline(s) decode to the pixels they were drawn from")
+    print(f"font: {len(want)} glyph(s) rendered, both weights have them, {spare} spare")
+    print(f"font: {2 * len(have)} outline(s) decode to the pixels they were drawn from")
+    print(f"font: {len(have) - len(source.SAME)} glyph(s) drawn twice, "
+          f"{len(source.SAME)} the same at both weights")
     return 0
 
 
-def metrics(shipped: dict[bytes, bytes]) -> list[str]:
+def between(regular: dict[bytes, bytes], bold: dict[bytes, bytes]) -> list[str]:
+    """What only means anything with two faces in front of you.
+
+    The advance is the one with teeth. The site is columns — listings,
+    diagrams, the sign — and a bold that advances one unit further than its
+    regular moves every one of them wherever a keyword or a depth is coloured.
+    """
+    bad = []
+    if cmap_of(regular[b"cmap"]) != cmap_of(bold[b"cmap"]):
+        bad.append("the two weights do not cover the same codepoints")
+    advances = []
+    for table in (regular, bold):
+        (count,) = struct.unpack(">H", table[b"maxp"][4:6])
+        advances.append([struct.unpack(">H", table[b"hmtx"][i * 4:i * 4 + 2])[0]
+                         for i in range(count)])
+    if advances[0] != advances[1]:
+        bad.append("the two weights do not advance identically")
+    if regular[b"hhea"] != bold[b"hhea"]:
+        bad.append("the two weights do not agree on ascent, descent or advance")
+    for name, table, weight, selection in (
+        ("regular", regular, 400, 0b1000000), ("bold", bold, 700, 0b100000)
+    ):
+        (said,) = struct.unpack(">H", table[b"OS/2"][4:6])
+        (flags,) = struct.unpack(">H", table[b"OS/2"][62:64])
+        (style,) = struct.unpack(">H", table[b"head"][44:46])
+        if said != weight:
+            bad.append(f"the {name} says usWeightClass {said} and not {weight}")
+        if flags != selection:
+            bad.append(f"the {name} says fsSelection {flags:b} and not {selection:b}")
+        if style != (1 if weight >= 700 else 0):
+            bad.append(f"the {name} head.macStyle does not say what it is")
+    return bad
+
+
+def metrics(shipped: dict[bytes, bytes], drawn: dict[str, tuple[str, ...]],
+            weight: int) -> list[str]:
     """The spacing contract is as real as the outlines.
 
     The drawing grid is eight pixels wide, while six pixels plus one blank
@@ -144,11 +214,11 @@ def metrics(shipped: dict[bytes, bytes]) -> list[str]:
     (fixed,) = struct.unpack(">I", shipped[b"post"][12:16])
     if fixed != 1:
         bad.append("post does not mark the face fixed-pitch")
-    for ch, rows in source.G.items():
+    for ch, rows in drawn.items():
         if any(bit == "#" for row in rows for bit in row[source.INK_COLS:]):
             bad.append(f"U+{ord(ch):04X} draws past the six-column mono cell")
-    for gid, ch in enumerate(sorted(source.G), 1):
-        columns = [x for row in source.G[ch] for x, bit in enumerate(row) if bit == "#"]
+    for gid, ch in enumerate(sorted(drawn), 1):
+        columns = [x for row in drawn[ch] for x, bit in enumerate(row) if bit == "#"]
         expected = min(columns, default=0) * source.PIXEL
         (_, bearing) = struct.unpack(">Hh", shipped[b"hmtx"][gid * 4:gid * 4 + 4])
         if bearing != expected:
@@ -246,7 +316,8 @@ def points_of(glyph: bytes) -> list[tuple[int, int]] | str:
     return list(zip(coords[0], coords[1]))
 
 
-def outlines(shipped: dict[bytes, bytes], have: set[int]) -> list[tuple[int, str]]:
+def outlines(shipped: dict[bytes, bytes], have: set[int],
+             drawn: dict[str, tuple[str, ...]]) -> list[tuple[int, str]]:
     """Every glyph, decoded and compared with the bitmap it was drawn from."""
     sys.path.insert(0, str(ROOT / "site"))
     import font as source  # noqa: E402 — the thing under test, not a dependency
@@ -268,7 +339,7 @@ def outlines(shipped: dict[bytes, bytes], have: set[int]) -> list[tuple[int, str
             continue
         # What the bitmap says the corners should be, in the same order.
         want = []
-        for r, first, last in source.runs(source.G[chr(code)]):
+        for r, first, last in source.runs(drawn[chr(code)]):
             x0, x1 = first * source.PIXEL, (last + 1) * source.PIXEL
             y0 = source.ASCENT - (r + 1) * source.PIXEL
             want += [(x0, y0), (x0, y0 + source.PIXEL),
