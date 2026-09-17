@@ -108,15 +108,40 @@ refusal is an ordinary witness: it is recorded, it is served back on replay, and
 a trace whose program handled it replays identically to one whose program did
 not. Refusal does not make a trace incomplete and does not mark it.
 
-Two holes with identical `call` fields in the same trace MUST be the same
-hole. This is what makes exhumation cheap: reading the same file twice is one
-question, asked once.
+Two holes with identical `call` fields **at a read stratum** in the same trace
+MUST be the same hole. The read strata are 1, 2, 3 and 5. This is what makes
+exhumation cheap: reading the same file twice is one question, asked once.
 
-The hole keeps the `span` of the first place that asked, in the order
+Such a hole keeps the `span` of the first place that asked, in the order
 [§6.2](#62-demand) fixes. Which place that is, is therefore a fact about the
 program rather than about the implementation, and two burials of the same
 source agree on it. A hole is a question for the world, and the world does not
 care how many places were waiting on the answer.
+
+Holes at 4, 6, 7 and 8 are **never** merged, however identical their calls.
+[§1.8](01-strata.md#18-why-write-is-deeper-than-read) is the reason and it is
+the whole of it: those strata are ordered where they are because of what they
+disturb rather than what they learn, and a thing that cannot be taken back
+cannot be done once and counted twice. Two `post`s to the same address with
+the same body are two messages, and §1.1 prices stratum 6 at *the world
+remembers what was said*. Two `draw`s are two draws, or `draw` is a pure
+function of its argument and [§9.7](09-prelude.md#97-stratum-7-entropy) is wrong to call
+it the only source of nondeterminism in the language. `write` and `remove` are
+the arguable ones — writing the same bytes twice changes nothing the second
+time — and they are not merged either, because a trace that describes fewer
+acts than the program performed is a trace that lies about what was done.
+
+So a call can be asked more than once, and then it is answered more than once:
+
+> The answers to one call are served in the order [§6.2](#62-demand) fixes —
+> the *n*th hole that asks it takes the *n*th answer recorded for it. An
+> implementation MUST NOT address an answer by the place that asked. A span is
+> a fact about one text, a residue is printed and lowered again
+> ([§6.5](#65-residue)), and an answer that could not survive that would break
+> the staging law wherever the world had already said something.
+
+At a read stratum there is one hole and one answer, and this says nothing new
+about it.
 
 ## 6.4 Starvation and fuel
 
