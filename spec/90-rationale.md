@@ -1032,6 +1032,14 @@ because they are all true.
 - **Debugging by print.** Two commands instead of one, forever.
 - **Storage.** The ledger never shrinks. §7.6 argues that this is affordable;
   it has not yet been measured, and until it is that argument is a hope.
+- **Keeping a secret.** Depth is a claim about where a value has been, not
+  about what it can be made to reveal, and the two get confused because a
+  lattice is what a confidentiality type system looks like too.
+  [§1.5](01-strata.md#15-seal)'s `seal` is the shortest demonstration: the
+  cairn of a depth-3 file is at depth 0, `hex` makes it text, and equality on
+  it decides something about the file while holding nothing. A program that
+  must not reveal a deep value cannot be checked by this type system, and
+  nothing in the language is going to make it one.
 - **Learning curve.** Depth is a genuinely new thing to learn. HolyC's whole
   proposition was that you already knew it — it was C, plus permission.
 

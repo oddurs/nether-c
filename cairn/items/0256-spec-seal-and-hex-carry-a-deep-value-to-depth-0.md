@@ -2,8 +2,9 @@
 id: 256
 title: 'Spec: seal and hex carry a deep value to depth 0'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 created: 2026-09-16
 updated: 2026-09-16
 priority: p1
@@ -71,7 +72,11 @@ be checked by this type system.
 
 ## Acceptance criteria
 
-- [ ] §1.5 says what depth claims and what it does not
-- [ ] §2.3's [PRIM] justification does not rest on what an observer learns
-- [ ] §90.3 lists the exclusion beside the other honest ones
-- [ ] `spec/10-glossary.md`'s entry for depth agrees
+- [x] §1.5 says what depth claims and what it does not
+- [x] §2.3's [PRIM] justification does not rest on what an observer learns
+- [x] §90.3 lists the exclusion beside the other honest ones
+- [x] `spec/10-glossary.md`'s entry for depth agrees
+
+## 2026-09-16
+
+Written. §1.5 now states the rule in a block quote -- depth is a claim about where a value has been and about nothing else, and not a claim about what a deep value can be made to reveal -- and then demonstrates the gap with a real sample rather than the item's sketch: a depth-3 read sealed and compared against a cairn literal, giving a Bool@0. It says plainly that none of that is a hole in the rule, only in the rule a reader might have inferred. §2.3's [PRIM] justification no longer appeals to what an observer learns; the condition is in the maximum because the result's history runs through it -- a value that exists because a depth-3 file said one thing rather than another is a value the disk was consulted for, and a trace calling it pure would owe no witness for a read that happened -- and it points at §1.5 for the thing depth does not do. §90.3 gains 'Keeping a secret' beside the other exclusions, and says why the confusion is natural: a lattice is what a confidentiality type system looks like too. The glossary's Depth and Seal entries both agree. The new sample is registered in crates/nether-syntax/tests/spec/mod.rs as Statements and recorded in tests/transcripts/MANIFEST.tsv, so it parses and checks like every other sample in the specification. scripts/task check passes in full. No code changed and none needed to: the item is right that seal is sound and the defect was the justification beside it.

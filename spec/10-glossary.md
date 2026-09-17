@@ -42,7 +42,9 @@ evaluated. Nothing else is evaluated. There is no `main`.
 printed; read afterwards with `lamp`.
 [§4.7](04-grammar.md#47-the-bare-expression-statement)
 
-**Depth** (d) — how far into the world a value's history reaches, 0 to 8.
+**Depth** (d) — how far into the world a value's history reaches, 0 to 8. A
+claim about where a value has been and not about what it can be made to reveal
+([§1.5](01-strata.md#15-seal)).
 Part of the value's type; composes by maximum; never decreases.
 [§1.1](01-strata.md#11-the-lattice)
 
@@ -112,7 +114,9 @@ edges between them. Itself a complete program.
 `strata`, `graft`. [§8](08-rites.md)
 
 **Seal** — to take the cairn of a value. Always yields depth 0, because a name
-is pure regardless of what it names. [§1.5](01-strata.md#15-seal)
+is pure regardless of what it names — which is also the shortest demonstration
+that depth confines provenance and not secrecy.
+[§1.5](01-strata.md#15-seal)
 
 **Sealed trace** — a trace with no holes. It has a value.
 [§6.6](06-evaluation.md#66-exhumation)

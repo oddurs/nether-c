@@ -47,6 +47,7 @@ pub const SAMPLES: &[(&str, Shape)] = &[
     ("01-strata.md § 1.3 Descent #1", Shape::Unit),
     ("01-strata.md § 1.3 Descent #2", Shape::Illegal("`descend net` does not grant `disk!`")),
     ("01-strata.md § 1.5 Seal #1", Shape::Unit),
+    ("01-strata.md § 1.5 Seal #2", Shape::Statements),
     ("01-strata.md § 1.6 Shade, and the Orpheus rule #1", Shape::Illegal("the Orpheus error")),
     ("02-calculus.md § 2.3 What each rule is doing #1", Shape::Unit),
     ("02-calculus.md § 2.4 Metatheory #1", Shape::Statements),

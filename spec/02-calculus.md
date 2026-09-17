@@ -135,8 +135,13 @@ the artifact exists.
 **[PRIM]** ranges over every primitive operation, and a conditional is one of
 them: `if`, `while`, `&&` and `||` take their condition and their arms as
 operands, and the maximum is over all of them. The condition belongs in that
-maximum because which arm was taken is itself something the condition knew —
-`if (secret) { 0 } else { 1 }` tells you about `secret` whichever arm runs.
+maximum because the result's *history* runs through it: a value that exists
+because a depth-3 file said one thing rather than another is a value the disk
+was consulted for, and a trace that called it pure would owe no witness for a
+read that happened. That is provenance, which is what a depth is.
+
+It is not an argument about what an observer learns. Depth does not confine
+that, and [§1.5](01-strata.md#15-seal) says so where it is easiest to see.
 
 The arms are why [PRIM] is the one rule whose depth is a bound rather than a
 fact, and §2.4 is about that.
