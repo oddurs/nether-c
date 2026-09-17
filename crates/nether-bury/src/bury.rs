@@ -305,7 +305,7 @@ impl Halt {
 /// kept by putting the asking somewhere burial cannot reach. Given one, a
 /// world-question folds to what was said instead of becoming a hole. §6.6.
 #[derive(Debug, Clone, Default)]
-pub struct Answers(std::collections::HashMap<nether_ledger::Call, Value>);
+pub struct Answers(HashMap<nether_ledger::Call, Vec<Value>>);
 
 impl Answers {
     /// Nothing has been answered. Every world-question becomes a hole.
@@ -315,20 +315,26 @@ impl Answers {
     }
 
     /// What the world said to that question, as it was written down.
+    ///
+    /// Appended rather than replaced. §6.3 merges a hole only at a read
+    /// stratum, so one call can be asked more than once, and then it is
+    /// answered more than once — the *n*th hole takes the *n*th answer, in the
+    /// order §6.2 fixes. A read has one hole and one answer and never reaches
+    /// past the first.
     #[must_use]
     pub fn and(mut self, asked: nether_ledger::Call, said: Value) -> Self {
-        self.0.insert(asked, said);
+        self.0.entry(asked).or_default().push(said);
         self
     }
 
-    fn get(&self, asked: &nether_ledger::Call) -> Option<&Value> {
-        self.0.get(asked)
+    fn get(&self, asked: &nether_ledger::Call, nth: usize) -> Option<&Value> {
+        self.0.get(asked)?.get(nth)
     }
 
-    /// How many questions have been answered.
+    /// How many answers it holds.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.0.values().map(Vec::len).sum()
     }
 
     /// Whether nothing has.
@@ -401,6 +407,7 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64, answers: &Answers) -> Result<Re
         holes: Vec::new(),
         deposits: Vec::new(),
         asked: HashMap::new(),
+        served: HashMap::new(),
         specialised: Vec::new(),
         minted: HashMap::new(),
         starved: None,
@@ -541,10 +548,18 @@ struct Burial<'a> {
     starved: Option<Block>,
     /// The holes already dug, by the question each one asks.
     ///
-    /// §6.3 makes the `call` the identity and not the node. A node carries the
-    /// span of the place that asked, so interning on the node would make the
-    /// same question asked from two places into two questions.
+    /// Read strata only. §6.3 makes the `call` the identity there and not the
+    /// node — a node carries the span of the place that asked, so interning on
+    /// the node would make the same question asked from two places into two
+    /// questions. At 4, 6, 7 and 8 nothing is interned and two asks are two
+    /// holes, which is the same section read the other way.
     asked: HashMap<nether_ledger::Call, Cairn>,
+    /// How many times each call has already been answered in this burial.
+    ///
+    /// The *n*th ask takes the *n*th answer (§6.3). Only an act counts: a read
+    /// is one hole however many places wait on it, so every one of them takes
+    /// the first answer and none of them uses it up.
+    served: HashMap<nether_ledger::Call, usize>,
 }
 
 /// One open loop or call.
@@ -583,10 +598,12 @@ impl Burial<'_> {
     /// which is what makes exhumation cheap: reading the same file twice is
     /// one question, asked once. §6.3.
     fn dig(&mut self, p: Prim, call: nether_ledger::Call, span: Span) -> Cairn {
-        // §6.3: two holes with identical calls in one trace MUST be the same
-        // hole. The second place to ask is not a second question, so it gets
-        // the hole the first one made — span and all.
-        if let Some(dug) = self.asked.get(&call) {
+        // §6.3: two holes with identical calls at a read stratum MUST be the
+        // same hole. The second place to ask is not a second question, so it
+        // gets the hole the first one made — span and all. At 4, 6, 7 and 8
+        // the second ask is a second act, and §1.8 is the whole reason.
+        let shared = p.latent().reads();
+        if shared && let Some(dug) = self.asked.get(&call) {
             return *dug;
         }
         let node = Node::Hole {
@@ -598,9 +615,19 @@ impl Burial<'_> {
                 end: u64::from(span.end),
             },
         };
-        let cairn = self.remember(Stored::Node(node));
-        self.asked.insert(call, cairn);
-        self.holes.push(cairn);
+        // Two acts at one span are one node, because a node is named by what
+        // is in it — a loop asking the same thing twice from the same place.
+        // `remember` is where that is already known, so the list of holes is
+        // built from what it says rather than by looking through itself.
+        let cairn = Stored::Node(node.clone()).cairn();
+        let fresh = !self.known.contains(&cairn);
+        self.remember(Stored::Node(node));
+        if shared {
+            self.asked.insert(call, cairn);
+        }
+        if fresh {
+            self.holes.push(cairn);
+        }
         cairn
     }
 
@@ -977,7 +1004,16 @@ impl Burial<'_> {
                         function: p.name().to_string(),
                         args: args.into_iter().map(|v| self.remember(Stored::Value(v))).collect(),
                     };
-                    if let Some(said) = self.answers.get(&asked).cloned() {
+                    // §6.3: a read takes the first answer and does not use
+                    // it up; an act takes the one after the last act that
+                    // took one.
+                    let shared = p.latent().reads();
+                    let nth =
+                        if shared { 0 } else { self.served.get(&asked).copied().unwrap_or(0) };
+                    if let Some(said) = self.answers.get(&asked, nth).cloned() {
+                        if !shared {
+                            *self.served.entry(asked).or_default() += 1;
+                        }
                         self.remember(Stored::Value(said.clone()));
                         return Ok(Self::answered(&said, x));
                     }

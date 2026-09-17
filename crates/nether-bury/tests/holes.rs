@@ -148,6 +148,10 @@ fn one_question_asked_from_two_places_is_one_hole() {
     // §6.3, and the case the helper above hid: three `read("k")` built by
     // `reading()` share `Span::default()`, so interning on the node rather
     // than on the call looked right. Two positions is the test.
+    //
+    // 0138's proof, and it is a `read` on purpose: §6.3 now merges only at a
+    // read stratum, so this is the half of the lattice the claim was always
+    // about. The other half is below.
     let first = Span { start: 10, end: 20 };
     let second = Span { start: 90, end: 100 };
     let r = buried(&demanding(vec![
@@ -341,4 +345,130 @@ fn naming_is_constant_in_what_has_already_been_named() {
         large < small * 8,
         "four times the questions took {large:?} against {small:?}; that is the scan"
     );
+}
+
+// ── what a hole is a question about ─────────────────────────────────────────
+//
+// §6.3 merges two identical calls only at a read stratum. §1.8 is the reason
+// and it is the whole of it: 4, 6, 7 and 8 are ordered where they are by what
+// they disturb, and a thing that cannot be taken back cannot be done once and
+// counted twice.
+
+fn lowered(src: &str) -> Unit {
+    let ast = nether_syntax::parse(src.as_bytes()).expect("parses");
+    let unit = nether_syntax::lower(&ast).expect("lowers");
+    assert!(check(&unit).is_empty(), "{:?}", check(&unit));
+    unit
+}
+
+fn asking(residue: &Residue) -> Vec<(String, u8, (u64, u64))> {
+    residue
+        .questions()
+        .iter()
+        .map(|node| {
+            let Node::Hole { call, stratum, span } = node else { panic!("not a hole") };
+            (call.function.clone(), *stratum, (span.start, span.end))
+        })
+        .collect()
+}
+
+#[test]
+fn two_identical_reads_are_one_hole() {
+    let unit = lowered(
+        "Bytes@3 a = must(descend disk { read(\"k\") });\n\
+         Bytes@3 b = must(descend disk { read(\"k\") });\n\
+         demand concat(a, b);\n",
+    );
+    let r = bury(&unit, source(), 100_000).expect("buries");
+    assert_eq!(asking(&r).len(), 1, "a read asked twice is one question: {:?}", asking(&r));
+}
+
+#[test]
+fn two_identical_sends_are_two_holes_at_two_places() {
+    let unit = lowered(
+        "demand descend net! { post(\"http://h/pay\", b\"{}\") };\n\
+         demand descend net! { post(\"http://h/pay\", b\"{}\") };\n",
+    );
+    let r = bury(&unit, source(), 100_000).expect("buries");
+    let asked = asking(&r);
+    assert_eq!(asked.len(), 2, "two sends are two messages: {asked:?}");
+    assert!(asked.iter().all(|(f, s, _)| f == "post" && *s == 6));
+    assert_ne!(asked[0].2, asked[1].2, "and the trace says where each was sent from");
+}
+
+#[test]
+fn every_act_is_its_own_hole_and_every_read_is_shared() {
+    for (src, want) in [
+        (
+            "demand descend disk! { write(\"o\", b\"x\") };\n\
+          demand descend disk! { write(\"o\", b\"x\") };\n",
+            2,
+        ),
+        (
+            "demand descend disk! { remove(\"o\") };\n\
+          demand descend disk! { remove(\"o\") };\n",
+            2,
+        ),
+        (
+            "demand descend entropy { draw(8) };\n\
+          demand descend entropy { draw(8) };\n",
+            2,
+        ),
+        (
+            "demand descend net { get(\"http://h/x\") };\n\
+          demand descend net { get(\"http://h/x\") };\n",
+            1,
+        ),
+        ("demand descend env { env(\"HOME\") };\ndemand descend env { env(\"HOME\") };\n", 1),
+    ] {
+        let r = bury(&lowered(src), source(), 100_000).expect("buries");
+        assert_eq!(asking(&r).len(), want, "{src}gave {:?}", asking(&r));
+    }
+}
+
+#[test]
+fn two_draws_can_come_back_different() {
+    let unit =
+        lowered("demand descend entropy { draw(8) };\ndemand descend entropy { draw(8) };\n");
+    let pending = bury(&unit, source(), 100_000).expect("buries");
+    let [Node::Hole { call: first, .. }, Node::Hole { call: second, .. }] = pending.questions()[..]
+    else {
+        panic!("not two holes: {:?}", pending.questions())
+    };
+    assert_eq!(first, second, "the same question, asked twice");
+
+    // §6.3: the nth hole takes the nth answer. Entropy is the case that says
+    // whether this is real — under one answer per call, `draw` would be a
+    // pure function of its argument inside a trace, and §9.7 calls it the
+    // only source of nondeterminism in the language.
+    let answers = nether_bury::Answers::none()
+        .and(first.clone(), Value::Bytes(b"aaaaaaaa".to_vec()))
+        .and(second.clone(), Value::Bytes(b"bbbbbbbb".to_vec()));
+    let done = nether_bury::bury_with(&unit, source(), 100_000, &answers).expect("buries");
+    assert!(done.holes.is_empty());
+    let said: Vec<&ExprKind> = done.demands.iter().map(|d| &d.kind).collect();
+    assert_eq!(
+        said,
+        vec![
+            &ExprKind::Literal(Literal::Bytes(b"aaaaaaaa".to_vec())),
+            &ExprKind::Literal(Literal::Bytes(b"bbbbbbbb".to_vec())),
+        ]
+    );
+}
+
+#[test]
+fn a_read_asked_from_everywhere_still_takes_the_one_answer() {
+    let unit = lowered(
+        "Bytes@3 a = must(descend disk { read(\"k\") });\n\
+         Bytes@3 b = must(descend disk { read(\"k\") });\n\
+         Bytes@3 c = must(descend disk { read(\"k\") });\n\
+         demand concat(concat(a, b), c);\n",
+    );
+    let pending = bury(&unit, source(), 100_000).expect("buries");
+    let [Node::Hole { call, .. }] = pending.questions()[..] else { panic!("not one hole") };
+    let said = Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(b"k".to_vec()))));
+    let answers = nether_bury::Answers::none().and(call.clone(), said);
+    let done = nether_bury::bury_with(&unit, source(), 100_000, &answers).expect("buries");
+    assert!(done.holes.is_empty(), "one answer serves every place that asked");
+    assert_eq!(done.demands[0].kind, ExprKind::Literal(Literal::Bytes(b"kkk".to_vec())));
 }
