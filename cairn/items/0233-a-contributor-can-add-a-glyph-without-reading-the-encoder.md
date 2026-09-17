@@ -2,10 +2,11 @@
 id: 233
 title: A contributor can add a glyph without reading the encoder
 type: docs
-status: unmarked
+status: buried
 milestone: face
+assignee: Oddur Sigurdsson
 created: 2026-09-14
-updated: 2026-09-15
+updated: 2026-09-16
 priority: p0
 effort: m
 area: site/font.py
@@ -48,5 +49,9 @@ CONTRIBUTING.md needs the missing-codepoint-to-PR path. Preserve the current det
 
 ### Acceptance and evidence
 
-- [ ] A contributor can reproduce the diagnostic, add a glyph, regenerate tracked assets and pass checks without reading the TrueType encoder. Any proposed distribution change belongs to 0235.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] A contributor can reproduce the diagnostic, add a glyph, regenerate tracked assets and pass checks without reading the TrueType encoder. Any proposed distribution change belongs to 0235.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## 2026-09-16
+
+Written, and followed. CONTRIBUTING.md gains a 'Drawing a glyph' section: the diagnostic as it is actually printed, where the drawings live, the six things the grid asks (eight rows of eight, six ink columns, seven rows tall with row 7 the descender, name the character rather than its number, draw both weights or declare SAME, and look at it with --sheet), then scripts/task font and scripts/task check. I verified it by adding a paragraph with U+22A5 to spec/10-glossary.md, baking, watching tests/font/run name it, pasting the example straight out of CONTRIBUTING.md into site/font.py, and running the two commands: green, 140 glyphs. Walking it found two things the prose could not paper over. The regular glyphs beyond ASCII were written as \\uXXXX escapes while the bold ones I added in 0231 use the character itself, so a contributor had to guess which; 44 of them now name the character they draw, which changes no bytes in either .woff. And a contributor who drew the regular and forgot the bold got a KeyError traceback out of bold() -- the exact experience this item exists to remove. bold() now falls back to the regular for a glyph with no bold and weigh() reports it first, so both the forgot-it and the genuinely-un-boldable paths end in a sentence naming the glyph and the two ways out. On the question the item raised: the .woff files stay committed. The thing a reviewer has to read is the bitmaps beside them, the files are a deterministic function of those, and scripts/task font:check rebuilds and compares -- which is the opposite of web/necropolis/nether.wasm, never committed because a Rust release build is not byte-reproducible. That reasoning is in CONTRIBUTING.md; 0235 is about releasing the face with a licence and is untouched. scripts/task check passes in full.
