@@ -117,10 +117,19 @@ fn deposits(store: &Store, root: Cairn) -> Vec<String> {
         }
         let Ok(stored) = store.get(at) else { continue };
         let Stored::Node(n) = &stored else { continue };
-        if let Node::Deposit { value: held, span } = n {
-            if let Ok(Stored::Value(v)) = store.get(*held) {
-                found.push((*span.source.as_bytes(), span.start, value(&v)));
+        match n {
+            // §7.3.1: the list holds one entry per deposit, and a value
+            // deposited a thousand times from one span is one node named a
+            // thousand times. So the list is read and not the graph — walking
+            // the graph finds that node once, and a loop that deposits on
+            // every turn used to read as one turn.
+            Node::Trace { deposits, .. } => {
+                found.extend(deposits.iter().filter_map(|at| deposited(store, *at)));
             }
+            // A `Deposit` lamped on its own, rather than through a trace that
+            // names it. There is no list to read, and it is one deposit.
+            Node::Deposit { .. } if at == root => found.extend(deposited(store, at)),
+            _ => {}
         }
         stack.extend(n.references());
     }
@@ -129,6 +138,15 @@ fn deposits(store: &Store, root: Cairn) -> Vec<String> {
     // corresponding to nothing anybody wrote.
     found.sort_by_key(|(source, at, _)| (*source, *at));
     found.into_iter().map(|(_, _, text)| text).collect()
+}
+
+/// One `Deposit`, as the source it was made from and the offset within it.
+fn deposited(store: &Store, at: Cairn) -> Option<([u8; 32], u64, String)> {
+    let Ok(Stored::Node(Node::Deposit { value: held, span })) = store.get(at) else {
+        return None;
+    };
+    let Ok(Stored::Value(v)) = store.get(held) else { return None };
+    Some((*span.source.as_bytes(), span.start, value(&v)))
 }
 
 /// A value, as a person reads one.
