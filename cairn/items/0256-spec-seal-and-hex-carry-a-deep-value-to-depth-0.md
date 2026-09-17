@@ -2,8 +2,9 @@
 id: 256
 title: 'Spec: seal and hex carry a deep value to depth 0'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 created: 2026-09-16
 updated: 2026-09-16
 priority: p1
@@ -71,7 +72,15 @@ be checked by this type system.
 
 ## Acceptance criteria
 
-- [ ] §1.5 says what depth claims and what it does not
-- [ ] §2.3's [PRIM] justification does not rest on what an observer learns
-- [ ] §90.3 lists the exclusion beside the other honest ones
-- [ ] `spec/10-glossary.md`'s entry for depth agrees
+- [x] §1.5 says what depth claims and what it does not
+- [x] §2.3's [PRIM] justification does not rest on what an observer learns
+- [x] §90.3 lists the exclusion beside the other honest ones
+- [x] `spec/10-glossary.md`'s entry for depth agrees
+
+## 2026-09-16
+
+Neither seal nor the lattice was wrong. §2.3 was: it justified PRIM's condition term with an information-flow argument, which is the one thing the lattice does not do. PRIM takes the condition because the result's history reaches through it — provenance — and §1.5 now says outright that depth records where a value came from and does not bound what it reveals.
+
+## 2026-09-16
+
+Two ways to make the confinement reading true were rejected and are in §90.2. Giving seal a depth deletes the escape, since a name as deep as what it names is the value with fewer bits and every trace is built from cairns held at 0. Forbidding cairn comparison breaks equality itself (§5.3) and closes only the deciding half; hex still hands over the bits.

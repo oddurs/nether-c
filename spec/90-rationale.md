@@ -670,6 +670,53 @@ span is a fact about one text, and [§6.5](06-evaluation.md#65-residue) requires
 a residue to be printed and lowered again, which gives every hole in it a new
 one.
 
+### `seal`, and the lattice that was read as a confinement
+
+[§2.3](02-calculus.md#23-what-each-rule-is-doing) justified [PRIM]'s inclusion
+of a conditional's condition like this:
+
+> The condition belongs in that maximum because which arm was taken is itself
+> something the condition knew — `if (secret) { 0 } else { 1 }` tells you about
+> `secret` whichever arm runs.
+
+That is an information-flow argument, and it was the only justification the
+rule offered. One section earlier, [§1.5](01-strata.md#15-seal) hands back the
+name of a value of any depth at depth 0, and [§9.2](09-prelude.md#92-depth-0)
+turns a name into text with `hex`. A reader who took §2.3 at face value had
+been told the lattice confines what a deep value can reveal, immediately before
+being handed a two hundred and fifty-six bit summary of one.
+
+Worse than the summary: [§5.3](05-types.md#53-equality) makes equality a
+comparison of cairns, so `seal secret == #…` is a `Bool@0`. A deep value drawn
+from a small set — a version string, a four-digit number, a file that is one of
+three — is recoverable at depth 0 by guessing, holding no capability and
+writing no witness.
+
+Two ways to make the confinement reading true were considered.
+
+**Give `seal` a depth.** `seal e : Cairn@d` rather than `Cairn@0`. It closes
+the channel and it deletes the escape: the entire use of a cairn is to be a
+name you can carry anywhere, and a name that is as deep as what it names is not
+a name, it is the value with fewer bits. Every trace in
+[section 07](07-ledger.md) is built out of cairns held at depth 0.
+
+**Keep `seal` and forbid comparing cairns.** Narrower, and it does not work
+either: [§5.3](05-types.md#53-equality) makes cairn comparison *the* equality
+in the language, and forbidding it for `Cairn` alone means two values that are
+equal cannot be compared. It would also close only the deciding half; `hex`
+would still hand over the bits.
+
+Neither was taken, because neither was fixing a defect. `seal` is sound for
+what depth actually tracks. What was wrong was the sentence in §2.3 and the
+silence in §1.5, and both are now fixed in place: [PRIM] takes the condition
+because the result's history reaches through it, which is provenance, and §1.5
+says outright what depth is a claim about.
+
+**What it cost.** An exclusion in [§90.3](#903-things-nether-c-is-worse-at), in
+the same register as the rest of that list. A reader who arrived hoping the
+lattice would keep a secret out of an artifact is told at §1.5 that it will
+not, rather than finding out from a cairn in a deposit.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
@@ -996,6 +1043,13 @@ because they are all true.
   holds a connection.
 - **Numerics.** No floats. See above.
 - **Debugging by print.** Two commands instead of one, forever.
+- **Confidentiality.** Depth is provenance, not secrecy. `seal` names a value
+  of any depth at depth 0 and `hex` turns that name into text, so a depth-0
+  expression can carry two hundred and fifty-six bits of a depth-3 file and,
+  since equality is a comparison of cairns, can decide things about one by
+  guessing. A program that must not *reveal* a deep value cannot be checked
+  by this type system, and nothing in the lattice was ever going to do it.
+  [§1.5](01-strata.md#15-seal).
 - **Storage.** The ledger never shrinks. §7.6 argues that this is affordable;
   it has not yet been measured, and until it is that argument is a hope.
 - **Learning curve.** Depth is a genuinely new thing to learn. HolyC's whole

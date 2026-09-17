@@ -124,6 +124,33 @@ file's contents hash to `a1f0c93d` tells you nothing about the file that you
 could not have computed yourself given the same bytes; it is a claim *about*
 the deep value, not the deep value.
 
+Depth records **where a value came from**. It does not record, and does not
+confine, what a value can reveal, and `seal` is the sentence that makes the
+difference visible:
+
+```c
+Bytes@3 secret = must(descend disk { read("key") });
+demand hex(seal secret);              // Str@0 — two hundred and fifty-six
+                                      // bits of a depth-3 file, deposited
+```
+
+[§5.3](05-types.md#53-equality) makes equality a comparison of cairns, so a
+depth-0 expression can also *decide* things about a deep value:
+`seal secret == #<sixty-four hex digits>` is a `Bool@0`, and a deep value drawn
+from a small set is recoverable at depth 0 by guessing — holding no capability
+and writing no witness.
+
+None of that is unsound. Nothing is laundered ([§1.2](#12-the-monotonicity-law)
+is untouched, since no operation handed back a shallower version of `secret`),
+no witness is missing, and the trace records exactly what happened: a `read`
+at stratum 3, and some pure arithmetic on its name afterwards.
+
+But it means the lattice is not a confidentiality lattice, and an
+implementation MUST NOT be built as though it were. A program that must not
+reveal a deep value cannot be checked by this type system, and
+[§90.3](90-rationale.md#903-things-nether-c-is-worse-at) says so beside the
+other exclusions.
+
 `seal` on a shade (§1.6) is legal and names the shade. A shade carries the
 stratum it came out of, and [§7.1](07-ledger.md#71-canonical-encoding) encodes
 that alongside what it holds, so `seal shade e` is not `seal e`. The cairn of

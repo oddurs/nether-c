@@ -43,8 +43,9 @@ printed; read afterwards with `lamp`.
 [§4.7](04-grammar.md#47-the-bare-expression-statement)
 
 **Depth** (d) — how far into the world a value's history reaches, 0 to 8.
-Part of the value's type; composes by maximum; never decreases.
-[§1.1](01-strata.md#11-the-lattice)
+Part of the value's type; composes by maximum; never decreases. A record of
+where a value came from, and not a bound on what it can reveal.
+[§1.1](01-strata.md#11-the-lattice), [§1.5](01-strata.md#15-seal)
 
 **Descend** — the expression that acquires a capability for the extent of a
 block. One-way within the block; only the tail value leaves.

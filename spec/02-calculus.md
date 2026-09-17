@@ -135,8 +135,14 @@ the artifact exists.
 **[PRIM]** ranges over every primitive operation, and a conditional is one of
 them: `if`, `while`, `&&` and `||` take their condition and their arms as
 operands, and the maximum is over all of them. The condition belongs in that
-maximum because which arm was taken is itself something the condition knew —
-`if (secret) { 0 } else { 1 }` tells you about `secret` whichever arm runs.
+maximum because the result's *history* reaches through it: whichever arm
+produced the value, the condition is one of the things that had to be evaluated
+to produce it, and a depth is a record of what a value's making touched.
+
+That is a claim about provenance and not about what an observer can work out.
+It is worth being exact, because the two read alike here and the lattice only
+does the first: `seal` hands the name of a depth-3 value back at depth 0, and
+[§1.5](01-strata.md#15-seal) is where that is settled.
 
 The arms are why [PRIM] is the one rule whose depth is a bound rather than a
 fact, and §2.4 is about that.
