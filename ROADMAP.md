@@ -288,13 +288,12 @@ An inspectable local trace, followed by a provenance walk and capability/answer 
 
 ## face — The Face
 
-`######····` 55% · 6 of 11 done · due 2027-08-01
+`#######···` 64% · 7 of 11 done · due 2027-08-01
 
 Conservative completion of the font system: preserve regular glyph work and current metrics while adding a real weight, review surface and contribution path.
 
 ### unmarked
 
-- [ ] [`0231`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0231-draw-a-bold-weight-and-refuse-to-fake-one.md) Draw a bold weight, and refuse to fake one <sup>feature · p0 · 0</sup>
 - [ ] [`0232`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0232-a-specimen-a-person-can-actually-read.md) A specimen a person can actually read <sup>feature · p1 · 0</sup>
 - [ ] [`0233`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0233-a-contributor-can-add-a-glyph-without-reading-the-encoder.md) A contributor can add a glyph without reading the encoder <sup>docs · p0 · 0</sup>
 - [ ] [`0234`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0234-read-the-face-at-the-sizes-it-is-read-at.md) Read the face at the sizes it is read at <sup>chore · p1 · 0</sup>
@@ -302,6 +301,7 @@ Conservative completion of the font system: preserve regular glyph work and curr
 
 ### buried
 
+- [x] [`0231`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0231-draw-a-bold-weight-and-refuse-to-fake-one.md) Draw a bold weight, and refuse to fake one <sup>feature · p0 · 0</sup>
 - [x] [`0236`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0236-decide-whether-the-headings-are-the-same-face.md) Decide whether the headings are the same face <sup>spec · p2 · 0</sup>
 - [x] [`0239`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0239-give-nether-8-deliberate-side-bearings.md) Give Nether 8 deliberate side bearings <sup>bug · p0 · 0</sup>
 - [x] [`0246`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0246-recover-and-publish-the-site-and-both-bitmap-faces.md) Recover and publish the site and both bitmap faces <sup>chore · p2 · 0</sup>
