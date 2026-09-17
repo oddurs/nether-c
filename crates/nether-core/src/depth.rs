@@ -47,6 +47,18 @@ impl Depth {
         self.0
     }
 
+    /// Whether this stratum asks the world something rather than doing
+    /// something to it.
+    ///
+    /// Strata 1, 2, 3 and 5. `spec/06-evaluation.md` §6.3 merges two identical
+    /// holes only here, and `spec/01-strata.md` §1.8 is why: 4, 6, 7 and 8 are
+    /// ordered where they are by what they disturb, and a thing that cannot be
+    /// taken back cannot be done once and counted twice.
+    #[must_use]
+    pub const fn reads(self) -> bool {
+        matches!(self, Self::STORE | Self::ENV | Self::DISK | Self::NET)
+    }
+
     /// The deeper of two depths.
     ///
     /// This is the whole of composition: an expression built from parts is
