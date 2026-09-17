@@ -645,6 +645,47 @@ buy that nesting back. It is a grammar change for an ergonomic one, nesting
 already says it, and [§1.3](01-strata.md#13-descent) is clearer when one
 `descend` means one capability.
 
+### One merging rule for every stratum
+
+[§6.3](06-evaluation.md#63-holes) said two holes with identical `call` fields
+MUST be the same hole, and justified it with a read: *reading the same file
+twice is one question, asked once*. The rule ranged over every prelude
+function.
+
+It made two identical `post` calls one send, and two `draw(8)` calls the same
+eight bytes. [§1.8](01-strata.md#18-why-write-is-deeper-than-read) spends a
+whole section arguing that a write is deeper than a read because it cannot be
+taken back, and this was the rule that ignored the argument one section later.
+`draw` is worse than the write case: §9.7 calls it the only source of
+nondeterminism in the language, and merging made it a pure function of its
+argument within a trace.
+
+Two ways to keep one rule were available.
+
+**Merge everything and say a program that means two sends writes two calls.**
+It is already false: two textually distinct `post` calls with equal arguments
+merged too, so there was no way to write two at all.
+
+**Merge nothing.** Honest, and it gives up the property that makes exhumation
+affordable: a build that reads one header from forty files would ask the world
+forty identical questions, and §6.3's sentence about why merging exists is
+right about the case it describes.
+
+What was taken is the split §1.8 already draws. Strata 1, 2, 3 and 5 read, and
+merge. Strata 4 and 6 disturb the world, 7 cannot answer twice alike, 8 cannot
+promise anything, and none of them merges.
+
+**What it cost.** A rule that was one sentence is now a sentence and a list of
+four numbers. The list is worth being explicit about rather than deriving from
+a predicate, because a reader who has to work out whether `exists` is a read
+will eventually work it out wrong.
+
+It also uncovered a case the specification still cannot express, which is item
+0264: two acts written at one span — a `post` in a loop that unrolls — are one
+node under [§7.3](07-ledger.md#73-nodes), because a node is named by its
+content and nothing in the content differs. Fixing that means a field on `Hole`
+and a domain bump, which is why it is its own item and not a line here.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by

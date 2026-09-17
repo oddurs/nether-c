@@ -42,6 +42,7 @@ spec/05-types.md § 5.4 Mutation #1	c	pinned	b90bad42db5f84e0
 spec/06-evaluation.md § 6.1 Burial #1	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md § 6.1 Burial #2	console	checked	f0456e0a140e8d99
 spec/06-evaluation.md § 6.2 Demand #1	c	pinned	32047b898ae2a1c0
+spec/06-evaluation.md § 6.3 Holes #1	c	pinned	d9b9c90820975ed9
 spec/06-evaluation.md § 6.4 Starvation and fuel #1	text	pinned	07c9e60510dab9cc
 spec/06-evaluation.md § 6.6 Exhumation #1	console	checked	2eabda973722523e
 spec/06-evaluation.md § 6.7 Replay #1	console	checked	48b4f4a335379799

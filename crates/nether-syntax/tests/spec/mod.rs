@@ -57,6 +57,7 @@ pub const SAMPLES: &[(&str, Shape)] = &[
     ("05-types.md § 5.2 Aggregates #1", Shape::Unit),
     ("05-types.md § 5.4 Mutation #1", Shape::Illegal("h was named by `seal h`")),
     ("06-evaluation.md § 6.2 Demand #1", Shape::Unit),
+    ("06-evaluation.md § 6.3 Holes #1", Shape::Unit),
     ("09-prelude.md § 9.2 Depth 0 #1", Shape::Statements),
     ("90-rationale.md § One number on an arrow #1", Shape::Unit),
 ];

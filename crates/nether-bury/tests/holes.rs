@@ -66,6 +66,37 @@ fn reading(path: &str) -> Expr {
     read_of(str_lit(path), Span::default())
 }
 
+fn post_of(body: &str, span: Span) -> Expr {
+    let answer = answer_bytes();
+    let mut c = call(
+        prim(Prim::Post, vec![Type::Str, Type::Bytes], answer.clone()),
+        vec![
+            str_lit("http://h/pay"),
+            pure(ExprKind::Literal(Literal::Bytes(body.into())), Type::Bytes),
+        ],
+        answer,
+        Depth::NET_WRITE,
+    );
+    c.span = span;
+    c
+}
+
+fn draw_of(n: i64, span: Span) -> Expr {
+    let mut c = call(
+        prim(Prim::Draw, vec![Type::Int], Type::Bytes),
+        vec![int(n)],
+        Type::Bytes,
+        Depth::ENTROPY,
+    );
+    c.span = span;
+    c
+}
+
+fn under(capability: Capability, body: Expr) -> Expr {
+    let (ty, depth) = (body.ty.clone(), body.depth);
+    e(ExprKind::Descend { capability, body: Box::new(body) }, ty, depth)
+}
+
 fn descending(body: Expr) -> Expr {
     let (ty, depth) = (body.ty.clone(), body.depth);
     e(ExprKind::Descend { capability: Capability::Disk, body: Box::new(body) }, ty, depth)
@@ -341,4 +372,37 @@ fn naming_is_constant_in_what_has_already_been_named() {
         large < small * 8,
         "four times the questions took {large:?} against {small:?}; that is the scan"
     );
+}
+
+// ── §6.3: what merges, and what does not ────────────────────────────────────
+
+#[test]
+fn two_identical_sends_are_two_holes() {
+    // §1.8: a write is deeper than a read because it cannot be taken back, and
+    // two acts are two. A merged `post` would make the trace record one
+    // payment where the program made two. 0255.
+    let r = buried(&demanding(vec![
+        under(Capability::NetWrite, post_of("{}", Span { start: 10, end: 20 })),
+        under(Capability::NetWrite, post_of("{}", Span { start: 90, end: 100 })),
+    ]));
+    assert_eq!(r.holes.len(), 2, "two sends: {:?}", r.questions());
+}
+
+#[test]
+fn two_identical_draws_are_two_holes() {
+    // §9.7 calls `draw` the only source of nondeterminism in the language.
+    // Merged, it is a pure function of its argument within one trace. 0255.
+    let r = buried(&demanding(vec![
+        under(Capability::Entropy, draw_of(8, Span { start: 10, end: 20 })),
+        under(Capability::Entropy, draw_of(8, Span { start: 90, end: 100 })),
+    ]));
+    assert_eq!(r.holes.len(), 2, "two draws: {:?}", r.questions());
+}
+
+#[test]
+fn every_stratum_answers_the_merging_question_once() {
+    // The list in §6.3, checked against the lattice rather than repeated in
+    // prose: 1, 2, 3 and 5 merge and the rest do not.
+    let merging: Vec<u8> = (0..=8).filter(|n| Depth::new(*n).unwrap().answers_alike()).collect();
+    assert_eq!(merging, vec![0, 1, 2, 3, 5]);
 }

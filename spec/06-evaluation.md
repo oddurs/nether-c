@@ -108,15 +108,45 @@ refusal is an ordinary witness: it is recorded, it is served back on replay, and
 a trace whose program handled it replays identically to one whose program did
 not. Refusal does not make a trace incomplete and does not mark it.
 
-Two holes with identical `call` fields in the same trace MUST be the same
-hole. This is what makes exhumation cheap: reading the same file twice is one
-question, asked once.
+Two holes with identical `call` fields in the same trace MUST be the same hole
+**when the stratum only reads**. This is what makes exhumation cheap: reading
+the same file twice is one question, asked once.
 
-The hole keeps the `span` of the first place that asked, in the order
+The merging strata are 1, 2, 3 and 5. The rest — 4, 6, 7 and 8 — MUST NOT be
+merged, however identical the calls.
+
+The split is [§1.8](01-strata.md#18-why-write-is-deeper-than-read)'s, and it is
+the reason that section exists. A read can be asked twice and leave the world
+where it found it, so asking twice is waste. A write is an act, and two acts
+are two: `remove` on a path answers `absent` the second time where it answered
+given the first, and
+
+```c
+demand descend net! { post("http://h/pay", b"{}") };
+demand descend net! { post("http://h/pay", b"{}") };
+```
+
+is two payments and not one. §1.1 says stratum 6 costs *the world remembers
+what was said*; a rule that merged them would make the trace record fewer acts
+than the program performed, which is the one thing a trace is for.
+
+Strata 7 and 8 do not merge for their own reasons, and both are worse than the
+write case. `draw` is defined as the thing that cannot answer twice alike
+([§9.7](09-prelude.md#97-stratum-7-entropy)), so merging two `draw(8)` calls
+would hand a program the same eight bytes and make the only source of
+nondeterminism in the language a pure function of its argument. Stratum 8
+cannot promise anything at all, which is what §1.7 means by unrecorded.
+
+A merged hole keeps the `span` of the first place that asked, in the order
 [§6.2](#62-demand) fixes. Which place that is, is therefore a fact about the
 program rather than about the implementation, and two burials of the same
-source agree on it. A hole is a question for the world, and the world does not
+source agree on it. A read is a question for the world, and the world does not
 care how many places were waiting on the answer.
+
+> Two acts written at one span — a `post` inside a loop that unrolls — are one
+> node under [§7.3](07-ledger.md#73-nodes), because a node is named by its
+> content and nothing distinguishes them. That is a hole in this section and it
+> is item 0264.
 
 ## 6.4 Starvation and fuel
 

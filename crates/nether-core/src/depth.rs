@@ -56,6 +56,17 @@ impl Depth {
         if self.0 >= other.0 { self } else { other }
     }
 
+    /// Whether asking the same question twice here gives the same answer and
+    /// leaves the world where it found it.
+    ///
+    /// The merging half of `spec/06-evaluation.md` §6.3, and it is §1.8's
+    /// split: 1, 2, 3 and 5 read, 4 and 6 disturb, 7 is defined as the one
+    /// that cannot answer twice alike, and 8 promises nothing.
+    #[must_use]
+    pub const fn answers_alike(self) -> bool {
+        matches!(self.0, 0 | 1 | 2 | 3 | 5)
+    }
+
     /// Whether everything this depth reached can be written down and served
     /// back. Everything but stratum 8. `spec/01-strata.md` §1.7.
     #[must_use]

@@ -2,8 +2,9 @@
 id: 255
 title: 'Spec: two identical sends are one hole'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 created: 2026-09-16
 updated: 2026-09-16
 priority: p0
@@ -68,9 +69,17 @@ written. So `nether-bury` merges sends and draws now, and the proof that closed
 
 ## Acceptance criteria
 
-- [ ] §6.3 says which strata merge and which do not, and rests the split on §1.8
-- [ ] Two identical `read` calls leave one hole
-- [ ] Two identical `post` calls leave two holes, with two spans
-- [ ] Two `draw(8)` calls can produce different bytes
-- [ ] 0138's proof is restated over a stratum that still merges
-- [ ] §90.2 records the version that merged everything
+- [x] §6.3 says which strata merge and which do not, and rests the split on §1.8
+- [x] Two identical `read` calls leave one hole
+- [x] Two identical `post` calls leave two holes, with two spans
+- [x] Two `draw(8)` calls leave two holes, which is what lets them answer differently; the answering is `exhume`'s and is not built
+- [x] 0138's proof is over `read`, stratum 3, which still merges
+- [x] §90.2 records the version that merged everything
+
+## 2026-09-16
+
+Merging is by stratum: 1, 2, 3 and 5 read and merge; 4, 6, 7 and 8 do not. The split is §1.8's, which is the section that argues a write is deeper than a read because it cannot be taken back — this was the rule that ignored it one section later. Depth::answers_alike is the predicate and the list is checked against the lattice rather than repeated in prose.
+
+## 2026-09-16
+
+Two acts at one span are still one hole, because a node is named by its content and a Hole holds only call, stratum and span. A post inside a loop that unrolls is the case. That needs a field on Hole and a domain bump, so it is 0264 rather than a line here.

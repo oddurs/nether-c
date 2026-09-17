@@ -539,11 +539,12 @@ struct Burial<'a> {
     /// A side channel because a block's residue is not its value: the value is
     /// what starved and the residue is the statements around it.
     starved: Option<Block>,
-    /// The holes already dug, by the question each one asks.
+    /// The holes already dug at a merging stratum, by the question each asks.
     ///
-    /// §6.3 makes the `call` the identity and not the node. A node carries the
-    /// span of the place that asked, so interning on the node would make the
-    /// same question asked from two places into two questions.
+    /// §6.3 makes the `call` the identity and not the node, where the stratum
+    /// merges at all. A node carries the span of the place that asked, so
+    /// interning on the node would make the same question asked from two
+    /// places into two questions.
     asked: HashMap<nether_ledger::Call, Cairn>,
 }
 
@@ -579,15 +580,20 @@ impl Burial<'_> {
 
     /// A question for the world, named and written down.
     ///
-    /// Two holes with identical calls in one trace MUST be the same hole,
-    /// which is what makes exhumation cheap: reading the same file twice is
-    /// one question, asked once. §6.3.
+    /// Two holes with identical calls in one trace MUST be the same hole
+    /// where the stratum only reads, which is what makes exhumation cheap:
+    /// reading the same file twice is one question, asked once. §6.3.
     fn dig(&mut self, p: Prim, call: nether_ledger::Call, span: Span) -> Cairn {
-        // §6.3: two holes with identical calls in one trace MUST be the same
-        // hole. The second place to ask is not a second question, so it gets
-        // the hole the first one made — span and all.
-        if let Some(dug) = self.asked.get(&call) {
-            return *dug;
+        // §6.3, and §1.8 underneath it. At a reading stratum the second place
+        // to ask is not a second question, so it gets the hole the first one
+        // made — span and all. At 4, 6, 7 and 8 it is a second act, a second
+        // draw or a second thing nothing can promise about, and merging it
+        // would make the trace record less than the program did.
+        let merges = p.latent().answers_alike();
+        if merges {
+            if let Some(dug) = self.asked.get(&call) {
+                return *dug;
+            }
         }
         let node = Node::Hole {
             call: call.clone(),
@@ -599,7 +605,9 @@ impl Burial<'_> {
             },
         };
         let cairn = self.remember(Stored::Node(node));
-        self.asked.insert(call, cairn);
+        if merges {
+            self.asked.insert(call, cairn);
+        }
         self.holes.push(cairn);
         cairn
     }
