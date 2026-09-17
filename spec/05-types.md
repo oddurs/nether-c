@@ -134,6 +134,24 @@ If any path through a block names a local, it is named for everything after
 that block. An implementation cannot know which arm will run, and the value is
 named on the one that does.
 
+A loop body comes after itself, so a local named anywhere in one is named for
+the whole of it — including the lines written above the naming. The second
+turn's assignment is after the first turn's naming, and there is no third
+thing to say about it:
+
+```c
+U0 turn(Bool c)
+{
+  Bytes h;
+  while (c) { h = b"y"; Cairn k = seal h; }   // error: named on the turn before
+}
+```
+
+Which leaves the counter, and the counter is fine: `i += 1` assigns a local
+that arithmetic never named, so the rule above has nothing to freeze. That is
+the same distinction as three paragraphs up and it is the reason the rule is
+about naming rather than about reading.
+
 An implementation SHOULD compile the assignments to in-place writes. No program
 can observe the difference, which is what makes it sound.
 

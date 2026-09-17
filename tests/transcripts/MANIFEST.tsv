@@ -39,7 +39,8 @@ spec/04-grammar.md § 4.7 The bare-expression statement #1	c	pinned	4fae387bf70b
 spec/05-types.md § 5.1.1 Answers and refusals #1	text	pinned	1de4c44f9b08a8ce
 spec/05-types.md § 5.1.1 Answers and refusals #2	c	pinned	0c96fcfac5c029b7
 spec/05-types.md § 5.2 Aggregates #1	c	pinned	bae6053b958ec44b
-spec/05-types.md § 5.4 Mutation #1	c	pinned	b90bad42db5f84e0
+spec/05-types.md § 5.4 Mutation #1	c	pinned	7fa8a94712bff16a
+spec/05-types.md § 5.4 Mutation #2	c	pinned	b90bad42db5f84e0
 spec/06-evaluation.md § 6.1 Burial #1	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md § 6.1 Burial #2	console	checked	f0456e0a140e8d99
 spec/06-evaluation.md § 6.2 Demand #1	c	pinned	32047b898ae2a1c0
