@@ -1127,6 +1127,14 @@ because they are all true.
   it decides something about the file while holding nothing. A program that
   must not reveal a deep value cannot be checked by this type system, and
   nothing in the language is going to make it one.
+- **Writing a container.** A program cannot abstract over a type. `func_decl`
+  ([§4.2](04-grammar.md#42-declarations)) has no type parameters, §3.8 removed
+  the preprocessor and §5.2 removed pointers, so there is no macro, no
+  `void *` and no generic to fall back on. The prelude's own signatures are
+  generic in `T` — `must`, `given`, `answered` — and nothing a program writes
+  can be. A C programmer reaches for a container on day two and this language
+  has no way to write one: the answer is one type per element type, by hand,
+  and that is the whole of it in this draft.
 - **Learning curve.** Depth is a genuinely new thing to learn. HolyC's whole
   proposition was that you already knew it — it was C, plus permission.
 
