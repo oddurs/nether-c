@@ -615,19 +615,16 @@ impl Burial<'_> {
                 end: u64::from(span.end),
             },
         };
-        // Two acts at one span are one node, because a node is named by what
-        // is in it — a loop asking the same thing twice from the same place.
-        // `remember` is where that is already known, so the list of holes is
-        // built from what it says rather than by looking through itself.
-        let cairn = Stored::Node(node.clone()).cairn();
-        let fresh = !self.known.contains(&cairn);
-        self.remember(Stored::Node(node));
+        let cairn = self.remember(Stored::Node(node));
         if shared {
             self.asked.insert(call, cairn);
         }
-        if fresh {
-            self.holes.push(cairn);
-        }
+        // §7.3.1: one entry per question left open, which is not one entry per
+        // node. Four `post`s from one line are one node — same call, same
+        // stratum, same span, so one content address — and four entries, the
+        // way four deposits from one line are. A read never reaches here twice
+        // for one call: the interning above returned the first hole.
+        self.holes.push(cairn);
         cairn
     }
 
