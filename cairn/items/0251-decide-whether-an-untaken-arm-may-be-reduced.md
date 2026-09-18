@@ -2,10 +2,11 @@
 id: 251
 title: Decide whether an untaken arm may be reduced
 type: spec
-status: unmarked
+status: buried
 milestone: futamura
+assignee: Oddur Sigurdsson
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-09-18
 priority: p1
 area: spec/06-evaluation.md
 proof: §6.5 states one rule for an undecided arm and names what it forbids
@@ -40,13 +41,16 @@ records no hole and no deposit, and anything that would ask stops where it is.
 
 ## Open questions
 
-- [ ] Does "asks nothing" mean no hole *recorded*, or no prelude call deeper
-      than the surface *attempted*? They differ when two arms would ask the
-      same question.
-- [ ] What stops the reduction from diverging where the two arms are a
-      recursion that only the answer terminates?
-- [ ] Is the rule worth its size, given that `opaque` already exists to make
-      burial do less and nothing yet exists to make it do more?
+- [x] Recorded. A call inside an undecided arm stops and residualises, even
+      where the other arm asks the same question and a hole already exists —
+      §6.3's merging does not reach across into an arm nothing has committed to.
+- [x] Nothing but the budget, and that is stated as a cost rather than
+      solved. A separate speculative budget was rejected: the residue would
+      then depend on the invocation, which §8.2 forbids.
+- [x] Yes, and no new construct. Without it the projection stops at the first
+      branch on an unknown value, which for an interpreter is the first one it
+      reaches; `opaque` remains the only control, in the only direction worth
+      asking for.
 
 ## Delivery steps and dependencies
 
@@ -58,6 +62,18 @@ records no hole and no deposit, and anything that would ask stops where it is.
 
 ## Acceptance criteria
 
-- [ ] Every normative claim is stated once, in one place
-- [ ] Every code sample in it is in `tests/transcripts/`
-- [ ] A reader who has not read the rest of the spec can follow it
+- [x] Every normative claim is stated once, in one place
+- [x] Every code sample in it is in `tests/transcripts/`
+- [x] A reader who has not read the rest of the spec can follow it
+
+## 2026-09-18
+
+Settled yes, with three refusals: a speculative reduction may not form a hole, may not deposit, and may not collapse. The first two are §6.2's own reason turned into a rule — it forbids undemanded evaluation because such an expression could reach the world, and a reduction that cannot reach it leaves nothing for the guarantee to protect.
+
+## 2026-09-18
+
+The third refusal is the one that would have been got wrong. An out-of-range slice in an arm the world never takes would otherwise cave in the burial, which makes whether a program buries depend on how far a specialiser got. That is the objection that killed rescue, arriving from the other side.
+
+## 2026-09-18
+
+A separate speculative budget was rejected even though it removes the divergence regression. The residue would depend on how much fuel was left, two budgets would give two residues, and §8.2 says a budget is not in a trace precisely because it cannot have affected one. 0270 implements it.
