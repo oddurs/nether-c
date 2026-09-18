@@ -383,7 +383,7 @@ Evidence-led performance work with canonical results and fuel semantics preserve
 
 ## cortege — The Cortege
 
-`··········` 0% · 0 of 7 done · due 2028-02-15
+`##········` 14% · 1 of 7 done · due 2028-02-15
 
 Concurrency that preserves specified observable order, not an assumption that all world questions commute.
 
@@ -396,9 +396,9 @@ Concurrency that preserves specified observable order, not an assumption that al
 - [ ] [`0208`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0208-two-machines-one-trace.md) Two machines, one trace <sup>feature · p2 · 6</sup>
 - [ ] [`0209`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0209-say-what-a-parallel-burial-may-and-may-not-do.md) Say what a parallel burial may and may not do <sup>spec · p0 · 0</sup>
 
-### descending
+### buried
 
-- [ ] [`0269`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0269-the-release-workflow-is-four-majors-behind-on-its-artifacts.md) The release workflow is four majors behind on its artifacts <sup>chore · p3 · 0</sup>
+- [x] [`0269`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0269-the-release-workflow-is-four-majors-behind-on-its-artifacts.md) The release workflow is four majors behind on its artifacts <sup>chore · p3 · 0</sup>
 
 ## ossuary — The Ossuary
 

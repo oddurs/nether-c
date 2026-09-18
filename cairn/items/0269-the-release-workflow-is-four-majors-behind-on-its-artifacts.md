@@ -2,10 +2,9 @@
 id: 269
 title: The release workflow is four majors behind on its artifacts
 type: chore
-status: descending
+status: buried
 milestone: cortege
 assignee: Oddur Sigurdsson
-claimed: 2026-09-18
 created: 2026-09-18
 updated: 2026-09-18
 priority: p3
@@ -59,7 +58,7 @@ exercises.
 
 - [x] Both actions are on the current major
 - [x] The release workflow still uploads per-target tarballs and gathers them
-- [ ] The two dependabot pull requests are closed, not left open
+- [x] The two dependabot pull requests are closed, not left open
 
 ## 2026-09-18
 
