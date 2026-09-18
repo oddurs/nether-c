@@ -90,8 +90,11 @@ Text in a block quote, and the whole of section 90, is non-normative.
 ## 0.6 Status
 
 This specification is a **draft**. Sections marked `status: draft` are subject
-to change without a version bump. Nothing here is frozen except where a
-section says so explicitly, and today only one thing is: **there is no `run`**.
+to change without a version bump. Nothing here is frozen except where a section
+says so explicitly, and three do: the canonical encoding
+([§7.1](07-ledger.md#71-canonical-encoding)), the node encoding on the same
+terms ([§7.3.1](07-ledger.md#731-node-encoding)), and the one frozen
+*requirement*, which is that **there is no `run`** ([§8.0](08-rites.md#80-there-is-no-run)).
 
 Open design questions are tracked as items in the repository's roadmap
 (`cairn list --filter 'title~Decide'`), not as inline TODOs. Where this
@@ -110,8 +113,14 @@ A fourth — what a prelude function does when it cannot answer — is settled i
 from the world is an *answer* and gets a value; a mistake in the program is
 *collapse* and stops the burial.
 
-No design question in this draft is currently open. That is not a claim that
-none remain, only that none are known.
+Which questions are open is a fact about the roadmap and not about this
+document, so this section does not count them. The filter above lists them, and
+each is named where it bites: a rule a roadmap item is still arguing about is
+block-quoted in its own section, beside the rule, where somebody relying on it
+will see it rather than somewhere they have to think to look.
+
+Settling one is not the same as knowing they are all settled. A question nobody
+has asked yet leaves no trace here.
 
 ## 0.7 A first program
 
