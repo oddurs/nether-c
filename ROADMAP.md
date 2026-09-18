@@ -44,7 +44,7 @@ Buried. The front page declares rather than explains: nine doctrine passages, ea
 
 ## codex — The Codex
 
-`##########` 97% · 30 of 31 done · due 2026-10-15
+`##########` 97% · 31 of 32 done · due 2026-10-15
 
 Buried. Twelve specification sections, every design question settled and every rejected alternative recorded in 90.2, every code sample a fixture in tests/transcripts, and the Decay Rule proven by a pull request that was refused. Only one claim in the specification is frozen: there is no run.
 
@@ -84,6 +84,7 @@ Buried. Twelve specification sections, every design question settled and every r
 - [x] [`0262`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0262-spec-the-disk-is-the-one-bounded-capability-the-invocation-cannot-bound.md) Spec: the disk is the one bounded capability the invocation cannot bound <sup>spec · p1 · 0</sup>
 - [x] [`0263`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0263-spec-a-program-can-inspect-an-answer-and-cannot-build-one.md) Spec: a program can inspect an Answer and cannot build one <sup>spec · p2 · 0</sup>
 - [x] [`0264`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0264-bury-an-act-repeated-from-one-span-is-one-hole.md) bury: an act repeated from one span is one hole <sup>bug · p1 · 0</sup>
+- [x] [`0268`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0268-spec-the-overview-no-longer-describes-the-document.md) Spec: the overview no longer describes the document <sup>spec · p1 · 0</sup>
 
 ## lamp — The Lamp
 

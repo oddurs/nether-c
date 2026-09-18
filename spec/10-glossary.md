@@ -71,8 +71,10 @@ the nodes waiting on it. Identical calls are one hole.
 operator carries; never a capability the program holds.
 [§8.4](08-rites.md#84-lamp)
 
-**Latent depth** — the depth a function reaches when applied, carried in its
-arrow type and written as a trailing `@n` on its signature.
+**Latent set** (dƒ) — the capabilities a caller must already hold to apply a
+function. Carried in its arrow type, written as a trailing `@n` or `@{n,m}` on
+its signature, and not what the function *reaches*: that is a fact about a
+trace and no rule consumes it.
 [§2.1](02-calculus.md#21-judgement-form)
 
 **Ledger** — the content-addressed store of nodes. Immutable, append-only, not
