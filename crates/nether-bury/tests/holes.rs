@@ -535,3 +535,30 @@ fn a_budget_that_binds_cuts_where_the_order_says() {
         assert_eq!(r.value(call.args[0]), Some(&Value::Str("a".into())));
     }
 }
+
+/// §7.3.1: one entry per question left open, which is not one entry per node.
+///
+/// A function body is one span, so two calls to it ask from the same place —
+/// same call, same stratum, same span, and therefore one `Hole` node. They are
+/// still two acts, and §6.3 does not care that they were written once.
+#[test]
+fn one_act_reached_from_two_calls_is_two_entries_naming_one_node() {
+    let unit = lowered(
+        "U0 send() @6 { post(\"http://h/x\", b\"y\"); }\n\
+         demand descend net! { send() };\n\
+         demand descend net! { send() };\n",
+    );
+    let r = bury(&unit, source(), 100_000).expect("buries");
+    assert_eq!(r.holes.len(), 2, "two sends are two messages");
+    assert_eq!(r.holes[0], r.holes[1], "and one place asked, so one node");
+    assert_eq!(asking(&r).len(), 2);
+
+    // A read is the other half of the same sentence: one hole, one entry,
+    // however many callers reach it.
+    let unit = lowered(
+        "Bytes@3 fetch() @3 { must(read(\"k\")) }\n\
+         demand descend disk { concat(fetch(), fetch()) };\n",
+    );
+    let r = bury(&unit, source(), 100_000).expect("buries");
+    assert_eq!(r.holes.len(), 1, "one question, asked from one place, twice");
+}

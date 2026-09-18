@@ -163,10 +163,11 @@ difference is worth stating because both readings decode.
 > makes a bare expression statement an act of the program rather than a
 > declaration about it.
 >
-> The **hole list names each hole once.** A hole is a question, and a question
-> asked twice from one place is one question the world will answer once;
-> [§6.3](06-evaluation.md#63-holes) is where two asks are two holes and where
-> they are not.
+> The **hole list holds one entry per question the burial left open**, and is
+> the same kind of list for the same reason. At a read stratum two asks are one
+> hole and one entry; at 4, 6, 7 and 8 they are two acts and two entries, and
+> two acts written in one place are two entries naming one node.
+> [§6.3](06-evaluation.md#63-holes) is which of those a given pair is.
 
 A `Trace`'s three `cairn-list`s are not all the same kind of list, and the
 difference is worth stating because both readings decode.
