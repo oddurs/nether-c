@@ -115,7 +115,13 @@ LIT = {
 RAMPS = {"nether": strata(), "lit": strata(0.49, 0.12, dim=0.09, rise=0.04)}
 
 # Spacing is independent of the font's seven-pixel advance.
-CELL = 12
+#
+# Ten rather than twelve. The type cannot come down with it -- a face drawn on
+# an eight-pixel grid has four sizes and nothing between them -- so the only
+# way this design gets smaller is by taking the air out, and a finer cell is
+# what that means. Every step below keeps its count, so the whole scale moves
+# together and no two things that used to line up stop.
+CELL = 10
 SPACE = {"hair": 1, "tight": 2, "snug": 3, "step": 4, "gap": 6, "room": 10}
 
 #: Type. Four sizes and no others.
@@ -149,7 +155,8 @@ def tokens() -> str:
         " *",
         " * Colour is Oklch, so the ramps step evenly to the eye rather than",
         " * evenly in a number nobody perceives. Space is the cell. Type is the",
-        " * cell doubled and trebled. Every value here is derived; the argument",
+        " * eight-pixel drawing grid, which is a different grid and does not",
+        " * move with it. Every value here is derived; the argument",
         " * for each is in site/design.py.",
         " */",
         "",

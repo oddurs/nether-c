@@ -11,11 +11,15 @@
    form its light companion. Both are generated from semantic roles, not
    inverted RGB values. Depth follows the same violet-to-rose path in each.
 
-   Space follows a twelve-pixel grid, independent of the font's advance.
+   Space follows a ten-pixel grid, independent of the font's advance. There are
+   two spacing systems here and that is a fact rather than a plan: the pages
+   are written in `rem` off the root size and the necropolis is written in the
+   cell. Both came down together, which is what makes the site smaller.
 
    Type follows the eight-pixel drawing cell. There are four sizes, because a face
    drawn on an eight-pixel grid has exactly four at which a pixel of it is a
-   whole number of the screen's.
+   whole number of the screen's. It does not come down with the space, and it
+   is why the page gets denser rather than daintier.
 
    tests/contrast/run checks semantic text, raised surfaces, depth labels and
    the colour tables in the shipped GIFs. The two rooms share roles, not RGB
@@ -26,7 +30,13 @@
   /* Colour, space and type are generated into tokens.css by site/design.py,
      which is the only place on this site where a colour is a number. If you
      are about to write a `#` below this line, the value belongs there. */
-  --col: calc(80 * var(--cell));
+  /* Ninety-six cells rather than eighty, which is the same nine hundred and
+     sixty pixels the column has always been. The cell came down to ten and the
+     measure did not follow it: the face still advances fourteen pixels at the
+     body size, so this is sixty-eight characters of it, and the specification
+     writes code samples up to seventy-eight. A narrower column would not make
+     the page smaller, it would make `pre` scroll sideways. */
+  --col: calc(96 * var(--cell));
   --bevel-hi: var(--dim);
   --bevel-lo: var(--dimmer);
 }
@@ -53,7 +63,17 @@ a.skip:focus {
   z-index: 10;
 }
 
+/* The root size is the other half of the scale, and it is the half that
+   moves most of this file. Every margin, padding and gap below is written in
+   `rem`; every `font-size` is written in `px`, on the eight-pixel grid the
+   face is drawn on. So this takes fourteen sixteenths of the air out of the
+   page and leaves every glyph landing exactly where it did.
+
+   It is the only way a design whose type has four sizes gets smaller. The
+   cell in site/design.py is the same move on the other spacing system, the
+   one the necropolis uses. */
 html {
+  font-size: 14px;
   background: var(--ground) url("gfx/bg.gif") repeat;
 }
 html[data-lamp="lit"] { background-image: url("gfx/bg-lit.gif"); }
@@ -111,7 +131,14 @@ body {
      seven pixels per cell: six for ink and one blank metric bearing. The
      scale is 8, 16, 24, 32 and there is nothing in between it. */
   font-size: 16px;
-  line-height: 1.5;
+  /* Twenty-two pixels, not twenty-four. Leading is the largest vertical
+     measure on the page by a long way -- margins are a minority of it -- so it
+     is the only number that makes the page denser rather than marginally
+     tidier. It has to land on a whole pixel: the face draws a one-pixel stem
+     and a line box that ends on a half puts the next row's baseline half a
+     pixel out. 1.375 of sixteen is twenty-two, and 1.4 is twenty-two and two
+     fifths. */
+  line-height: 1.375;
   /* A weight or a style this face does not have must fail visibly rather than
      be invented. A missing bold that looks wrong is a bug report; a smeared
      one is a thing people assume was intended. There is no italic and there
@@ -417,7 +444,9 @@ figure.listing pre {
   overflow-x: auto;
   overflow-y: hidden;
   padding: .7rem .9rem;
-  line-height: 1.45;
+  /* Was 1.45, which is twenty-three and a fifth. The body's leading, for the
+     reason written beside it. */
+  line-height: 1.375;
   tab-size: 2;
 }
 figure.listing pre code { color: var(--ink); white-space: pre; }
@@ -660,7 +689,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .nc-source { border: 1px solid var(--dimmer); padding: var(--hair) var(--tight); background: var(--sunk); }
 .nc-source summary { cursor: pointer; min-height: 32px; color: var(--code); }
 .nc-source label { display: block; margin-top: var(--hair); }
-.nc-source textarea { display: block; width: 100%; min-height: 240px; resize: vertical; margin: var(--hair) 0; padding: var(--hair); border: 1px solid var(--dimmer); background: var(--ground); color: var(--ink); font: inherit; line-height: 1.6; }
+.nc-source textarea { display: block; width: 100%; min-height: 240px; resize: vertical; margin: var(--hair) 0; padding: var(--hair); border: 1px solid var(--dimmer); background: var(--ground); color: var(--ink); font: inherit; line-height: 1.5; }
 .nc-state { display: flex; align-items: center; justify-content: space-between; gap: var(--hair); padding: var(--tight) 0; color: var(--dim); }
 .nc-state p { margin: 0; }
 .nc-overview { display: flex; align-items: center; justify-content: space-between; gap: var(--tight); padding: var(--tight); border: 1px solid var(--dimmer); border-top: 3px solid var(--accent); background: var(--sunk); }

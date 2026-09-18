@@ -2,7 +2,8 @@
  *
  * Colour is Oklch, so the ramps step evenly to the eye rather than
  * evenly in a number nobody perceives. Space is the cell. Type is the
- * cell doubled and trebled. Every value here is derived; the argument
+ * eight-pixel drawing grid, which is a different grid and does not
+ * move with it. Every value here is derived; the argument
  * for each is in site/design.py.
  */
 
@@ -29,7 +30,7 @@
   --d7: #E881CB;
   --d8: #F079B6;
 
-  --cell: 12px;
+  --cell: 10px;
   --hair: calc(1 * var(--cell));
   --tight: calc(2 * var(--cell));
   --snug: calc(3 * var(--cell));
