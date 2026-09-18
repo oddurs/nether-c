@@ -310,23 +310,69 @@ and it is a consequence of this section rather than a feature of its own: a
 specialiser is what a partial evaluator is when it is pointed at an
 interpreter.
 
-It is specialised up to that first question and no further. An `if` whose
-condition waits on the world residualises whole with both arms unreduced, as
-above, so an interpreter that branches on an answer it has not got goes on
-interpreting from there. Reducing inside an arm that may not be
-taken would carry it further and is exactly what [§6.2](#62-demand)'s
-guarantee forbids, because such an arm could reach the world and leave a
-witness for something the program never asked for.
+### Reducing under an undecided branch
 
-> Whether an arm that may not be taken may be reduced on the condition that it
-> asks the world nothing — no hole, no deposit — is open, and is item 0251.
-> Until it is settled, a first projection stops at the first unanswered
-> question on its path.
+An `if` whose condition waits on the world residualises whole. Both arms
+survive, because which one runs is a thing only the answer settles. But the
+arms may be **reduced** where they stand, and an implementation SHOULD reduce
+them: without it a first projection stops at the first branch on an unanswered
+value, which for an interpreter is the first one it reaches.
+
+Reduction under an undecided branch is **speculative**, and a speculative
+reduction may produce a value or it may stop. It MUST NOT do anything else.
+Three things in particular:
+
+1. It MUST NOT form a hole. A world-question inside an undecided arm stops
+   where it is and residualises, even where the other arm asks the same
+   question and a hole for it already exists
+   ([§6.3](#63-holes)). A trace that recorded it would be owed an answer to
+   something the program has not asked.
+2. It MUST NOT deposit. A deposit is the program saying *this value matters*
+   ([§4.7](04-grammar.md#47-the-bare-expression-statement)), and an arm that
+   may not run has not said it.
+3. It MUST NOT collapse. An out-of-range slice in an arm the world never takes
+   is a mistake nothing reaches, and a burial that caved in on it would make
+   whether a program buries depend on how far a specialiser got — which is what
+   [§90.2](90-rationale.md#902-rejected-alternatives) refused when it refused
+   `rescue`. The reduction stops there and the arm residualises as it stands.
+
+So speculation folds, and nothing it does is visible in the trace. What it
+leaves is a smaller program inside the same branch.
+
+This does not weaken [§6.2](#62-demand), which is the guarantee it looks like
+it touches. §6.2 forbids evaluating what no demand requires *because such an
+expression could reach the world*; the three clauses above are that reason,
+made into a rule. A reduction that cannot ask, cannot deposit and cannot
+collapse leaves nothing behind for §6.2 to be protecting.
+
+Nor does it disturb the staging law. Reducing an arm does not change which arm
+is taken, so the composite trace is the one a single burial would have written.
+What differs is fuel, and a budget is not in a trace
+([§8.2](08-rites.md#82-bury)) precisely because it is not part of what was
+produced.
 
 **What it costs.** A specialised body can be larger than the general one, and
 there is one per call site that starved, each carrying the constants it was
-specialised to. `opaque` ([§6.4](#64-starvation-and-fuel)) is the programmer's
-control over that, and is the reason that sentence is in §6.4.
+specialised to. Speculation adds to that: both arms of an undecided branch are
+reduced and only one will ever be taken, so the work is charged for a path that
+may not exist and the residue carries both.
+
+The sharper cost is that a program which buries today may stop burying. An arm
+that never terminates is reduced until the budget runs out, and fuel exhausted
+is a halt with no trace at all ([§6.4](#64-starvation-and-fuel)) — where before
+the arm simply residualised and nobody noticed.
+
+That is a smaller loss than it reads as. Such a program only buried because the
+world answered the way that avoided the arm; had it answered the other way, the
+burial would not have finished either. Speculation turns a non-termination that
+was conditional into one that is certain, which is a bug found rather than a
+bug introduced.
+
+`opaque` ([§6.4](#64-starvation-and-fuel)) is the control for the case where it
+was meant, and is why that sentence is in §6.4. It is also the only control:
+there is no construct that makes burial reduce *more*, because everything here
+already reduces as far as it can and the one direction worth asking for is
+less.
 
 ## 6.6 Exhumation
 

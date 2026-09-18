@@ -803,6 +803,68 @@ an operator who trusts `example.com` over 443 has said something about
 instead of implying it: a bare host permits every port on that host, and the
 program chooses which.
 
+### Leaving an undecided arm alone
+
+[§6.5](06-evaluation.md#65-residue) used to stop at a branch. An `if` whose
+condition waited on the world residualised with both arms untouched, on the
+grounds that reducing one would be evaluating something no demand requires and
+[§6.2](06-evaluation.md#62-demand) forbids that.
+
+It reads as the conservative choice and it is the expensive one. §6.2's reason
+is stated in §6.2: an undemanded expression *could reach the world and leave a
+witness for something the program never asked for*. That is a reason about
+reaching the world, not about reducing — and a partial evaluator that stops at
+the first branch on an unknown value stops immediately, because an interpreter's
+first act is to branch on the thing it was given. The projection this language
+is named for was being given up to protect a guarantee that folding arithmetic
+does not threaten.
+
+Three ways to keep the branch sealed were considered.
+
+**Leave it.** Defensible, and it makes [§6.5](06-evaluation.md#65-residue)'s
+"what this is for" paragraph claim something the rule does not deliver: bury an
+interpreter and you get the interpreter back, specialised up to the first
+`if`. The first Futamura projection is the section's own stated purpose and
+this is the rule that prevented it.
+
+**Speculate under a separate, smaller budget**, so that a divergent arm cannot
+exhaust the burial's. It removes the regression below — speculation could never
+turn a finished burial into a halt, because running out would simply leave the
+arm unreduced. It was rejected because the residue would then depend on the
+budget: how far an arm got would be a function of how much fuel was left, two
+budgets would give two residues, and [§8.2](08-rites.md#82-bury) says a budget
+is not recorded in a trace precisely because it cannot have affected one. Buying
+safety with a trace that depends on the invocation is the wrong trade twice
+over.
+
+**A keyword that asks for it.** `opaque` makes burial do less and nothing makes
+it do more, so the symmetric answer is a second keyword and speculation only
+where it is written. Rejected on size. It is a keyword to buy back behaviour
+that is correct by default, and this language already spends one of its eleven
+rules on the other direction.
+
+What was taken instead is speculation with three things forbidden: a
+speculative reduction may not form a hole, may not deposit, and may not
+collapse. The first two are §6.2's reason turned into a rule. The third is
+subtler and is the one that would have been got wrong: an out-of-range slice in
+an arm the world never takes would otherwise cave in the burial, which makes
+whether a program buries depend on how far a specialiser got — the same
+objection that killed `rescue` earlier in this section, arriving from the other
+side.
+
+**What it cost.** A program that buries today may stop burying, because an arm
+that never terminates is now reduced until the budget runs out. It is a smaller
+loss than it reads as: such a program only buried because the world answered
+the way that avoided the arm, and had it answered the other way the burial
+would not have finished either. Speculation turns a conditional
+non-termination into a certain one. `opaque` is the control for the case where
+it was meant.
+
+Also paid: both arms are reduced and one is thrown away, so the work is charged
+for a path that may not exist and the residue carries both. That is the
+ordinary price of a polyvariant specialiser and it is why `opaque` is in §6.4
+rather than here.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by
