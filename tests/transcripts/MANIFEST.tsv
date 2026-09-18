@@ -53,7 +53,7 @@ spec/07-ledger.md § 7.5 The store #1	text	pinned	ebd628943dfe60de
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
 spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
 spec/08-rites.md § 8.2 `bury` #2	console	checked	50d0f77ea2722fdb
-spec/08-rites.md § 8.3 `exhume` #1	text	pinned	a10f49174d282bed
+spec/08-rites.md § 8.3 `exhume` #1	text	pinned	08c22655fc9eb98b
 spec/08-rites.md § 8.4 `lamp` #1	text	pinned	2111624617db0431
 spec/08-rites.md § 8.4 `lamp` #2	console	checked	b0b2566108b96d04
 spec/08-rites.md § 8.4 `lamp` #3	console	checked	fcab9af3c5828177

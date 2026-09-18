@@ -151,6 +151,11 @@ program. `write` is the first genuinely irreversible thing the language can
 do, and the only prelude function whose witness records something the ledger
 cannot later reproduce on its own.
 
+Where a path is rooted is not said here. It is the invocation's, and
+[§8.3.4](08-rites.md#834-declaring-a-root) is where an operator says it — which
+is also where `denied` comes from for a path that would climb out, as against
+the `absent` of a path that is simply not there.
+
 ## 9.6 Strata 5 and 6 — `net`, `net!`
 
 ```signatures

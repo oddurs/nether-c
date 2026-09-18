@@ -101,8 +101,8 @@ spent, because that is where it is a fact.
 
 ```
 nether exhume <cairn> [--grant <cap>]... [--declare <name>=<value>]...
-                      [--clock <seconds>] [--target <triple>] [--reach <host>]...
-                      [--load <path>]... [--replay] [--json]
+                      [--clock <seconds>] [--target <triple>] [--root <path>]
+                      [--reach <host>]... [--load <path>]... [--replay] [--json]
 ```
 
 Grants capabilities, answers holes, records every answer, re-buries the
@@ -155,6 +155,13 @@ detail of the service and the host is the party being trusted. It matches that
 host exactly — a subdomain is a different party, and a reach that spread to one
 would be a reach nobody declared.
 
+That default is the widest thing any flag in this section does, and it is worth
+saying rather than implying: `--reach example.com` permits 22 and 25 and 6379
+on that host as readily as 443, and the program chooses which. What it declares
+is the party trusted, not the service used. An operator who means one service
+writes the port, and [§90.2](90-rationale.md#902-rejected-alternatives) records
+the narrower default that was considered.
+
 Granting `net` and reaching nothing is legal and means a network with nothing
 in it, which is the right default for the same reason as no `--grant` at all.
 Reaching without granting `net` is an error, on §8.3.1's reasoning.
@@ -178,6 +185,41 @@ This is the same argument as §8.3.2 in the place it matters most. A
 stratum-8 call that may load any object on the machine is ambient authority,
 and [§1.7](01-strata.md#17-stratum-8-the-unrecorded) already says this stratum
 is the one that has to be quarantined loudly.
+
+### 8.3.4 Declaring a root
+
+`--root` names the one directory `disk` and `disk!` resolve every path
+against. It is **required** whenever either is granted, and there is no
+default, on [§8.3.1](#831-declaring-an-environment)'s reasoning: the only
+default available is the directory the rite happened to be run in, and a rite
+whose answer depends on where it was run is what
+[§6.7](06-evaluation.md#67-replay) exists to prevent. Rooting without granting
+`disk` is an error, on the same reasoning again.
+
+This is the flag [§8.3.2](#832-declaring-a-reach) was already arguing from. It
+makes its case for `--reach` by pointing at the disk — §09 says nothing about
+where a path is rooted, and an implementation that rooted it nowhere would be
+one nobody could grant a capability to — and then the disk was the one
+capability the invocation could not bound. Two implementations answered
+`read("main.nc")` differently while the hole's `call` was byte-identical, and
+[§6.3](06-evaluation.md#63-holes) makes that `call` the whole of what the
+question is.
+
+A path is resolved against the root and MUST NOT climb out of it. A path that
+would — `..`, an absolute path, a drive letter — is **`denied`** and not
+`absent`: the file may well be there, and what refused is this build. That is
+[§9.9](09-prelude.md#99-failure-and-the-difference-between-two-of-them)'s
+distinction, and [§9.5](09-prelude.md#95-strata-3-and-4-disk-disk) gives both
+refusals to every path-taking function for exactly this.
+
+Textual resolution is not enough on its own, and an implementation MUST also
+refuse a path that leaves the root through a symbolic link. Nothing textual can
+see one, and a program buried with `disk!` can make one for itself to read
+back through.
+
+`--root` MAY be given once. A path does not name its root the way a URL names
+its host, so a second root makes every path ambiguous and a `write`
+undecidable — which is why `--reach` repeats and this does not.
 
 ## 8.4 `lamp`
 
