@@ -91,6 +91,26 @@ if (given(a)) {
 }
 ```
 
+These three go one way. There is no constructor, so every `Answer` that exists
+came out of the prelude, and a function a program wrote cannot hand its caller
+the shape the prelude hands it: it has `must`, which collapses and so forbids
+the caller from handling anything, or a `Bool` and a value beside it, which is
+what `Answer` replaced.
+
+That is not a rule anybody chose. `utf8` is on this page, at depth 0, refusing
+`malformed` — so a pure prelude function does the thing a pure program function
+cannot, and [§9.9](#99-failure-and-the-difference-between-two-of-them) says
+which of those two is the odd one.
+
+> Whether the prelude gains `answered` and `refused` is open, and is item 0266.
+> The naming is the smaller half of it: `given` is already the predicate, so
+> the constructors cannot be named for
+> [§5.1.1](05-types.md#511-answers-and-refusals)'s two cases without one name
+> meaning both the question and an answer. The larger half is that
+> `refused(absent)` does not say what `T` is — the IR has no type variables,
+> and the three polymorphic signatures above all take their `T` from an
+> argument, which a refusal does not carry.
+
 `compile` is not in the prelude. Nether C does not know how to compile Nether
 C until [Self-Burial](../ROADMAP.md); until then it is an ordinary function a
 program supplies for itself.
@@ -259,14 +279,23 @@ one you are looking at.
 ### A refusal is an answer
 
 When the world is asked a question it is entitled to answer no to — the file is
-not there, the response never came, the bytes are not UTF-8 — that no **is the
-answer**. It is a value, of type `Answer⟨T⟩`, and it is recorded as a witness
-exactly like a yes.
+not there, the response never came — that no **is the answer**. It is a value,
+of type `Answer⟨T⟩`, and it is recorded as a witness exactly like a yes.
 
 This is not a concession to practicality. It follows from
 [§1.4](01-strata.md#14-what-the-trace-records): everything the world says gets
 written down before the program sees it. A missing file is something the world
 said. Replay serves it back, and a program that handled it replays identically.
+
+The world is where most refusals come from and it is not where the type comes
+from. `utf8` is at depth 0 and refuses `malformed`: bytes that are not UTF-8
+are a fact about bytes the program already had, nothing was asked of anybody,
+and there is no witness because nothing happened. A program's own parser is in
+the same position, and [§9.2](#92-depth-0) gives it the same two constructors
+rather than leaving the prelude able to do something a program cannot. What
+`Answer⟨T⟩` says is that this can be refused and which no it was; where the no
+came from is what the stratum says, and a depth-0 refusal is one nobody owes a
+witness for.
 
 ### A collapse is a bug
 

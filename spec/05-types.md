@@ -67,6 +67,12 @@ else the world said ([§1.4](01-strata.md#14-what-the-trace-records)), where
 > A program may act on *what kind* of no it received. It may not act on how a
 > particular kernel chose to phrase it.
 
+An `Answer` is not only the world's: `utf8` is at depth 0 and refuses
+`malformed`, having asked nobody anything. But the two cases above have no
+constructors, so only the prelude can build one and a program that parses
+cannot refuse the way `utf8` does. [§9.2](09-prelude.md#92-depth-0) is where
+that stands, and item 0266 is whether it stays that way.
+
 ## 5.2 Aggregates
 
 ```c
