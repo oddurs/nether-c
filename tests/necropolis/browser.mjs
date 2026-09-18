@@ -162,7 +162,10 @@ try {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 11);
       } else {
         assert.equal(await evaluate("document.querySelector('img.hero').naturalWidth"), 600);
-        assert.ok(await evaluate("[...document.querySelectorAll('.swatches > div')].every(s => getComputedStyle(s, '::before').height === '32px' && getComputedStyle(s, '::before').backgroundColor !== 'rgba(0, 0, 0, 0)')"), "swatches show the live tokens");
+        // 28px is `2rem` at the root size site/nether.css sets. The chip is
+        // decoration and takes the air out with everything else; it is not on
+        // the eight-pixel drawing grid and has no reason to be.
+        assert.ok(await evaluate("[...document.querySelectorAll('.swatches > div')].every(s => getComputedStyle(s, '::before').height === '28px' && getComputedStyle(s, '::before').backgroundColor !== 'rgba(0, 0, 0, 0)')"), "swatches show the live tokens");
         await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
         await until("document.querySelector('img.hero').getAttribute('src').endsWith('-still.gif') && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
         assert.match(await evaluate("document.querySelector('img.descent').getAttribute('src')"), /-still.gif$/);
