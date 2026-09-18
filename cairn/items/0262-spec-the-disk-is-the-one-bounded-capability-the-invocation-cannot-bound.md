@@ -2,10 +2,11 @@
 id: 262
 title: 'Spec: the disk is the one bounded capability the invocation cannot bound'
 type: spec
-status: unmarked
+status: buried
 milestone: codex
+assignee: Oddur Sigurdsson
 created: 2026-09-16
-updated: 2026-09-16
+updated: 2026-09-17
 priority: p1
 effort: m
 stratum: '0'
@@ -61,7 +62,11 @@ sentence that permits it, or make a bare host mean the scheme's default port.
 
 ## Acceptance criteria
 
-- [ ] §8.3 says how the disk is bounded, or says it is the implementation's and why `net` is not
-- [ ] §9.5 links whichever it is
-- [ ] §8.3.2 states what a portless reach permits, where it permits it
-- [ ] §90.2 records the alternative
+- [x] §8.3 says how the disk is bounded, or says it is the implementation's and why `net` is not
+- [x] §9.5 links whichever it is
+- [x] §8.3.2 states what a portless reach permits, where it permits it
+- [x] §90.2 records the alternative
+
+## 2026-09-17
+
+Bounded. spec/08-rites.md gains §8.3.4: --root names the one directory disk and disk! resolve every path against, required whenever either is granted, with no default -- on §8.3.1's own reasoning about --clock and --target, since the only default available is the directory the rite was run in. It says out loud that this is the flag §8.3.2 was already arguing from, and why the gap mattered: two implementations answered read("main.nc") differently while the hole's call was byte-identical, and §6.3 makes that call the whole of what the question is. A path that would climb out is denied and not absent, which is §9.9's distinction and the reason §9.5 gives both refusals to every path-taking function, and an implementation must also refuse a path that leaves through a symbolic link because nothing textual can see one. §9.5 now links it rather than staying silent. On the port: the wide default is kept and §8.3.2 states it instead of implying it -- a bare host permits 22 and 25 and 6379 as readily as 443, what is declared is the party and not the service, and an operator who means one service writes the port. §90.2 records all three rejected readings: the root left to the implementation, a root that repeats as a search path (rejected because a write could not resolve against one -- a path does not name its root the way a URL names its host), and a bare host meaning the scheme's default port. The flag is specification only for now: exhume.rs still calls current_dir(), which is 0265. scripts/task check passes in full.

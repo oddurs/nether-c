@@ -760,6 +760,37 @@ had already chosen both — burial recorded four deposits for the loop above and
 deposits. Not a node each: the `Deposit` is one node however many times the
 trace names it.
 
+### The disk root as the implementation's, and a reach that names a port
+
+Two smaller choices in [§8.3](08-rites.md#83-exhume), which grew a fourth
+subsection when the disk turned out to be the one bounded capability the
+invocation could not bound.
+
+**Leave the root to the implementation.** It is what every version of this
+document did, and there was a case for it: §09 talks about paths and not about
+filesystems, the bound is an operational concern, and the one implementation
+here already had a root that nothing may climb out of. Rejected because the
+bound existed and was undeclarable, so an operator could not say where a burial
+may read and two implementations could answer `read("main.nc")` differently
+while the hole's `call` was byte-identical. A reproducibility claim that
+touches a filesystem touches it exactly there.
+
+**A root that repeats, resolved as a search path.** `--load` repeats and takes
+the first object that has the symbol, and reads could work the same way.
+Rejected because a `write` could not: a path does not name its root the way a
+URL names its host, so two roots leave every written path ambiguous and the
+invocation would need a second flag to say which one a write lands in — a flag
+to disambiguate a flag. One root, and a build that needs two things in one
+place puts them there.
+
+**A bare `--reach` host meaning the scheme's default port.** Tighter, and it
+matches the standard the rest of the section keeps: a grant states its bound.
+Rejected because the thing being declared is a party rather than a service, and
+an operator who trusts `example.com` over 443 has said something about
+`example.com` rather than about 443. The cost is real and §8.3.2 now states it
+instead of implying it: a bare host permits every port on that host, and the
+program chooses which.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by

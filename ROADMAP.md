@@ -44,13 +44,12 @@ Buried. The front page declares rather than explains: nine doctrine passages, ea
 
 ## codex — The Codex
 
-`##########` 93% · 28 of 30 done · due 2026-10-15
+`##########` 97% · 29 of 30 done · due 2026-10-15
 
 Buried. Twelve specification sections, every design question settled and every rejected alternative recorded in 90.2, every code sample a fixture in tests/transcripts, and the Decay Rule proven by a pull request that was refused. Only one claim in the specification is frozen: there is no run.
 
 ### unmarked
 
-- [ ] [`0262`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0262-spec-the-disk-is-the-one-bounded-capability-the-invocation-cannot-bound.md) Spec: the disk is the one bounded capability the invocation cannot bound <sup>spec · p1 · 0</sup>
 - [ ] [`0263`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0263-spec-a-program-can-inspect-an-answer-and-cannot-build-one.md) Spec: a program can inspect an Answer and cannot build one <sup>spec · p2 · 0</sup>
 
 ### buried
@@ -82,6 +81,7 @@ Buried. Twelve specification sections, every design question settled and every r
 - [x] [`0259`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0259-spec-a-trace-that-has-answered-nothing-has-two-depths.md) Spec: a trace that has answered nothing has two depths <sup>spec · p1 · 0</sup>
 - [x] [`0260`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0260-spec-5-4-does-not-state-the-loop-rule-the-checker-enforces.md) Spec: §5.4 does not state the loop rule the checker enforces <sup>spec · p1 · 0</sup>
 - [x] [`0261`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0261-spec-nothing-says-whether-a-deposit-made-twice-is-recorded-twice.md) Spec: nothing says whether a deposit made twice is recorded twice <sup>spec · p2 · 0</sup>
+- [x] [`0262`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0262-spec-the-disk-is-the-one-bounded-capability-the-invocation-cannot-bound.md) Spec: the disk is the one bounded capability the invocation cannot bound <sup>spec · p1 · 0</sup>
 - [x] [`0264`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0264-bury-an-act-repeated-from-one-span-is-one-hole.md) bury: an act repeated from one span is one hole <sup>bug · p1 · 0</sup>
 
 ## lamp — The Lamp
@@ -222,7 +222,11 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`##########` 100% · 19 of 19 done · due 2027-05-15
+`##########` 95% · 19 of 20 done · due 2027-05-15
+
+### unmarked
+
+- [ ] [`0265`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0265-exhume-root-and-no-default-for-it.md) exhume: --root, and no default for it <sup>feature · p1 · 4</sup>
 
 ### buried
 
