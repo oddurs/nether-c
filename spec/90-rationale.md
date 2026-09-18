@@ -507,6 +507,18 @@ Unicode publishes. Putting it in the count would mean every future commit
 measuring itself against a number that is mostly somebody else's data.
 Generating it at build time moves the lines and not the problem.
 
+**What it cost**, measured rather than estimated: in the module
+`web/necropolis/` downloads, the tables are the largest single thing there is.
+The data section is 141 KB on the wire's far side and 67 KB compressed, of
+which about 10 KB is every diagnostic this project writes and the rest is
+`perfect_hash`, `decompose` and `lookups`. That is 44% of what a browser
+downloads to bury a program, spent on a correctness property most programs
+never exercise — and it is still the right trade, because the property it buys
+is that two spellings of one name cannot become two bindings, quietly. The
+alternative is a subset of somebody else's data, which is the thing the rule
+above refuses. `tests/wasm/run` prints the breakdown on every build so that
+this stays a decision rather than a discovery.
+
 So `unicode-ident` and `unicode-normalization` are permitted, the language
 pins **Unicode 16.0**, and the rule the three of them share is worth stating
 because "no dependencies" was never quite it:

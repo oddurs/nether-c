@@ -41,6 +41,40 @@ def leb128(data, at):
         shift += 7
 
 
+#: The section tags the format assigns, and the two that matter here.
+SECTIONS = {
+    0: "custom", 1: "type", 2: "import", 3: "function", 4: "table", 5: "memory",
+    6: "global", 7: "export", 8: "start", 9: "elem", 10: "code", 11: "data",
+    12: "datacount",
+}
+
+
+def sections(data):
+    """Every section, with what it costs a browser.
+
+    Where the bytes are, rather than only how many. A budget argued without
+    this is argued from a single number, and a single number can only be
+    raised.
+
+    Each is measured compressed on its own, so the figures are indicative and
+    do not sum to the module's: gzip finds matches across a section boundary
+    that it cannot find when the sections are handed to it separately.
+    """
+    at, out = 8, []
+    while at < len(data):
+        tag = data[at]
+        size, at = leb128(data, at + 1)
+        body = data[at : at + size]
+        name = SECTIONS.get(tag, str(tag))
+        if tag == 0:  # a custom section carries its own name
+            length, j = leb128(body, 0)
+            name = "custom:" + body[j : j + length].decode("utf-8", "replace")
+        out.append((name, size, len(gzip.compress(body, 9))))
+        at += size
+    out.sort(key=lambda row: -row[2])
+    return out
+
+
 def exports(data):
     """Every name the module exports."""
     if data[:4] != b"\x00asm":
@@ -90,6 +124,10 @@ def main():
         raise SystemExit(1)
     room = ceiling - size
     print(f"wasm: {size} bytes compressed, {room} under the {ceiling}-byte budget")
+    for name, raw, packed in sections(data):
+        if packed < 1024:
+            continue
+        print(f"      {name:<10} {raw:>8} raw {packed:>8} compressed")
     # A budget with no room left is one that fails on the next machine rather
     # than on the next change, so say so before it does.
     if room < 1024:
