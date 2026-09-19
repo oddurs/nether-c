@@ -2,10 +2,10 @@
 id: 216
 title: Write the threat model down
 type: docs
-status: unmarked
+status: buried
 milestone: warden
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-09-18
 priority: p0
 effort: m
 area: SECURITY.md
@@ -36,5 +36,42 @@ SECURITY.md still says nothing is implemented. Eight crates, WASM workers, share
 
 ### Acceptance and evidence
 
-- [ ] Every real boundary has a threat and defense or linked gap. Distinguish integrity from availability and recorded replay from trusting foreign code.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] Every real boundary has a threat and defense or linked gap. Distinguish integrity from availability and recorded replay from trusting foreign code.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## Evidence — 2026-09-18
+
+Written against `c0f4128`. Seven boundaries, each with what crosses it, what is
+checked, what is assumed and what is not promised. Every path cited in the
+table was verified to exist; every claim about a check was read out of the
+source rather than recalled.
+
+`scripts/task check` green: 260 items, 0 warnings.
+
+**Integrity and availability are separated throughout.** A shared store defends
+the first and not the second — anyone who may write to it may fill it — and
+that is said rather than left to be discovered.
+
+**Recorded replay and trusting foreign code are separated.** Boundary 3 assumes
+the machine and records everything it says, so replay is exact; boundary 4
+assumes nothing, promises nothing, and marks the trace forever.
+
+### The five gaps, named rather than fixed
+
+- `nether-foreign` allocates `*out_len` bytes uncapped on return code `1`.
+  `net` and `entropy` both bound their answers; this one does not.
+- `nether-wasm` frees with `capacity == len`, which holds today and is not
+  guaranteed.
+- `nether-wasm` builds a slice from a caller-supplied length.
+- `unrecorded` writes the §9.8.1 pre-call witness as `Refusal::Unreachable`, so
+  a call that then succeeds leaves a permanent false refusal in an append-only
+  ledger.
+- Concurrent writers to one store are unsettled — 0207.
+
+## 2026-09-18
+
+SECURITY.md opened with 'Nothing is implemented and nothing is released' and claimed the workspace forbids unsafe. Both were true when written and neither survived: v0.2.0 is out, there are eight crates, and unsafe is allowed in two of them.
+
+## 2026-09-18
+
+The four gaps in the Known section were verified in the source at c0f4128 rather than recalled from the reviews that found them. A threat model that lists only defences is the security version of a design document that lists only advantages.
