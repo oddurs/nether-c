@@ -339,7 +339,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## after — After the Burial
 
-`####······` 31% · 4 of 13 done · due 2027-10-01
+`####······` 36% · 5 of 14 done · due 2027-10-01
 
 Adoption work has several independent tracks. This is not one serial implementation ticket, and the year-long/public proofs do not fit a single coding session.
 
@@ -361,6 +361,7 @@ Adoption work has several independent tracks. This is not one serial implementat
 - [x] [`0137`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0137-sample-tables-in-tests-are-keyed-by-line-number.md) Sample tables in tests are keyed by line number <sup>chore · p2</sup>
 - [x] [`0148`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0148-hygiene-found-by-the-review.md) Hygiene found by the review <sup>chore · p3 · 0</sup>
 - [x] [`0250`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0250-turn-the-remaining-descents-into-executable-plans.md) Turn the remaining descents into executable plans <sup>docs · p2 · 0</sup>
+- [x] [`0271`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0271-the-released-binary-says-it-is-0-0-0.md) The released binary says it is 0.0.0 <sup>bug · p1 · 0</sup>
 
 ## quickening — The Quickening
 

@@ -17,7 +17,17 @@ use std::process::ExitCode;
 
 use nether_ledger::Store;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// What this build is, and it is the tag or it is nothing.
+///
+/// `CARGO_PKG_VERSION` is the workspace version, which is `0.0.0` and always
+/// will be: the crates are not published and the tag is the version. A binary
+/// built from `cargo build` is not a release and says so rather than claiming
+/// a number somebody might quote back. `scripts/task release` and the release
+/// workflow set `NETHER_VERSION` from the tag. 0271.
+const VERSION: &str = match option_env!("NETHER_VERSION") {
+    Some(tag) => tag,
+    None => "(not a release build)",
+};
 
 /// §8.8's exit codes, by the names the table gives them.
 mod code {
