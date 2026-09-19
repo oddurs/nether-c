@@ -16,7 +16,7 @@ use nether_world::{
     Declared, Disk, Entropy, Env, Ledger, Net, Recorder, Replay, Unrecorded, World,
 };
 
-use crate::{FAILED, code, json, ledger, usage_error};
+use crate::{FAILED, code, json, usage_error};
 
 /// The budget, as §8.2 gives `bury` one.
 const DEFAULT_FUEL: u64 = 1_000_000;
@@ -170,12 +170,9 @@ pub fn run(args: &[String]) -> ExitCode {
         Ok(asked) => asked,
         Err(code) => return code,
     };
-    let store = match ledger() {
+    let store = match crate::opened() {
         Ok(store) => store,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
+        Err(code) => return code,
     };
     let cairn = match store.resolve(asked.name.unwrap_or_default()) {
         Ok(cairn) => cairn,
@@ -184,7 +181,10 @@ pub fn run(args: &[String]) -> ExitCode {
             return ExitCode::from(code::ABSENT);
         }
     };
-    dig_up(&store, cairn, &asked)
+    match dig_up(&store, cairn, &asked) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(code) => code,
+    }
 }
 
 /// Every hole a trace names, with the question it asks and where it was asked.
@@ -257,7 +257,7 @@ fn world_from(asked: &Asked, root: &Path) -> Result<World, Capability> {
 }
 
 #[expect(clippy::too_many_lines, reason = "one pass, in the order §6.6 puts it")]
-fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
+fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     let (replaying, wants_json) = (asked.replaying, asked.wants_json);
     let Ok(Stored::Node(Node::Trace {
         residue,
@@ -269,15 +269,14 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
         ..
     })) = store.get(cairn)
     else {
-        eprintln!("nether: {} is not a trace", cairn.short());
-        return FAILED;
+        return Err(crate::not_a_trace(store, cairn));
     };
 
     // The residue is source (§6.5). Burying it again means lexing, parsing and
     // lowering it again, which is exactly what burying anything means.
     let Ok(Stored::Value(Value::Bytes(text))) = store.get(residue) else {
         eprintln!("nether: the residue of {} is not in this ledger", cairn.short());
-        return ExitCode::from(code::ABSENT);
+        return Err(ExitCode::from(code::ABSENT));
     };
     let shown = format!("{}:residue", cairn.short());
     let unit = match parse(&text)
@@ -287,7 +286,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
         Ok(ast) => ast,
         Err(d) => {
             eprint!("{}", nether_core::report(&d, &String::from_utf8_lossy(&text), &shown));
-            return ExitCode::from(code::MALFORMED);
+            return Err(ExitCode::from(code::MALFORMED));
         }
     };
     if let Some(fault) = check(&unit).first() {
@@ -295,7 +294,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
             "{}",
             nether_core::report(&fault.diagnostic(), &String::from_utf8_lossy(&text), &shown)
         );
-        return ExitCode::from(code::MALFORMED);
+        return Err(ExitCode::from(code::MALFORMED));
     }
 
     // §1.7: an implementation MUST refuse to report a marked trace as
@@ -309,7 +308,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
         eprintln!("  second run agreeing with the first would be a coincidence and a");
         eprintln!("  second run disagreeing would be the same trace. `nether strata`");
         eprintln!("  says `replayable: no` about this one, and so does this.");
-        return FAILED;
+        return Err(FAILED);
     }
 
     // Answer what can be answered, and write every answer down first.
@@ -324,13 +323,13 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
         let have = Replay::of_trace(store, &witnesses);
         let asked = match questions(store, &holes) {
             Ok(asked) => asked,
-            Err(hole) => return no_such_hole(hole),
+            Err(hole) => return Err(no_such_hole(hole)),
         };
         for (call, _, _) in &asked {
             if have.answer(call).is_none() {
                 eprintln!("nether: nothing recorded answers `{}`", call.function);
                 eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
-                return FAILED;
+                return Err(FAILED);
             }
         }
         for (call, value) in have.all() {
@@ -343,13 +342,13 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
             Err(cap) => {
                 eprintln!("nether: `{cap}` is in §9.1 and is not built yet.");
                 eprintln!("        §9.1's first seven are built; stratum 8 is 0072.");
-                return ExitCode::from(code::UNIMPLEMENTED);
+                return Err(ExitCode::from(code::UNIMPLEMENTED));
             }
         };
         let into = Recorder::new(store);
         let asked = match questions(store, &holes) {
             Ok(asked) => asked,
-            Err(hole) => return no_such_hole(hole),
+            Err(hole) => return Err(no_such_hole(hole)),
         };
         for (call, _, span) in asked {
             match world.ask(&call, span, &into) {
@@ -361,22 +360,22 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
                 Err(e @ nether_world::Unanswered::Collapsed(_)) => {
                     eprintln!("nether: {e}");
                     eprintln!("        §9.9: a collapse is a bug in the program, not an answer.");
-                    return FAILED;
+                    return Err(FAILED);
                 }
                 // Not the program's mistake and not the world's answer. §8.8
                 // has a code for a machine that cannot do what was asked.
                 Err(e @ nether_world::Unanswered::Unavailable(_)) => {
                     eprintln!("nether: {e}");
-                    return ExitCode::from(code::UNIMPLEMENTED);
+                    return Err(ExitCode::from(code::UNIMPLEMENTED));
                 }
                 Err(e) => {
                     eprintln!("nether: {e}");
-                    return FAILED;
+                    return Err(FAILED);
                 }
                 Ok(answer) => {
                     let Ok(Stored::Value(value)) = store.get(answer.answer()) else {
                         eprintln!("nether: the answer to `{}` is not readable back", call.function);
-                        return FAILED;
+                        return Err(FAILED);
                     };
                     said.push((call.clone(), answer.answer()));
                     recorded.push(answer.witness());
@@ -393,27 +392,18 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
                 "{}",
                 nether_core::report(&halt.diagnostic(), &String::from_utf8_lossy(&text), &shown)
             );
-            return match halt.kind {
+            return Err(match halt.kind {
                 HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
                 _ => FAILED,
-            };
+            });
         }
     };
 
     for (_, stored) in &residue.named {
-        if let Err(e) = store.put(stored) {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
+        crate::kept(store, stored)?;
     }
     let printed = print(&residue.as_unit(&unit));
-    let next_residue = match store.put(&Stored::Value(Value::Bytes(printed.into_bytes()))) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
-    };
+    let next_residue = crate::kept(store, &Stored::Value(Value::Bytes(printed.into_bytes())))?;
     let deepest = crate::closing::depth(store, residue.depth.get(), &recorded);
     let deeper = Node::Trace {
         residue: next_residue,
@@ -424,23 +414,17 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
         source,
         depth: deepest,
     };
-    let next = match store.put(&Stored::Node(deeper)) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
-    };
+    let next = crate::kept(store, &Stored::Node(deeper))?;
 
     // §6.7's replay law: replaying a sealed trace produces the same cairn.
     if replaying {
         if next == cairn {
             println!("identical.");
-            return ExitCode::SUCCESS;
+            return Ok(());
         }
         eprintln!("nether: replay produced {} and not {}", next.short(), cairn.short());
         eprintln!("        §6.7 calls that a bug in the implementation.");
-        return ExitCode::from(code::MALFORMED);
+        return Err(ExitCode::from(code::MALFORMED));
     }
 
     let told = Sealed {
@@ -456,7 +440,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> ExitCode {
     } else {
         print!("{}", told.text(store));
     }
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 /// The summary §6.6 prints.

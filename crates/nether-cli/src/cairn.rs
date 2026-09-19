@@ -7,7 +7,7 @@ use std::process::ExitCode;
 
 use nether_ledger::{Cairn, Store, StoreError, Stored, Value};
 
-use crate::{FAILED, code, json, ledger, usage_error};
+use crate::{FAILED, code, json, usage_error};
 
 /// `nether cairn <path> | --verify <cairn> [--json]`
 pub fn run(args: &[String]) -> ExitCode {
@@ -56,12 +56,9 @@ fn name(path: &Path, wants_json: bool) -> ExitCode {
 /// store already refuses to serve bytes that do not hash to the name it was
 /// asked for; what this adds is saying which of the three things happened.
 fn verify(prefix: &str, wants_json: bool) -> ExitCode {
-    let store = match ledger() {
+    let store = match crate::opened() {
         Ok(store) => store,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
+        Err(code) => return code,
     };
     let cairn = match store.resolve(prefix) {
         Ok(cairn) => cairn,

@@ -15,7 +15,7 @@ use nether_core::{Capability, Depth, Diagnostic, check, report};
 use nether_ledger::{Cairn, Node, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
 
-use crate::{FAILED, code, json, ledger, usage_error};
+use crate::{FAILED, code, json, usage_error};
 
 /// The budget a burial runs under when nobody says otherwise.
 ///
@@ -83,19 +83,18 @@ pub fn run(args: &[String]) -> ExitCode {
         eprintln!("    nether exhume <cairn> --grant {cap}");
         return usage_error();
     }
-    inter(Path::new(path), fuel, wants_json)
+    match inter(Path::new(path), fuel, wants_json) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(code) => code,
+    }
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one pass, in the order it happens; splitting it would hide the order"
-)]
-fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
+fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
     let source = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln!("nether: {}: {e}", path.display());
-            return FAILED;
+            return Err(FAILED);
         }
     };
 
@@ -103,7 +102,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
     // span, and a span is a byte range in something with lines in it.
     let Ok(text) = String::from_utf8(source.clone()) else {
         eprintln!("nether: {} is not UTF-8", path.display());
-        return ExitCode::from(code::MALFORMED);
+        return Err(ExitCode::from(code::MALFORMED));
     };
     let shown = path.display().to_string();
     let complain = |d: &Diagnostic| eprint!("{}", report(d, &text, &shown));
@@ -114,7 +113,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
             for fault in &faults {
                 complain(&fault.diagnostic());
             }
-            return ExitCode::from(code::MALFORMED);
+            return Err(ExitCode::from(code::MALFORMED));
         }
     };
     let unit = match lower(&ast) {
@@ -123,7 +122,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
             for fault in &faults {
                 complain(&fault.diagnostic());
             }
-            return ExitCode::from(code::MALFORMED);
+            return Err(ExitCode::from(code::MALFORMED));
         }
     };
     // The depth checker runs before burial, not after. A program that does not
@@ -134,37 +133,25 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
         for fault in &faults {
             complain(&fault.diagnostic());
         }
-        return ExitCode::from(code::MALFORMED);
+        return Err(ExitCode::from(code::MALFORMED));
     }
 
-    let store = match ledger() {
-        Ok(store) => store,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
-    };
+    let store = crate::opened()?;
 
     // The source is named before anything is buried. A span points at a cairn
     // rather than a path (§7.3.1), so the name has to exist first.
-    let source_cairn = match store.put(&Stored::Value(Value::Bytes(source.clone()))) {
-        Ok(cairn) => cairn,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
-    };
+    let source_cairn = crate::kept(&store, &Stored::Value(Value::Bytes(source.clone())))?;
 
     let residue = match bury(&unit, source_cairn, fuel) {
         Ok(residue) => residue,
         Err(halt) => {
             complain(&halt.diagnostic());
-            return match halt.kind {
+            return Err(match halt.kind {
                 // §8.8 gives fuel its own code: it is the one failure a larger
                 // budget might fix.
                 HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
                 _ => FAILED,
-            };
+            });
         }
     };
 
@@ -173,23 +160,12 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
     // writing to a store is stratum 1.
     let mut written = 0usize;
     for (_, stored) in &residue.named {
-        match store.put(stored) {
-            Ok(_) => written += 1,
-            Err(e) => {
-                eprintln!("nether: {e}");
-                return FAILED;
-            }
-        }
+        crate::kept(&store, stored)?;
+        written += 1;
     }
 
     let printed = print(&residue.as_unit(&unit));
-    let residue_cairn = match store.put(&Stored::Value(Value::Bytes(printed.into_bytes()))) {
-        Ok(cairn) => cairn,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
-    };
+    let residue_cairn = crate::kept(&store, &Stored::Value(Value::Bytes(printed.into_bytes())))?;
 
     // Burial holds no capability, so nothing was answered and there are no
     // witnesses. §6.6: exhumation is what records one.
@@ -204,13 +180,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
         deposits: residue.deposits.clone(),
         source: source_cairn,
     };
-    let trace_cairn = match store.put(&Stored::Node(trace)) {
-        Ok(cairn) => cairn,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
-    };
+    let trace_cairn = crate::kept(&store, &Stored::Node(trace))?;
 
     let told = Buried {
         path: path.display().to_string(),
@@ -227,7 +197,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> ExitCode {
     } else {
         print!("{}", told.text(&store));
     }
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 /// The summary §8.2 requires: what was written, never what the program said.

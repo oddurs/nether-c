@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use nether_ledger::{AnswerOf, Cairn, Node, Refusal, Store, Stored, Value};
 
-use crate::{FAILED, code, json, ledger, usage_error};
+use crate::{FAILED, json, usage_error};
 
 /// How far a provenance walk goes when nobody says.
 const DEFAULT_DEPTH: usize = 8;
@@ -40,19 +40,13 @@ pub fn run(args: &[String]) -> ExitCode {
         return complain("which cairn?");
     };
 
-    let store = match ledger() {
+    let store = match crate::opened() {
         Ok(store) => store,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
+        Err(code) => return code,
     };
-    let cairn = match store.resolve(&name) {
-        Ok(cairn) => cairn,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return ExitCode::from(code::ABSENT);
-        }
+    let cairn = match crate::named(&store, &name) {
+        Ok(c) => c,
+        Err(code) => return code,
     };
     if backwards {
         provenance(&store, cairn, depth, wants_json)
