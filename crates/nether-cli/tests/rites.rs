@@ -1720,3 +1720,17 @@ fn the_browser_buries_what_the_rite_buries() {
     let printed = said.split("\"printed\":").nth(1).expect("the residue, printed");
     assert!(printed.contains("descend disk"), "{printed}");
 }
+
+#[test]
+fn a_build_that_is_not_a_release_does_not_claim_a_version() {
+    // 0271. `VERSION` was `CARGO_PKG_VERSION`, which is the workspace version
+    // and is `0.0.0` on purpose, so every binary of every release said 0.0.0.
+    // It is the tag now, stamped by the release workflow, and a build without
+    // one says so rather than offering a number somebody might quote back.
+    let out = nether(None, &["--version"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let said = stdout(&out);
+    assert!(said.starts_with("nether "), "{said}");
+    assert!(!said.contains("0.0.0"), "a build with no tag is claiming a version: {said}");
+    assert!(said.contains("not a release build"), "{said}");
+}

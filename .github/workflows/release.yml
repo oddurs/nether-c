@@ -71,8 +71,33 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      # The tag is the version, and this is where it becomes one. Without it
+      # the binary reports `CARGO_PKG_VERSION`, which is the workspace version
+      # and is `0.0.0` on purpose -- the crates are not published. v0.2.0
+      # shipped three binaries that all said 0.0.0. 0271.
       - name: Build the binary
-        run: cargo build --release --locked --bin nether --target ${{ matrix.target }}
+        run: |
+          export NETHER_VERSION="${GITHUB_REF_NAME#v}"
+          cargo build --release --locked --bin nether --target ${{ matrix.target }}
+
+      # Asked of the artifact rather than of the build that made it. Both
+      # strings are exact and neither can appear by accident: one is the
+      # version this tag is, the other is what a non-release build says
+      # instead. Read rather than executed, because a cross-compiled binary
+      # does not run on the machine that built it.
+      - name: The binary must say which release it is
+        run: |
+          bin="target/${{ matrix.target }}/release/nether"
+          want="${GITHUB_REF_NAME#v}"
+          if grep -qa "(not a release build)" "$bin"; then
+            echo "::error::$bin was built without NETHER_VERSION"
+            exit 1
+          fi
+          if ! grep -qa "$want" "$bin"; then
+            echo "::error::$bin does not carry the version $want"
+            exit 1
+          fi
+          echo "$bin carries $want"
 
       # One archive per target, named so a person can tell them apart in a
       # directory of downloads.
