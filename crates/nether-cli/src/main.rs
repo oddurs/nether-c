@@ -15,7 +15,7 @@ mod strata;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use nether_ledger::Store;
+use nether_ledger::{Cairn, Node, Store, Stored};
 
 /// What this build is, and it is the tag or it is nothing.
 ///
@@ -53,6 +53,89 @@ fn ledger() -> Result<Store, std::io::Error> {
     let root =
         std::env::var_os("NETHER_STORE").map_or_else(|| PathBuf::from(".nether"), PathBuf::from);
     Store::open(root)
+}
+
+/// Put it in the ledger, or say why it would not go.
+///
+/// Twenty-four places across six rites said this in seven lines each, and the
+/// shape of the rite was buried under its own error handling. §7.5: a store
+/// that will not take an answer is this machine failing rather than the world
+/// saying no, so there is nothing for a caller to decide.
+///
+/// # Errors
+///
+/// [`FAILED`], with the reason already printed.
+fn kept(store: &Store, what: &Stored) -> Result<Cairn, ExitCode> {
+    store.put(what).map_err(|e| {
+        eprintln!("nether: {e}");
+        FAILED
+    })
+}
+
+/// Open the ledger, or say why it would not open.
+///
+/// Every rite begins here and each of them said so in six lines.
+///
+/// # Errors
+///
+/// [`FAILED`], with the reason already printed.
+fn opened() -> Result<Store, ExitCode> {
+    ledger().map_err(|e| {
+        eprintln!("nether: {e}");
+        FAILED
+    })
+}
+
+/// The cairn a prefix names, or say why it names nothing.
+///
+/// §7.5 lets a person type as much of a name as tells it apart, so a rite
+/// takes a prefix and the store settles it. Not finding one is `ABSENT`, and
+/// finding two is the store's sentence rather than this one's.
+///
+/// # Errors
+///
+/// [`code::ABSENT`], with the reason already printed.
+fn named(store: &Store, prefix: &str) -> Result<Cairn, ExitCode> {
+    store.resolve(prefix).map_err(|e| {
+        eprintln!("nether: {e}");
+        ExitCode::from(code::ABSENT)
+    })
+}
+
+/// What a cairn turned out to name, for the sentence that says it is not a
+/// trace.
+fn kind(stored: &Stored) -> &'static str {
+    match stored {
+        Stored::Value(_) => "a value",
+        Stored::Node(Node::Literal(_)) => "a literal",
+        Stored::Node(Node::Apply { .. }) => "an application",
+        Stored::Node(Node::Hole { .. }) => "a hole",
+        Stored::Node(Node::Deposit { .. }) => "a deposit",
+        Stored::Node(Node::Witness { .. }) => "a witness",
+        Stored::Node(Node::Trace { .. }) => "a trace",
+    }
+}
+
+/// Say that a cairn does not name a trace, and what it names instead.
+///
+/// Three rites read a trace before they do anything and all three said so
+/// differently. Two said only "is not a trace", which tells a reader they are
+/// wrong and not what they have — `strata` already said which, and offered
+/// the rite that would show them. That is the sentence, and now it is the
+/// only one.
+///
+/// The `let … else` that failed stays where it is: what was duplicated is the
+/// sentence, not the shape of reading a trace, and a helper that returned one
+/// would leave every caller destructuring a `Node` it had just been promised.
+fn not_a_trace(store: &Store, cairn: Cairn) -> ExitCode {
+    match store.get(cairn) {
+        Ok(stored) => {
+            eprintln!("nether: {} is {}, not a trace", cairn.short(), kind(&stored));
+            eprintln!("        `nether lamp {}` shows what is there", cairn.short());
+        }
+        Err(e) => eprintln!("nether: {e}"),
+    }
+    FAILED
 }
 
 const USAGE: &str = "\

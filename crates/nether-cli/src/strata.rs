@@ -11,7 +11,7 @@ use std::process::ExitCode;
 use nether_core::{Capability, Depth};
 use nether_ledger::{Cairn, Node, Span, Store, Stored, Value};
 
-use crate::{FAILED, code, json, lamp, ledger, usage_error};
+use crate::{code, json, lamp, usage_error};
 
 /// `nether strata <cairn> [--json]`
 pub fn run(args: &[String]) -> ExitCode {
@@ -24,37 +24,22 @@ pub fn run(args: &[String]) -> ExitCode {
         return complain();
     }
 
-    let store = match ledger() {
+    let store = match crate::opened() {
         Ok(store) => store,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
+        Err(code) => return code,
     };
-    let cairn = match store.resolve(name) {
-        Ok(cairn) => cairn,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return ExitCode::from(code::ABSENT);
-        }
+    let cairn = match crate::named(&store, name) {
+        Ok(c) => c,
+        Err(code) => return code,
     };
-    let stored = match store.get(cairn) {
-        Ok(stored) => stored,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
-    };
-    let Stored::Node(trace @ Node::Trace { depth, unrecorded, .. }) = &stored else {
-        eprintln!("nether: {} is {}, not a trace", cairn.short(), kind(&stored));
-        eprintln!("        `nether lamp {}` shows what is there", cairn.short());
-        return FAILED;
+    let Ok(Stored::Node(trace @ Node::Trace { depth, unrecorded, .. })) = store.get(cairn) else {
+        return crate::not_a_trace(&store, cairn);
     };
 
     // A trace names its holes, its witnesses and its deposits. The residue and
     // the source it also names are `Bytes`.
     let found = survey(&store, &trace.nodes());
-    let told = Reading { cairn, depth: *depth, unrecorded: *unrecorded, found };
+    let told = Reading { cairn, depth, unrecorded, found };
     if wants_json {
         println!("{}", told.json(&store));
     } else {
@@ -76,19 +61,6 @@ pub fn run(args: &[String]) -> ExitCode {
 fn complain() -> ExitCode {
     eprintln!("usage: nether strata <cairn> [--json]");
     usage_error()
-}
-
-/// What a cairn turned out to name, for the sentence that says it is not a trace.
-fn kind(stored: &Stored) -> &'static str {
-    match stored {
-        Stored::Value(_) => "a value",
-        Stored::Node(Node::Literal(_)) => "a literal",
-        Stored::Node(Node::Apply { .. }) => "an application",
-        Stored::Node(Node::Hole { .. }) => "a hole",
-        Stored::Node(Node::Deposit { .. }) => "a deposit",
-        Stored::Node(Node::Witness { .. }) => "a witness",
-        Stored::Node(Node::Trace { .. }) => "a trace",
-    }
 }
 
 // ── what is under a trace ───────────────────────────────────────────────────

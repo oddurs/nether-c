@@ -14,7 +14,7 @@ use nether_ledger::{Cairn, Node, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
 use nether_world::Replay;
 
-use crate::{FAILED, code, ledger, usage_error};
+use crate::{FAILED, code, usage_error};
 
 /// The budget, as §8.2 gives `bury` one.
 const DEFAULT_FUEL: u64 = 1_000_000;
@@ -44,12 +44,9 @@ pub fn run(args: &[String]) -> ExitCode {
         return usage_error();
     };
 
-    let store = match ledger() {
+    let store = match crate::opened() {
         Ok(store) => store,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return FAILED;
-        }
+        Err(code) => return code,
     };
     let name = |what: &str| match store.resolve(what) {
         Ok(c) => Ok(c),
@@ -69,8 +66,7 @@ fn take(store: &Store, trace: Cairn, replace: Cairn, with: Cairn, wants_json: bo
     let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. })) =
         store.get(trace)
     else {
-        eprintln!("nether: {} is not a trace", trace.short());
-        return FAILED;
+        return crate::not_a_trace(store, trace);
     };
 
     // What the trace was told, with one thing said differently. The answer
