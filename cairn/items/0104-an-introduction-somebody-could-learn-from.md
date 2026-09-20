@@ -2,8 +2,10 @@
 id: 104
 title: An introduction somebody could learn from
 type: docs
-status: unmarked
+status: descending
 milestone: after
+assignee: Oddur Sigurdsson
+claimed: 2026-09-19
 depends_on:
 - 66
 created: 2026-09-11

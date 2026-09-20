@@ -348,12 +348,15 @@ Adoption work has several independent tracks. This is not one serial implementat
 - [ ] [`0101`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0101-a-package-format-addressed-by-cairn.md) A package format, addressed by cairn <sup>feature · p1 · 1</sup>
 - [ ] [`0102`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0102-editor-support-spans-depth-and-provenance.md) Editor support: spans, depth and provenance <sup>feature · p1 · 3</sup>
 - [ ] [`0103`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0103-a-pilot-build-something-real-with-it.md) A pilot: build something real with it <sup>chore · p0 · 4</sup>
-- [ ] [`0104`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0104-an-introduction-somebody-could-learn-from.md) An introduction somebody could learn from <sup>docs · p1</sup>
 - [ ] [`0105`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0105-a-conformance-suite-for-a-second-implementation.md) A conformance suite for a second implementation <sup>chore · p1 · 0</sup>
 - [ ] [`0106`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0106-a-public-store-and-what-it-costs-to-run.md) A public store, and what it costs to run <sup>chore · p2 · 6</sup>
 - [ ] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
+
+### descending
+
+- [ ] [`0104`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0104-an-introduction-somebody-could-learn-from.md) An introduction somebody could learn from <sup>docs · p1</sup>
 
 ### buried
 
