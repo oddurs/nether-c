@@ -45,13 +45,13 @@ try {
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="index.html" aria-current="page">front desk</a><a href="spec/index.html">manual</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="index.html" aria-current="page">front desk</a><a href="manual/index.html">manual</a><a href="spec/index.html">specification</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
 <details open class="directory-drawer">
 <summary>Directory</summary>
-<nav class="desk-directory" aria-label="Front desk contents"><a href="index.html#start"><span aria-hidden="true">00</span> Start here</a><a href="index.html#first-program"><span aria-hidden="true">01</span> First burial</a><a href="index.html#nine-strata"><span aria-hidden="true">02</span> Nine strata</a><a href="index.html#six-rites"><span aria-hidden="true">03</span> The six rites</a><a href="index.html#specification"><span aria-hidden="true">04</span> Specification</a><a href="index.html#status"><span aria-hidden="true">05</span> Project status</a></nav>
+<nav class="desk-directory" aria-label="Front desk contents"><a href="index.html#start"><span aria-hidden="true">00</span> Start here</a><a href="index.html#first-program"><span aria-hidden="true">01</span> First burial</a><a href="index.html#nine-strata"><span aria-hidden="true">02</span> Nine strata</a><a href="index.html#six-rites"><span aria-hidden="true">03</span> The six rites</a><a href="index.html#manual"><span aria-hidden="true">04</span> The manual</a><a href="index.html#specification"><span aria-hidden="true">05</span> Specification</a><a href="index.html#status"><span aria-hidden="true">06</span> Project status</a></nav>
 <p class="directory-note">You are here.<br>Here is below.</p>
 </details>
 </aside>
@@ -63,7 +63,7 @@ try {
 <img class="hero" src="gfx/hero.gif" data-dark-src="gfx/hero.gif" data-lit-src="gfx/hero-lit.gif" data-still width="600" height="192" alt="An obsidian cairn over a shaft. A trace cube circles an unanswered hole.">
 <h1>Nothing runs.</h1>
 <p>A programming language. An unusually permanent filing system.</p>
-<p class="arrival-actions"><a href="#first-program">[ Bury a program ]</a><a href="spec/index.html">[ Open the manual ]</a></p>
+<p class="arrival-actions"><a href="#first-program">[ Bury a program ]</a><a href="manual/index.html">[ Open the manual ]</a></p>
 <p class="desk-notice">Please keep all limbs inside the current stratum.</p>
 </div>
 
@@ -379,6 +379,24 @@ modes. The afterlife has paperwork; it need not have eyestrain.</p>
 
 <img class="rule" src="gfx/rule-quiet.gif" data-dark-src="gfx/rule-quiet.gif" data-lit-src="gfx/rule-quiet-lit.gif" width="396" height="9" alt="">
 
+<h2 id="manual">The manual</h2>
+
+<p>The specification answers <em>what is the rule</em>. It says each rule
+exactly once, in the order a rule needs the ones above it, and it is not a
+tutorial and will not become one.</p>
+
+<p><a href="manual/index.html">The manual</a> is the other document. Ten short
+chapters with one idea in each: bury a program, read back what it left, watch
+it starve on a question the world has not answered, grant the thing it asked
+for, and then ask the trace whether the world has moved since.</p>
+
+<p>Every command on those pages is executed on every build of this project,
+against the binary in this repository, and the output printed underneath is the
+output that came back. Documentation that lies fails the build. Writing it
+found two bugs.</p>
+
+<img class="rule" src="gfx/rule-quiet.gif" data-dark-src="gfx/rule-quiet.gif" data-lit-src="gfx/rule-quiet-lit.gif" width="396" height="9" alt="">
+
 <h2 id="specification">The specification</h2>
 
 <p>Written before the compiler. Deliberately. The compiler is not being started
@@ -430,7 +448,7 @@ a GIF, so it did not even change colour when it stopped being true. The two
 blocks below are read out of <code>cairn/items/</code> when the page is baked,
 and the build fails the day the board moves and the page does not.</p>
 
-<figure class="listing"><figcaption>the descent, from cairn/items/</figcaption><pre><code>depth 7 of 9   50 hole(s) still owed
+<figure class="listing"><figcaption>the descent, from cairn/items/</figcaption><pre><code>depth 7 of 9   52 hole(s) still owed
 
   <span class="d0"> 1</span>  The Codex             buried      1 hole(s)
   <span class="d0"> 2</span>  The Lamp              buried      
@@ -448,7 +466,7 @@ Every rite in <a href="spec/08-rites.html">&sect;08</a> is built. A trace that
 reached stratum 7 replays byte for byte, and one that reached stratum 8 refuses
 to claim it can. What is left is the part you can look at.</p>
 
-<figure class="listing"><figcaption>what the world still owes</figcaption><pre><code>holes 50
+<figure class="listing"><figcaption>what the world still owes</figcaption><pre><code>holes 52
 
   hole <span class="d0"> 1</span>  Decide whether the prelude gains an Answe…  <span class="d0">stratum 0</span>  codex
   hole <span class="d4"> 2</span>  exhume: --root, and no default for it       <span class="d4">stratum 4</span>  world
@@ -458,7 +476,7 @@ to claim it can. What is left is the part you can look at.</p>
   hole <span class="d0"> 6</span>  The playground editor                       <span class="d0">stratum 0</span>  necropolis
   hole <span class="d0"> 7</span>  bury: reduce under an undecided branch      <span class="d0">stratum 0</span>  futamura
   hole <span class="d4"> 8</span>  A pilot: build something real with it       <span class="d4">stratum 4</span>  after
-  ... and 42 more, in the roadmap
+  ... and 44 more, in the roadmap
 </code></pre></figure>
 
 <p>Those are holes in the ordinary sense of the word here: the work is

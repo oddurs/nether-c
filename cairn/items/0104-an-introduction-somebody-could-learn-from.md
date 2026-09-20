@@ -7,7 +7,7 @@ milestone: after
 depends_on:
 - 66
 created: 2026-09-11
-updated: 2026-09-15
+updated: 2026-09-19
 priority: p1
 effort: l
 area: docs/
@@ -39,3 +39,11 @@ The spec answers rules; this item teaches a first successful burial. Reuse worki
 
 - [ ] The newcomer writes and buries a working program in one sitting. Passing snippets is necessary but does not replace the human proof; leave the item open until observed.
 - [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## 2026-09-19
+
+The document exists: docs/manual/, ten chapters, baked to site/manual/. Every `$ nether` line in it is executed by tests/transcripts/run against the binary, in a scratch store holding tests/programs/, so a chapter that drifts from the implementation turns CI red. The harness also refuses a Nether C sample whose first line names a fixture it does not byte-match, so a program printed in the prose is the program that ran.
+
+The proof is not met and this stays descending. Steps 1 and 2 are done; step 3 is observing somebody who has not read the specification write and bury a program from this, without coaching. Nothing in a repository can produce that.
+
+Writing it found two bugs, 0273 and 0274, both because documenting a rite truthfully means running it.

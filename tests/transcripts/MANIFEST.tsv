@@ -1,5 +1,5 @@
 # ref	kind	status	digest
-README.md § THE FIRST PROGRAM #1	c	pinned	9bc96e7b7ae86373
+README.md § THE FIRST PROGRAM #1	c	pinned	d92d2096e7e25092
 README.md § THE FIRST PROGRAM #2	console	checked	7f9a7bf849a83e2b
 README.md § WHAT IS TRUE TODAY #1	console	checked	d838eaf97e53718b
 README.md § DEVELOPMENT #1	sh	pinned	7b99770b16361486
@@ -72,3 +72,32 @@ spec/09-prelude.md § 9.7 Stratum 7 — `entropy` #1	signatures	pinned	b3bc31d5c
 spec/09-prelude.md § 9.8 Stratum 8 — `unrecorded` #1	signatures	pinned	b83338a5100b0081
 spec/09-prelude.md § 9.8.1 The other side #1	text	pinned	0040972abd71d3a5
 spec/90-rationale.md § One number on an arrow #1	c	pinned	f426e2ac55ce8205
+docs/manual/00-a-way-in.md § What you need #1	console	pinned	286c37e56d3fca75
+docs/manual/01-the-first-burial.md § The first burial #1	c	pinned	d92d2096e7e25092
+docs/manual/01-the-first-burial.md § The first burial #2	console	checked	ff3859a0180fb86e
+docs/manual/01-the-first-burial.md § The first burial #3	console	checked	b0b2566108b96d04
+docs/manual/01-the-first-burial.md § What `depth 0` bought you #1	console	checked	861859854dc64227
+docs/manual/02-a-name-that-holds.md § A name that holds #1	console	checked	714352ec4f15b19a
+docs/manual/02-a-name-that-holds.md § Asking whether a name still holds #1	console	checked	a671405a16fe6ede
+docs/manual/03-the-hole.md § The hole #1	c	pinned	a34b3b84923d0179
+docs/manual/03-the-hole.md § The hole #2	console	pinned	5d5e33ebd2ef222b
+docs/manual/03-the-hole.md § The hole #3	console	checked	4968c59d1b7089ba
+docs/manual/03-the-hole.md § Burial has no world #1	console	checked	8b4ecbf0adaa6321
+docs/manual/03-the-hole.md § Burial has no world #2	console	checked	e5645553497d4c89
+docs/manual/04-the-grant.md § The grant #1	console	checked	76412f28ea64649f
+docs/manual/04-the-grant.md § The grant #2	console	checked	34879260aaf1312b
+docs/manual/04-the-grant.md § The grant #3	console	checked	278228f105b15dcf
+docs/manual/05-the-witness.md § The witness #1	console	checked	34879260aaf1312b
+docs/manual/05-the-witness.md § The witness #2	console	checked	b5b628b09d204d01
+docs/manual/05-the-witness.md § Reading it back #1	console	checked	eb470e4a8f20ee02
+docs/manual/05-the-witness.md § Reading it back #2	console	checked	fb816a6cad20f70f
+docs/manual/06-two-worlds.md § Two worlds #1	c	pinned	9272794b8f93515e
+docs/manual/06-two-worlds.md § Two worlds #2	console	checked	505eab833bb926be
+docs/manual/06-two-worlds.md § Two worlds #3	console	checked	f3122f27d42756a6
+docs/manual/06-two-worlds.md § Two worlds #4	console	checked	5eb9561e8e2c2240
+docs/manual/06-two-worlds.md § Two worlds #5	console	checked	48d3193268a19137
+docs/manual/06-two-worlds.md § Two worlds #6	console	checked	404080528c2d338b
+docs/manual/07-the-replay.md § The replay #1	console	checked	f2a8df5eeaa9935d
+docs/manual/08-the-orpheus-rule.md § The Orpheus rule #1	c	pinned	ece8d8c71c722bbe
+docs/manual/08-the-orpheus-rule.md § The Orpheus rule #2	console	checked	b95c9f3eb611ad61
+docs/manual/08-the-orpheus-rule.md § Where it bites in practice #1	c	pinned	e6717adb0284a676

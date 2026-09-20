@@ -36,8 +36,14 @@ ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = Path(__file__).resolve().parent / "MANIFEST.tsv"
 
 # Prose that carries samples. Order is stable so the manifest is stable.
-SOURCES = ["README.md", "site/src/index.html"] + sorted(
-    str(p.relative_to(ROOT)) for p in (ROOT / "spec").glob("*.md")
+#
+# The manual is here for the same reason the specification is: it is the
+# document a newcomer types out of, so it is the document that can do the most
+# damage by being wrong. Every `$ nether` line in it is executed on every run.
+SOURCES = (
+    ["README.md", "site/src/index.html"]
+    + sorted(str(p.relative_to(ROOT)) for p in (ROOT / "spec").glob("*.md"))
+    + sorted(str(p.relative_to(ROOT)) for p in (ROOT / "docs" / "manual").glob("*.md"))
 )
 
 ELISION = "[...]"
@@ -128,11 +134,17 @@ RUNNABLE = re.compile(
     r"^nether\s+(run|--version|-V|--help|-h|bury|cairn|lamp|strata|exhume)\b"
 )
 
-# The programs a transcript may refer to. Every checked sample runs in a
-# scratch directory holding these, with a ledger that has already buried them,
-# because that is what a reader following the document has done by the time
-# they reach one.
-PROGRAMS = sorted((ROOT / "tests" / "programs").glob("*.nc"))
+# What a transcript may refer to. Every checked sample runs in a scratch
+# directory holding these files, with a ledger that has already buried the
+# programs, because that is what a reader following the document has done by
+# the time they reach one.
+#
+# Not every fixture is a program. `errand.nc` reads `who.txt`, and a manual
+# that tells a reader to make a file has to be checked against a directory
+# where the file is there to be read. Everything is copied; only the programs
+# are buried.
+FIXTURES = sorted(p for p in (ROOT / "tests" / "programs").iterdir() if p.is_file())
+PROGRAMS = [p for p in FIXTURES if p.suffix == ".nc"]
 
 
 def binary() -> Path:
@@ -193,8 +205,8 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
     skipped = 0
     with tempfile.TemporaryDirectory() as work:
         work = Path(work)
-        for program in PROGRAMS:
-            shutil.copy(program, work / program.name)
+        for fixture in FIXTURES:
+            shutil.copy(fixture, work / fixture.name)
         env = dict(os.environ, NETHER_STORE=str(work / ".nether"))
         for program in PROGRAMS:
             subprocess.run(
@@ -226,6 +238,32 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
                     f"  --- actual ---\n{actual}"
                 ), skipped
     return True, "", skipped
+
+
+# ── the programs the prose quotes ───────────────────────────────────────────
+
+def quoted(samples: list[Sample]) -> list[str]:
+    """A program printed in the prose must be the program that was run.
+
+    Every fixture opens with `// <name> — …`, so a Nether C sample whose first
+    line names one is claiming to be it. Checking the transcript beneath a
+    program is worth nothing if the program above it drifted: the reader types
+    out the page and the harness runs the file, and nothing else compares the
+    two. 0104.
+    """
+    by_name = {f.name: f for f in FIXTURES}
+    wrong = []
+    for s in samples:
+        if s.kind != "c":
+            continue
+        first = s.body.split("\n", 1)[0].strip()
+        m = re.match(r"^//\s*(\S+\.nc)\s+—", first)
+        if not m or m.group(1) not in by_name:
+            continue
+        want = by_name[m.group(1)].read_text(encoding="utf-8").rstrip("\n")
+        if s.body.rstrip("\n") != want:
+            wrong.append(f"  {s.ref}\n    does not match tests/programs/{m.group(1)}")
+    return wrong
 
 
 def is_checkable(sample: Sample) -> bool:
@@ -273,6 +311,16 @@ def main() -> int:
                 print(f"  {'added  ' if ref not in old else 'removed' if ref not in new else 'changed'}  {ref}", file=sys.stderr)
         print("\n  If the change was intended, re-record it:\n"
               "    tests/transcripts/run --record\n", file=sys.stderr)
+        return 1
+
+    drifted = quoted(samples)
+    if drifted:
+        print("transcripts: a program in the prose is not the program that runs:\n",
+              file=sys.stderr)
+        for line in drifted:
+            print(line, file=sys.stderr)
+        print("\n  The file under tests/programs/ is the one that was executed.\n",
+              file=sys.stderr)
         return 1
 
     if shutil.which("cargo") is None:
