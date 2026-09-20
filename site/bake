@@ -21,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = ROOT / "spec"
+MANUAL = ROOT / "docs" / "manual"
 BOARD = ROOT / "cairn" / "items"
 SITE = ROOT / "site"
 REPO = "https://github.com/oddurs/nether-c"
@@ -49,6 +50,17 @@ def slug(text: str) -> str:
 def rewrite_href(href: str) -> str:
     if href.startswith("../ROADMAP.md"):
         return f"{REPO}/blob/main/ROADMAP.md"
+    # The manual is written in docs/manual/ and baked into site/manual/, so a
+    # link it makes to `../../spec/06-evaluation.md` has one fewer level to
+    # climb on the site than in the repository, and lands on a page.
+    m = re.fullmatch(r"\.\./\.\./spec/([\w.-]+)\.md(#.*)?", href)
+    if m:
+        return f"../spec/{m.group(1)}.html{m.group(2) or ''}"
+    # Anything else it reaches for at the root of the repository is a file
+    # nothing bakes, such as CONTRIBUTING, so send the reader to the source.
+    m = re.fullmatch(r"\.\./\.\./([\w.-]+\.md)", href)
+    if m:
+        return f"{REPO}/blob/main/{m.group(1)}"
     if re.fullmatch(r"[\w.-]+\.md(#.*)?", href):
         return href.replace(".md", ".html", 1)
     return href
@@ -444,13 +456,42 @@ def load_sections() -> list[dict[str, str]]:
     return out
 
 
+def load_chapters() -> list[dict[str, object]]:
+    """The manual, which is a different document with a different job.
+
+    The specification answers "what is the rule" and says each rule once. A
+    newcomer needs "what do I type", in an order that introduces one idea at a
+    time, and the two cannot be the same document without one of them getting
+    worse. 0104.
+    """
+    out = []
+    for path in sorted(MANUAL.glob("*.md")):
+        meta, body = split_front_matter(path.read_text(encoding="utf-8"))
+        html = render(body)
+        out.append(
+            {
+                "slug": path.stem,
+                "section": meta.get("section", ""),
+                "title": meta.get("title", path.stem),
+                "status": meta.get("status", "draft"),
+                "html": html,
+            }
+        )
+    return out
+
+
 def navbar(current: str, depth: int) -> str:
     up = "../" if depth else ""
-    links = [("index", f"{up}index.html"), ("spec", f"{up}spec/index.html")]
+    # Three documents, named for what they are. The specification used to be
+    # labelled "manual", which it is not and says so in its first paragraph.
+    links = [
+        ("index", f"{up}index.html", "front desk"),
+        ("manual", f"{up}manual/index.html", "manual"),
+        ("spec", f"{up}spec/index.html", "specification"),
+    ]
     items = []
-    for name, href in links:
+    for name, href, label in links:
         cur = ' aria-current="page"' if name == current else ""
-        label = "front desk" if name == "index" else "manual"
         items.append(f'<a href="{href}"{cur}>{label}</a>')
     items.append(f'<a href="{REPO}" target="_blank" rel="noreferrer noopener">source</a>')
     items.append(f'<a href="{REPO}/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a>')
@@ -476,6 +517,21 @@ def contents(sections: list[dict[str, object]], current: str) -> str:
     )
 
 
+def chapters_of(chapters: list[dict[str, object]], current: str) -> str:
+    """The whole manual beside every chapter, the way the spec carries its own."""
+    items = []
+    for c in chapters:
+        label = f'{c["section"]} {esc(str(c["title"]))}'
+        if c["slug"] == current:
+            items.append(f'<li aria-current="page">{label}</li>')
+        else:
+            items.append(f'<li><a href="{c["slug"]}.html">{label}</a></li>')
+    return (
+        '<nav class="contents" aria-label="Manual contents">'
+        '<p>manual/</p><ol role="list">' + "".join(items) + "</ol></nav>"
+    )
+
+
 SITE_NAME = "Nether C"
 
 
@@ -489,7 +545,8 @@ def page(title: str, body: str, *, current: str, depth: int, directory: str = ""
         entries = [
             ("start", "Start here"), ("first-program", "First burial"),
             ("nine-strata", "Nine strata"), ("six-rites", "The six rites"),
-            ("specification", "Specification"), ("status", "Project status"),
+            ("manual", "The manual"), ("specification", "Specification"),
+            ("status", "Project status"),
         ]
         directory = '<nav class="desk-directory" aria-label="Front desk contents">' + "".join(
             f'<a href="{up}index.html#{anchor}"><span aria-hidden="true">{n:02}</span> {label}</a>'
@@ -536,6 +593,46 @@ def build() -> dict[Path, str]:
     files[SITE / "in-memoriam.html"] = page(
         "Terry A. Davis", memorial, current="", depth=0
     )
+
+    # the manual
+    chapters = load_chapters()
+    cards = "".join(
+        f'<a class="chapter" href="{c["slug"]}.html">'
+        f'<span class="n" aria-hidden="true">{esc(str(c["section"]))}</span>'
+        f'<span class="t">{esc(str(c["title"]))}</span></a>'
+        for c in chapters
+    )
+    manual_body = (
+        "<h1>The manual</h1>"
+        "<p>The specification answers <em>what is the rule</em>, and says each "
+        "rule exactly once. This answers <em>what do I type</em>. Ten short "
+        "chapters with one idea in each, starting from an empty directory and "
+        "ending with a trace you can hand to somebody who does not have your "
+        "disk.</p>"
+        '<div class="box"><strong>Every command on these pages is executed on '
+        "every build of this project</strong>, against the binary in the "
+        f'repository, by <a href="{REPO}/blob/main/tests/transcripts/run">'
+        "tests/transcripts/run</a>. The output printed underneath is the output "
+        "that came back. Documentation that lies fails the build.</div>"
+        '<div class="chapters">' + cards + "</div>"
+        f'<p class="small">Written in Markdown in '
+        f'<a href="{REPO}/tree/main/docs/manual">docs/manual/</a>, which is '
+        "canonical there.</p>"
+    )
+    files[SITE / "manual" / "index.html"] = page(
+        "The manual", manual_body, current="manual", depth=1,
+        directory=chapters_of(chapters, ""),
+    )
+    for c in chapters:
+        head = (
+            f'<p class="c">chapter {esc(str(c["section"]))} &middot; '
+            f'{esc(str(c["status"]))} &middot; '
+            f'<a href="{REPO}/blob/main/docs/manual/{c["slug"]}.md">edit the source</a></p>'
+        )
+        files[SITE / "manual" / f'{c["slug"]}.html'] = page(
+            str(c["title"]), head + str(c["html"]),
+            current="manual", depth=1, directory=chapters_of(chapters, str(c["slug"])),
+        )
 
     # the specification index
     rows = "".join(

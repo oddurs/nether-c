@@ -85,7 +85,7 @@ Orpheus could have kept her.
 ## THE FIRST PROGRAM
 
 ```c
-// hello.nc — there is no main. There is a demand.
+// hello.nc — there is no main; there is a demand.
 
 U0 greet()
 {
@@ -179,6 +179,30 @@ nether: there is no `run`.
 
 That is the one behaviour the language will never change. It seemed like the
 honest thing to build first.
+
+---
+
+## THE MANUAL
+
+The specification answers *what is the rule*. It says each rule exactly once
+and it is not a tutorial. [`docs/manual/`](docs/manual/00-a-way-in.md) is the
+other document — ten short chapters with one idea in each, starting from an
+empty directory.
+
+| | | |
+|---|---|---|
+| 01 | [The first burial](docs/manual/01-the-first-burial.md) | a deposit is not a print |
+| 02 | [A name that holds](docs/manual/02-a-name-that-holds.md) | the name is the thing |
+| 03 | [The hole](docs/manual/03-the-hole.md) | what the world has not said is written down |
+| 04 | [The grant](docs/manual/04-the-grant.md) | a capability is given, never ambient |
+| 05 | [The witness](docs/manual/05-the-witness.md) | what the world said is kept beside what it made |
+| 06 | [Two worlds](docs/manual/06-two-worlds.md) | one burial, as many worlds as you like |
+| 07 | [The replay](docs/manual/07-the-replay.md) | a question about the past, not a second run |
+| 08 | [The Orpheus rule](docs/manual/08-the-orpheus-rule.md) | carry it up, go back down to look |
+
+Every command on those pages is executed on every build, against the binary in
+this repository, by `tests/transcripts/run`. The output printed underneath is
+the output that came back.
 
 ---
 

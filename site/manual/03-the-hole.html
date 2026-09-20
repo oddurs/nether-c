@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The hole &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nether C">
+<meta property="og:title" content="The hole &mdash; Nether C">
+<meta property="og:description" content="A C dialect in which nothing runs. Programs are buried, not executed; what ships is the trace and the holes the world still owes an answer to.">
+<meta property="og:image" content="https://oddurs.github.io/nether-c/gfx/card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Nether C. A C dialect in which nothing runs. The program has already run; you read what is left of it.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../nether.css">
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body class="terminal">
+
+<a class="skip" href="#main">Skip to the text</a>
+
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<header class="terminal-header">
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+</header>
+
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" aria-current="page">manual</a><a href="../spec/index.html">specification</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<div class="terminal-workspace">
+<aside class="directory">
+<details open class="directory-drawer">
+<summary>Directory</summary>
+<nav class="contents" aria-label="Manual contents"><p>manual/</p><ol role="list"><li><a href="00-a-way-in.html">00 A way in</a></li><li><a href="01-the-first-burial.html">01 The first burial</a></li><li><a href="02-a-name-that-holds.html">02 A name that holds</a></li><li aria-current="page">03 The hole</li><li><a href="04-the-grant.html">04 The grant</a></li><li><a href="05-the-witness.html">05 The witness</a></li><li><a href="06-two-worlds.html">06 Two worlds</a></li><li><a href="07-the-replay.html">07 The replay</a></li><li><a href="08-the-orpheus-rule.html">08 The Orpheus rule</a></li><li><a href="09-where-to-go-from-here.html">09 Where to go from here</a></li></ol></nav>
+<p class="directory-note">You are here.<br>Here is below.</p>
+</details>
+</aside>
+<div class="reading-pane">
+<div class="pane-title"><span>The hole</span><span aria-hidden="true">[text]</span></div>
+<main id="main" tabindex="-1">
+<p class="c">chapter 03 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/03-the-hole.md">edit the source</a></p><h1 id="the-hole"><a href="#the-hole">The hole</a></h1><blockquote><p>One idea: <strong>what the world has not said is written down as a question.</strong></p></blockquote><p>Every program so far could be worked out completely, because nothing in it needed anything from outside. Most programs are not like that. Write <code>errand.nc</code>:</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// errand.nc — the manual&#x27;s worked example. docs/manual/03-the-hole.md.</span>
+<span class="c">//</span>
+<span class="c">// One read of one file, and a greeting built from what comes back. It is the</span>
+<span class="c">// smallest program that has a hole in it: `read` is stratum 3, burial has no</span>
+<span class="c">// disk, so the call cannot happen and the trace says so instead.</span>
+
+<span class="t">Bytes</span><span class="d3">@3</span> name = must(<span class="k">descend</span> disk { read(<span class="s">&quot;who.txt&quot;</span>) });
+
+<span class="t">U0</span> greet()
+{
+  concat(<span class="s">b&quot;Hello, &quot;</span>, name);
+}
+
+<span class="k">demand</span> greet();</code></pre></figure><p>Three new things, and they are all on the first line.</p><p><code>@3</code> is a <strong>stratum</strong>. It is part of the type, and it says this value comes from a depth of 3 — the disk. A type without one is at stratum 0 and is pure. The strata are a fixed list of nine and <a href="../spec/01-strata.html">§1</a> is the whole of it.</p><p><code>descend disk { … }</code> is how a capability is acquired. It is lexical: the disk is held for the length of that block and nowhere else. There is no ambient permission in this language, no global that is already open, and nothing to forget to close.</p><p><code>must</code> turns an answer that might be a refusal into the value, or collapses. It is the short way to say &quot;I have not written the failure path yet&quot;, which is honest and is checkable — <a href="../spec/09-prelude.html">§9.9</a> has the long way.</p><p>Also make the file it wants:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> echo world &gt; who.txt</code></pre></figure><p>Now bury it.</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">bury</span> errand.nc
+buried   errand.nc → <span class="h">4fc5e660</span>   depth 3   holes 1   4 nodes
+  hole ①  read(&quot;who.txt&quot;)                stratum 3  disk</code></pre></figure><p>The disk is right there. Burial did not read it.</p><h2 id="burial-has-no-world"><a href="#burial-has-no-world">Burial has no world</a></h2><p>This is the part that takes a minute. <code>nether bury</code> is not refusing to read the file, and it is not failing. It has no disk at all, in the same way it has no terminal. Burial evaluates what can be evaluated with nothing, and where it reaches something it cannot know, it writes down the question instead of guessing.</p><p>That written-down question is a <strong>hole</strong>. It is a node in the trace like any other, it has a cairn like any other, and it records what was asked, where it was asked, and which stratum answering it would reach.</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">strata</span> 4fc5e660
+depth 3   disk
+
+  3  read(&quot;who.txt&quot;)           <span class="h">cc948e97</span>:7:36   pending
+  0  everything else
+
+  replayable: yes
+  of that, 0 (pure) has happened; the rest is what exhuming will cost.</code></pre></figure><p>Read the last line again. Before anything touches your disk, you have an itemised account of what it is going to cost: one call, at stratum 3, from line 7 column 36 of a source whose name is <code>cc948e97</code>. Not a summary somebody wrote by hand — the trace, asked a question.</p><p>And the greeting is not there yet, because it cannot be:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> 4fc5e660
+nothing was deposited</code></pre></figure><p><code>concat(b&quot;Hello, &quot;, name)</code> needs <code>name</code>, <code>name</code> is a hole, so the concat is <strong>starved</strong> and the deposit never happened. Starvation is not an error. It is the ordinary condition of a program that has not been given what it asked for, and the trace is complete and correct as it stands.</p><h2 id="what-you-have"><a href="#what-you-have">What you have</a></h2><p>A file that is worth keeping. <code>4fc5e660</code> is a full account of everything <code>errand.nc</code> means, minus exactly one fact about the world, with that one fact named. It will still mean that in ten years. You can hand it to somebody who does not have your disk.</p><p><a href="04-the-grant.html">Next</a>: giving it the disk.</p>
+</main>
+</div>
+</div>
+
+<div class="terminal-status"><span>END OF BUFFER</span><a href="#main">Back to text ^</a></div>
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>.
+Take it. It was always there.</p>
+<div class="badges">
+<img src="../gfx/badge-norun.gif" data-dark-src="../gfx/badge-norun.gif" data-lit-src="../gfx/badge-norun-lit.gif" width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" data-dark-src="../gfx/badge-unlit.gif" data-lit-src="../gfx/badge-unlit-lit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" data-dark-src="../gfx/badge-handmade.gif" data-lit-src="../gfx/badge-handmade-lit.gif" width="88" height="31" alt="No libraries, written from scratch">
+<img src="../gfx/badge-80col.gif" data-dark-src="../gfx/badge-80col.gif" data-lit-src="../gfx/badge-80col-lit.gif" width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" data-dark-src="../gfx/badge-decay.gif" data-lit-src="../gfx/badge-decay-lit.gif" width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" data-dark-src="../gfx/badge-public.gif" data-lit-src="../gfx/badge-public-lit.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>the world still owes</span>
+  <img src="../gfx/counter.gif" data-dark-src="../gfx/counter.gif" data-lit-src="../gfx/counter-lit.gif" width="84" height="26" alt="Holes still owed, counted off the board">
+  <span>holes</span>
+</div>
+
+<p class="center">Every graphic on this site is drawn by
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var directory = document.querySelector(".directory-drawer");
+  if (directory && window.matchMedia("(max-width: 1050px)").matches) directory.open = false;
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  function paintImages() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    document.querySelectorAll("img[data-dark-src]").forEach(function (img) {
+      var src = lit ? img.dataset.litSrc : img.dataset.darkSrc;
+      if (motion.matches && img.hasAttribute("data-still")) src = src.replace(".gif", "-still.gif");
+      if (img.getAttribute("src") !== src) img.setAttribute("src", src);
+    });
+  }
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+    paintImages();
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+  motion.addEventListener("change", paintImages);
+})();
+</script>
+
+</body>
+</html>

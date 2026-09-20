@@ -453,7 +453,12 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 1 of 1 done
+`####······` 33% · 1 of 3 done
+
+### unmarked
+
+- [ ] [`0273`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0273-grafting-an-answer-keeps-the-deposits-it-replaced.md) Grafting an answer keeps the deposits it replaced <sup>bug · p1 · 2</sup>
+- [ ] [`0274`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0274-a-comment-changes-what-lamp-prints-first.md) A comment changes what lamp prints first <sup>spec · p1 · 1</sup>
 
 ### buried
 

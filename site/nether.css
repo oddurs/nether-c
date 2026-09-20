@@ -740,3 +740,28 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
   .nc-navigation button { padding: 8px; }
   .nc-navigation span { width: 100%; margin: 0; }
 }
+
+/* --- the manual's chapter list -------------------------------------------- */
+
+/* Nine doors, numbered, in the order they are meant to be opened. A grid
+   rather than a table because there is nothing to compare between rows: the
+   only fact about a chapter here is which one comes next. */
+.chapters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: .4rem;
+  margin: 1.5rem 0;
+}
+a.chapter {
+  display: flex;
+  gap: .75rem;
+  align-items: baseline;
+  padding: .6rem .8rem;
+  border: 2px solid;
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+  text-decoration: none;
+  color: var(--ink);
+}
+a.chapter .n { color: var(--dimmer); }
+a.chapter:hover, a.chapter:focus-visible { background: var(--accent); color: var(--ground); }
+a.chapter:hover .n, a.chapter:focus-visible .n { color: var(--ground); }
