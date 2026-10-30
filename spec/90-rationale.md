@@ -1236,6 +1236,25 @@ trace, and that is a second place the number lives. It is never read except to
 compare with a budget, and an entry that disagrees with the trace it names is
 the same as no entry: the rite buries.
 
+### A parallel burial with an order of its own
+
+[§6.2.1](06-evaluation.md#621-burying-in-parallel) requires a parallel burial
+to leave the trace the serial order would. The alternative considered was to
+let each implementation order holes and deposits however its threads finished
+and to compare traces as sets.
+
+Rejected because the order is not decoration. A hole list is read in order by
+`exhume` and by every person reading `strata`, a deposit list is a program's
+output in the order it was made, and which of two places asked a shared
+question first is the span the hole keeps. Comparing as sets would let two
+burials of one program disagree about all three and still be called the same,
+and the trace's cairn — which is built from those lists in order — would
+differ between them anyway.
+
+**What it cost.** A parallel burial has to keep enough of the serial order to
+commit results in it, which is bookkeeping a free order would not need, and a
+collapse found early on another thread has to wait to be reported.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own
