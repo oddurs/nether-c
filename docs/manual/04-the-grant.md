@@ -26,7 +26,7 @@ could not be taken anywhere, so it is still itself, and the ledger did not grow.
 Now grant the disk:
 
 ```console
-$ nether exhume 4fc5e660 --grant disk
+$ nether exhume 4fc5e660 --grant disk --root .
   ①  read("who.txt")  →  6 bytes  4395a792
 sealed   4fc5e660 + 4395a792 → f03489d0   depth 3   holes 0
 ```
@@ -68,6 +68,11 @@ may answer the disk questions this trace already wrote down. The trace asked
 for `who.txt` at burial time, in a file you can read, and it cannot decide
 during exhuming to ask for something else — a hole is a question that was
 already settled, not an open line.
+
+`--root .` says where the disk is. Every path the program reads is resolved
+against it, a path that climbs out of it is refused, and there is no default —
+the only one available would be wherever you happened to run the command, and
+then the same trace would read different files on different days.
 
 ## `descend` and `--grant` are two halves
 

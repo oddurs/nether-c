@@ -58,7 +58,7 @@ try {
 <div class="reading-pane">
 <div class="pane-title"><span>The replay</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">chapter 07 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/07-the-replay.md">edit the source</a></p><h1 id="the-replay"><a href="#the-replay">The replay</a></h1><blockquote><p>One idea: <strong>a replay is a question about the past, not a second run.</strong></p></blockquote><p><code>f03489d0</code> from <a href="04-the-grant.html">chapter 4</a> was made by asking the disk what was in <code>who.txt</code>. Ask whether that is still true:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk
+<p class="c">chapter 07 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/07-the-replay.md">edit the source</a></p><h1 id="the-replay"><a href="#the-replay">The replay</a></h1><blockquote><p>One idea: <strong>a replay is a question about the past, not a second run.</strong></p></blockquote><p><code>f03489d0</code> from <a href="04-the-grant.html">chapter 4</a> was made by asking the disk what was in <code>who.txt</code>. Ask whether that is still true:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk --root .
   ①  read(&quot;who.txt&quot;)  →  6 bytes  <span class="h">4395a792</span>
 sealed   <span class="h">4fc5e660</span> + <span class="h">4395a792</span> → <span class="h">f03489d0</span>   depth 3   holes 0
 <span class="p">$</span> nether <span class="k">exhume</span> f03489d0 --replay

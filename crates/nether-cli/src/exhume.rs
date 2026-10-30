@@ -5,7 +5,7 @@
 //! exists with its hole in it.
 
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 
 use nether_bury::{Answers, HaltKind, bury_with};
@@ -29,6 +29,7 @@ struct Asked<'a> {
     declared: Declared,
     reach: Vec<String>,
     load: Vec<String>,
+    root: Option<&'a str>,
     clock: Option<i64>,
     target: Option<&'a str>,
     replaying: bool,
@@ -37,7 +38,7 @@ struct Asked<'a> {
 
 const USAGE: &str = "usage: nether exhume <cairn> [--grant <cap>]... \
                      [--declare <name>=<value>]...\n       [--clock <seconds>] \
-                     [--target <triple>] [--replay] [--json]";
+                     [--target <triple>] [--root <dir>] [--replay] [--json]";
 
 fn wrong(what: &str) -> ExitCode {
     eprintln!("nether: {what}");
@@ -67,6 +68,12 @@ impl<'a> Asked<'a> {
                 "--reach" => match rest.next() {
                     Some(h) if !h.is_empty() => it.reach.push(h.clone()),
                     _ => return Err(wrong("`--reach` wants a host, and optionally a port")),
+                },
+                // §8.3.4: once. Two roots would be two answers to one `read`.
+                "--root" => match rest.next() {
+                    Some(r) if !r.is_empty() && it.root.is_none() => it.root = Some(r),
+                    Some(_) if it.root.is_some() => return Err(wrong("`--root` is given once")),
+                    _ => return Err(wrong("`--root` wants a directory")),
                 },
                 "--load" => match rest.next() {
                     Some(p) if !p.is_empty() => it.load.push(p.clone()),
@@ -102,17 +109,23 @@ impl<'a> Asked<'a> {
         // read, and accepting it would be §8.0's failure in a smaller place.
         let net = self.granted.iter().any(|c| matches!(c, Capability::Net | Capability::NetWrite));
         if !net && !self.reach.is_empty() {
-            eprintln!("nether: a reach without `--grant net` could not be used.");
-            eprintln!();
-            eprintln!("  §8.3.2: `--grant net` says which stratum, `--reach` says how far.");
-            return Err(usage_error());
+            return Err(unused("a reach", "net", "§8.3.2", "how far"));
         }
         // §8.3.3, on the same reasoning.
         if !self.granted.contains(&Capability::Unrecorded) && !self.load.is_empty() {
-            eprintln!("nether: a load without `--grant unrecorded` could not be used.");
-            eprintln!();
-            eprintln!("  §8.3.3: `--grant unrecorded` says which stratum, `--load` says what.");
+            return Err(unused("a load", "unrecorded", "§8.3.3", "what"));
+        }
+        // §8.3.4, on §8.3.1's reasoning: the only default is wherever the rite
+        // was run, and a root nothing can use could not be read.
+        let disk =
+            self.granted.iter().any(|c| matches!(c, Capability::Disk | Capability::DiskWrite));
+        if disk && self.root.is_none() {
+            eprintln!("nether: granting `disk` means rooting it: `--root`. §8.3.4: there is");
+            eprintln!("        no default but where this was run, and §6.7 forbids that one.");
             return Err(usage_error());
+        }
+        if !disk && self.root.is_some() {
+            return Err(unused("a root", "disk", "§8.3.4", "where"));
         }
         let env = self.granted.contains(&Capability::Env);
         if env && (self.clock.is_none() || self.target.is_none()) {
@@ -134,6 +147,13 @@ impl<'a> Asked<'a> {
         }
         Ok(self)
     }
+}
+
+/// A flag that bounds a grant nobody made. §8.0's failure in a smaller place.
+fn unused(flag: &str, grant: &str, section: &str, says: &str) -> ExitCode {
+    eprintln!("nether: {flag} without `--grant {grant}` could not be used.");
+    eprintln!("        {section}: `--grant {grant}` says which stratum, the flag says {says}.");
+    usage_error()
 }
 
 /// One `--grant`, by the names §9.1 fixes.
@@ -212,7 +232,10 @@ fn no_such_hole(hole: Cairn) -> ExitCode {
 }
 
 /// The world a grant asks for, or the reason there is not one yet.
-fn world_from(asked: &Asked, root: &Path) -> Result<World, Capability> {
+fn world_from(asked: &Asked) -> Result<World, Capability> {
+    // `settled` has refused a disk grant without a root, so an empty one here
+    // is a world nothing will ask the disk of.
+    let root = Path::new(asked.root.unwrap_or_default());
     let mut world = World::sealed();
     for cap in &asked.granted {
         let provider: Box<dyn nether_world::Provider> = match cap {
@@ -336,8 +359,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
             answers = answers.and(call.clone(), value.clone());
         }
     } else {
-        let root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let world = match world_from(asked, &root) {
+        let world = match world_from(asked) {
             Ok(world) => world,
             Err(cap) => {
                 eprintln!("nether: `{cap}` is in §9.1 and is not built yet.");
