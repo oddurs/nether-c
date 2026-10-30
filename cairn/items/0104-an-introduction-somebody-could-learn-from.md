@@ -2,14 +2,14 @@
 id: 104
 title: An introduction somebody could learn from
 type: docs
-status: descending
+status: starved
 milestone: after
 assignee: Oddur Sigurdsson
 claimed: 2026-09-19
 depends_on:
 - 66
 created: 2026-09-11
-updated: 2026-09-19
+updated: 2026-10-30
 priority: p1
 effort: l
 area: docs/
@@ -49,3 +49,11 @@ The document exists: docs/manual/, ten chapters, baked to site/manual/. Every `$
 The proof is not met and this stays descending. Steps 1 and 2 are done; step 3 is observing somebody who has not read the specification write and bury a program from this, without coaching. Nothing in a repository can produce that.
 
 Writing it found two bugs, 0273 and 0274, both because documenting a rite truthfully means running it.
+
+## 2026-10-30
+
+Starved, not descending. Nothing has moved since 2026-09-19 because nothing in
+the repository can move it: steps 1 and 2 are done and step 3 is a person. That
+is what starved means, and it is how 0075 is held for the same reason. Keep the
+claim. Close it on the observation, recorded here with the commit it was made
+against.
