@@ -354,7 +354,7 @@ Adoption work has several independent tracks. This is not one serial implementat
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
 
-### descending
+### starved
 
 - [ ] [`0104`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0104-an-introduction-somebody-could-learn-from.md) An introduction somebody could learn from <sup>docs · p1</sup>
 
