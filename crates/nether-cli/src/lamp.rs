@@ -97,50 +97,35 @@ fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Every `Deposit` under a trace, rendered, in the order they were written.
+/// Every `Deposit` a trace names, rendered, in the order they were made.
 ///
 /// A deposit is not printed when it is made — nothing in Nether C is printed.
 /// It is read afterwards, by somebody who decided to go and look.
+///
+/// §7.3.1: the list holds one entry per deposit, and a value deposited a
+/// thousand times from one span is one node named a thousand times, so the
+/// list is read and not the graph. §8.4: and it is read in its own order,
+/// which is the order they were made in. Sorting it by source put a
+/// hash in charge of which half of a program's output came first.
 fn deposits(store: &Store, root: Cairn) -> Vec<String> {
-    let mut found = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let mut stack = vec![root];
-    while let Some(at) = stack.pop() {
-        if !seen.insert(at) {
-            continue;
+    match store.get(root) {
+        Ok(Stored::Node(Node::Trace { deposits, .. })) => {
+            deposits.iter().filter_map(|at| deposited(store, *at)).collect()
         }
-        let Ok(stored) = store.get(at) else { continue };
-        let Stored::Node(n) = &stored else { continue };
-        match n {
-            // §7.3.1: the list holds one entry per deposit, and a value
-            // deposited a thousand times from one span is one node named a
-            // thousand times. So the list is read and not the graph — walking
-            // the graph finds that node once, and a loop that deposits on
-            // every turn used to read as one turn.
-            Node::Trace { deposits, .. } => {
-                found.extend(deposits.iter().filter_map(|at| deposited(store, *at)));
-            }
-            // A `Deposit` lamped on its own, rather than through a trace that
-            // names it. There is no list to read, and it is one deposit.
-            Node::Deposit { .. } if at == root => found.extend(deposited(store, at)),
-            _ => {}
-        }
-        stack.extend(n.references());
+        // A `Deposit` lamped on its own, rather than through a trace that
+        // names it. There is no list to read, and it is one deposit.
+        Ok(Stored::Node(Node::Deposit { .. })) => deposited(store, root).into_iter().collect(),
+        _ => Vec::new(),
     }
-    // §8.4: grouped by source, then by offset within it. Sorting on the offset
-    // alone interleaved two sources by byte position, which is an order
-    // corresponding to nothing anybody wrote.
-    found.sort_by_key(|(source, at, _)| (*source, *at));
-    found.into_iter().map(|(_, _, text)| text).collect()
 }
 
-/// One `Deposit`, as the source it was made from and the offset within it.
-fn deposited(store: &Store, at: Cairn) -> Option<([u8; 32], u64, String)> {
-    let Ok(Stored::Node(Node::Deposit { value: held, span })) = store.get(at) else {
+/// One `Deposit`, rendered.
+fn deposited(store: &Store, at: Cairn) -> Option<String> {
+    let Ok(Stored::Node(Node::Deposit { value: held, .. })) = store.get(at) else {
         return None;
     };
     let Ok(Stored::Value(v)) = store.get(held) else { return None };
-    Some((*span.source.as_bytes(), span.start, value(&v)))
+    Some(value(&v))
 }
 
 /// A value, as a person reads one.

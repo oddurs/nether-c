@@ -17,9 +17,6 @@ against two different worlds. Write `post.nc`:
 // `env` is stratum 2 and `--declare` is how a rite answers it, so the world
 // this program runs against fits on the command line. Two exhumings of one
 // trace reach two sealed traces, and both keep their names.
-//
-// One deposit, not three. A trace whose deposits come from two sources reads
-// back in an order §8.4 decides by sorting cairns, and 0274 is about that.
 
 Str@2 who = must(descend env { env("WHO") });
 
@@ -36,14 +33,14 @@ environment costs nothing and changes nothing. Bury it once:
 
 ```console
 $ nether bury post.nc
-buried   post.nc → 50893e26   depth 2   holes 1   4 nodes
+buried   post.nc → e7e0b6de   depth 2   holes 1   4 nodes
   hole ①  env("WHO")                     stratum 2  env
 ```
 
 Now try to answer it, and get told off:
 
 ```console
-$ nether exhume 50893e26 --grant env
+$ nether exhume e7e0b6de --grant env
 nether: granting `env` means pinning it: `--clock` and `--target`.
 
   §8.3.1: there is no default, because a default would be this
@@ -61,25 +58,25 @@ the laptop it was invented on, and this is that bug, refused at the door.
 So say what the world is:
 
 ```console
-$ nether exhume 50893e26 --grant env --declare WHO=world --clock 0 --target x86_64-unknown-linux-gnu
+$ nether exhume e7e0b6de --grant env --declare WHO=world --clock 0 --target x86_64-unknown-linux-gnu
   ①  env("WHO")  →  world  10960a1b
-sealed   50893e26 + 10960a1b → 2d9de1c3   depth 2   holes 0
+sealed   e7e0b6de + 10960a1b → 732a2f23   depth 2   holes 0
 ```
 
 And then say it differently:
 
 ```console
-$ nether exhume 50893e26 --grant env --declare WHO=moon --clock 0 --target x86_64-unknown-linux-gnu
+$ nether exhume e7e0b6de --grant env --declare WHO=moon --clock 0 --target x86_64-unknown-linux-gnu
   ①  env("WHO")  →  moon  c26253b8
-sealed   50893e26 + c26253b8 → 45b71fe3   depth 2   holes 0
+sealed   e7e0b6de + c26253b8 → c9bcc6a6   depth 2   holes 0
 ```
 
 Two rites, one burial, two worlds. Both of them are still there:
 
 ```console
-$ nether lamp 2d9de1c3
+$ nether lamp 732a2f23
 Hello, world
-$ nether lamp 45b71fe3
+$ nether lamp c9bcc6a6
 Hello, moon
 ```
 
@@ -93,11 +90,11 @@ had.
 That is the ordinary shape of work here. Bury the expensive, deterministic part
 once and keep its name. Answer the part that depends on the world as many times
 as there are worlds you care about. Nothing is invalidated, because nothing was
-ever overwritten — `50893e26` still has its hole, and will have it forever.
+ever overwritten — `e7e0b6de` still has its hole, and will have it forever.
 
 ## The names are the record
 
-`2d9de1c3` and `45b71fe3` are different names because they are different
+`732a2f23` and `c9bcc6a6` are different names because they are different
 things, and they are different things because they were told different things.
 The environment that produced each is not a note somebody kept; it is reachable
 from the trace, through the witness, by anyone holding the name.
