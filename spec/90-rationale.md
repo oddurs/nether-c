@@ -1212,6 +1212,29 @@ agreeing about §4.6. They read one table, so they cannot disagree by drifting,
 but a wrong table is now wrong in both places at once, and the round trip
 cannot see it. §4.6's own proof, which compares the table with §04, is what
 catches that.
+### Burial that holds the store
+
+[§8.2.1](08-rites.md#821-burying-what-is-already-buried) lets `bury` remember
+a burial it already did. The first proposal was for burial itself to consult the
+store before evaluating, which makes burial hold stratum 1, which makes `bury`
+grant `store` by default. Rejected because it unsays §8.2: with no `--grant`,
+burial holds no capability, and that is the default precisely because it cannot
+surprise anyone. A burial that can read the store can read a node somebody else
+wrote, and then two stores give one source two traces.
+
+The memo is the rite's, not the program's, and holds nothing the store does not.
+
+Also rejected: reporting zero steps for a remembered burial. Steps are a fact
+about the burial, and §6.4 asks implementations to agree on them. An
+implementation that remembered would report a number one that did not could
+never reproduce, and the budget would mean something different on each. So the
+rite reports the steps the burial costs, says it remembered, and refuses the
+memo when the budget would not have covered them.
+
+**What it cost.** A memo entry records the steps a burial spent, outside the
+trace, and that is a second place the number lives. It is never read except to
+compare with a budget, and an entry that disagrees with the trace it names is
+the same as no entry: the rite buries.
 
 ### `https`, and the one dependency exception
 
