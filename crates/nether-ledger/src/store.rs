@@ -357,8 +357,13 @@ impl Store {
             .map(Cairn::from_bytes)
             // Appending admits duplicates; collapse them here.
             .filter(|c| seen.insert(*c))
-            // An edge written just before a crash can outlive its object.
-            .filter(|c| self.has(*c))
+            // The index is a claim, and anybody who can write the store can
+            // write one. An edge counts only if its node is there, checks, and
+            // names this cairn: that covers an edge that outlived its object in
+            // a crash and an edge a hostile writer added. 0217.
+            .filter(
+                |c| matches!(self.get(*c), Ok(Stored::Node(n)) if n.references().contains(&cairn)),
+            )
             .collect())
     }
 
@@ -631,6 +636,73 @@ mod tests {
         std::fs::remove_file(scratch.0.join("objects").join(&hex[..2]).join(&hex[2..])).unwrap();
 
         assert!(store.referrers(target).unwrap().is_empty());
+    }
+
+    // ── 0217: a writer with the whole store cannot make a reader see a lie ──
+
+    /// A forged edge says a node produced this cairn. The node exists and
+    /// checks, and does not name it, so it is not believed.
+    #[test]
+    fn a_forged_edge_is_not_a_referrer() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let target = store.put(&value(1)).unwrap();
+        let elsewhere = store.put(&node_pointing_at(store.put(&value(2)).unwrap())).unwrap();
+        store.add_ref(target, elsewhere).unwrap();
+        assert!(store.referrers(target).unwrap().is_empty());
+    }
+
+    /// Bytes replaced under their name, and a name written for bytes it does
+    /// not hold, are refusals: a writer can make a read fail, and cannot make
+    /// it succeed with the wrong thing.
+    #[test]
+    fn misnamed_bytes_are_refused_however_they_were_found() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let real = store.put(&value(3)).unwrap();
+        std::fs::write(store.fanned("objects", real), value(4).encode()).unwrap();
+        assert!(matches!(store.get(real), Err(StoreError::Corrupt { .. })));
+
+        // A file named for a cairn nobody wrote, holding somebody else's
+        // bytes. `resolve` reads names, so it finds it; `get` reads bytes.
+        let named = Stored::Value(Value::Int(5)).cairn();
+        let path = store.fanned("objects", named);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, value(6).encode()).unwrap();
+        let found = store.resolve(&named.to_string()[..12]).unwrap();
+        assert!(matches!(store.get(found), Err(StoreError::Corrupt { .. })));
+    }
+
+    /// A reader racing a writer that keeps replacing the object sees the
+    /// object or a refusal, and never another value.
+    #[test]
+    fn a_reader_racing_a_replacing_writer_never_sees_another_value() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let cairn = store.put(&value(7)).unwrap();
+        let path = store.fanned("objects", cairn);
+        let (good, bad) = (value(7).encode(), value(8).encode());
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let writer = {
+            let (path, done, good, bad) = (path.clone(), done.clone(), good.clone(), bad.clone());
+            std::thread::spawn(move || {
+                for i in 0..2000 {
+                    let tmp = path.with_extension(format!("w{i}"));
+                    std::fs::write(&tmp, if i % 2 == 0 { &bad } else { &good }).unwrap();
+                    std::fs::rename(&tmp, &path).unwrap();
+                }
+                done.store(true, Ordering::Relaxed);
+            })
+        };
+        while !done.load(Ordering::Relaxed) {
+            // A fresh store each time, so nothing is remembered between reads.
+            match Store::open(&scratch.0).unwrap().get(cairn) {
+                Ok(v) => assert_eq!(v, value(7), "a read returned another value"),
+                Err(StoreError::Corrupt { .. } | StoreError::Absent(_)) => {}
+                Err(e) => panic!("{e}"),
+            }
+        }
+        writer.join().unwrap();
     }
 
     #[test]

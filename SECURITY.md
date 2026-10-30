@@ -103,7 +103,8 @@ A store shared between people who do not trust each other.
 | Crosses | objects, and the reverse index under `refs/` |
 | Checked | the store is append-only and content-addressed, so a writer can add but cannot revise; everything read is verified against the name it was asked for |
 | Assumed | that the filesystem gives each writer a whole write. Concurrency across processes is not yet settled — that is 0207 |
-| Not promised | availability. Anyone who can write to a shared store can fill it |
+| Checked | a reverse-index edge is believed only when the node it names is read, verified, and refers to the target, so a forged edge is ignored rather than reported |
+| Not promised | availability. Anyone who can write to a shared store can fill it, and can make a read refuse: replace an object's bytes, plant a prefix that makes a short name ambiguous, or leave an object too large to read. A writer can make a reader see nothing; it cannot make a reader see something else. Bounding what one read may cost is 0219 |
 
 ### 6. The page a browser loads
 
