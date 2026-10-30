@@ -169,22 +169,6 @@ difference is worth stating because both readings decode.
 > two acts written in one place are two entries naming one node.
 > [§6.3](06-evaluation.md#63-holes) is which of those a given pair is.
 
-A `Trace`'s three `cairn-list`s are not all the same kind of list, and the
-difference is worth stating because both readings decode.
-
-> The **deposit list holds one entry per deposit the program made**, and may
-> name the same cairn more than once. A value deposited a thousand times from
-> one span is one `Deposit` node — same value, same span, so one content
-> address — and a thousand entries. The node is what the program said; the
-> list is what it did, and [§4.7](04-grammar.md#47-the-bare-expression-statement)
-> makes a bare expression statement an act of the program rather than a
-> declaration about it.
->
-> The **hole list names each hole once.** A hole is a question, and a question
-> asked twice from one place is one question the world will answer once;
-> [§6.3](06-evaluation.md#63-holes) is where two asks are two holes and where
-> they are not.
-
 A decoder MUST reject, in addition to the clauses in
 [§7.1.1](#711-what-a-decoder-must-reject):
 
