@@ -59,6 +59,9 @@ struct Lowering<'a> {
     landing: Option<ir::Type>,
     /// What the function being lowered returns.
     returning: Option<ir::Type>,
+    /// Unit-level code's locals and their depths, kept while a function's are
+    /// in their place.
+    unit_frame: (Vec<ir::LocalDef>, Vec<Depth>),
 }
 
 impl<'a> Lowering<'a> {
@@ -74,6 +77,7 @@ impl<'a> Lowering<'a> {
             depths: Vec::new(),
             landing: None,
             returning: None,
+            unit_frame: (Vec::new(), Vec::new()),
         };
         // Declarations are visible to each other regardless of order, so the
         // shapes are collected before anything is lowered.
@@ -237,12 +241,18 @@ impl<'a> Lowering<'a> {
                 break;
             }
         }
+        // The bindings' frame, set aside while the functions had theirs, is
+        // the demands' frame too: unit-level code has one.
+        (self.locals, self.depths) = std::mem::take(&mut self.unit_frame);
         let demands = self.demands(unit);
-        ir::Unit { structs, funcs, globals, demands }
+        let locals = std::mem::take(&mut self.locals);
+        ir::Unit { structs, funcs, globals, demands, locals }
     }
 
     fn unit_bindings(&mut self, unit: &'a ast::Unit) -> Vec<ir::GlobalDef> {
         self.globals.clear();
+        self.locals = Vec::new();
+        self.depths = Vec::new();
         let mut out = Vec::new();
         for item in &unit.items {
             let ast::Item::Let(binding) = item else { continue };
@@ -266,6 +276,7 @@ impl<'a> Lowering<'a> {
                 span: binding.span,
             });
         }
+        self.unit_frame = (std::mem::take(&mut self.locals), std::mem::take(&mut self.depths));
         out
     }
 
