@@ -2022,3 +2022,49 @@ fn a_starved_global_that_binds_exhumes() {
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     assert!(stdout(&out).contains("\"holes\":0"), "{}", stdout(&out));
 }
+
+// ── §6.5 reducing under an undecided branch ─────────────────────────────────
+
+/// A branch on the world, with an arm that folds, asks, and deposits, and an
+/// arm that would collapse. 0270.
+const UNDECIDED: &str = "Bytes@3 src = must(descend disk { read(\"main.nc\") });\n\n\
+                         U0 go()\n{\n  if (len(src) > 3) {\n    I64 k = 2 + 3;\n    \
+                         Bytes@3 more = must(descend disk { read(\"other.nc\") });\n    k;\n  \
+                         } else {\n    slice(b\"abc\", 0, 9);\n  }\n}\n\ndemand go();\n";
+
+fn undecided(what: &str) -> (PathBuf, String) {
+    let dir = a_build(what);
+    std::fs::write(dir.join("undecided.nc"), UNDECIDED).expect("undecided.nc");
+    let out = there(&dir, &["bury", "undecided.nc", "--json"]);
+    assert_eq!(code(&out), 0, "a collapse in an untaken arm stopped the burial: {}", stderr(&out));
+    (dir, stdout(&out))
+}
+
+#[test]
+fn an_undecided_branch_is_reduced_in_both_arms_and_keeps_its_branch() {
+    let (dir, told) = undecided("speculate-arms");
+    let residue = stdout(&there(&dir, &["lamp", &field(&told, "residue")]));
+    assert!(residue.contains("if ("), "the branch went:\n{residue}");
+    // The specialised body carries the arm folded; the general body beside
+    // it is the function as written, as it is for any call that starved.
+    assert!(residue.contains("I64 k = 5;"), "the arm was not reduced:\n{residue}");
+    assert!(residue.contains("slice(b\"abc\", 0, 9)"), "a collapsing arm changed:\n{residue}");
+}
+
+#[test]
+fn an_undecided_arm_asks_nothing_and_deposits_nothing() {
+    let (dir, told) = undecided("speculate-quiet");
+    // One hole, for `main.nc`: the arm's own read formed none.
+    assert_eq!(told.matches("\"call\":").count(), 1, "{told}");
+    assert!(!told.contains("other.nc"), "{told}");
+    let lamped = stdout(&there(&dir, &["lamp", &field(&told, "cairn")]));
+    assert!(!lamped.contains('5'), "an arm that may not run deposited:\n{lamped}");
+}
+
+#[test]
+fn speculation_buries_to_the_same_trace_and_the_same_steps_every_time() {
+    let (_, first) = undecided("speculate-once");
+    let (_, again) = undecided("speculate-twice");
+    assert_eq!(field(&first, "cairn"), field(&again, "cairn"));
+    assert_eq!(steps(&first), steps(&again));
+}
