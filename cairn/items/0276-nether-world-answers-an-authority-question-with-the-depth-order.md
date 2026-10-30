@@ -2,9 +2,11 @@
 id: 276
 title: nether-world answers an authority question with the depth order
 type: bug
-status: unmarked
+status: buried
+assignee: Oddur Sigurdsson
+claimed: 2026-10-30
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-10-30
 priority: p2
 effort: s
 area: crates/nether-world
@@ -77,3 +79,7 @@ not because 3 ≤ 4. `World::depth` stays: it is the deepest stratum anything
 granted can reach, which is a depth question and a correct one.
 
 Found by auditing each concept in the language against its implementation.
+
+## 2026-10-30
+
+Buried. World::holds is now whether a provider for that capability was granted: d ∈ δ, by membership, and not depth() >= stratum. The five assertions that asserted the depth order now say what is true: a world granted entropy holds entropy and not net, net! not net, unrecorded not entropy, store not env, and disk! not disk. The disk! test is renamed the_disk_write_provider_answers_reads_too, because that is why a disk! grant reads: the provider handed over for it answers read. World::depth is unchanged; it is a depth question. No production path called holds, so no behaviour a user can see moves. cargo test -p nether-world and scripts/task check pass; the core is unchanged at 8426 lines.

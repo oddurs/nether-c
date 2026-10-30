@@ -1090,6 +1090,66 @@ next is not a literal.
 will read as a preprocessor directive for as long as anyone remembers what one
 was.
 
+### Deposits in source order
+
+[§8.4](08-rites.md#84-lamp) used to render deposits grouped by the cairn of the
+source they came from, ordered by offset within each group, on the reasoning
+that a trace's sources were never written down in a sequence. They were: a
+sealed trace's deposit list is the order the deposits were made in, and the
+sort threw it away. Its key began with thirty-two bytes of hash, so which half of a
+program's output came first was decided by a digest, and a comment added to the
+top of a file reordered what `lamp` printed.
+
+Ordering by offset within one source looked like the safe half and was the
+same mistake one level down. A function called from two places deposits in
+call order from one span, and offset cannot tell those apart.
+
+**What it cost.** Nothing that was true. A reader who wanted the deposits of one
+source together, in the order the text has them, now has to ask for that
+rather than getting it by default — and nothing asks, because a program's
+output is read in the order it was made.
+### Grafting an answer that was already given
+
+[§8.7](08-rites.md#87-graft) used to accept an answer the trace had already
+been given as a thing to replace. It counted it, reported `1 recomputed`, and
+returned a trace naming the substitute witness beside the deposits the
+original answer produced, because a sealed trace's residue no longer holds the
+work that consumed the answer and re-burying it produces nothing.
+
+The alternative considered was to make it work: re-bury from the trace that
+still had the hole, which is the only thing that can produce the right
+deposits. Rejected because a sealed trace does not name the trace it was
+exhumed from — nothing in [§7.3.1](07-ledger.md#731-node-encoding) points
+backwards — so `graft` would have to search the ledger for a parent, and a
+ledger may hold several or none. Re-burying the source from scratch instead
+would reach a trace with a different residue and a different name from the one
+exhuming the parent would have reached, which is two names for one result.
+
+**What it cost.** A person holding only the sealed trace cannot ask "what if
+this file had said something else" of it. They need the trace from before it
+was answered, which they had, because they exhumed it.
+### A trace's depth without its holes
+
+[§7.3.2](07-ledger.md#732-what-a-decoder-cannot-check) used to make a trace's
+depth the join of its residue and its witnesses. A hole contributed nothing, on
+the reasoning that the residue already counts whatever the holes would reach.
+[§1.5](01-strata.md#15-seal) makes that false: `seal e` is depth 0 whatever
+`e` is, so a program that demands a fetch only through a seal buried to
+`depth 0` with a stratum-5 hole under it, and `strata` printed `pure` over a
+trace that could not take a step without the network.
+
+The alternative considered was to leave the formula and make the residue carry
+the depth of what it seals. Rejected because it unsays §1.5: a seal is pure
+because naming a value does not touch the world, and a residue that counted
+sealed expressions would make every program that keeps a cairn as deep as the
+thing the cairn names. Counting holes *instead of* the residue was rejected
+already, by `opaque`, which hides a deep expression that never becomes a hole.
+Counting them *as well* is the only rule both cases agree with.
+
+**What it cost.** A trace's depth is no longer a fact about its residue alone,
+so `bury` reads every hole it is about to write back out of the ledger, and a
+trace written before this rule may now be malformed by §8.6 without anything
+about it having changed.
 ### A refusal that knows its own type
 
 [§9.2](09-prelude.md#92-depth-0) gives a program `answered` and `refused`.

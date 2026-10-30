@@ -412,7 +412,7 @@ disagree, the Markdown is right and continuous integration is broken.</p>
 <div class="scroll">
 <table>
 <thead><tr><th>&sect;</th><th>Section</th><th>Status</th></tr></thead>
-<tbody><tr><td class="d0"><a href="spec/00-overview.html">00</a></td><td><a href="spec/00-overview.html">Overview</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d3"><a href="spec/01-strata.html">01</a></td><td><a href="spec/01-strata.html">The strata</a></td><td class="d3">3</td><td>draft</td></tr><tr><td class="d3"><a href="spec/02-calculus.html">02</a></td><td><a href="spec/02-calculus.html">The calculus of depth</a></td><td class="d3">3</td><td>draft</td></tr><tr><td class="d0"><a href="spec/03-lexical.html">03</a></td><td><a href="spec/03-lexical.html">Lexical structure</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d5"><a href="spec/04-grammar.html">04</a></td><td><a href="spec/04-grammar.html">Grammar</a></td><td class="d5">5</td><td>draft</td></tr><tr><td class="d0"><a href="spec/05-types.html">05</a></td><td><a href="spec/05-types.html">Types and the data model</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d3"><a href="spec/06-evaluation.html">06</a></td><td><a href="spec/06-evaluation.html">Burial, holes and replay</a></td><td class="d3">3</td><td>draft</td></tr><tr><td class="d0"><a href="spec/07-ledger.html">07</a></td><td><a href="spec/07-ledger.html">The ledger</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d0"><a href="spec/08-rites.html">08</a></td><td><a href="spec/08-rites.html">The rites</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d8"><a href="spec/09-prelude.html">09</a></td><td><a href="spec/09-prelude.html">The prelude</a></td><td class="d8">8</td><td>draft</td></tr><tr><td class="d0"><a href="spec/10-glossary.html">10</a></td><td><a href="spec/10-glossary.html">Glossary</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d0"><a href="spec/90-rationale.html">90</a></td><td><a href="spec/90-rationale.html">Rationale</a></td><td class="d0">0</td><td>non-normative</td></tr></tbody>
+<tbody><tr><td class="d0"><a href="spec/00-overview.html">00</a></td><td><a href="spec/00-overview.html">Overview</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d3"><a href="spec/01-strata.html">01</a></td><td><a href="spec/01-strata.html">The strata</a></td><td class="d3">3</td><td>draft</td></tr><tr><td class="d3"><a href="spec/02-calculus.html">02</a></td><td><a href="spec/02-calculus.html">The calculus of depth</a></td><td class="d3">3</td><td>draft</td></tr><tr><td class="d0"><a href="spec/03-lexical.html">03</a></td><td><a href="spec/03-lexical.html">Lexical structure</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d5"><a href="spec/04-grammar.html">04</a></td><td><a href="spec/04-grammar.html">Grammar</a></td><td class="d5">5</td><td>draft</td></tr><tr><td class="d0"><a href="spec/05-types.html">05</a></td><td><a href="spec/05-types.html">Types and the data model</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d3"><a href="spec/06-evaluation.html">06</a></td><td><a href="spec/06-evaluation.html">Burial, holes and replay</a></td><td class="d3">3</td><td>draft</td></tr><tr><td class="d5"><a href="spec/07-ledger.html">07</a></td><td><a href="spec/07-ledger.html">The ledger</a></td><td class="d5">5</td><td>draft</td></tr><tr><td class="d0"><a href="spec/08-rites.html">08</a></td><td><a href="spec/08-rites.html">The rites</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d8"><a href="spec/09-prelude.html">09</a></td><td><a href="spec/09-prelude.html">The prelude</a></td><td class="d8">8</td><td>draft</td></tr><tr><td class="d0"><a href="spec/10-glossary.html">10</a></td><td><a href="spec/10-glossary.html">Glossary</a></td><td class="d0">0</td><td>draft</td></tr><tr><td class="d0"><a href="spec/90-rationale.html">90</a></td><td><a href="spec/90-rationale.html">Rationale</a></td><td class="d0">0</td><td>non-normative</td></tr></tbody>
 </table>
 </div>
 
@@ -448,9 +448,9 @@ a GIF, so it did not even change colour when it stopped being true. The two
 blocks below are read out of <code>cairn/items/</code> when the page is baked,
 and the build fails the day the board moves and the page does not.</p>
 
-<figure class="listing"><figcaption>the descent, from cairn/items/</figcaption><pre><code>depth 7 of 9   53 hole(s) still owed
+<figure class="listing"><figcaption>the descent, from cairn/items/</figcaption><pre><code>depth 7 of 9   50 hole(s) still owed
 
-  <span class="d0"> 1</span>  The Codex             buried      
+  <span class="d0"> 1</span>  The Codex             buried      1 hole(s)
   <span class="d0"> 2</span>  The Lamp              buried      
   <span class="d0"> 3</span>  The Ledger            buried      
   <span class="d0"> 4</span>  The Core Calculus     buried      
@@ -466,17 +466,17 @@ Every rite in <a href="spec/08-rites.html">&sect;08</a> is built. A trace that
 reached stratum 7 replays byte for byte, and one that reached stratum 8 refuses
 to claim it can. What is left is the part you can look at.</p>
 
-<figure class="listing"><figcaption>what the world still owes</figcaption><pre><code>holes 53
+<figure class="listing"><figcaption>what the world still owes</figcaption><pre><code>holes 50
 
-  hole <span class="d4"> 1</span>  exhume: --root, and no default for it       <span class="d4">stratum 4</span>  world
-  hole <span class="d0"> 2</span>  The trace graph browser                     <span class="d0">stratum 0</span>  necropolis
-  hole <span class="d0"> 3</span>  Provenance walk                             <span class="d0">stratum 0</span>  necropolis
-  hole <span class="d0"> 4</span>  Proof: a stranger explains a hole           <span class="d0">stratum 0</span>  necropolis
-  hole <span class="d0"> 5</span>  The playground editor                       <span class="d0">stratum 0</span>  necropolis
-  hole <span class="d0"> 6</span>  bury: reduce under an undecided branch      <span class="d0">stratum 0</span>  futamura
-  hole <span class="d4"> 7</span>  A pilot: build something real with it       <span class="d4">stratum 4</span>  after
-  hole <span class="d0"> 8</span>  Benchmark burial, and fail the build when…  <span class="d0">stratum 0</span>  quickening
-  ... and 45 more, in the roadmap
+  hole <span class="d0"> 1</span>  Decide whether the prelude gains an Answe…  <span class="d0">stratum 0</span>  codex
+  hole <span class="d4"> 2</span>  exhume: --root, and no default for it       <span class="d4">stratum 4</span>  world
+  hole <span class="d0"> 3</span>  The trace graph browser                     <span class="d0">stratum 0</span>  necropolis
+  hole <span class="d0"> 4</span>  Provenance walk                             <span class="d0">stratum 0</span>  necropolis
+  hole <span class="d0"> 5</span>  Proof: a stranger explains a hole           <span class="d0">stratum 0</span>  necropolis
+  hole <span class="d0"> 6</span>  The playground editor                       <span class="d0">stratum 0</span>  necropolis
+  hole <span class="d0"> 7</span>  bury: reduce under an undecided branch      <span class="d0">stratum 0</span>  futamura
+  hole <span class="d4"> 8</span>  A pilot: build something real with it       <span class="d4">stratum 4</span>  after
+  ... and 42 more, in the roadmap
 </code></pre></figure>
 
 <p>Those are holes in the ordinary sense of the word here: the work is

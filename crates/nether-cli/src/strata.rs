@@ -47,12 +47,9 @@ pub fn run(args: &[String]) -> ExitCode {
     }
     // A trace that under-reports its own depth is a trace lying about the one
     // thing it is for. §8.8 calls that malformed.
-    if told.deepest_answered() > told.depth {
-        eprintln!(
-            "nether: this trace records depth {}, and a witness under it reached {}",
-            told.depth,
-            told.deepest_answered()
-        );
+    if let Some(r) = told.found.reaches.iter().find(|r| r.stratum > told.depth) {
+        let did = if r.answered { "a witness under it reached" } else { "a hole under it owes" };
+        eprintln!("nether: this trace records depth {}, and {did} {}", told.depth, r.stratum);
         return ExitCode::from(code::MALFORMED);
     }
     ExitCode::SUCCESS
