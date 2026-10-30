@@ -38,6 +38,7 @@ by the invocation and not by the program.
 | Crosses | source text, and the arguments it computes for prelude calls |
 | Checked | the depth checker, before burial. `δ` is a set of strata ([§2](spec/02-calculus.md)), so a grant is not implied by any other grant — `descend net { write(…) }` is rejected, and `spec/mod.rs` holds that sample as `Illegal` |
 | Checked | burial is bounded by fuel ([§6.4](spec/06-evaluation.md)) and by a nesting limit, so a program cannot run the burial out of stack or time |
+| Checked | reading a program before it is buried — lexing, parsing, lowering, checking, printing — allocates at most 256 times the source at its peak and 384 times in all, asserted on input built to be expensive per byte in `crates/nether-wasm/tests/bound.rs`. What the burial then holds is the program's to spend, under fuel and the limits §6.4 makes an implementation state |
 | Checked | every string a program hands to `net` must be printable ASCII, and a host must look like a host, so a program cannot write its own HTTP headers or reach a party the invocation did not name |
 | Assumed | nothing |
 | Not promised | that a program which was *granted* a capability will use it well. That is what the grant meant |
@@ -55,6 +56,7 @@ arrives as bytes and is parsed before anything else knows what it is.
 | Checked | every object is verified against the cairn it was fetched by, so a store that serves altered bytes is detected rather than believed |
 | Checked | the decoder rejects non-canonical forms, over-long strata, malformed spans and trailing bytes; a decoder that accepted two byte strings as one value would break every reproducibility claim in the specification |
 | Checked | a trace naming a hole this ledger does not hold is reported rather than skipped |
+| Checked | decoding allocates at most 128 times the object at its peak and 192 times in all, in the same file. A count is believed only against the bytes left and nothing is reserved on its word, because every enclosing level is believed against the same bytes |
 | Assumed | that `blake3` is collision-resistant. It is the only dependency in the tree and the only place this assumption is made |
 | Not promised | that a trace is *true*. It says what some machine recorded. Whether that machine was honest is boundary 3 |
 

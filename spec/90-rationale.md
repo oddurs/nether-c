@@ -1340,6 +1340,26 @@ is a crate whose `Cargo.toml` says so.
 `Cargo.toml` files that say `unsafe_code = "allow"` in exactly the places a
 reader will go looking for them.
 
+### A bound on reading, and why it is not ten
+
+0219 set out to show that no input under a megabyte costs more than ten
+megabytes. **Rejected**, because no tree can meet it: a `;` is a token and a
+statement, and a `0x00` inside an array is a 48-byte value, so one byte of
+either input is several dozen bytes of what it means. Meeting ten would mean
+not building the tree.
+
+What was kept is the half of the claim that was about attack: what a reader
+allocates is linear in what it was given, with the multiple stated and
+asserted (`SECURITY.md`, boundaries 1 and 2). Measuring it
+found the case the claim was written against — an array nested in arrays,
+each believing a count against the same remaining bytes, reserved five
+gigabytes from one megabyte — and it was in the codec, which had been looked
+at twice.
+
+**What it costs.** A megabyte of source can hold a quarter of a gigabyte while
+it is parsed. That is a large constant, and it is a constant: it cannot be
+bought with a cleverer megabyte.
+
 ### Floating point
 
 Excluded from [§3.6](03-lexical.md#36-literals) because IEEE 754 has

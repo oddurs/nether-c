@@ -513,7 +513,10 @@ impl Reader<'_> {
                 }
                 let count = self.len()?;
                 self.believable(count, 1)?;
-                let mut fields = Vec::with_capacity(count);
+                // Grown, not reserved: a count is believable against the bytes
+                // left, and every enclosing level is believed against the same
+                // bytes, so reserving it nests into gigabytes. 0219.
+                let mut fields = Vec::new();
                 for _ in 0..count {
                     fields.push(self.value(depth + 1)?);
                 }
@@ -522,7 +525,7 @@ impl Reader<'_> {
             tag::ARRAY => {
                 let count = self.len()?;
                 self.believable(count, 1)?;
-                let mut items = Vec::with_capacity(count);
+                let mut items = Vec::new();
                 for _ in 0..count {
                     items.push(self.value(depth + 1)?);
                 }
