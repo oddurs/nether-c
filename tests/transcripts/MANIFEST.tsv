@@ -62,8 +62,11 @@ spec/08-rites.md § 8.5 `cairn` #1	text	pinned	a0f5b8eab441d74a
 spec/08-rites.md § 8.6 `strata` #1	text	pinned	f2bdddcccdc852aa
 spec/08-rites.md § 8.6 `strata` #2	console	checked	fd204021b1466dbb
 spec/08-rites.md § 8.7 `graft` #1	text	pinned	f9ddf95151d63ade
-spec/09-prelude.md § 9.2 Depth 0 #1	signatures	pinned	42165e84073d2ffe
+spec/09-prelude.md § 9.2 Depth 0 #1	signatures	pinned	bca58628903ed8fd
 spec/09-prelude.md § 9.2 Depth 0 #2	c	pinned	67bb7c58077b7645
+spec/09-prelude.md § 9.2 Depth 0 #3	c	pinned	0a3acbdfff0272bc
+spec/09-prelude.md § 9.2 Depth 0 #4	console	checked	16120fe72724f29b
+spec/09-prelude.md § 9.2 Depth 0 #5	console	checked	cf959abe75e3616c
 spec/09-prelude.md § 9.3 Stratum 1 — `store` #1	signatures	pinned	480f7d18349a56f5
 spec/09-prelude.md § 9.4 Stratum 2 — `env` #1	signatures	pinned	ea824054bc313eff
 spec/09-prelude.md § 9.5 Strata 3 and 4 — `disk`, `disk!` #1	signatures	pinned	834d41e9dd803353

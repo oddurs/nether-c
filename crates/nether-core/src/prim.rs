@@ -47,6 +47,11 @@ pub enum Prim {
     Refusal,
     /// `T must(Answer<T>)` — the value. Starves on a no.
     Must,
+    /// `Answer<T> answered(T)` — a yes a program built.
+    Answered,
+    /// `Answer<T> refused(Refusal)` — a no a program built. `T` is whatever
+    /// it is declared into.
+    Refused,
     /// `Answer<Bytes> fetch_node(Cairn)`
     FetchNode,
     /// `Bool has_node(Cairn)`
@@ -79,7 +84,7 @@ pub enum Prim {
 
 impl Prim {
     /// Every prelude function, in the order `spec/09-prelude.md` lists them.
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 32] = [
         Self::Min,
         Self::Max,
         Self::Abs,
@@ -96,6 +101,8 @@ impl Prim {
         Self::Given,
         Self::Refusal,
         Self::Must,
+        Self::Answered,
+        Self::Refused,
         Self::FetchNode,
         Self::HasNode,
         Self::Env,
@@ -133,6 +140,8 @@ impl Prim {
             Self::Given => ("given", Depth::PURE),
             Self::Refusal => ("refusal", Depth::PURE),
             Self::Must => ("must", Depth::PURE),
+            Self::Answered => ("answered", Depth::PURE),
+            Self::Refused => ("refused", Depth::PURE),
             Self::FetchNode => ("fetch_node", Depth::STORE),
             Self::HasNode => ("has_node", Depth::STORE),
             Self::Env => ("env", Depth::ENV),
