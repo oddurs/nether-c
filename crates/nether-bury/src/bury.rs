@@ -412,6 +412,7 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64, answers: &Answers) -> Result<Re
         specialised: Vec::new(),
         minted: HashMap::new(),
         starved: None,
+        speculating: false,
     };
     let mut demands = Vec::with_capacity(unit.demands.len());
     // In source order, which §6.2 fixes: two burials of the same input produce
@@ -542,6 +543,9 @@ struct Burial<'a> {
     /// and a residue that held a copy for each would grow with the guest
     /// rather than with what is left of it.
     minted: HashMap<(FuncId, Vec<Literal>), FuncId>,
+    /// Whether this is an arm of a branch the world has not decided. §6.5:
+    /// such a reduction may produce a value or stop, and nothing else.
+    speculating: bool,
     /// The block the body just starved in, on the way out of [`Burial::block`].
     ///
     /// A side channel because a block's residue is not its value: the value is
@@ -917,9 +921,10 @@ impl Burial<'_> {
         })
     }
 
-    /// A branch on something that is not here residualises whole, both arms
-    /// unevaluated. Evaluating the arm that will not be taken is exactly what
-    /// §6.2 forbids.
+    /// A branch on something that is not here residualises whole, and both
+    /// arms are reduced where they stand. §6.5 makes that reduction
+    /// speculative, which is what keeps it inside §6.2: it cannot ask, deposit
+    /// or collapse, so it leaves nothing that §6.2 is protecting.
     fn select(
         &mut self,
         x: &Expr,
@@ -934,14 +939,40 @@ impl Burial<'_> {
             Some(false) => self.expr(otherwise, env)?,
             None => {
                 let cond = Box::new(Self::residual(c, cond));
-                let kind = ExprKind::Select {
-                    cond,
-                    then: Box::new(then.clone()),
-                    otherwise: Box::new(otherwise.clone()),
-                };
-                Self::rebuild(kind, x, x.depth)
+                let then = Box::new(self.speculate(then, env)?);
+                let otherwise = Box::new(self.speculate(otherwise, env)?);
+                Self::rebuild(ExprKind::Select { cond, then, otherwise }, x, x.depth)
             }
         })
+    }
+
+    /// One arm of an undecided branch, reduced as far as speculation allows.
+    ///
+    /// On a copy of the environment, because an assignment in an arm that may
+    /// not run cannot be seen after it. An arm that collapsed, or that reached
+    /// a `break`, `continue` or `return`, stays as it was written: the first is
+    /// §6.5's third clause, and folding the second to its value would drop the
+    /// jump. Fuel is charged as for anything else, and running out of it is
+    /// still a halt (§6.4).
+    fn speculate(&mut self, arm: &Expr, env: &Env) -> Result<Expr, Halt> {
+        let was = std::mem::replace(&mut self.speculating, true);
+        let (grind, minted, outer) =
+            (self.grind.len(), self.specialised.len(), self.starved.take());
+        let out = self.expr(arm, &mut env.clone());
+        self.speculating = was;
+        let jumped = self.flow.take().is_some();
+        self.starved = outer;
+        match out {
+            Ok(v) if !jumped => Ok(Self::residual(v, arm)),
+            Ok(_) => Ok(arm.clone()),
+            Err(Halt { kind: HaltKind::Collapsed(_), .. }) => {
+                self.grind.truncate(grind);
+                self.specialised.truncate(minted);
+                self.minted.retain(|_, id| (id.0 as usize) < self.unit.funcs.len() + minted);
+                Ok(arm.clone())
+            }
+            Err(halt) => Err(halt),
+        }
     }
 
     /// A descent is a scope marker. Evaluating it evaluates its body; what the
@@ -977,7 +1008,11 @@ impl Burial<'_> {
         // keeps every binding, and a copy would carry those locals into a
         // function's frame, where their ids name something else.
         let v = if v.is_stuck() && !self.unit.locals.is_empty() { Self::stuck(x) } else { v };
-        if let Some(slot) = self.globals.get_mut(id.0 as usize) {
+        // Not kept while speculating: a binding that starved because an arm
+        // may not ask would otherwise stay starved for the code that may.
+        if !self.speculating
+            && let Some(slot) = self.globals.get_mut(id.0 as usize)
+        {
             *slot = Some(v.clone());
         }
         Ok(v)
@@ -1005,7 +1040,9 @@ impl Burial<'_> {
         // Burial holds no capability and never asks: an answer is here because
         // a rite with a grant got it and wrote it down first (§1.4, §6.6).
         if let Kind::Prim(p) = f.kind {
-            if p.latent() > Depth::PURE {
+            // §6.5: an undecided arm forms no hole, and does not take an answer
+            // either, since taking one moves which answer the next act gets.
+            if p.latent() > Depth::PURE && !self.speculating {
                 if let Some(args) = values.iter().map(as_value).collect::<Option<Vec<_>>>() {
                     // The arguments are named as values rather than wrapped
                     // in anything. A value has one name, and `seal` of the
@@ -1361,10 +1398,20 @@ impl Burial<'_> {
                         && let Some(value) = as_value(&v)
                         && value != Value::Unit
                     {
-                        let at = self.deposit(value, x.span);
-                        self.deposits.push(at);
+                        // §6.5: an arm that may not run has not said anything.
+                        // The statement waits in the residue for the burial
+                        // that takes the arm, and deposits then.
+                        if self.speculating {
+                            let e = Box::new(Self::residual(v.clone(), x));
+                            Val { kind: Kind::Stuck(e), ty: v.ty, depth: v.depth }
+                        } else {
+                            let at = self.deposit(value, x.span);
+                            self.deposits.push(at);
+                            v
+                        }
+                    } else {
+                        v
                     }
-                    v
                 }
             };
             // A statement that is not here takes the block with it: everything

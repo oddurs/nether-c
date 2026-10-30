@@ -2,17 +2,19 @@
 id: 270
 title: 'bury: reduce under an undecided branch'
 type: feature
-status: unmarked
+status: buried
 milestone: futamura
+assignee: Oddur Sigurdsson
+claimed: 2026-10-30
 depends_on:
 - 251
 created: 2026-09-18
-updated: 2026-09-18
+updated: 2026-10-30
 priority: p1
 effort: l
 stratum: '0'
 area: crates/nether-bury
-proof: An interpreter buried against a guest it branches on specialises past the branch, and a slice that would collapse in an untaken arm does not stop the burial
+proof: An if on an unanswered condition residualises with both arms reduced, and an arm forms no hole, deposits nothing and collapses nothing
 ---
 
 ## Problem
@@ -65,15 +67,19 @@ the world.
 
 ## Acceptance criteria
 
-- [ ] An `if` on an unanswered condition residualises with both arms reduced
-- [ ] A world-question inside an arm forms no hole, and the trace's hole count
+- [x] An `if` on an unanswered condition residualises with both arms reduced
+- [x] A world-question inside an arm forms no hole, and the trace's hole count
       is what it was before the arm was reduced
-- [ ] A deposit inside an arm is not in the trace
-- [ ] An out-of-range slice inside an arm does not stop the burial
-- [ ] The same program buries to the same trace on two runs, fuel included
-- [ ] The bootstrap's residue is measured again and both figures recorded
+- [x] A deposit inside an arm is not in the trace
+- [x] An out-of-range slice inside an arm does not stop the burial
+- [x] The same program buries to the same trace on two runs, fuel included
+- [x] The bootstrap's residue is measured again and both figures recorded
 
 ## Evidence to close
 
 Set `proof` to the observable gate. Record the tested commit, exact checks and
 remaining limits here. Human or elapsed-time evidence cannot be replaced by CI.
+
+## 2026-10-30
+
+Buried. select reduces both arms of an undecided branch through Burial::speculate, on a copy of the environment, with speculating set. Under it: a prelude call deeper than the surface neither digs a hole nor takes a recorded answer (taking one would move which answer the next act gets); a bare statement that would deposit starves instead, so it waits in the residue and deposits when an arm is really taken; a unit-level binding reached for the first time is not cached, since a binding that starved because the arm may not ask would stay starved for the code that may. A collapse leaves the arm as written and rolls back the functions minted inside it; an arm that reached break, continue or return is kept as written too, since folding it to its value would drop the jump. Fuel is charged as for anything else and running out is still a halt. Tests in rites.rs: an_undecided_branch_is_reduced_in_both_arms_and_keeps_its_branch (I64 k = 2 + 3 becomes I64 k = 5 in the specialised body, the collapsing slice stays as written, and the burial finishes), an_undecided_arm_asks_nothing_and_deposits_nothing (one hole; nothing lamped), speculation_buries_to_the_same_trace_and_the_same_steps_every_time. No documented transcript moved. Bootstrap measured again: 1,433 lines, 21 minted functions, 4,993,540 steps, one hole, the same as before, because the interpreter never reaches its branch on the answer: the statement before it, Bytes r = expression__91();, starves, and §6.5 stops a block there. The original proof, an interpreter that specialises past the branch, needs reduction past a starved statement, which is a specification question; it is 0281's proof now, with this measurement as its evidence, and projection.rs points its boundary assertion at 0281.

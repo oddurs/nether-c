@@ -6,9 +6,11 @@
 //! `interpret`. The syntax read before that question is not read again.
 //!
 //! What it is not is a compiler. The residue is specialised up to the first
-//! unanswered question on its path and interprets from there, because an `if`
-//! whose condition waits on the world residualises with both arms unreduced.
-//! That boundary is 0251 and is asserted here so that it cannot move quietly.
+//! unanswered question on its path and interprets from there. An `if` whose
+//! condition waits on the world has its arms reduced now (0251, 0270), but the
+//! interpreter never reaches one: the statement that binds the unanswered
+//! value starves first, and §6.5 stops a block there. That boundary is 0281
+//! and is asserted here so that it cannot move quietly.
 
 use nether_bury::{Answers, Residue, bury, bury_with};
 use nether_core::{ExprKind, Literal, check};
@@ -107,10 +109,10 @@ fn burying_the_residue_again_leaves_the_same_residue() {
     assert_eq!(printed, print(&twice.as_unit(&again)));
 }
 
-/// The boundary, stated as a test rather than as a comment. Burial does not
-/// reduce inside an arm it may not take (§6.2), so the residue still calls the
-/// general interpreter for whatever comes after the guest's question. When
-/// 0251 settles, this is the assertion that has to change.
+/// The boundary, stated as a test rather than as a comment. A block stops at
+/// the statement that starves (§6.5), so the residue still calls the general
+/// interpreter for whatever comes after the guest's question. When 0281
+/// settles, this is the assertion that has to change.
 #[test]
 fn the_residue_still_interprets_past_the_unanswered_question() {
     let source = against(BUILD);
@@ -121,7 +123,7 @@ fn the_residue_still_interprets_past_the_unanswered_question() {
     assert!(minted > 0);
     assert!(
         printed.contains("evaluate_program(s,"),
-        "nothing calls the general evaluator any more, which would mean 0251 landed"
+        "nothing calls the general evaluator any more, which would mean 0281 landed"
     );
 }
 
