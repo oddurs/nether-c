@@ -170,12 +170,13 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
     // Burial holds no capability, so nothing was answered and there are no
     // witnesses. §6.6: exhumation is what records one.
     let witnesses: Vec<Cairn> = Vec::new();
+    let depth = crate::closing::depth(&store, residue.depth.get(), &residue.holes, &witnesses);
 
     let trace = Node::Trace {
         residue: residue_cairn,
         holes: residue.holes.clone(),
         unrecorded: crate::closing::unrecorded(&store, &witnesses),
-        depth: crate::closing::depth(&store, residue.depth.get(), &witnesses),
+        depth,
         witnesses,
         deposits: residue.deposits.clone(),
         source: source_cairn,
@@ -187,7 +188,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
         cairn: trace_cairn,
         residue: residue_cairn,
         source: source_cairn,
-        depth: residue.depth.get(),
+        depth,
         holes: residue.holes.clone(),
         nodes: written + 2,
         fuel_spent: residue.fuel_spent,

@@ -1090,6 +1090,29 @@ next is not a literal.
 will read as a preprocessor directive for as long as anyone remembers what one
 was.
 
+### A trace's depth without its holes
+
+[§7.3.2](07-ledger.md#732-what-a-decoder-cannot-check) used to make a trace's
+depth the join of its residue and its witnesses. A hole contributed nothing, on
+the reasoning that the residue already counts whatever the holes would reach.
+[§1.5](01-strata.md#15-seal) makes that false: `seal e` is depth 0 whatever
+`e` is, so a program that demands a fetch only through a seal buried to
+`depth 0` with a stratum-5 hole under it, and `strata` printed `pure` over a
+trace that could not take a step without the network.
+
+The alternative considered was to leave the formula and make the residue carry
+the depth of what it seals. Rejected because it unsays §1.5: a seal is pure
+because naming a value does not touch the world, and a residue that counted
+sealed expressions would make every program that keeps a cairn as deep as the
+thing the cairn names. Counting holes *instead of* the residue was rejected
+already, by `opaque`, which hides a deep expression that never becomes a hole.
+Counting them *as well* is the only rule both cases agree with.
+
+**What it cost.** A trace's depth is no longer a fact about its residue alone,
+so `bury` reads every hole it is about to write back out of the ledger, and a
+trace written before this rule may now be malformed by §8.6 without anything
+about it having changed.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own

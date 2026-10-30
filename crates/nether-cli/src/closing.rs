@@ -6,23 +6,23 @@
 
 use nether_ledger::{Cairn, Node, Store, Stored};
 
-/// The stratum that witness reached, or 0 if it is not one.
-fn reached(store: &Store, witness: Cairn) -> u8 {
-    match store.get(witness) {
-        Ok(Stored::Node(Node::Witness { stratum, .. })) => stratum,
+/// The stratum a witness reached or a hole would reach, or 0 if it is neither.
+fn reached(store: &Store, node: Cairn) -> u8 {
+    match store.get(node) {
+        Ok(Stored::Node(Node::Witness { stratum, .. } | Node::Hole { stratum, .. })) => stratum,
         _ => 0,
     }
 }
 
-/// §7.3.2: the join of what the residue still reaches and what a witness
-/// reached.
+/// §7.3.2: the join of what the residue still reaches, what a hole would
+/// reach, and what a witness reached.
 ///
-/// Both halves are needed. A stage-one burial has answered nothing, so the
-/// witnesses say 0 and the residue says how deep the program still goes; a
-/// sealed trace has no holes left, so the residue says 0 and the witnesses say
-/// how deep it went.
-pub fn depth(store: &Store, residue: u8, witnesses: &[Cairn]) -> u8 {
-    witnesses.iter().map(|w| reached(store, *w)).fold(residue, u8::max)
+/// All three are needed. A stage-one burial has answered nothing, so the
+/// witnesses say 0; a sealed trace has no holes left, so the holes say 0; and a
+/// world-question demanded through a `seal` is a hole the residue does not
+/// count, because §1.5 makes the seal pure.
+pub fn depth(store: &Store, residue: u8, holes: &[Cairn], witnesses: &[Cairn]) -> u8 {
+    holes.iter().chain(witnesses).map(|n| reached(store, *n)).fold(residue, u8::max)
 }
 
 /// §1.7: marked when something *reached* stratum 8, which a hole at 8 has not.

@@ -189,7 +189,7 @@ fn take(store: &Store, trace: Cairn, replace: Cairn, with: Cairn, wants_json: bo
         witnesses: witnesses.clone(),
         deposits: crate::closing::deposits(&deposits, &residue.deposits),
         source,
-        depth: crate::closing::depth(store, residue.depth.get(), &witnesses),
+        depth: crate::closing::depth(store, residue.depth.get(), &residue.holes, &witnesses),
         unrecorded: crate::closing::unrecorded(store, &witnesses),
     });
     if store.has(node.cairn()) {

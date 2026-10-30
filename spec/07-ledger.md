@@ -201,11 +201,11 @@ that has never seen that filesystem.
 ### 7.3.2 What a decoder cannot check
 
 A `Trace`'s `depth` is how deep it goes, counting both directions at once: the
-join of the depth of its residue and the greatest stratum of any `Witness` it
-names.
+join of the depth of its residue, the greatest stratum of any `Hole` it names,
+and the greatest stratum of any `Witness` it names.
 
-Both halves are needed and neither alone is enough. A stage-one burial has
-answered nothing, so its witnesses say 0 and its residue says how deep the
+All three are needed and no two are enough. A stage-one burial has answered
+nothing, so its witnesses say 0 and its residue and holes say how deep the
 program still reaches — which is why
 [§8.2](08-rites.md#82-bury)'s transcript reads `depth 3` over a program with one
 unanswered `read`. A sealed trace has no holes left, so its residue says 0 and
@@ -213,9 +213,34 @@ its witnesses say how deep it went — which is why
 [§6.6](06-evaluation.md#66-exhumation)'s reads `depth 3   holes 0`. One rule,
 both transcripts.
 
-`opaque` is the case that rules out counting holes instead of the residue: a
-world-question inside an `opaque` barrier is never evaluated and never becomes a
-hole, and the expression is still at its stratum.
+`seal` is the case that rules out the residue alone.
+[§1.5](01-strata.md#15-seal) makes `seal e` depth 0 whatever `e` is, so a
+program that reaches the world only through a seal demands something pure and
+still owes a hole:
+
+```c
+// owed.nc — a trace that owes the network. spec/07-ledger.md §7.3.2.
+//
+// The fetch is demanded only through a seal, and §1.5 makes a seal pure, so
+// the residue is at depth 0 and the hole is at 5. The trace's depth is the
+// join of both.
+Bytes@5 page = must(descend net { get("https://example.invalid/x") });
+Cairn   c    = seal page;
+demand c;
+```
+
+```console
+$ nether bury owed.nc
+buried   owed.nc → 044d6d32   depth 5   holes 1   4 nodes
+  hole ①  get("https://example.invalid/x") stratum 5  net
+```
+
+That trace cannot take a step without a network fetch, and calling it `pure`
+would be the strongest claim the language makes, made falsely.
+
+`opaque` is the case that rules out the holes alone: a world-question inside an
+`opaque` barrier is never evaluated and never becomes a hole, and the
+expression is still at its stratum.
 
 The stratum-8 mark is the other half of §1.7 and is **not** the same test.
 It is set exactly when a `Witness` the trace names is at stratum 8 — *reached*,
@@ -225,10 +250,10 @@ not marked, because nothing has happened off the record yet.
 Neither claim is checkable on `put`. A decoder sees one node, and both are
 facts about a graph that may not be wholly present. An implementation MUST NOT
 be required to enforce them there.
-[§8.6](08-rites.md#86-strata) is where the witness half is caught, because
-`strata` is the rite that has the whole graph in hand. The residue half needs
-lowering the residue, which is burying it, and that is `bury`'s job rather than
-`strata`'s.
+[§8.6](08-rites.md#86-strata) is where the hole and witness halves are caught,
+because `strata` is the rite that has the whole graph in hand. The residue half
+needs lowering the residue, which is burying it, and that is `bury`'s job
+rather than `strata`'s.
 
 ## 7.4 Provenance
 

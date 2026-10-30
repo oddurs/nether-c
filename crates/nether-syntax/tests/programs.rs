@@ -1,4 +1,4 @@
-//! The stage two proof: `hello.nc`, `stamp.nc` and `build.nc` compile
+//! The stage two proof: `hello.nc`, `stamp.nc`, `build.nc` and `owed.nc` compile
 //! verbatim from the specification.
 //!
 //! The programs are lifted unchanged. Where a file has more in it than the
@@ -30,10 +30,11 @@ fn library(name: &str) -> String {
 }
 
 /// Every program, and the sample it was lifted from.
-const PROGRAMS: [(&str, &str); 3] = [
+const PROGRAMS: [(&str, &str); 4] = [
     ("hello.nc", "00-overview.md § 0.7 A first program #1"),
     ("stamp.nc", "01-strata.md § 1.6 Shade, and the Orpheus rule #1"),
     ("build.nc", "06-evaluation.md § 6.2 Demand #1"),
+    ("owed.nc", "07-ledger.md § 7.3.2 What a decoder cannot check #1"),
 ];
 
 #[test]
