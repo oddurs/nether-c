@@ -681,6 +681,59 @@ fn a_trace_that_under_reports_its_own_depth_is_malformed() {
     assert!(stdout(&out).contains("read(\"main.nc\")"), "it still says where:\n{}", stdout(&out));
 }
 
+/// §1.5 makes a seal pure, so the residue of a fetch demanded only through one
+/// is at depth 0 — and the trace still owes the network. 0275.
+#[test]
+fn a_trace_that_owes_the_network_is_not_pure() {
+    let dir = scratch("strata-owed");
+    let src = dir.join("owed.nc");
+    std::fs::write(&src, include_str!("../../../tests/programs/owed.nc")).expect("write");
+
+    let out = nether(Some(&dir), &["bury", src.to_str().expect("utf8"), "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let said = stdout(&out);
+    assert!(said.contains("\"depth\":5"), "{said}");
+    let at = said.find("\"cairn\":\"").expect("a cairn") + "\"cairn\":\"".len();
+    let trace = &said[at..at + said[at..].find('"').expect("a closing quote")];
+
+    let out = nether(Some(&dir), &["strata", trace]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.starts_with("depth 5   net\n"), "{text}");
+}
+
+#[test]
+fn a_trace_shallower_than_a_hole_it_owes_is_malformed() {
+    // §7.3.2 counts holes toward depth, so §8.6 catches a trace that does not.
+    let dir = scratch("strata-owes-more");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
+    let span = Span { source, start: 0, end: 11 };
+    let url = put(Value::Str("https://example.invalid/x".into()));
+    let call = Call { function: "get".into(), args: vec![url] };
+    let hole = node(Node::Hole { call, stratum: 5, span });
+    let trace = node(Node::Trace {
+        residue: source,
+        holes: vec![hole],
+        witnesses: vec![],
+        deposits: vec![],
+        source,
+        depth: 0,
+        unrecorded: false,
+    });
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 65, "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("records depth 0, and a hole under it owes 5"),
+        "{}",
+        stderr(&out)
+    );
+}
+
 #[test]
 fn a_trace_that_never_went_anywhere_says_so() {
     let dir = scratch("strata-pure");

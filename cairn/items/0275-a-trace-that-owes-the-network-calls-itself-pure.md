@@ -2,9 +2,9 @@
 id: 275
 title: A trace that owes the network calls itself pure
 type: spec
-status: unmarked
+status: buried
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-10-30
 priority: p0
 effort: m
 area: spec/07-ledger.md
@@ -17,7 +17,8 @@ proof: Burying a program whose only world-question is demanded through a `seal` 
 
 ## Open questions
 
-- [ ]
+- [x] Count holes as well as the residue, or make the residue carry what it
+      seals? As well as. The other unsays §1.5; §90.2 records it.
 
 ## Delivery steps and dependencies
 
@@ -26,9 +27,9 @@ proof: Burying a program whose only world-question is demanded through a `seal` 
 
 ## Acceptance criteria
 
-- [ ] Every normative claim is stated once, in one place
-- [ ] Every code sample in it is in `tests/transcripts/`
-- [ ] A reader who has not read the rest of the spec can follow it
+- [x] Every normative claim is stated once, in one place
+- [x] Every code sample in it is in `tests/transcripts/`
+- [x] A reader who has not read the rest of the spec can follow it
 
 §7.3.2 defines a trace's depth as "the join of the depth of its residue and the
 greatest stratum of any `Witness` it names". A hole contributes nothing. That is
@@ -100,3 +101,26 @@ recording the wrong fact, which is worse in a different way: nothing downstream
 has reason to doubt it.
 
 Found by auditing each concept in the language against its implementation.
+
+## 2026-10-30
+
+Buried. §7.3.2 makes a trace's depth the join of its residue, its holes and its
+witnesses, and works `owed.nc` — this item's three lines, now
+`tests/programs/owed.nc` — as the case that rules out the residue alone.
+`closing::depth` takes the holes, and `bury`, `exhume` and `graft` pass them.
+§8.6's malformed check reads holes as well as witnesses. `bury`'s headline now
+prints the trace's depth rather than the residue's, which is what made it say
+`depth 0` over a stratum-5 hole.
+
+Proof, observed: `nether bury owed.nc` prints `depth 5   holes 1`, and
+`nether strata` on it prints `depth 5   net`. Both are executed by
+`tests/transcripts/run` from §7.3.2, and `a_trace_that_owes_the_network_is_not_pure`
+and `a_trace_shallower_than_a_hole_it_owes_is_malformed` hold it in
+`crates/nether-cli/tests/rites.rs`.
+
+It also corrected `docs/manual/04-the-grant.md`: exhuming `errand.nc` with no
+grant printed `depth 0` over the trace chapter 3 shows at `depth 3`. Same bug,
+in `exhume`.
+
+A trace written before this change that owes a hole deeper than its residue is
+now reported malformed by `strata`. That is the rule working, not a regression.

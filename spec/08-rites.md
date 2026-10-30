@@ -313,9 +313,9 @@ rather than the number above it: the transcript is one of those traces — one
 `read`, still pending — and its number is what §7.3.2 says a trace's depth is.
 
 If the trace is marked as having reached stratum 8, `strata` MUST say so
-without being asked, and MUST report `replayable: no`. A witness deeper than
-the recorded depth is a malformed trace (§7.3.2), and `strata` is where it is
-caught.
+without being asked, and MUST report `replayable: no`. A hole or a witness
+deeper than the recorded depth is a malformed trace (§7.3.2), and `strata` is
+where it is caught.
 
 "Why is this value at depth 5" has to be a command, not an investigation.
 

@@ -49,6 +49,8 @@ spec/06-evaluation.md § 6.6 Exhumation #1	console	checked	2eabda973722523e
 spec/06-evaluation.md § 6.7 Replay #1	console	checked	48b4f4a335379799
 spec/06-evaluation.md § 6.8 What burial prints #1	text	pinned	a39449193e40ee44
 spec/07-ledger.md § 7.2 Cairns #1	text	pinned	ef8410b2b1784b2f
+spec/07-ledger.md § 7.3.2 What a decoder cannot check #1	c	pinned	99f2b4a37918eaad
+spec/07-ledger.md § 7.3.2 What a decoder cannot check #2	console	checked	ac0d031ae27f9a0e
 spec/07-ledger.md § 7.5 The store #1	text	pinned	ebd628943dfe60de
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
 spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
@@ -84,7 +86,7 @@ docs/manual/03-the-hole.md § The hole #2	console	pinned	5d5e33ebd2ef222b
 docs/manual/03-the-hole.md § The hole #3	console	checked	4968c59d1b7089ba
 docs/manual/03-the-hole.md § Burial has no world #1	console	checked	8b4ecbf0adaa6321
 docs/manual/03-the-hole.md § Burial has no world #2	console	checked	e5645553497d4c89
-docs/manual/04-the-grant.md § The grant #1	console	checked	76412f28ea64649f
+docs/manual/04-the-grant.md § The grant #1	console	checked	cf7ef1406fe3729c
 docs/manual/04-the-grant.md § The grant #2	console	checked	34879260aaf1312b
 docs/manual/04-the-grant.md § The grant #3	console	checked	278228f105b15dcf
 docs/manual/05-the-witness.md § The witness #1	console	checked	34879260aaf1312b
