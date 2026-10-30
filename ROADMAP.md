@@ -456,18 +456,18 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`#####·····` 43% · 3 of 7 done
+`######····` 57% · 4 of 7 done
 
 ### unmarked
 
 - [ ] [`0273`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0273-grafting-an-answer-keeps-the-deposits-it-replaced.md) Grafting an answer keeps the deposits it replaced <sup>bug · p1 · 2</sup>
 - [ ] [`0274`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0274-a-comment-changes-what-lamp-prints-first.md) A comment changes what lamp prints first <sup>spec · p1 · 1</sup>
 - [ ] [`0275`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0275-a-trace-that-owes-the-network-calls-itself-pure.md) A trace that owes the network calls itself pure <sup>spec · p0</sup>
-- [ ] [`0276`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0276-nether-world-answers-an-authority-question-with-the-depth-order.md) nether-world answers an authority question with the depth order <sup>bug · p2</sup>
 
 ### buried
 
 - [x] [`0253`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0253-a-bytes-literal-cannot-spell-every-byte.md) A Bytes literal cannot spell every byte <sup>bug · p1 · 0</sup>
+- [x] [`0276`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0276-nether-world-answers-an-authority-question-with-the-depth-order.md) nether-world answers an authority question with the depth order <sup>bug · p2</sup>
 - [x] [`0277`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0277-setup-overwrites-the-roadmap-schema.md) Setup overwrites the roadmap schema <sup>bug · p1</sup>
 - [x] [`0278`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0278-7-3-1-states-the-hole-list-twice-two-ways.md) §7.3.1 states the hole list twice, two ways <sup>spec · p1</sup>
 
