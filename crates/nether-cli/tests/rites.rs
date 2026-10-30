@@ -966,7 +966,7 @@ fn exhuming_answers_a_hole_and_seals_the_trace() {
     let dir = a_build("exhume");
     let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
 
-    let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--json"]);
+    let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--root", ".", "--json"]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     let told = stdout(&out);
     let sealed = field(&told, "sealed");
@@ -1008,8 +1008,10 @@ fn what_was_read_is_in_the_ledger_and_the_file_is_no_longer_needed() {
     // program was told, so the trace holds it whatever happens to the disk.
     let dir = a_build("exhume-outlives");
     let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
-    let sealed =
-        field(&stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--json"])), "sealed");
+    let sealed = field(
+        &stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
 
     std::fs::remove_file(dir.join("main.nc")).expect("delete it");
     std::fs::remove_file(dir.join("build.nc")).expect("delete it too");
@@ -1043,6 +1045,9 @@ fn every_capability_section_nine_names_is_built() {
         if cap == "env" {
             args.extend(["--clock", "0", "--target", "x"]);
         }
+        if cap.starts_with("disk") {
+            args.extend(["--root", "."]);
+        }
         let out = there(&dir, &args);
         assert_ne!(code(&out), 69, "`{cap}` is not built: {}", stderr(&out));
         assert_ne!(code(&out), 64, "`{cap}` was not accepted: {}", stderr(&out));
@@ -1058,7 +1063,7 @@ fn exhuming_something_that_is_not_a_trace_says_so() {
     // The source is in the ledger because burying put it there, and it is
     // `Bytes` rather than a trace.
     let source = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "source");
-    let out = there(&dir, &["exhume", &source, "--grant", "disk"]);
+    let out = there(&dir, &["exhume", &source, "--grant", "disk", "--root", "."]);
     assert_eq!(code(&out), 1, "{}", stderr(&out));
     assert!(stderr(&out).contains("not a trace"), "{}", stderr(&out));
 }
@@ -1070,8 +1075,10 @@ fn replaying_a_sealed_trace_gives_it_back() {
     // folding it did, so a trace holding that number could never be itself.
     let dir = a_build("replay");
     let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
-    let sealed =
-        field(&stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--json"])), "sealed");
+    let sealed = field(
+        &stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
 
     let out = there(&dir, &["exhume", &sealed, "--replay"]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
@@ -1111,8 +1118,10 @@ fn replay_succeeds_with_the_source_deleted() {
     // world said is in the ledger, so a replay needs nothing from the world.
     let dir = a_build("replay-deleted");
     let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
-    let sealed =
-        field(&stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--json"])), "sealed");
+    let sealed = field(
+        &stdout(&there(&dir, &["exhume", &buried, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
 
     std::fs::remove_file(dir.join("main.nc")).expect("delete what it read");
     std::fs::remove_file(dir.join("build.nc")).expect("delete the program too");
@@ -1142,7 +1151,8 @@ fn grafting_an_answer_reaches_the_trace_the_world_would_have() {
     // Exhume the same trace against a different file, so the ledger holds what
     // the world would have said.
     std::fs::write(dir.join("main.nc"), b"int main(void) { return 1; }").expect("change it");
-    let exhumed = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+    let exhumed =
+        stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"]));
     let sealed = field(&exhumed, "sealed");
     let answer = field(&exhumed, "answer");
 
@@ -1167,7 +1177,8 @@ fn a_graft_says_how_much_it_reused() {
         .nth(2)
         .and_then(|r| r.split('"').next())
         .expect("the hole's cairn");
-    let exhumed = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+    let exhumed =
+        stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"]));
     let answer = field(&exhumed, "answer");
 
     let out = there(&dir, &["graft", &trace, "--replace", hole, "--with", &answer]);
@@ -1210,7 +1221,8 @@ fn a_deposit_survives_exhuming_and_grafting() {
         .expect("the hole's cairn");
     assert_eq!(stdout(&there(&dir, &["lamp", &trace])), "a deposit that happened\n");
 
-    let exhumed = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+    let exhumed =
+        stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"]));
     let sealed = field(&exhumed, "sealed");
     assert_eq!(
         stdout(&there(&dir, &["lamp", &sealed])),
@@ -1261,7 +1273,8 @@ fn exhume_reports_what_it_spent() {
     // fact." Not in the trace — a trace holding it could not be replayed.
     let dir = a_build("spent");
     let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
-    let told = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+    let told =
+        stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"]));
 
     assert_eq!(field(&told, "was_it"), "sealed", "{told}");
     let spent = told
@@ -1315,7 +1328,7 @@ fn a_hole_the_ledger_does_not_hold_is_reported() {
         }))
         .expect("put");
 
-    let out = there(&dir, &["exhume", &forged.to_string(), "--grant", "disk"]);
+    let out = there(&dir, &["exhume", &forged.to_string(), "--grant", "disk", "--root", "."]);
     assert_eq!(code(&out), 66, "{}", stderr(&out));
     assert!(stderr(&out).contains("a hole the ledger does not hold"), "{}", stderr(&out));
     assert!(stderr(&out).contains(&absent.to_string()), "it does not say which");
@@ -1338,15 +1351,19 @@ fn a_branch_on_exists_folds() {
     std::fs::write(dir.join("m.nc"), b"x\n").expect("the file it looks for");
 
     let trace = field(&stdout(&there(&dir, &["bury", "looks.nc", "--json"])), "cairn");
-    let sealed =
-        field(&stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"])), "sealed");
+    let sealed = field(
+        &stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
     assert_eq!(stdout(&there(&dir, &["lamp", &sealed])), "it is there\n");
 
     // And the other way, so this is about the answer and not about `true`.
     std::fs::remove_file(dir.join("m.nc")).expect("take it away");
     let gone = field(&stdout(&there(&dir, &["bury", "looks.nc", "--json"])), "cairn");
-    let after =
-        field(&stdout(&there(&dir, &["exhume", &gone, "--grant", "disk", "--json"])), "sealed");
+    let after = field(
+        &stdout(&there(&dir, &["exhume", &gone, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
     assert_eq!(stdout(&there(&dir, &["lamp", &after])), "it is not\n");
 }
 
@@ -1733,4 +1750,68 @@ fn a_build_that_is_not_a_release_does_not_claim_a_version() {
     assert!(said.starts_with("nether "), "{said}");
     assert!(!said.contains("0.0.0"), "a build with no tag is claiming a version: {said}");
     assert!(said.contains("not a release build"), "{said}");
+}
+
+// ── §8.3.4 `--root` ─────────────────────────────────────────────────────────
+
+#[test]
+fn granting_the_disk_without_a_root_is_refused() {
+    // There is no default, because the only one is wherever the rite ran.
+    let dir = a_build("root-missing");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    for cap in ["disk", "disk!"] {
+        let out = there(&dir, &["exhume", &buried, "--grant", cap]);
+        assert_eq!(code(&out), 64, "{}", stderr(&out));
+        assert!(stderr(&out).contains("§8.3.4"), "{}", stderr(&out));
+    }
+}
+
+#[test]
+fn a_root_without_the_disk_is_refused() {
+    let dir = a_build("root-unused");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let out = there(&dir, &["exhume", &buried, "--root", "."]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+    assert!(stderr(&out).contains("could not be used"), "{}", stderr(&out));
+    let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--root", ".", "--root", "."]);
+    assert_eq!(code(&out), 64, "{}", stderr(&out));
+}
+
+#[test]
+fn two_roots_answer_one_read_differently() {
+    // The observable the flag exists for: the hole's call is byte-identical,
+    // and where it is rooted is what decides the answer.
+    let dir = a_build("root-two");
+    let buried = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let mut said = Vec::new();
+    for (root, text) in [("one", "int a;"), ("two", "int b;")] {
+        std::fs::create_dir_all(dir.join(root)).expect("a root");
+        std::fs::write(dir.join(root).join("main.nc"), text).expect("main.nc");
+        let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--root", root, "--json"]);
+        assert_eq!(code(&out), 0, "{}", stderr(&out));
+        said.push(field(&stdout(&out), "answer"));
+    }
+    assert_ne!(said[0], said[1], "two roots gave one answer");
+}
+
+#[test]
+fn a_path_that_climbs_out_of_the_root_is_denied() {
+    // §8.3.4: the file may well be there, and what refused is this build.
+    let dir = a_build("root-climb");
+    let root = dir.join("inner");
+    std::fs::create_dir_all(&root).expect("a root");
+    std::fs::write(
+        dir.join("climb.nc"),
+        "Answer<Bytes>@3 a = descend disk { read(\"../main.nc\") };\n\n\
+         U0 say()\n{\n  if (refusal(a) == denied) { \"denied\"; }\n  \
+         if (refusal(a) == absent) { \"absent\"; }\n}\n\ndemand say();\n",
+    )
+    .expect("climb.nc");
+    let out = there(&dir, &["bury", "climb.nc", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let buried = field(&stdout(&out), "cairn");
+    let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--root", "inner", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let sealed = field(&stdout(&out), "sealed");
+    assert_eq!(stdout(&there(&dir, &["lamp", &sealed])), "denied\n");
 }

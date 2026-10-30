@@ -11,7 +11,7 @@ status: draft
 Pick up where [chapter 4](04-the-grant.md) left off:
 
 ```console
-$ nether exhume 4fc5e660 --grant disk
+$ nether exhume 4fc5e660 --grant disk --root .
   ①  read("who.txt")  →  6 bytes  4395a792
 sealed   4fc5e660 + 4395a792 → f03489d0   depth 3   holes 0
 ```

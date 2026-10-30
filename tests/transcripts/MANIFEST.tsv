@@ -9,7 +9,7 @@ site/src/index.html § The first program #1	hello.nc	pinned	11d370eae3fd608a
 site/src/index.html § The first program #2	console	checked	7f9a7bf849a83e2b
 site/src/index.html § The Orpheus rule #1	c	pinned	9c06d713f8f79db4
 site/src/index.html § The Orpheus rule #2	console	checked	b95c9f3eb611ad61
-site/src/index.html § What a hole is #1	console	checked	cfa0b6847cb3c4ea
+site/src/index.html § What a hole is #1	console	checked	a4ba4858ca078d1e
 site/src/index.html § Where it actually is #1	console	checked	d838eaf97e53718b
 spec/00-overview.md § 0.7 A first program #1	c	pinned	d92d2096e7e25092
 spec/00-overview.md § 0.7 A first program #2	console	checked	7f9a7bf849a83e2b
@@ -45,7 +45,7 @@ spec/06-evaluation.md § 6.1 Burial #1	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md § 6.1 Burial #2	console	checked	f0456e0a140e8d99
 spec/06-evaluation.md § 6.2 Demand #1	c	pinned	32047b898ae2a1c0
 spec/06-evaluation.md § 6.4 Starvation and fuel #1	text	pinned	07c9e60510dab9cc
-spec/06-evaluation.md § 6.6 Exhumation #1	console	checked	2eabda973722523e
+spec/06-evaluation.md § 6.6 Exhumation #1	console	checked	61e4082650fb0f96
 spec/06-evaluation.md § 6.7 Replay #1	console	checked	48b4f4a335379799
 spec/06-evaluation.md § 6.8 What burial prints #1	text	pinned	a39449193e40ee44
 spec/07-ledger.md § 7.2 Cairns #1	text	pinned	ef8410b2b1784b2f
@@ -85,9 +85,9 @@ docs/manual/03-the-hole.md § The hole #3	console	checked	4968c59d1b7089ba
 docs/manual/03-the-hole.md § Burial has no world #1	console	checked	8b4ecbf0adaa6321
 docs/manual/03-the-hole.md § Burial has no world #2	console	checked	e5645553497d4c89
 docs/manual/04-the-grant.md § The grant #1	console	checked	76412f28ea64649f
-docs/manual/04-the-grant.md § The grant #2	console	checked	34879260aaf1312b
+docs/manual/04-the-grant.md § The grant #2	console	checked	127cde526edf2ec2
 docs/manual/04-the-grant.md § The grant #3	console	checked	278228f105b15dcf
-docs/manual/05-the-witness.md § The witness #1	console	checked	34879260aaf1312b
+docs/manual/05-the-witness.md § The witness #1	console	checked	127cde526edf2ec2
 docs/manual/05-the-witness.md § The witness #2	console	checked	b5b628b09d204d01
 docs/manual/05-the-witness.md § Reading it back #1	console	checked	eb470e4a8f20ee02
 docs/manual/05-the-witness.md § Reading it back #2	console	checked	fb816a6cad20f70f
@@ -97,7 +97,7 @@ docs/manual/06-two-worlds.md § Two worlds #3	console	checked	f3122f27d42756a6
 docs/manual/06-two-worlds.md § Two worlds #4	console	checked	5eb9561e8e2c2240
 docs/manual/06-two-worlds.md § Two worlds #5	console	checked	48d3193268a19137
 docs/manual/06-two-worlds.md § Two worlds #6	console	checked	404080528c2d338b
-docs/manual/07-the-replay.md § The replay #1	console	checked	f2a8df5eeaa9935d
+docs/manual/07-the-replay.md § The replay #1	console	checked	9073b28479e185f3
 docs/manual/08-the-orpheus-rule.md § The Orpheus rule #1	c	pinned	ece8d8c71c722bbe
 docs/manual/08-the-orpheus-rule.md § The Orpheus rule #2	console	checked	b95c9f3eb611ad61
 docs/manual/08-the-orpheus-rule.md § Where it bites in practice #1	c	pinned	e6717adb0284a676
