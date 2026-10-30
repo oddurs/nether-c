@@ -420,11 +420,10 @@ fn a_lamp_on_a_trace_shows_what_the_program_left_behind() {
 }
 
 #[test]
-fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
-    // §8.4: "source order" is by offset within one source, and a trace may
-    // hold more than one. Sorting on the offset alone put the second file's
-    // first deposit between the first file's two, which is an order
-    // corresponding to nothing anybody wrote.
+fn deposits_are_read_in_the_order_the_trace_holds_them() {
+    // §8.4: the list is the order they were made in, across sources. This
+    // test used to assert that they were grouped by the cairn of their source,
+    // which let a hash decide which half of a program's output came first.
     let dir = scratch("lamp-two-sources");
     let store = Store::open(&dir).expect("a store");
     let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
@@ -438,11 +437,11 @@ fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
         let v = put(Value::Str(format!("{text}\n")));
         node(Node::Deposit { value: v, span: Span { source, start, end: start + 1 } })
     };
-    // Offsets chosen so that sorting on them alone interleaves the two.
+    // Offsets and sources in no order a sort would keep.
     let roots = vec![
-        at(one, 10, "one-a"),
+        at(one, 30, "one-a"),
         at(two, 20, "two-a"),
-        at(one, 30, "one-b"),
+        at(one, 10, "one-b"),
         at(two, 40, "two-b"),
     ];
     let trace = node(Node::Trace {
@@ -460,10 +459,7 @@ fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
     let text = stdout(&out);
     let lines: Vec<&str> = text.lines().collect();
 
-    let first =
-        if one.to_string() < two.to_string() { ["one-a", "one-b"] } else { ["two-a", "two-b"] };
-    let second = if first[0] == "one-a" { ["two-a", "two-b"] } else { ["one-a", "one-b"] };
-    assert_eq!(lines, [first[0], first[1], second[0], second[1]], "{lines:?}");
+    assert_eq!(lines, ["one-a", "two-a", "one-b", "two-b"], "{lines:?}");
 }
 
 #[test]
@@ -1733,4 +1729,37 @@ fn a_build_that_is_not_a_release_does_not_claim_a_version() {
     assert!(said.starts_with("nether "), "{said}");
     assert!(!said.contains("0.0.0"), "a build with no tag is claiming a version: {said}");
     assert!(said.contains("not a release build"), "{said}");
+}
+
+/// §8.4: deposits are read in the order they were made. A comment moves where
+/// the first deposit sits in the source and not where the second sits in the
+/// residue, and the output must not care. 0274.
+#[test]
+fn a_comment_does_not_change_what_lamp_prints_first() {
+    let program = "Str@2 who = must(descend env { env(\"WHO\") });\n\n\
+                   U0 greet()\n{\n  \"Hello,\";\n  who;\n}\n\ndemand greet();\n";
+    let mut read = Vec::new();
+    for header in [
+        String::new(),
+        format!(
+            "// {}
+",
+            "x".repeat(200)
+        ),
+    ] {
+        let dir = scratch("lamp-order");
+        std::fs::write(dir.join("greet.nc"), format!("{header}{program}")).expect("write");
+        let buried = field(&stdout(&there(&dir, &["bury", "greet.nc", "--json"])), "cairn");
+        let out = there(
+            &dir,
+            &["exhume", &buried, "--grant", "env", "--declare", "WHO=world", "--clock", "0"]
+                .into_iter()
+                .chain(["--target", "x86_64-unknown-linux-gnu", "--json"])
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(code(&out), 0, "{}", stderr(&out));
+        read.push(stdout(&there(&dir, &["lamp", &field(&stdout(&out), "sealed")])));
+    }
+    assert!(read[0].starts_with("Hello,"), "{}", read[0]);
+    assert!(read.iter().all(|r| *r == read[0]), "{read:#?}");
 }

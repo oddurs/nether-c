@@ -456,16 +456,16 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##········` 20% · 1 of 5 done
+`####······` 40% · 2 of 5 done
 
 ### unmarked
 
 - [ ] [`0273`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0273-grafting-an-answer-keeps-the-deposits-it-replaced.md) Grafting an answer keeps the deposits it replaced <sup>bug · p1 · 2</sup>
-- [ ] [`0274`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0274-a-comment-changes-what-lamp-prints-first.md) A comment changes what lamp prints first <sup>spec · p1 · 1</sup>
 - [ ] [`0275`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0275-a-trace-that-owes-the-network-calls-itself-pure.md) A trace that owes the network calls itself pure <sup>spec · p0</sup>
 - [ ] [`0276`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0276-nether-world-answers-an-authority-question-with-the-depth-order.md) nether-world answers an authority question with the depth order <sup>bug · p2</sup>
 
 ### buried
 
 - [x] [`0253`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0253-a-bytes-literal-cannot-spell-every-byte.md) A Bytes literal cannot spell every byte <sup>bug · p1 · 0</sup>
+- [x] [`0274`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0274-a-comment-changes-what-lamp-prints-first.md) A comment changes what lamp prints first <sup>spec · p1 · 1</sup>
 

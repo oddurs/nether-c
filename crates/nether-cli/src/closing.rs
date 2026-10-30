@@ -34,7 +34,7 @@ pub fn unrecorded(store: &Store, witnesses: &[Cairn]) -> bool {
     witnesses.iter().any(|w| reached(store, *w) == nether_ledger::MAX_STRATUM)
 }
 
-/// §6.8: what the trace deposited, then what burying its residue deposited.
+/// §8.4: what the trace deposited, then what burying its residue deposited.
 ///
 /// Carried forward the way witnesses are. A deposit is something the program
 /// already did, and a residue is right not to do it again — so a trace that

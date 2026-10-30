@@ -228,16 +228,15 @@ nether lamp <cairn> [--provenance] [--depth <n>] [--json]
 ```
 
 Carries light down. With no flags, renders the value at that cairn — including
-every `Deposit` node in a trace, in source order, which is how a program's
-output is read.
+every `Deposit` node in a trace, in the order they were made, which is how a
+program's output is read.
 
-*Source order* is by offset within one source, and a trace may hold more than
-one. Deposits are therefore grouped by the cairn of the source they were made
-from and ordered by offset within each group, rather than interleaved by
-offset across all of them — which would be an order corresponding to nothing
-anybody wrote. Which group comes first is the order the cairns sort in, because
-a source has no other order: one trace's two sources were never written down in
-a sequence.
+That order is the trace's own deposit list
+([§7.3.1](07-ledger.md#731-node-encoding)). A trace exhumed from another names
+the earlier trace's deposits first and then what burying its residue deposited,
+each in evaluation order, so the list is the order they were made in. `lamp`
+MUST NOT reorder it. Two spellings of one program that make
+the same deposits read the same, whatever their sources' cairns are.
 
 ```console
 $ nether lamp efed9b2a
