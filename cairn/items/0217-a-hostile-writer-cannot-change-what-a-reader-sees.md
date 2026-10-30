@@ -2,12 +2,13 @@
 id: 217
 title: A hostile writer cannot change what a reader sees
 type: chore
-status: unmarked
+status: buried
 milestone: warden
+assignee: Oddur Sigurdsson
 depends_on:
 - 216
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-10-30
 priority: p0
 effort: l
 area: crates/nether-ledger
@@ -37,5 +38,9 @@ Tamper rejection and concurrent writers already have tests. Extend coverage to n
 
 ### Acceptance and evidence
 
-- [ ] A hostile writer can cause refusal but not successful misnamed content. Retain exploit regressions and document availability/resource limits.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] A hostile writer can cause refusal but not successful misnamed content. Retain exploit regressions and document availability/resource limits.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## 2026-10-30
+
+Every read path verifies, including resolve, which returns a name that get() then checks. The one unverified path was referrers(), which believed refs/ edges on the word of their filenames; it now reads each referring node and keeps the edge only if the node names the target. Tests: a forged edge is not a referrer, misnamed bytes are refused however they were found, a reader racing a replacing writer never sees another value. Prefix collisions and oversized objects remain refusals a writer can cause; SECURITY.md boundary 5 says so, and 0219 bounds the cost.
