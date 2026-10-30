@@ -24,12 +24,14 @@ impl Value {
     /// The canonical encoding of this value.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
+        let mut size = Count(0);
+        self.encode_into(&mut size);
+        let mut out = Vec::with_capacity(size.0);
         self.encode_into(&mut out);
         out
     }
 
-    fn encode_into(&self, out: &mut Vec<u8>) {
+    fn encode_into(&self, out: &mut impl Sink) {
         out.push(self.tag());
         match self {
             Self::Unit => {}
@@ -77,8 +79,39 @@ impl Value {
     }
 }
 
+/// Where an encoding goes: into bytes, or only counted.
+///
+/// One traversal writes both, so the size an encoding asks for is the size it
+/// writes by construction rather than by a second function kept in step with
+/// the first. 0202.
+trait Sink {
+    fn push(&mut self, byte: u8);
+    fn extend_from_slice(&mut self, bytes: &[u8]);
+}
+
+impl Sink for Vec<u8> {
+    fn push(&mut self, byte: u8) {
+        Vec::push(self, byte);
+    }
+    fn extend_from_slice(&mut self, bytes: &[u8]) {
+        Vec::extend_from_slice(self, bytes);
+    }
+}
+
+/// A sink that keeps only how much it was given.
+struct Count(usize);
+
+impl Sink for Count {
+    fn push(&mut self, _: u8) {
+        self.0 += 1;
+    }
+    fn extend_from_slice(&mut self, bytes: &[u8]) {
+        self.0 += bytes.len();
+    }
+}
+
 /// Lengths and counts are `u64` big-endian, however small they are.
-fn put_len(out: &mut Vec<u8>, n: usize) {
+fn put_len(out: &mut impl Sink, n: usize) {
     out.extend_from_slice(&(n as u64).to_be_bytes());
 }
 
@@ -88,57 +121,64 @@ impl Node {
     /// The canonical encoding of this node.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
-        let mut out = vec![tag::NODE, self.kind()];
+        let mut size = Count(0);
+        self.encode_into(&mut size);
+        let mut out = Vec::with_capacity(size.0);
+        self.encode_into(&mut out);
+        out
+    }
+
+    fn encode_into(&self, out: &mut impl Sink) {
+        out.extend_from_slice(&[tag::NODE, self.kind()]);
         match self {
-            Self::Literal(value) => value.encode_into(&mut out),
+            Self::Literal(value) => value.encode_into(out),
             Self::Apply { function, args, result } => {
                 out.extend_from_slice(function.as_bytes());
-                put_cairns(&mut out, args);
+                put_cairns(out, args);
                 out.extend_from_slice(result.as_bytes());
             }
             Self::Hole { call, stratum, span } => {
-                put_call(&mut out, call);
+                put_call(out, call);
                 out.push(*stratum);
-                put_span(&mut out, span);
+                put_span(out, span);
             }
             Self::Deposit { value, span } => {
                 out.extend_from_slice(value.as_bytes());
-                put_span(&mut out, span);
+                put_span(out, span);
             }
             Self::Witness { stratum, call, answer, span } => {
                 out.push(*stratum);
-                put_call(&mut out, call);
+                put_call(out, call);
                 out.extend_from_slice(answer.as_bytes());
-                put_span(&mut out, span);
+                put_span(out, span);
             }
             Self::Trace { residue, holes, witnesses, deposits, source, depth, unrecorded } => {
                 out.extend_from_slice(residue.as_bytes());
-                put_cairns(&mut out, holes);
-                put_cairns(&mut out, witnesses);
-                put_cairns(&mut out, deposits);
+                put_cairns(out, holes);
+                put_cairns(out, witnesses);
+                put_cairns(out, deposits);
                 out.extend_from_slice(source.as_bytes());
                 out.push(*depth);
                 out.push(u8::from(*unrecorded));
             }
         }
-        out
     }
 }
 
-fn put_cairns(out: &mut Vec<u8>, cairns: &[Cairn]) {
+fn put_cairns(out: &mut impl Sink, cairns: &[Cairn]) {
     put_len(out, cairns.len());
     for cairn in cairns {
         out.extend_from_slice(cairn.as_bytes());
     }
 }
 
-fn put_span(out: &mut Vec<u8>, span: &Span) {
+fn put_span(out: &mut impl Sink, span: &Span) {
     out.extend_from_slice(span.source.as_bytes());
     out.extend_from_slice(&span.start.to_be_bytes());
     out.extend_from_slice(&span.end.to_be_bytes());
 }
 
-fn put_call(out: &mut Vec<u8>, call: &Call) {
+fn put_call(out: &mut impl Sink, call: &Call) {
     put_len(out, call.function.len());
     out.extend_from_slice(call.function.as_bytes());
     put_cairns(out, &call.args);
@@ -723,6 +763,19 @@ mod tests {
         }
     }
 
+    /// 0202: one allocation. `encode` counts, reserves exactly that, then
+    /// writes, and a `Vec` reallocates only when it would outgrow what it
+    /// reserved, so an encoding that ends at its capacity never reallocated.
+    #[test]
+    fn every_value_is_encoded_into_exactly_what_it_reserved() {
+        let large = Value::Array(vec![Value::Bytes(vec![7; 1 << 16]); 64]);
+        let nested = (0..MAX_DEPTH - 1).fold(Value::Unit, |v, _| Value::Array(vec![v]));
+        for value in sample().into_iter().chain([large, nested]) {
+            let bytes = value.encode();
+            assert_eq!(bytes.capacity(), bytes.len(), "{value:?} reallocated");
+        }
+    }
+
     #[test]
     fn rejects_trailing_bytes() {
         let mut bytes = Value::Unit.encode();
@@ -828,6 +881,15 @@ mod node_tests {
         for node in sample() {
             let bytes = node.encode();
             assert_eq!(decode_node(&bytes).unwrap().encode(), bytes);
+        }
+    }
+
+    /// 0202, for every node kind. See the value test of the same shape.
+    #[test]
+    fn every_node_is_encoded_into_exactly_what_it_reserved() {
+        for node in sample() {
+            let bytes = node.encode();
+            assert_eq!(bytes.capacity(), bytes.len(), "{node:?} reallocated");
         }
     }
 
