@@ -456,7 +456,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##········` 20% · 1 of 5 done
+`####······` 33% · 2 of 6 done
 
 ### unmarked
 
@@ -468,4 +468,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 ### buried
 
 - [x] [`0253`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0253-a-bytes-literal-cannot-spell-every-byte.md) A Bytes literal cannot spell every byte <sup>bug · p1 · 0</sup>
+- [x] [`0277`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0277-setup-overwrites-the-roadmap-schema.md) Setup overwrites the roadmap schema <sup>bug · p1</sup>
 
