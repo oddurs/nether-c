@@ -363,7 +363,7 @@ Adoption work has several independent tracks. This is not one serial implementat
 
 ## quickening — The Quickening
 
-`###·······` 25% · 2 of 8 done · due 2027-12-01
+`####······` 38% · 3 of 8 done · due 2027-12-01
 
 Evidence-led performance work with canonical results and fuel semantics preserved. Existing interpreter step budgets are a starting point, not a whole-system benchmark.
 
@@ -375,12 +375,9 @@ Evidence-led performance work with canonical results and fuel semantics preserve
 - [ ] [`0202`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0202-encoding-allocates-once.md) Encoding allocates once <sup>chore · p2 · 0</sup>
 - [ ] [`0203`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0203-a-fuel-budget-that-means-something.md) A fuel budget that means something <sup>spec · p2 · 0</sup>
 
-### descending
-
-- [ ] [`0200`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0200-burying-twice-does-no-work-the-second-time.md) Burying twice does no work the second time <sup>feature · p0 · 1</sup>
-
 ### buried
 
+- [x] [`0200`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0200-burying-twice-does-no-work-the-second-time.md) Burying twice does no work the second time <sup>feature · p0 · 1</sup>
 - [x] [`0241`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0241-make-the-pr-path-fast-and-enforce-its-boundaries.md) Make the PR path fast and enforce its boundaries <sup>chore · p2 · 0</sup>
 - [x] [`0242`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0242-harden-interpreter-literal-and-call-boundaries.md) Harden interpreter literal and call boundaries <sup>bug · p2 · 0</sup>
 

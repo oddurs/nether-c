@@ -213,6 +213,9 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
                 [str(exe), "bury", program.name],
                 capture_output=True, text=True, cwd=work, env=env,
             )
+        # The documents show a reader's first burial, so what those burials
+        # remembered goes. §8.2.1: losing the memo loses time and nothing else.
+        shutil.rmtree(work / ".nether" / "memo", ignore_errors=True)
 
         for earlier in before:
             for cmd, _ in parse_transcript(earlier.body):

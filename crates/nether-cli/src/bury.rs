@@ -15,6 +15,7 @@ use nether_core::{Capability, Depth, Diagnostic, check, report};
 use nether_ledger::{Cairn, Node, Store, Stored, Value};
 use nether_syntax::{lower, parse, print};
 
+use crate::memo::Remembered;
 use crate::{FAILED, code, json, usage_error};
 
 /// The budget a burial runs under when nobody says otherwise.
@@ -142,56 +143,73 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
     // rather than a path (§7.3.1), so the name has to exist first.
     let source_cairn = crate::kept(&store, &Stored::Value(Value::Bytes(source.clone())))?;
 
-    let residue = match bury(&unit, source_cairn, fuel) {
-        Ok(residue) => residue,
-        Err(halt) => {
-            complain(&halt.diagnostic());
-            return Err(match halt.kind {
-                // §8.8 gives fuel its own code: it is the one failure a larger
-                // budget might fix.
-                HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
-                _ => FAILED,
-            });
+    // §8.2.1: a burial this implementation already did, within this budget,
+    // is reported and not done again.
+    let memo = crate::memo::Memo::of(source_cairn);
+    let recalled = memo.as_ref().and_then(|m| m.recall(&store, source_cairn, fuel));
+    let remembered = recalled.is_some();
+    let done = if let Some(r) = recalled {
+        r
+    } else {
+        let residue = match bury(&unit, source_cairn, fuel) {
+            Ok(residue) => residue,
+            Err(halt) => {
+                complain(&halt.diagnostic());
+                return Err(match halt.kind {
+                    // §8.8 gives fuel its own code: it is the one failure a
+                    // larger budget might fix.
+                    HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
+                    _ => FAILED,
+                });
+            }
+        };
+
+        // Everything burial named, then the residue as source, then the trace.
+        // Nothing was written until now: burial holds no capability at all,
+        // and writing to a store is stratum 1.
+        for (_, stored) in &residue.named {
+            crate::kept(&store, stored)?;
         }
+        let printed = print(&residue.as_unit(&unit));
+        let residue_cairn =
+            crate::kept(&store, &Stored::Value(Value::Bytes(printed.into_bytes())))?;
+
+        // Burial holds no capability, so nothing was answered and there are no
+        // witnesses. §6.6: exhumation is what records one.
+        let witnesses: Vec<Cairn> = Vec::new();
+        let depth = crate::closing::depth(&store, residue.depth.get(), &residue.holes, &witnesses);
+        let trace = Node::Trace {
+            residue: residue_cairn,
+            holes: residue.holes.clone(),
+            unrecorded: crate::closing::unrecorded(&store, &witnesses),
+            depth,
+            witnesses,
+            deposits: residue.deposits.clone(),
+            source: source_cairn,
+        };
+        let trace = crate::kept(&store, &Stored::Node(trace))?;
+        let done = Remembered { trace, steps: residue.fuel_spent, nodes: residue.named.len() + 2 };
+        if let Some(memo) = &memo {
+            memo.record(&done);
+        }
+        done
     };
 
-    // Everything burial named, then the residue as source, then the trace.
-    // Nothing was written until now: burial holds no capability at all, and
-    // writing to a store is stratum 1.
-    let mut written = 0usize;
-    for (_, stored) in &residue.named {
-        crate::kept(&store, stored)?;
-        written += 1;
-    }
-
-    let printed = print(&residue.as_unit(&unit));
-    let residue_cairn = crate::kept(&store, &Stored::Value(Value::Bytes(printed.into_bytes())))?;
-
-    // Burial holds no capability, so nothing was answered and there are no
-    // witnesses. §6.6: exhumation is what records one.
-    let witnesses: Vec<Cairn> = Vec::new();
-    let depth = crate::closing::depth(&store, residue.depth.get(), &residue.holes, &witnesses);
-
-    let trace = Node::Trace {
-        residue: residue_cairn,
-        holes: residue.holes.clone(),
-        unrecorded: crate::closing::unrecorded(&store, &witnesses),
-        depth,
-        witnesses,
-        deposits: residue.deposits.clone(),
-        source: source_cairn,
+    // Read back rather than carried, so a remembered burial and a fresh one
+    // are reported by one path from one place: the trace.
+    let Ok(Stored::Node(Node::Trace { residue, holes, depth, .. })) = store.get(done.trace) else {
+        return Err(FAILED);
     };
-    let trace_cairn = crate::kept(&store, &Stored::Node(trace))?;
-
     let told = Buried {
         path: path.display().to_string(),
-        cairn: trace_cairn,
-        residue: residue_cairn,
+        cairn: done.trace,
+        residue,
         source: source_cairn,
         depth,
-        holes: residue.holes.clone(),
-        nodes: written + 2,
-        fuel_spent: residue.fuel_spent,
+        holes,
+        nodes: done.nodes,
+        fuel_spent: done.steps,
+        remembered,
     };
     if wants_json {
         println!("{}", told.json(&store));
@@ -216,17 +234,21 @@ struct Buried {
     /// What this burial spent. §8.2: reported by the rite, and not recorded in
     /// the trace, because a trace holding it could not be replayed (§6.7).
     fuel_spent: u64,
+    /// §8.2.1: whether the rite remembered this burial rather than doing it.
+    /// The steps are the burial's either way.
+    remembered: bool,
 }
 
 impl Buried {
     fn text(&self, store: &Store) -> String {
         let mut out = format!(
-            "buried   {} → {}   depth {}   holes {}   {} nodes\n",
+            "buried   {} → {}   depth {}   holes {}   {} nodes{}\n",
             self.path,
             self.cairn.short(),
             self.depth,
             self.holes.len(),
-            self.nodes
+            self.nodes,
+            if self.remembered { "   remembered" } else { "" }
         );
         for (n, hole) in self.holes.iter().enumerate() {
             let numeral = circled(n + 1);
@@ -266,10 +288,11 @@ impl Buried {
             self.source
         );
         format!(
-            "{{{named},\"depth\":{},\"nodes\":{},\"fuel_spent\":{},\"holes\":[{}]}}",
+            "{{{named},\"depth\":{},\"nodes\":{},\"fuel_spent\":{},\"remembered\":{},\"holes\":[{}]}}",
             self.depth,
             self.nodes,
             self.fuel_spent,
+            self.remembered,
             holes.join(",")
         )
     }

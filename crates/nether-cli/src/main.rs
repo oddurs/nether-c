@@ -10,6 +10,7 @@ mod exhume;
 mod graft;
 mod json;
 mod lamp;
+mod memo;
 mod strata;
 
 use std::path::PathBuf;
@@ -50,9 +51,12 @@ fn usage_error() -> ExitCode {
 /// not need to: where a store sits changes nothing about what is in it, and a
 /// trace means the same thing wherever it was written.
 fn ledger() -> Result<Store, std::io::Error> {
-    let root =
-        std::env::var_os("NETHER_STORE").map_or_else(|| PathBuf::from(".nether"), PathBuf::from);
-    Store::open(root)
+    Store::open(store_root())
+}
+
+/// Where the store is: `NETHER_STORE`, or `.nether` beside the work.
+fn store_root() -> PathBuf {
+    std::env::var_os("NETHER_STORE").map_or_else(|| PathBuf::from(".nether"), PathBuf::from)
 }
 
 /// Put it in the ledger, or say why it would not go.

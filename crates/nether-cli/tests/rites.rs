@@ -329,9 +329,11 @@ fn a_budget_that_did_not_bind_did_not_change_the_trace() {
     std::fs::write(&src, include_str!("../../../tests/programs/build.nc")).expect("write");
     let path = src.to_str().expect("utf8");
 
-    let plenty = stdout(&nether(Some(&dir), &["bury", path, "--fuel", "1000000"]));
-    let fewer = stdout(&nether(Some(&dir), &["bury", path, "--fuel", "999999"]));
-    assert_eq!(plenty, fewer, "a budget neither burial reached changed the trace");
+    // The trace and not the line: the second burial is remembered (§8.2.1),
+    // and saying so is a fact about the invocation, not the trace.
+    let plenty = stdout(&nether(Some(&dir), &["bury", path, "--fuel", "1000000", "--json"]));
+    let fewer = stdout(&nether(Some(&dir), &["bury", path, "--fuel", "999999", "--json"]));
+    assert_eq!(field(&plenty, "cairn"), field(&fewer, "cairn"), "a budget changed the trace");
 }
 
 /// §6.4: running out of fuel is a diagnostic, and §8.8 gives it its own code.
@@ -1938,4 +1940,51 @@ fn a_long_sum_in_a_residue_exhumes() {
     let buried = field(&stdout(&there(&dir, &["bury", "sum.nc", "--json"])), "cairn");
     let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--root", ".", "--json"]);
     assert_eq!(code(&out), 0, "{}", stderr(&out));
+}
+
+// ── §8.2.1 burying what is already buried ───────────────────────────────────
+
+fn steps(said: &str) -> u64 {
+    let at = said.find("\"fuel_spent\":").expect("fuel_spent") + "\"fuel_spent\":".len();
+    said[at..].split(|c: char| !c.is_ascii_digit()).next().and_then(|n| n.parse().ok()).expect("n")
+}
+
+#[test]
+fn burying_twice_remembers_and_reports_the_same_burial() {
+    let dir = a_build("memo-twice");
+    let first = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    let again = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    assert!(first.contains("\"remembered\":false"), "{first}");
+    assert!(again.contains("\"remembered\":true"), "{again}");
+    assert_eq!(field(&first, "cairn"), field(&again, "cairn"));
+    // The steps are what the burial costs, so they agree with a cold one.
+    assert_eq!(steps(&first), steps(&again));
+}
+
+#[test]
+fn a_budget_below_the_remembered_steps_runs_out_where_a_cold_burial_does() {
+    let dir = a_build("memo-fuel");
+    let first = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    let less = (steps(&first) - 1).to_string();
+    let out = there(&dir, &["bury", "build.nc", "--fuel", &less]);
+    assert_eq!(code(&out), 75, "{}", stdout(&out));
+    assert!(stderr(&out).contains(&format!("after {less} steps")), "{}", stderr(&out));
+}
+
+#[test]
+fn a_memo_that_is_gone_or_wrong_costs_time_and_nothing_else() {
+    let dir = a_build("memo-lost");
+    let first = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    std::fs::remove_dir_all(dir.join(".nether").join("memo")).expect("the memo");
+    let fresh = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    assert!(fresh.contains("\"remembered\":false"), "{fresh}");
+    assert_eq!(field(&first, "cairn"), field(&fresh, "cairn"));
+
+    // An entry naming a trace that is not there is stale, and the rite buries.
+    let memo = dir.join(".nether").join("memo");
+    let entry = std::fs::read_dir(&memo).expect("memo").next().expect("one").expect("entry");
+    std::fs::write(entry.path(), format!("{} 1 1\n", "0".repeat(64))).expect("spoil it");
+    let after = stdout(&there(&dir, &["bury", "build.nc", "--json"]));
+    assert!(after.contains("\"remembered\":false"), "{after}");
+    assert_eq!(field(&first, "cairn"), field(&after, "cairn"));
 }
