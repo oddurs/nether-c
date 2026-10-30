@@ -132,6 +132,14 @@ time:
 - **It writes nothing new.** Everything the trace names is already in the store,
   or the first rule refused the entry.
 
+Burying §8.2's program a second time:
+
+```console
+$ nether bury build.nc
+buried   build.nc → 76c4b655   depth 3   holes 1   4 nodes   remembered
+  hole ①  read("main.nc")                stratum 3  disk
+```
+
 Burial still holds no capability. Reading a memo is the rite consulting its own
 index before it buries, the way writing the trace afterwards is the rite and not
 the program; the program asks the same questions of the same world either way,
