@@ -78,7 +78,7 @@ jobs:
       - name: Build the binary
         run: |
           export NETHER_VERSION="${GITHUB_REF_NAME#v}"
-          cargo build --release --locked --bin nether --target ${{ matrix.target }}
+          scripts/task release:build ${{ matrix.target }}
 
       # Asked of the artifact rather than of the build that made it. Both
       # strings are exact and neither can appear by accident: one is the
@@ -115,9 +115,43 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
+  # 0221: the binary is reproducible, and this is where that is checked rather
+  # than claimed. A second runner, with no cache from the first, builds the
+  # same commit the same way and must get the same bytes the build job shipped.
+  reproduce:
+    name: reproduce x86_64-unknown-linux-gnu
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the pinned toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add x86_64-unknown-linux-gnu
+
+      - name: Build it again
+        run: |
+          export NETHER_VERSION="${GITHUB_REF_NAME#v}"
+          scripts/task release:build x86_64-unknown-linux-gnu
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: nether-x86_64-unknown-linux-gnu
+          path: shipped
+
+      - name: The same bytes
+        run: |
+          tar -xzf shipped/*.tar.gz -C shipped
+          a=$(shasum -a 256 shipped/*/nether | cut -d' ' -f1)
+          b=$(shasum -a 256 target/x86_64-unknown-linux-gnu/release/nether | cut -d' ' -f1)
+          echo "shipped $a"
+          echo "rebuilt $b"
+          [ "$a" = "$b" ] || { echo "::error::the binary did not reproduce"; exit 1; }
+
   publish:
     name: publish
-    needs: [check, build]
+    needs: [check, build, reproduce]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
