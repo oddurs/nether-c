@@ -499,6 +499,7 @@ fn sample() -> Unit {
             },
         ],
         demands: vec![Demand { value: call, span: span() }],
+        locals: Vec::new(),
     }
 }
 

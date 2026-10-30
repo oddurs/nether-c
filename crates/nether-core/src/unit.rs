@@ -23,6 +23,9 @@ pub struct Unit {
     pub globals: Vec<GlobalDef>,
     /// The demands, in source order, which is the order they are evaluated in.
     pub demands: Vec<Demand>,
+    /// What unit-level code binds: a block inside a global's value or a
+    /// demand may declare locals, and a function keeps its own. 0280.
+    pub locals: Vec<LocalDef>,
 }
 
 impl Unit {
@@ -30,6 +33,12 @@ impl Unit {
     #[must_use]
     pub fn func(&self, id: FuncId) -> Option<&FuncDef> {
         self.funcs.get(id.0 as usize)
+    }
+
+    /// A local unit-level code binds.
+    #[must_use]
+    pub fn local(&self, id: LocalId) -> Option<&LocalDef> {
+        self.locals.get(id.0 as usize)
     }
 
     /// The unit-level binding that id names.

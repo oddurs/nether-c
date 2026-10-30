@@ -451,11 +451,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`#########·` 88% · 7 of 8 done
-
-### unmarked
-
-- [ ] [`0280`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0280-a-binding-inside-a-global-s-initialiser-is-called-malformed.md) A binding inside a global's initialiser is called malformed <sup>bug · p2 · 0</sup>
+`##########` 100% · 8 of 8 done
 
 ### buried
 
@@ -466,4 +462,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0276`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0276-nether-world-answers-an-authority-question-with-the-depth-order.md) nether-world answers an authority question with the depth order <sup>bug · p2</sup>
 - [x] [`0277`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0277-setup-overwrites-the-roadmap-schema.md) Setup overwrites the roadmap schema <sup>bug · p1</sup>
 - [x] [`0278`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0278-7-3-1-states-the-hole-list-twice-two-ways.md) §7.3.1 states the hole list twice, two ways <sup>spec · p1</sup>
+- [x] [`0280`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0280-a-binding-inside-a-global-s-initialiser-is-called-malformed.md) A binding inside a global's initialiser is called malformed <sup>bug · p2 · 0</sup>
 

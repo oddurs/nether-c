@@ -252,7 +252,9 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
         needs: None,
     };
     // A unit-level binding may name one declared before it and not one
-    // declared after, so declaration order is checking order.
+    // declared after, so declaration order is checking order. Unit-level code
+    // binds into the unit's frame, as a body binds into its function's.
+    c.unit_frame();
     for g in &unit.globals {
         let derived = c.expr(&g.value, Held::NONE);
         c.globals.push(derived);
@@ -263,6 +265,7 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
         c.func(f);
     }
     // [DEMAND] keeps the depth and throws the value away: `demand e : U0@d`.
+    c.unit_frame();
     for d in &unit.demands {
         c.expr(&d.value, Held::NONE);
     }
@@ -428,7 +431,7 @@ impl<'a> Checker<'a> {
             Some(slot) => *slot = Some(depth),
             None => self.malformed(span, "this binding names no local"),
         }
-        if let Some(l) = self.func.and_then(|f| f.local(id)) {
+        if let Some(l) = self.func.map_or_else(|| self.unit.local(id), |f| f.local(id)) {
             let (span, asserted) = (l.span, l.asserted);
             self.asserted(span, depth, asserted, blame);
         }
@@ -445,6 +448,12 @@ impl<'a> Checker<'a> {
     /// The ambient depth it is checked at does not matter, because the ambient
     /// depth gates premises and nothing else: no derived depth depends on it.
     /// So the body is walked once, at 0, collecting what it asks for.
+    fn unit_frame(&mut self) {
+        self.func = None;
+        self.locals = vec![None; self.unit.locals.len()];
+        self.named = vec![None; self.unit.locals.len()];
+    }
+
     fn func(&mut self, f: &'a FuncDef) {
         self.func = Some(f);
         self.locals = vec![None; f.locals.len()];

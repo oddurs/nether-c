@@ -128,6 +128,7 @@ impl Residue {
             structs: buried.structs.clone(),
             funcs,
             globals: buried.globals.clone(),
+            locals: buried.locals.clone(),
             demands: self
                 .demands
                 .iter()
@@ -416,7 +417,7 @@ fn burrow(unit: &Unit, source: Cairn, fuel: u64, answers: &Answers) -> Result<Re
     // In source order, which §6.2 fixes: two burials of the same input produce
     // the same trace, and that includes the order things were discovered in.
     for d in &unit.demands {
-        let v = match b.expr(&d.value, &mut Vec::new()) {
+        let v = match b.expr(&d.value, &mut vec![None; unit.locals.len()]) {
             Ok(v) => v,
             Err(halt) => return Err(b.blame(halt)),
         };
@@ -969,7 +970,13 @@ impl Burial<'_> {
         let Some(g) = self.unit.global(id) else {
             return Ok(Self::stuck(x));
         };
-        let v = self.expr(&g.value, &mut Vec::new())?;
+        // Unit-level code has a frame of its own, as a function does. 0280.
+        let v = self.expr(&g.value, &mut vec![None; self.unit.locals.len()])?;
+        // In a unit whose top level binds locals, a value that did not finish
+        // is the binding's name and not a copy of its expression: the residue
+        // keeps every binding, and a copy would carry those locals into a
+        // function's frame, where their ids name something else.
+        let v = if v.is_stuck() && !self.unit.locals.is_empty() { Self::stuck(x) } else { v };
         if let Some(slot) = self.globals.get_mut(id.0 as usize) {
             *slot = Some(v.clone());
         }
