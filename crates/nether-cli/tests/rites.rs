@@ -1919,3 +1919,23 @@ fn a_path_that_climbs_out_of_the_root_is_denied() {
     let sealed = field(&stdout(&out), "sealed");
     assert_eq!(stdout(&there(&dir, &["lamp", &sealed])), "denied\n");
 }
+
+/// §6.5: a residue is a program, so one that holds an expression longer than
+/// the nesting limit allows still has to be read back in. It printed one
+/// parenthesis per operator, and a flat 80-term sum came back 79 deep. 0279.
+#[test]
+fn a_long_sum_in_a_residue_exhumes() {
+    let dir = a_build("long-sum");
+    let sum = vec!["x"; 80].join(" + ");
+    std::fs::write(
+        dir.join("sum.nc"),
+        format!(
+            "U0 f(I64 x)\n{{\n  {sum};\n}}\n\n\
+             I64@3 n = len(must(descend disk {{ read(\"main.nc\") }}));\ndemand f(n);\n"
+        ),
+    )
+    .expect("sum.nc");
+    let buried = field(&stdout(&there(&dir, &["bury", "sum.nc", "--json"])), "cairn");
+    let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--root", ".", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+}

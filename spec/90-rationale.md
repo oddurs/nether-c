@@ -1185,6 +1185,33 @@ which. And `refused` sits one letter from `refusal`, which is the inspector
 pointing the other way; the types differ, so the typo is caught rather than
 believed.
 
+### Parenthesising every expression a residue prints
+
+`print`, which writes a residue back out as source
+([§6.5](06-evaluation.md#65-residue)), used to wrap every operator in
+parentheses. The reasoning was that the round trip is about meaning, and a
+printer that leaned on [§4.6](04-grammar.md#46-precedence)'s table to rebuild
+the shape would prove the table rather than lowering. It also added a level of
+nesting the source never had for every operator it printed, and
+[§6.4](06-evaluation.md#64-starvation-and-fuel)'s limit on nesting reads the
+printed form like any other. A flat sum of 80 terms buried, and its residue
+came back 79 parentheses deep and could never be exhumed.
+
+The alternative considered was to keep the principle and stop the damage:
+print a left-nested chain of one operator as one parenthesised run. Rejected
+because it is the precedence table again, used for associativity only, and it
+fixes the chain while leaving every other way an expression can be long.
+
+The printer now parenthesises a child only when its level is looser than its
+place allows, and reads the levels from the table the parser climbs. Minimal
+parentheses never nest deeper than the source that lowered, so what lowers
+prints as something that lowers, and the fuzzer holds that over every input.
+
+**What it cost.** The round trip now depends on the printer and the parser
+agreeing about §4.6. They read one table, so they cannot disagree by drifting,
+but a wrong table is now wrong in both places at once, and the round trip
+cannot see it. §4.6's own proof, which compares the table with §04, is what
+catches that.
 ### Burial that holds the store
 
 [§8.2.1](08-rites.md#821-burying-what-is-already-buried) lets `bury` remember

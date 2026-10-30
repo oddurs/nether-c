@@ -215,7 +215,7 @@ demand c;
 
 ```console
 $ nether bury owed.nc
-buried   owed.nc → 044d6d32   depth 5   holes 1   4 nodes
+buried   owed.nc → 8baa0677   depth 5   holes 1   4 nodes
   hole ①  get("https://example.invalid/x") stratum 5  net
 ```
 
