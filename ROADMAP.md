@@ -354,7 +354,7 @@ Adoption work has several independent tracks. This is not one serial implementat
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
 
-### descending
+### starved
 
 - [ ] [`0104`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0104-an-introduction-somebody-could-learn-from.md) An introduction somebody could learn from <sup>docs · p1</sup>
 
@@ -456,7 +456,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`####······` 40% · 2 of 5 done
+`######····` 57% · 4 of 7 done
 
 ### unmarked
 
@@ -468,4 +468,6 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 - [x] [`0253`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0253-a-bytes-literal-cannot-spell-every-byte.md) A Bytes literal cannot spell every byte <sup>bug · p1 · 0</sup>
 - [x] [`0276`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0276-nether-world-answers-an-authority-question-with-the-depth-order.md) nether-world answers an authority question with the depth order <sup>bug · p2</sup>
+- [x] [`0277`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0277-setup-overwrites-the-roadmap-schema.md) Setup overwrites the roadmap schema <sup>bug · p1</sup>
+- [x] [`0278`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0278-7-3-1-states-the-hole-list-twice-two-ways.md) §7.3.1 states the hole list twice, two ways <sup>spec · p1</sup>
 
