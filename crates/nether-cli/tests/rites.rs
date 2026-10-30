@@ -1988,3 +1988,37 @@ fn a_memo_that_is_gone_or_wrong_costs_time_and_nothing_else() {
     assert!(after.contains("\"remembered\":false"), "{after}");
     assert_eq!(field(&first, "cairn"), field(&after, "cairn"));
 }
+
+// ── unit-level locals ───────────────────────────────────────────────────────
+
+/// A global's value is an expression, and an expression may be a block that
+/// binds. The checker used to call that malformed IR. 0280.
+#[test]
+fn a_binding_inside_a_global_buries() {
+    let dir = a_build("unit-local");
+    std::fs::write(
+        dir.join("g.nc"),
+        "Bytes g = { Bytes s = b\"hi\"; concat(s, s) };\n\nU0 f() { g; }\n\ndemand f();\n",
+    )
+    .expect("g.nc");
+    let out = there(&dir, &["bury", "g.nc", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert_eq!(stdout(&there(&dir, &["lamp", &field(&stdout(&out), "cairn")])), "hihi\n");
+}
+
+/// And when it starves, its residue still reads back and exhumes: the stuck
+/// binding stays a name rather than carrying its locals into a function.
+#[test]
+fn a_starved_global_that_binds_exhumes() {
+    let dir = a_build("unit-local-hole");
+    std::fs::write(
+        dir.join("h.nc"),
+        "I64@3 n = len(must(descend disk { Bytes p = b\"x\"; read(\"main.nc\") }));\n\n\
+         U0 f() { n; }\n\ndemand f();\n",
+    )
+    .expect("h.nc");
+    let buried = field(&stdout(&there(&dir, &["bury", "h.nc", "--json"])), "cairn");
+    let out = there(&dir, &["exhume", &buried, "--grant", "disk", "--root", ".", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(stdout(&out).contains("\"holes\":0"), "{}", stdout(&out));
+}

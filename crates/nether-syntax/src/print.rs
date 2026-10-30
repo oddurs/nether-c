@@ -15,8 +15,8 @@
 use core::fmt::Write as _;
 
 use nether_core::{
-    Asserted, BinOp, Block, Expr, ExprKind, FuncDef, Literal, LocalId, Proj, Rite, Stmt, Type,
-    UnOp, Unit,
+    Asserted, BinOp, Block, Expr, ExprKind, FuncDef, Literal, LocalDef, LocalId, Proj, Rite, Stmt,
+    Type, UnOp, Unit,
 };
 
 use crate::parse::LEVELS;
@@ -109,8 +109,13 @@ fn indent(depth: usize) -> String {
     "  ".repeat(depth)
 }
 
-fn local_name(f: Option<&FuncDef>, id: LocalId) -> String {
-    f.and_then(|f| f.local(id)).map_or_else(|| format!("«local {}»", id.0), |l| l.name.clone())
+/// A local, from the function it is in or, outside one, from the unit. 0280.
+fn local<'u>(unit: &'u Unit, f: Option<&'u FuncDef>, id: LocalId) -> Option<&'u LocalDef> {
+    f.map_or_else(|| unit.local(id), |f| f.local(id))
+}
+
+fn local_name(unit: &Unit, f: Option<&FuncDef>, id: LocalId) -> String {
+    local(unit, f, id).map_or_else(|| format!("«local {}»", id.0), |l| l.name.clone())
 }
 
 fn block(b: &Block, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
@@ -128,7 +133,7 @@ fn block(b: &Block, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
 fn stmt(s: &Stmt, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
     match s {
         Stmt::Let { local, value } => {
-            let def = f.and_then(|f| f.local(*local));
+            let def = self::local(unit, f, *local);
             let (t, name) = def.map_or_else(
                 || ("U0".to_string(), format!("«local {}»", local.0)),
                 |d| (declared(&d.ty, d.asserted), d.name.clone()),
@@ -138,7 +143,7 @@ fn stmt(s: &Stmt, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
         // A declaration with no value, which is how an aggregate is built. It
         // has to print back as one or a residue stops round-tripping. §6.5.
         Stmt::Declare { local } => {
-            let def = f.and_then(|f| f.local(*local));
+            let def = self::local(unit, f, *local);
             let (t, name) = def.map_or_else(
                 || ("U0".to_string(), format!("«local {}»", local.0)),
                 |d| (declared(&d.ty, d.asserted), d.name.clone()),
@@ -247,7 +252,7 @@ fn bare(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
     let at = |e: &Expr, allowed: u8| within(e, allowed, unit, f);
     match &x.kind {
         ExprKind::Literal(l) => literal(l),
-        ExprKind::Local(id) => local_name(f, *id),
+        ExprKind::Local(id) => local_name(unit, f, *id),
         ExprKind::Global(id) => {
             unit.global(*id).map_or_else(|| format!("«global {}»", id.0), |g| g.name.clone())
         }
@@ -272,8 +277,8 @@ fn bare(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
         }
         ExprKind::Index { base, index } => format!("{}[{}]", at(base, POSTFIX), go(index)),
         ExprKind::Assign { place, value } => {
-            let mut out = local_name(f, place.local);
-            let mut ty_of = f.and_then(|f| f.local(place.local)).map(|l| l.ty.clone());
+            let mut out = local_name(unit, f, place.local);
+            let mut ty_of = local(unit, f, place.local).map(|l| l.ty.clone());
             for p in &place.path {
                 match p {
                     Proj::Field(i) => {

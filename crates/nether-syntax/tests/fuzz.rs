@@ -68,6 +68,7 @@ fn corpus() -> Vec<Vec<u8>> {
             "struct P { I64 x; I64 y; }\ntypedef P Q;\nU0 g() { Q q; q.x = 1; q.y = q.x; }\n",
             "Shade<Bytes> s = descend net { shade must(get(\"https://example.invalid/\")) };\n",
             "U0 h() @{3,5} { opaque { 1; } }\n",
+            "Bytes g = { Bytes s = b\"hi\"; concat(s, s) };\ndemand { I64 k = 2; k };\n",
         ]
         .map(|s| s.as_bytes().to_vec()),
     );
