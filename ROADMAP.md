@@ -44,13 +44,9 @@ Buried. The front page declares rather than explains: nine doctrine passages, ea
 
 ## codex — The Codex
 
-`##########` 97% · 31 of 32 done · due 2026-10-15
+`##########` 100% · 32 of 32 done · due 2026-10-15
 
 Buried. Twelve specification sections, every design question settled and every rejected alternative recorded in 90.2, every code sample a fixture in tests/transcripts, and the Decay Rule proven by a pull request that was refused. Only one claim in the specification is frozen: there is no run.
-
-### unmarked
-
-- [ ] [`0266`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0266-decide-whether-the-prelude-gains-an-answer-constructor.md) Decide whether the prelude gains an Answer constructor <sup>spec · p1 · 0</sup>
 
 ### buried
 
@@ -84,6 +80,7 @@ Buried. Twelve specification sections, every design question settled and every r
 - [x] [`0262`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0262-spec-the-disk-is-the-one-bounded-capability-the-invocation-cannot-bound.md) Spec: the disk is the one bounded capability the invocation cannot bound <sup>spec · p1 · 0</sup>
 - [x] [`0263`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0263-spec-a-program-can-inspect-an-answer-and-cannot-build-one.md) Spec: a program can inspect an Answer and cannot build one <sup>spec · p2 · 0</sup>
 - [x] [`0264`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0264-bury-an-act-repeated-from-one-span-is-one-hole.md) bury: an act repeated from one span is one hole <sup>bug · p1 · 0</sup>
+- [x] [`0266`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0266-decide-whether-the-prelude-gains-an-answer-constructor.md) Decide whether the prelude gains an Answer constructor <sup>spec · p1 · 0</sup>
 - [x] [`0268`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0268-spec-the-overview-no-longer-describes-the-document.md) Spec: the overview no longer describes the document <sup>spec · p1 · 0</sup>
 
 ## lamp — The Lamp
@@ -224,11 +221,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## world — The World
 
-`##########` 95% · 19 of 20 done · due 2027-05-15
-
-### unmarked
-
-- [ ] [`0265`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0265-exhume-root-and-no-default-for-it.md) exhume: --root, and no default for it <sup>feature · p1 · 4</sup>
+`##########` 100% · 20 of 20 done · due 2027-05-15
 
 ### buried
 
@@ -251,6 +244,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 - [x] [`0175`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0175-what-a-foreign-call-looks-like-from-the-other-side.md) What a foreign call looks like from the other side <sup>spec · p0 · 8</sup>
 - [x] [`0176`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0176-the-stratum-8-proof-builds-one-object-into-one-path-from-five-tests.md) The stratum-8 proof builds one object into one path from five tests <sup>bug · p0 · 8</sup>
 - [x] [`0180`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0180-a-program-can-write-headers-of-its-own-into-a-request-net-sends.md) A program can write headers of its own into a request net sends <sup>bug · p0 · 6</sup>
+- [x] [`0265`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0265-exhume-root-and-no-default-for-it.md) exhume: --root, and no default for it <sup>feature · p1 · 4</sup>
 
 ## necropolis — The Necropolis
 
@@ -354,7 +348,7 @@ Adoption work has several independent tracks. This is not one serial implementat
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
 
-### descending
+### starved
 
 - [ ] [`0104`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0104-an-introduction-somebody-could-learn-from.md) An introduction somebody could learn from <sup>docs · p1</sup>
 
@@ -457,16 +451,15 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##········` 20% · 1 of 5 done
-
-### unmarked
-
-- [ ] [`0273`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0273-grafting-an-answer-keeps-the-deposits-it-replaced.md) Grafting an answer keeps the deposits it replaced <sup>bug · p1 · 2</sup>
-- [ ] [`0274`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0274-a-comment-changes-what-lamp-prints-first.md) A comment changes what lamp prints first <sup>spec · p1 · 1</sup>
-- [ ] [`0275`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0275-a-trace-that-owes-the-network-calls-itself-pure.md) A trace that owes the network calls itself pure <sup>spec · p0</sup>
-- [ ] [`0276`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0276-nether-world-answers-an-authority-question-with-the-depth-order.md) nether-world answers an authority question with the depth order <sup>bug · p2</sup>
+`##########` 100% · 7 of 7 done
 
 ### buried
 
 - [x] [`0253`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0253-a-bytes-literal-cannot-spell-every-byte.md) A Bytes literal cannot spell every byte <sup>bug · p1 · 0</sup>
+- [x] [`0273`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0273-grafting-an-answer-keeps-the-deposits-it-replaced.md) Grafting an answer keeps the deposits it replaced <sup>bug · p1 · 2</sup>
+- [x] [`0274`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0274-a-comment-changes-what-lamp-prints-first.md) A comment changes what lamp prints first <sup>spec · p1 · 1</sup>
+- [x] [`0275`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0275-a-trace-that-owes-the-network-calls-itself-pure.md) A trace that owes the network calls itself pure <sup>spec · p0</sup>
+- [x] [`0276`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0276-nether-world-answers-an-authority-question-with-the-depth-order.md) nether-world answers an authority question with the depth order <sup>bug · p2</sup>
+- [x] [`0277`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0277-setup-overwrites-the-roadmap-schema.md) Setup overwrites the roadmap schema <sup>bug · p1</sup>
+- [x] [`0278`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0278-7-3-1-states-the-hole-list-twice-two-ways.md) §7.3.1 states the hole list twice, two ways <sup>spec · p1</sup>
 
