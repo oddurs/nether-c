@@ -313,7 +313,7 @@ Conservative completion of the font system: preserve regular glyph work and curr
 
 ## futamura — Self-Burial
 
-`#######···` 63% · 5 of 8 done · due 2027-09-01
+`#######···` 67% · 6 of 9 done · due 2027-09-01
 
 Given a due date so the roadmap orders correctly against After the Burial. It is a target on a roadmap, not a promise: the third projection is the one claim here that might turn out to be false, and if it does it closes as unrecorded, in public.
 
@@ -321,7 +321,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 - [ ] [`0081`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0081-the-second-projection.md) The second projection <sup>feature · p2 · 0</sup>
 - [ ] [`0082`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0082-the-third-projection.md) The third projection <sup>feature · p2 · 0</sup>
-- [ ] [`0270`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0270-bury-reduce-under-an-undecided-branch.md) bury: reduce under an undecided branch <sup>feature · p1 · 0</sup>
+- [ ] [`0281`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0281-reduce-past-a-statement-that-starved.md) Reduce past a statement that starved <sup>spec · p1 · 0</sup>
 
 ### buried
 
@@ -330,6 +330,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [x] [`0240`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0240-give-the-interpreter-a-memory.md) Give the interpreter a memory <sup>feature · p1 · 5</sup>
 - [x] [`0251`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0251-decide-whether-an-untaken-arm-may-be-reduced.md) Decide whether an untaken arm may be reduced <sup>spec · p1 · 0</sup>
 - [x] [`0252`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0252-burial-specialises-a-starved-call.md) Burial specialises a starved call <sup>feature · p1 · 0</sup>
+- [x] [`0270`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0270-bury-reduce-under-an-undecided-branch.md) bury: reduce under an undecided branch <sup>feature · p1 · 0</sup>
 
 ## after — After the Burial
 
@@ -363,7 +364,7 @@ Adoption work has several independent tracks. This is not one serial implementat
 
 ## quickening — The Quickening
 
-`#####·····` 50% · 4 of 8 done · due 2027-12-01
+`#######···` 63% · 5 of 8 done · due 2027-12-01
 
 Evidence-led performance work with canonical results and fuel semantics preserved. Existing interpreter step budgets are a starting point, not a whole-system benchmark.
 
@@ -371,13 +372,13 @@ Evidence-led performance work with canonical results and fuel semantics preserve
 
 - [ ] [`0198`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0198-benchmark-burial-and-fail-the-build-when-it-slows.md) Benchmark burial, and fail the build when it slows <sup>chore · p0 · 0</sup>
 - [ ] [`0199`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0199-profile-a-real-burial-and-say-where-the-time-goes.md) Profile a real burial and say where the time goes <sup>chore · p0 · 0</sup>
-- [ ] [`0202`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0202-encoding-allocates-once.md) Encoding allocates once <sup>chore · p2 · 0</sup>
 - [ ] [`0203`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0203-a-fuel-budget-that-means-something.md) A fuel budget that means something <sup>spec · p2 · 0</sup>
 
 ### buried
 
 - [x] [`0200`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0200-burying-twice-does-no-work-the-second-time.md) Burying twice does no work the second time <sup>feature · p0 · 1</sup>
 - [x] [`0201`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0201-the-store-s-read-path-does-not-go-to-disk-twice.md) The store's read path does not go to disk twice <sup>feature · p1 · 1</sup>
+- [x] [`0202`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0202-encoding-allocates-once.md) Encoding allocates once <sup>chore · p2 · 0</sup>
 - [x] [`0241`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0241-make-the-pr-path-fast-and-enforce-its-boundaries.md) Make the PR path fast and enforce its boundaries <sup>chore · p2 · 0</sup>
 - [x] [`0242`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0242-harden-interpreter-literal-and-call-boundaries.md) Harden interpreter literal and call boundaries <sup>bug · p2 · 0</sup>
 
