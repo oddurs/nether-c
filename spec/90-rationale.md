@@ -1090,6 +1090,24 @@ next is not a literal.
 will read as a preprocessor directive for as long as anyone remembers what one
 was.
 
+### Deposits in source order
+
+[§8.4](08-rites.md#84-lamp) used to render deposits grouped by the cairn of the
+source they came from, ordered by offset within each group, on the reasoning
+that a trace's sources were never written down in a sequence. They were: a
+sealed trace's deposit list is the order the deposits were made in, and the
+sort threw it away. Its key began with thirty-two bytes of hash, so which half of a
+program's output came first was decided by a digest, and a comment added to the
+top of a file reordered what `lamp` printed.
+
+Ordering by offset within one source looked like the safe half and was the
+same mistake one level down. A function called from two places deposits in
+call order from one span, and offset cannot tell those apart.
+
+**What it cost.** Nothing that was true. A reader who wanted the deposits of one
+source together, in the order the text has them, now has to ask for that
+rather than getting it by default — and nothing asks, because a program's
+output is read in the order it was made.
 ### Grafting an answer that was already given
 
 [§8.7](08-rites.md#87-graft) used to accept an answer the trace had already

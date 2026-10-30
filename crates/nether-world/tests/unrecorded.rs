@@ -86,7 +86,8 @@ fn foreign_code_is_called_and_what_it_said_is_recorded() {
         AnswerOf::Given(Value::Bytes(b"HELLO THERE".to_vec()))
     );
     assert_eq!(a.world.depth(), Depth::UNRECORDED);
-    assert!(a.world.holds(Capability::Entropy), "§1.1 is a total order");
+    assert!(a.world.holds(Capability::Unrecorded));
+    assert!(!a.world.holds(Capability::Entropy), "calling out is drawing random bytes");
 }
 
 #[test]
