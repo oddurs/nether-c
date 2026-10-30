@@ -79,7 +79,8 @@ fn fetch_node_gives_back_the_encoding_and_has_node_a_plain_bool() {
 fn the_store_capability_is_stratum_one() {
     let a = Asked::granting("store-depth", Box::new(Ledger));
     assert_eq!(a.world.depth(), Depth::STORE);
-    assert!(!a.world.holds(nether_core::Capability::Env), "§1.1 is a total order");
+    assert!(a.world.holds(nether_core::Capability::Store));
+    assert!(!a.world.holds(nether_core::Capability::Env), "reading the ledger is reading env");
 }
 
 // ── §9.4 env ────────────────────────────────────────────────────────────────

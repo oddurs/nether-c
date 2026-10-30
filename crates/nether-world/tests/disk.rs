@@ -173,12 +173,13 @@ fn removing_something_that_is_not_there_is_absent() {
 }
 
 #[test]
-fn a_deeper_grant_answers_a_shallower_question() {
-    // §1.1's total order, and [DESCEND] raising the ambient to what was
-    // granted: `descend disk! { read(...) }` is stratum 3 within stratum 4.
+fn the_disk_write_provider_answers_reads_too() {
+    // Granting `disk!` is not granting `disk`: authority is a set, §2.1. It
+    // reads because the provider handed over for `disk!` answers `read`, and
+    // not because 3 is less than 4.
     let a = Asked::new("deeper", true);
     assert!(a.world.holds(Capability::DiskWrite));
-    assert!(a.world.holds(Capability::Disk), "disk! does not reach disk");
+    assert!(!a.world.holds(Capability::Disk), "a grant of disk! is a grant of disk");
     assert!(!a.world.holds(Capability::Net), "disk! reaches the network");
 
     std::fs::write(a.root.join("main.nc"), b"x").expect("a file");
