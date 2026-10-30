@@ -688,6 +688,8 @@ g("⊢", "#.......", "#.......", "#.......", "#####...",
              "#.......", "#.......", "#.......", "........")
 g("①", "........", ".####...", "#..#.#..", "#..#.#..",
              "#..#.#..", ".####...", "........", "........")
+g("②", "........", ".####...", "#.##.#..", "#..#.#..",
+             "#.##.#..", ".####...", "........", "........")
 g("─", "........", "........", "........", "........",
              "######..", "........", "........", "........")
 g("■", "........", "######..", "######..", "######..",
@@ -716,12 +718,12 @@ g("⟶", "........", "........", "........", "....#...",
 # synthetic bold cannot do: it smears every glyph sideways and `M` comes out
 # of it a filled square.
 #
-# Twenty-two glyphs are the same drawing at both weights. Blocks and box
+# Twenty-three glyphs are the same drawing at both weights. Blocks and box
 # drawing rule listings and headings that have to join whatever the text
 # around them weighs, and the rest have no room in six columns for a second
 # pixel anywhere.
 
-SAME = frozenset("*^_`m~«»×…′ₙ≡⊕①─└█■▸⟨⟩")
+SAME = frozenset("*^_`m~«»×…′ₙ≡⊕①②─└█■▸⟨⟩")
 
 B: dict[str, tuple[str, ...]] = {}
 

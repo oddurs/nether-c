@@ -90,6 +90,76 @@ evaluation of a node begins. Two burials of the same source and the same
 capabilities MUST produce the same trace, and a trace that holds the order
 cannot do that while the order is anyone's business.
 
+### 6.2.1 Burying in parallel
+
+The order above is the order a trace records, not an order evaluation has to
+happen in. An implementation MAY evaluate on several threads, out of order, or
+ahead of need, on one condition:
+
+> **Serial equivalence.** A parallel burial MUST leave exactly the trace the
+> order above would, and where that order would halt, it MUST halt with the
+> same diagnostic at the same place.
+
+What that fixes, because each is part of a trace or of what a burial reports:
+
+- **Holes**, in the order the serial evaluation discovered them, and for a
+  shared question the span of the place that asked it first ([§6.3](#63-holes)).
+- **Deposits**, in the order they were made ([§8.4](08-rites.md#84-lamp)).
+- **Witnesses**, in the order the world answered ([§6.6](#66-exhumation)).
+- **The halt.** If the serial order would collapse before it ran out of fuel,
+  the burial collapses there; if it would run out first, it runs out at the
+  step the serial order would have reached ([§6.4](#64-starvation-and-fuel)).
+  A collapse found ahead of need on another thread is not one the program
+  reached until the serial order reaches it.
+- **The steps.** The rite reports the steps the serial order spends, whatever
+  the threads spent between them.
+
+What is free:
+
+- Pure work in any order, on any thread, including work that is thrown away.
+  Evaluating ahead of need is §6.5's speculation by another name, and the same
+  three refusals keep it invisible: it forms no hole, deposits nothing and
+  collapses nothing until the serial order commits to it.
+- The order objects reach the store. A store is a set
+  ([§7.5](07-ledger.md#75-the-store)), and two writes of one object are one.
+
+Nothing that reaches the world is free. A burial holds no capability, and
+`exhume` asks the world in the order its holes are recorded; asking two at once
+is a matter for [§6.6](#66-exhumation), not for this section.
+
+```c
+// order.nc — the order a burial leaves, which a parallel one must leave too.
+// spec/06-evaluation.md §6.2.1.
+//
+// `b` is declared first and `a` is asked for first, so the holes are in the
+// order the demand reached them and not the order they were written. The
+// deposits are in demand order, with a starved demand between them.
+Bytes@3 b = must(descend disk { read("b.txt") });
+Bytes@3 a = must(descend disk { read("a.txt") });
+
+U0 first() { "one\n"; }
+U0 second() { "two\n"; }
+
+demand first();
+demand concat(a, b);
+demand second();
+```
+
+```console
+$ nether bury order.nc
+buried   order.nc → 22644e59   depth 3   holes 2   10 nodes
+  hole ①  read("a.txt")                  stratum 3  disk
+  hole ②  read("b.txt")                  stratum 3  disk
+$ nether lamp 22644e59
+one
+two
+```
+
+`b` is declared first and `a` is asked for first, so `a` is hole ①. The
+deposits are in demand order, with a demand that starved between them. A
+parallel burial that discovered `b` first, or deposited `two` first, has
+written a different trace.
+
 ## 6.3 Holes
 
 A **hole** is a suspended world-question. An implementation MUST record, for
