@@ -313,7 +313,7 @@ Conservative completion of the font system: preserve regular glyph work and curr
 
 ## futamura — Self-Burial
 
-`#######···` 63% · 5 of 8 done · due 2027-09-01
+`#######···` 67% · 6 of 9 done · due 2027-09-01
 
 Given a due date so the roadmap orders correctly against After the Burial. It is a target on a roadmap, not a promise: the third projection is the one claim here that might turn out to be false, and if it does it closes as unrecorded, in public.
 
@@ -321,7 +321,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 - [ ] [`0081`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0081-the-second-projection.md) The second projection <sup>feature · p2 · 0</sup>
 - [ ] [`0082`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0082-the-third-projection.md) The third projection <sup>feature · p2 · 0</sup>
-- [ ] [`0270`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0270-bury-reduce-under-an-undecided-branch.md) bury: reduce under an undecided branch <sup>feature · p1 · 0</sup>
+- [ ] [`0281`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0281-reduce-past-a-statement-that-starved.md) Reduce past a statement that starved <sup>spec · p1 · 0</sup>
 
 ### buried
 
@@ -330,6 +330,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 - [x] [`0240`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0240-give-the-interpreter-a-memory.md) Give the interpreter a memory <sup>feature · p1 · 5</sup>
 - [x] [`0251`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0251-decide-whether-an-untaken-arm-may-be-reduced.md) Decide whether an untaken arm may be reduced <sup>spec · p1 · 0</sup>
 - [x] [`0252`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0252-burial-specialises-a-starved-call.md) Burial specialises a starved call <sup>feature · p1 · 0</sup>
+- [x] [`0270`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0270-bury-reduce-under-an-undecided-branch.md) bury: reduce under an undecided branch <sup>feature · p1 · 0</sup>
 
 ## after — After the Burial
 
@@ -426,6 +427,9 @@ A stated trust model and tested defenses across current entrypoints, not just th
 - [ ] [`0217`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0217-a-hostile-writer-cannot-change-what-a-reader-sees.md) A hostile writer cannot change what a reader sees <sup>chore · p0 · 4</sup>
 - [ ] [`0219`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0219-a-bound-on-every-path-that-reads-a-stranger-s-bytes.md) A bound on every path that reads a stranger's bytes <sup>chore · p1 · 0</sup>
 - [ ] [`0220`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0220-a-trace-s-claims-are-checkable-by-somebody-who-does-not-trust-it.md) A trace's claims are checkable by somebody who does not trust it <sup>feature · p1 · 1</sup>
+
+### descending
+
 - [ ] [`0221`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0221-build-the-binary-reproducibly.md) Build the binary reproducibly <sup>chore · p2 · 4</sup>
 
 ### buried
