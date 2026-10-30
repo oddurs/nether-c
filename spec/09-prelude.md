@@ -120,7 +120,7 @@ demand report();
 ```
 
 ```console
-$ nether lamp c7bb7baa
+$ nether lamp 0909a5ab
 n
 nothing there
 ```

@@ -249,7 +249,7 @@ renders one line per entry, so a loop that deposits on every turn reads as the
 program wrote it rather than as the ledger stored it:
 
 ```console
-$ nether lamp 570b6de4
+$ nether lamp cbd2ade7
 tick
 tick
 tick

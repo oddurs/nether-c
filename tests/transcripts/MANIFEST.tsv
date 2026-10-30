@@ -50,7 +50,7 @@ spec/06-evaluation.md § 6.7 Replay #1	console	checked	48b4f4a335379799
 spec/06-evaluation.md § 6.8 What burial prints #1	text	pinned	a39449193e40ee44
 spec/07-ledger.md § 7.2 Cairns #1	text	pinned	ef8410b2b1784b2f
 spec/07-ledger.md § 7.3.2 What a decoder cannot check #1	c	pinned	99f2b4a37918eaad
-spec/07-ledger.md § 7.3.2 What a decoder cannot check #2	console	checked	ac0d031ae27f9a0e
+spec/07-ledger.md § 7.3.2 What a decoder cannot check #2	console	checked	b141b789d32c34fd
 spec/07-ledger.md § 7.5 The store #1	text	pinned	ebd628943dfe60de
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
 spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
@@ -58,7 +58,7 @@ spec/08-rites.md § 8.2 `bury` #2	console	checked	50d0f77ea2722fdb
 spec/08-rites.md § 8.3 `exhume` #1	text	pinned	08c22655fc9eb98b
 spec/08-rites.md § 8.4 `lamp` #1	text	pinned	2111624617db0431
 spec/08-rites.md § 8.4 `lamp` #2	console	checked	b0b2566108b96d04
-spec/08-rites.md § 8.4 `lamp` #3	console	checked	fcab9af3c5828177
+spec/08-rites.md § 8.4 `lamp` #3	console	checked	c48a751344b43026
 spec/08-rites.md § 8.4 `lamp` #4	console	checked	3b0f86d7d76eae6c
 spec/08-rites.md § 8.5 `cairn` #1	text	pinned	a0f5b8eab441d74a
 spec/08-rites.md § 8.6 `strata` #1	text	pinned	f2bdddcccdc852aa
@@ -67,7 +67,7 @@ spec/08-rites.md § 8.7 `graft` #1	text	pinned	f9ddf95151d63ade
 spec/09-prelude.md § 9.2 Depth 0 #1	signatures	pinned	bca58628903ed8fd
 spec/09-prelude.md § 9.2 Depth 0 #2	c	pinned	67bb7c58077b7645
 spec/09-prelude.md § 9.2 Depth 0 #3	c	pinned	0a3acbdfff0272bc
-spec/09-prelude.md § 9.2 Depth 0 #4	console	checked	16120fe72724f29b
+spec/09-prelude.md § 9.2 Depth 0 #4	console	checked	aa29dfec68b0a944
 spec/09-prelude.md § 9.2 Depth 0 #5	console	checked	cf959abe75e3616c
 spec/09-prelude.md § 9.3 Stratum 1 — `store` #1	signatures	pinned	480f7d18349a56f5
 spec/09-prelude.md § 9.4 Stratum 2 — `env` #1	signatures	pinned	ea824054bc313eff

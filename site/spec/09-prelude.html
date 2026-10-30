@@ -108,7 +108,7 @@ Answer&lt;<span class="t">Bytes</span>&gt; first(<span class="t">Bytes</span> b)
   <span class="k">if</span> (refusal(none) == absent) { <span class="s">&quot;nothing there\n&quot;</span>; }
 }
 
-<span class="k">demand</span> report();</code></pre></figure><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> c7bb7baa
+<span class="k">demand</span> report();</code></pre></figure><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> 0909a5ab
 n
 nothing there</code></pre></figure><p><code>answered</code> takes its <code>T</code> from its argument, the way the three inspectors do. <code>refused</code> has no <code>T</code> to take: a refusal is a code and nothing else. It takes the one it is declared into, so it MUST be the whole value of a binding or a <code>return</code> whose declared type is an <code>Answer</code>. Anywhere else it is an error, because anywhere else nothing says what it is a refusal <em>of</em>:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">bury</span> unlanded.nc
 <span class="e">error:</span> expected a declared `Answer&lt;T&gt;` for `refused`
