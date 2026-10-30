@@ -104,35 +104,29 @@ fn take(store: &Store, trace: Cairn, replace: Cairn, with: Cairn, wants_json: bo
             grafted += 1;
         }
     }
-    // Or an answer the trace was already given, which is the other thing a
-    // cairn here could name.
-    for (call, said) in told.all() {
-        if said.cairn() == replace {
-            answers = answers.and(call.clone(), instead.clone());
-            grafted += 1;
-        }
-    }
-    // The trace has to name what answered it, and after a graft that is the
-    // witness that recorded the substitute — §7.4's reverse index is how a
-    // value finds the node that produced it.
-    // The trace has to name what answered it, and after a graft that is
-    // whatever recorded the substitute — §7.4's reverse index is how a value
-    // finds the node that produced it. A substitute nothing witnessed means
-    // nobody was ever told it, and then there is no witness to name.
-    let recorded = witnessing(store, with);
-    let mut witnesses: Vec<Cairn> = witnesses
-        .iter()
-        .map(|w| if answered_by(store, *w) == Some(replace) { recorded.unwrap_or(*w) } else { *w })
-        .collect();
-    if let Some(w) = recorded {
-        if !witnesses.contains(&w) {
-            witnesses.push(w);
-        }
+    // §8.7: a graft replaces a hole. An answer the trace was already given has
+    // been consumed, and what it produced is in the trace's deposits rather
+    // than its residue, so burying the residue again could not change it.
+    if told.all().any(|(_, said)| said.cairn() == replace) {
+        eprintln!("nether: {} was already answered under {}", replace.short(), trace.short());
+        eprintln!("        §8.7: a graft replaces a hole. Graft or exhume the trace that");
+        eprintln!("        still has it.");
+        return FAILED;
     }
     if grafted == 0 {
         eprintln!("nether: {} answers nothing under {}", replace.short(), trace.short());
         eprintln!("        `nether strata {}` says what it was told.", trace.short());
         return FAILED;
+    }
+    // The trace has to name what answered it, and after a graft that is
+    // whatever recorded the substitute — §7.4's reverse index is how a value
+    // finds the node that produced it. A substitute nothing witnessed means
+    // nobody was ever told it, and then there is no witness to name.
+    let mut witnesses = witnesses;
+    if let Some(w) = witnessing(store, with) {
+        if !witnesses.contains(&w) {
+            witnesses.push(w);
+        }
     }
 
     let Ok(Stored::Value(Value::Bytes(text))) = store.get(residue) else {
@@ -209,14 +203,6 @@ fn take(store: &Store, trace: Cairn, replace: Cairn, with: Cairn, wants_json: bo
         print!("{}", told.text());
     }
     ExitCode::SUCCESS
-}
-
-/// What that witness recorded.
-fn answered_by(store: &Store, witness: Cairn) -> Option<Cairn> {
-    match store.get(witness) {
-        Ok(Stored::Node(Node::Witness { answer, .. })) => Some(answer),
-        _ => None,
-    }
 }
 
 /// The witness that recorded that answer, read backwards. §7.4.
