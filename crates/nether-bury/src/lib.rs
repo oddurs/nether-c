@@ -8,4 +8,6 @@
 
 mod bury;
 
-pub use bury::{Answers, Grinding, Halt, HaltKind, MAX_FRAMES, Residue, STACK, bury, bury_with};
+pub use bury::{
+    Answers, Grinding, Halt, HaltKind, MAX_FRAMES, Residue, STACK, bury, bury_on, bury_with,
+};

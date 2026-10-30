@@ -2,12 +2,13 @@
 id: 204
 title: Bury independent demands in parallel
 type: feature
-status: unmarked
+status: buried
 milestone: cortege
+assignee: Oddur Sigurdsson
 depends_on:
 - 209
 created: 2026-09-13
-updated: 2026-09-16
+updated: 2026-10-30
 priority: p0
 effort: l
 area: crates/nether-bury
@@ -45,9 +46,13 @@ Pure concurrency still has observable shared-binding, deposit, hole-span and fue
 
 ### Acceptance and evidence
 
-- [ ] N independent demands actually use N available cores and match the serial cairn. Include concurrency evidence, not just elapsed speedup.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] N independent demands actually use N available cores and match the serial cairn. Include concurrency evidence, not just elapsed speedup.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
 
 ## 2026-09-16
 
 0258 settled the order question against this item: spec/06-evaluation.md §6.2 now specifies evaluation inside a demand as left to right and innermost first, because three sections were already resting on an order a fourth declined to fix -- the hole order in §7.3, the span a shared hole keeps in §6.3, and where a fuel budget runs out in §6.4. A parallel burial therefore has to charge fuel as though it had run sequentially, as well as discovering holes and keeping spans in the serial order. Its proof -- the same cairn as the serial burial -- is unchanged and is now harder to reach honestly, because a budget that binds has to cut in the same place.
+
+## 2026-10-30
+
+Buried on top of c4373b7. Each demand after the first is buried ahead on a worker, from nothing; a burial ahead that reaches a unit-level binding, the world, or a minted function empties its own fuel and is dropped, so only a demand that could not see another is ever kept. The serial thread walks demands in order and keeps an early result only if its steps fit in the fuel left; otherwise, and for any demand no worker has started, it buries that demand itself. Holes, halts and steps are therefore always the serial order's. Evidence: crates/nether-bury/tests/parallel.rs compares 1 thread against 2, 3, 4 and 16 on ten fixtures and a unit mixing independent demands, shared bindings, shared holes, deposits and a collapse, and compares every budget from 0 to past the total; dropping the deposits of an early result, or ignoring the fuel check, each fails it. Concurrency: four independent fib(24) demands under nether bury on a 4-core machine spend 0.37 s CPU in 0.11 s wall (3.5x), cairn b4a2a628 either way. The interpreter bootstrap, whose demands share bindings, is unchanged (2.59 s against 2.5 s release). Limits: a demand that touches a global is never parallel, so most real programs gain nothing yet; and an early result that does not fit the fuel left is work thrown away.
