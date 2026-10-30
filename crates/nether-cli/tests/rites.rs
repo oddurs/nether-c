@@ -1187,6 +1187,26 @@ fn grafting_something_the_trace_never_asked_says_so() {
     assert!(stderr(&out).contains("answers nothing under"), "{}", stderr(&out));
 }
 
+#[test]
+fn grafting_an_answer_already_given_is_refused() {
+    // §8.7: a graft replaces a hole. An answer the trace was given has been
+    // consumed and its deposits are already in the trace, so re-burying the
+    // residue cannot change them. This used to report `1 recomputed` and
+    // return a trace naming the new answer and the old deposits. 0273.
+    let dir = a_build("graft-answered");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let first = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+    std::fs::write(dir.join("main.nc"), b"int main(void) { return 1; }").expect("change it");
+    let second = stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--json"]));
+
+    let (sealed, was, instead) =
+        (field(&first, "sealed"), field(&first, "answer"), field(&second, "answer"));
+    let out = there(&dir, &["graft", &sealed, "--replace", &was, "--with", &instead]);
+    assert_eq!(code(&out), 1, "{}", stdout(&out));
+    assert!(stderr(&out).contains("already answered"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("replaces a hole"), "{}", stderr(&out));
+}
+
 /// A program with something to keep, and a hole to answer.
 const KEEPS: &str = "U0 note()\n{\n  b\"a deposit that happened\";\n}\n\n\
                      Bytes@3 src = must(descend disk { read(\"main.nc\") });\n\n\

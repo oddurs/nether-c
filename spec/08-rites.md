@@ -326,8 +326,15 @@ caught.
 nether graft <cairn> --replace <cairn> --with <cairn> [--json]
 ```
 
-Substitutes a subtrace and re-buries only what changed, which
-[§6.5](06-evaluation.md#65-residue) guarantees is sound.
+Answers a hole differently and re-buries only what changed, which
+[§6.5](06-evaluation.md#65-residue) guarantees is sound. `--replace` names a
+hole the trace still has, and `--with` the value to answer it with.
+
+A graft replaces a hole and nothing else. If `--replace` names an answer the
+trace was already given, `graft` MUST refuse and exit 1: that answer has been
+consumed, what it produced is in the trace's deposits rather than its residue,
+and burying the residue again cannot change them. To answer it differently,
+graft or exhume the trace that still has the hole.
 
 `graft` MUST report how many nodes were reused and how many were recomputed.
 That ratio is the whole argument for content addressing, and a build tool that

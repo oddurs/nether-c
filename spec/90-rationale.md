@@ -1090,6 +1090,27 @@ next is not a literal.
 will read as a preprocessor directive for as long as anyone remembers what one
 was.
 
+### Grafting an answer that was already given
+
+[§8.7](08-rites.md#87-graft) used to accept an answer the trace had already
+been given as a thing to replace. It counted it, reported `1 recomputed`, and
+returned a trace naming the substitute witness beside the deposits the
+original answer produced, because a sealed trace's residue no longer holds the
+work that consumed the answer and re-burying it produces nothing.
+
+The alternative considered was to make it work: re-bury from the trace that
+still had the hole, which is the only thing that can produce the right
+deposits. Rejected because a sealed trace does not name the trace it was
+exhumed from — nothing in [§7.3.1](07-ledger.md#731-node-encoding) points
+backwards — so `graft` would have to search the ledger for a parent, and a
+ledger may hold several or none. Re-burying the source from scratch instead
+would reach a trace with a different residue and a different name from the one
+exhuming the parent would have reached, which is two names for one result.
+
+**What it cost.** A person holding only the sealed trace cannot ask "what if
+this file had said something else" of it. They need the trace from before it
+was answered, which they had, because they exhumed it.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own
