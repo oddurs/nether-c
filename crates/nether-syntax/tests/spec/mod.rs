@@ -7,7 +7,7 @@
 //! in another crate, and says `no entry found for key` when it does. 0137.
 //!
 //! The table below is the one place that says what a sample is. Four proofs
-//! read it: the parser's, depth inference's, lowering's, and the four
+//! read it: the parser's, depth inference's, lowering's, and the five
 //! programs lifted verbatim into `tests/programs/`.
 
 // Four test binaries include this module and each uses part of it.
@@ -61,6 +61,7 @@ pub const SAMPLES: &[(&str, Shape)] = &[
     ("06-evaluation.md § 6.2 Demand #1", Shape::Unit),
     ("07-ledger.md § 7.3.2 What a decoder cannot check #1", Shape::Unit),
     ("09-prelude.md § 9.2 Depth 0 #1", Shape::Statements),
+    ("09-prelude.md § 9.2 Depth 0 #2", Shape::Unit),
     ("90-rationale.md § One number on an arrow #1", Shape::Unit),
 ];
 

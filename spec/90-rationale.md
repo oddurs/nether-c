@@ -1150,6 +1150,40 @@ Counting them *as well* is the only rule both cases agree with.
 so `bury` reads every hole it is about to write back out of the ledger, and a
 trace written before this rule may now be malformed by §8.6 without anything
 about it having changed.
+### A refusal that knows its own type
+
+[§9.2](09-prelude.md#92-depth-0) gives a program `answered` and `refused`.
+`refused(absent)` carries no `T`, and the IR's types have no variables, so it
+takes `T` from the binding or `return` it is the whole value of and is an error
+anywhere else.
+
+Three alternatives were considered.
+
+**No constructors.** Leave every `Answer` to the prelude. Rejected because it
+made `utf8` a pure function that does what no pure program function can, and a
+program that parses had two ways to say no: collapse, which forbids its caller
+from handling anything, or return a `Bool` beside a value, which is the shape
+`Answer` exists to replace.
+
+**Type variables in the IR.** Leave `refused`'s `T` unknown and solve
+for it. Rejected on what it costs: inference is a second type system beside
+the depth calculus, which is eleven rules on purpose, to type one function
+whose `T` is written down a few characters to its left in every program
+anybody would write.
+
+**A type argument.** `refused<Bytes>(absent)`. Rejected because it is new
+syntax for one call, and it says again what the declaration already says.
+
+`answered` alone, without `refused`, was not considered seriously: a program
+that can say yes and not no is worse than one that can say neither.
+
+**What it cost.** `refused` cannot be an argument. `given(refused(absent))`,
+`first(refused(absent))` and a `refused` written as a function's tail value
+with no `return` are all errors, where a language with inference would accept
+them. Each has a one-line rewrite through a declaration, and the error says
+which. And `refused` sits one letter from `refusal`, which is the inspector
+pointing the other way; the types differ, so the typo is caught rather than
+believed.
 
 ### `https`, and the one dependency exception
 

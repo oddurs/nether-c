@@ -724,6 +724,13 @@ impl Burial<'_> {
             (Prim::Given, Kind::Refused(_)) => Some(Self::known(Literal::Bool(false), x)),
             (Prim::Refusal, Kind::Refused(r)) => Some(Self::known(Literal::Refusal(*r), x)),
             (Prim::Refusal, Kind::Answered(_)) => return collapse("this answer was given"),
+            (Prim::Answered, Kind::Known(_)) => {
+                let kind = Kind::Answered(Box::new(answer.clone()));
+                Some(Val { kind, ty: x.ty.clone(), depth: x.depth })
+            }
+            (Prim::Refused, Kind::Known(Literal::Refusal(r))) => {
+                Some(Val { kind: Kind::Refused(*r), ty: x.ty.clone(), depth: x.depth })
+            }
             _ => None,
         })
     }
