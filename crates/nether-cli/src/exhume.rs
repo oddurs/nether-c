@@ -426,7 +426,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     }
     let printed = print(&residue.as_unit(&unit));
     let next_residue = crate::kept(store, &Stored::Value(Value::Bytes(printed.into_bytes())))?;
-    let deepest = crate::closing::depth(store, residue.depth.get(), &recorded);
+    let deepest = crate::closing::depth(store, residue.depth.get(), &residue.holes, &recorded);
     let deeper = Node::Trace {
         residue: next_residue,
         holes: residue.holes.clone(),

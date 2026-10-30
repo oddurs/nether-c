@@ -59,7 +59,7 @@ try {
 <div class="pane-title"><span>The grant</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
 <p class="c">chapter 04 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/04-the-grant.md">edit the source</a></p><h1 id="the-grant"><a href="#the-grant">The grant</a></h1><blockquote><p>One idea: <strong>a capability is given, never ambient.</strong></p></blockquote><p><code>errand.nc</code> asked the disk a question. Answering it is a separate rite, run by a person who decided to answer it, and that rite is <code>exhume</code>.</p><p>Try it with nothing:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660
-unchanged <span class="h">4fc5e660</span>   depth 0   holes 1
+unchanged <span class="h">4fc5e660</span>   depth 3   holes 1
 
 nothing was granted, so nothing was answered. §9.1 names the capability each hole&#x27;s stratum asks for.</code></pre></figure><p><em>Unchanged.</em> Not an error — you asked for the trace to be taken further and it could not be taken anywhere, so it is still itself, and the ledger did not grow.</p><p>Now grant the disk:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk --root .
   ①  read(&quot;who.txt&quot;)  →  6 bytes  <span class="h">4395a792</span>

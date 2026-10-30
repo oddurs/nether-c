@@ -420,11 +420,10 @@ fn a_lamp_on_a_trace_shows_what_the_program_left_behind() {
 }
 
 #[test]
-fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
-    // §8.4: "source order" is by offset within one source, and a trace may
-    // hold more than one. Sorting on the offset alone put the second file's
-    // first deposit between the first file's two, which is an order
-    // corresponding to nothing anybody wrote.
+fn deposits_are_read_in_the_order_the_trace_holds_them() {
+    // §8.4: the list is the order they were made in, across sources. This
+    // test used to assert that they were grouped by the cairn of their source,
+    // which let a hash decide which half of a program's output came first.
     let dir = scratch("lamp-two-sources");
     let store = Store::open(&dir).expect("a store");
     let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
@@ -438,11 +437,11 @@ fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
         let v = put(Value::Str(format!("{text}\n")));
         node(Node::Deposit { value: v, span: Span { source, start, end: start + 1 } })
     };
-    // Offsets chosen so that sorting on them alone interleaves the two.
+    // Offsets and sources in no order a sort would keep.
     let roots = vec![
-        at(one, 10, "one-a"),
+        at(one, 30, "one-a"),
         at(two, 20, "two-a"),
-        at(one, 30, "one-b"),
+        at(one, 10, "one-b"),
         at(two, 40, "two-b"),
     ];
     let trace = node(Node::Trace {
@@ -460,10 +459,7 @@ fn deposits_from_two_sources_are_grouped_and_not_interleaved() {
     let text = stdout(&out);
     let lines: Vec<&str> = text.lines().collect();
 
-    let first =
-        if one.to_string() < two.to_string() { ["one-a", "one-b"] } else { ["two-a", "two-b"] };
-    let second = if first[0] == "one-a" { ["two-a", "two-b"] } else { ["one-a", "one-b"] };
-    assert_eq!(lines, [first[0], first[1], second[0], second[1]], "{lines:?}");
+    assert_eq!(lines, ["one-a", "two-a", "one-b", "two-b"], "{lines:?}");
 }
 
 #[test]
@@ -683,6 +679,59 @@ fn a_trace_that_under_reports_its_own_depth_is_malformed() {
     assert_eq!(code(&out), 65, "{}", stderr(&out));
     assert!(stderr(&out).contains("records depth 3"), "{}", stderr(&out));
     assert!(stdout(&out).contains("read(\"main.nc\")"), "it still says where:\n{}", stdout(&out));
+}
+
+/// §1.5 makes a seal pure, so the residue of a fetch demanded only through one
+/// is at depth 0 — and the trace still owes the network. 0275.
+#[test]
+fn a_trace_that_owes_the_network_is_not_pure() {
+    let dir = scratch("strata-owed");
+    let src = dir.join("owed.nc");
+    std::fs::write(&src, include_str!("../../../tests/programs/owed.nc")).expect("write");
+
+    let out = nether(Some(&dir), &["bury", src.to_str().expect("utf8"), "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let said = stdout(&out);
+    assert!(said.contains("\"depth\":5"), "{said}");
+    let at = said.find("\"cairn\":\"").expect("a cairn") + "\"cairn\":\"".len();
+    let trace = &said[at..at + said[at..].find('"').expect("a closing quote")];
+
+    let out = nether(Some(&dir), &["strata", trace]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(text.starts_with("depth 5   net\n"), "{text}");
+}
+
+#[test]
+fn a_trace_shallower_than_a_hole_it_owes_is_malformed() {
+    // §7.3.2 counts holes toward depth, so §8.6 catches a trace that does not.
+    let dir = scratch("strata-owes-more");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
+    let span = Span { source, start: 0, end: 11 };
+    let url = put(Value::Str("https://example.invalid/x".into()));
+    let call = Call { function: "get".into(), args: vec![url] };
+    let hole = node(Node::Hole { call, stratum: 5, span });
+    let trace = node(Node::Trace {
+        residue: source,
+        holes: vec![hole],
+        witnesses: vec![],
+        deposits: vec![],
+        source,
+        depth: 0,
+        unrecorded: false,
+    });
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 65, "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("records depth 0, and a hole under it owes 5"),
+        "{}",
+        stderr(&out)
+    );
 }
 
 #[test]
@@ -1196,6 +1245,28 @@ fn grafting_something_the_trace_never_asked_says_so() {
     let out = there(&dir, &["graft", &trace, "--replace", &source, "--with", &source]);
     assert_eq!(code(&out), 1, "{}", stderr(&out));
     assert!(stderr(&out).contains("answers nothing under"), "{}", stderr(&out));
+}
+
+#[test]
+fn grafting_an_answer_already_given_is_refused() {
+    // §8.7: a graft replaces a hole. An answer the trace was given has been
+    // consumed and its deposits are already in the trace, so re-burying the
+    // residue cannot change them. This used to report `1 recomputed` and
+    // return a trace naming the new answer and the old deposits. 0273.
+    let dir = a_build("graft-answered");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let first =
+        stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"]));
+    std::fs::write(dir.join("main.nc"), b"int main(void) { return 1; }").expect("change it");
+    let second =
+        stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"]));
+
+    let (sealed, was, instead) =
+        (field(&first, "sealed"), field(&first, "answer"), field(&second, "answer"));
+    let out = there(&dir, &["graft", &sealed, "--replace", &was, "--with", &instead]);
+    assert_eq!(code(&out), 1, "{}", stdout(&out));
+    assert!(stderr(&out).contains("already answered"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("replaces a hole"), "{}", stderr(&out));
 }
 
 /// A program with something to keep, and a hole to answer.
@@ -1750,6 +1821,39 @@ fn a_build_that_is_not_a_release_does_not_claim_a_version() {
     assert!(said.starts_with("nether "), "{said}");
     assert!(!said.contains("0.0.0"), "a build with no tag is claiming a version: {said}");
     assert!(said.contains("not a release build"), "{said}");
+}
+
+/// §8.4: deposits are read in the order they were made. A comment moves where
+/// the first deposit sits in the source and not where the second sits in the
+/// residue, and the output must not care. 0274.
+#[test]
+fn a_comment_does_not_change_what_lamp_prints_first() {
+    let program = "Str@2 who = must(descend env { env(\"WHO\") });\n\n\
+                   U0 greet()\n{\n  \"Hello,\";\n  who;\n}\n\ndemand greet();\n";
+    let mut read = Vec::new();
+    for header in [
+        String::new(),
+        format!(
+            "// {}
+",
+            "x".repeat(200)
+        ),
+    ] {
+        let dir = scratch("lamp-order");
+        std::fs::write(dir.join("greet.nc"), format!("{header}{program}")).expect("write");
+        let buried = field(&stdout(&there(&dir, &["bury", "greet.nc", "--json"])), "cairn");
+        let out = there(
+            &dir,
+            &["exhume", &buried, "--grant", "env", "--declare", "WHO=world", "--clock", "0"]
+                .into_iter()
+                .chain(["--target", "x86_64-unknown-linux-gnu", "--json"])
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(code(&out), 0, "{}", stderr(&out));
+        read.push(stdout(&there(&dir, &["lamp", &field(&stdout(&out), "sealed")])));
+    }
+    assert!(read[0].starts_with("Hello,"), "{}", read[0]);
+    assert!(read.iter().all(|r| *r == read[0]), "{read:#?}");
 }
 
 // ── §8.3.4 `--root` ─────────────────────────────────────────────────────────

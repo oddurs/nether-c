@@ -15,7 +15,7 @@ Try it with nothing:
 
 ```console
 $ nether exhume 4fc5e660
-unchanged 4fc5e660   depth 0   holes 1
+unchanged 4fc5e660   depth 3   holes 1
 
 nothing was granted, so nothing was answered. §9.1 names the capability each hole's stratum asks for.
 ```
