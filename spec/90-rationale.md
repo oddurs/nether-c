@@ -1236,6 +1236,26 @@ trace, and that is a second place the number lives. It is never read except to
 compare with a budget, and an entry that disagrees with the trace it names is
 the same as no entry: the rite buries.
 
+### A newer release that replays older traces
+
+[§0.6.1](00-overview.md#061-what-a-release-promises) promises that an old trace
+can be replayed by the release that wrote it, not by every release after. The
+alternative considered was the stronger promise: each release carries what it
+needs to bury the residues of the ones before it, as a compatibility mode keyed
+on the trace.
+
+Rejected on cost and on honesty. Every semantic change would leave a branch
+behind in the evaluator for as long as old traces exist, which in a ledger
+without garbage collection ([§7.6](07-ledger.md#76-garbage)) is
+forever. And a compatibility mode is a second implementation of the old release
+written by people who have since changed their minds about it, which is a worse
+witness to what the old release did than the old release itself. Reproducible
+builds make the old release recoverable, and recovering it is the honest way to
+ask what it would have done.
+
+**What it cost.** Replaying a trace from two majors ago means fetching and
+running a two-majors-old binary. Somebody who only has the newest release
+cannot do it.
 ### A parallel burial with an order of its own
 
 [§6.2.1](06-evaluation.md#621-burying-in-parallel) requires a parallel burial

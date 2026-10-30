@@ -122,6 +122,51 @@ will see it rather than somewhere they have to think to look.
 Settling one is not the same as knowing they are all settled. A question nobody
 has asked yet leaves no trace here.
 
+### 0.6.1 What a release promises
+
+A trace is a fact about the past: this implementation, given this source and
+these answers, wrote this. A later release of the language cannot make that
+untrue, and it is not asked to keep it *reproducible* by every later
+implementation either. What a trace written by an older release may still claim
+is four things, and each has its own answer.
+
+| A trace written by an older release is | when |
+| --- | --- |
+| **readable** | its domain separator is this implementation's ([§7.7](07-ledger.md#77-versioning)) |
+| **verifiable** — its cairns check | the same: a cairn is checked under the domain it was written in |
+| **replayable** ([§6.7](06-evaluation.md#67-replay)) | by the implementation that wrote it, and by any later one whose burial of that residue is unchanged |
+| **true** | always. Its depth, holes and witnesses say what that implementation did, and nothing later reinterprets them |
+
+Replay is the one that a language change can take away, because a residue is
+source ([§6.5](06-evaluation.md#65-residue)) and replay buries it again. So the
+promise is not that every release replays every old trace. It is that the
+release which wrote one can always be had again: a release binary is built
+reproducibly and its hash published (`scripts/task release:build`), and that
+binary replays its own traces for as long as anybody keeps one.
+
+After 1.0, a release follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+by these rules, layer by layer:
+
+- **Encoding.** Any change to §7.1 or §7.3.1 moves the domain separator, and a
+  moved domain is a **major** release. There is no minor change to a frozen
+  format.
+- **Syntax and meaning.** A change after which a program that buried before
+  buries to a different trace, or no longer lowers, is **major**. A change that
+  only lets more programs lower is **minor**.
+- **Prelude.** Adding a function is **minor**. Changing a function's signature,
+  its stratum, or what it answers is **major**, because a trace's holes name
+  prelude calls and their strata.
+- **Rites.** A flag that changes what a rite writes into the store is
+  **major**. One that changes only what it prints is **minor**, and what it
+  prints in `--json` is part of what it writes for this purpose.
+
+A major release says, in its changelog, which of the four claims above its
+older traces lose, and the rejected alternative to the change goes in
+[§90.2](90-rationale.md#902-rejected-alternatives) as every design decision's
+does. Before 1.0 the draft status above holds and none of this binds; it is
+written down now so that 1.0 is a decision to start keeping it rather than a
+decision about what it says.
+
 ## 0.7 A first program
 
 ```c

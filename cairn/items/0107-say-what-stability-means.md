@@ -2,12 +2,14 @@
 id: 107
 title: Say what stability means
 type: spec
-status: unmarked
+status: buried
 milestone: after
+assignee: Oddur Sigurdsson
+claimed: 2026-10-30
 depends_on:
 - 21
 created: 2026-09-11
-updated: 2026-09-15
+updated: 2026-10-30
 priority: p1
 effort: m
 area: spec/
@@ -40,5 +42,9 @@ The ledger's format promise and the language's draft status are separate. State 
 
 ### Acceptance and evidence
 
-- [ ] A reader can determine the promised treatment of an old trace after a release. The policy names limits and breaking-change procedure; it does not claim 1.0 or compatibility already tested.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] A reader can determine the promised treatment of an old trace after a release. The policy names limits and breaking-change procedure; it does not claim 1.0 or compatibility already tested.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## 2026-10-30
+
+Buried. §0.6.1 states it once. A trace written by an older release is readable and verifiable exactly when its domain separator is this implementation's (§7.7); replayable by the release that wrote it and by any later one whose burial of that residue is unchanged; and true always, because it says what that implementation did. Replay is the claim a language change can take away, since a residue is source and replay buries it again, so the promise is that the writing release can always be had again: release binaries are built reproducibly and hashed (scripts/task release:build, 0221). After 1.0, semver by layer: any encoding change moves the domain and is major; a change that makes a program bury differently or stop lowering is major, one that only lets more lower is minor; adding a prelude function is minor, changing one's signature, stratum or answers is major; a rite flag that changes what is written is major, one that changes only what is printed is minor, with --json counted as written. A major release names in its changelog which of the four claims its older traces lose. §90.2 records the rejected stronger promise, a compatibility mode in every later release. Limits: no illustrative old-domain fixtures were added; §7.7's refusal of a foreign domain is already the implemented behaviour, and before 1.0 none of this binds.
