@@ -27,6 +27,8 @@
 //! 0116.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+use std::sync::{Mutex, mpsc};
 
 use nether_core::{
     BinOp, Block, Capability, Demand, Depth, Diagnostic, Expr, ExprKind, FuncDef, FuncId, GlobalId,
@@ -375,7 +377,25 @@ pub fn bury_with(
     fuel: u64,
     answers: &Answers,
 ) -> Result<Residue, Halt> {
-    let run = || burrow(unit, source, fuel, answers);
+    let cores = std::thread::available_parallelism().map_or(1, usize::from);
+    bury_on(unit, source, fuel, answers, cores)
+}
+
+/// Bury on at most this many threads. §6.2.1 makes the count invisible: one
+/// thread and sixty-four leave the same trace, halt at the same place and
+/// report the same steps. More threads only bury independent demands sooner.
+///
+/// # Errors
+///
+/// As [`bury`].
+pub fn bury_on(
+    unit: &Unit,
+    source: Cairn,
+    fuel: u64,
+    answers: &Answers,
+    threads: usize,
+) -> Result<Residue, Halt> {
+    let run = || Burial::new(unit, source, fuel, answers, false).burrow(threads);
     if cfg!(target_family = "wasm") {
         return run();
     }
@@ -393,47 +413,134 @@ pub fn bury_with(
     })
 }
 
-fn burrow(unit: &Unit, source: Cairn, fuel: u64, answers: &Answers) -> Result<Residue, Halt> {
-    let mut b = Burial {
-        unit,
-        source,
-        left: fuel,
-        spent: 0,
-        globals: vec![None; unit.globals.len()],
-        flow: None,
-        grind: Vec::new(),
-        answers,
-        named: Vec::new(),
-        known: HashSet::new(),
-        holes: Vec::new(),
-        deposits: Vec::new(),
-        asked: HashMap::new(),
-        served: HashMap::new(),
-        specialised: Vec::new(),
-        minted: HashMap::new(),
-        starved: None,
-        speculating: false,
-    };
-    let mut demands = Vec::with_capacity(unit.demands.len());
-    // In source order, which §6.2 fixes: two burials of the same input produce
-    // the same trace, and that includes the order things were discovered in.
-    for d in &unit.demands {
-        let v = match b.expr(&d.value, &mut vec![None; unit.locals.len()]) {
-            Ok(v) => v,
-            Err(halt) => return Err(b.blame(halt)),
-        };
-        demands.push(Burial::residual(v, &d.value));
+/// A demand buried ahead, as [`Burial::early`] leaves it for the serial order;
+/// and, beside each demand, who took it.
+type Handoff =
+    (Vec<Mutex<Option<mpsc::Sender<Option<Residue>>>>>, Vec<mpsc::Receiver<Option<Residue>>>);
+
+impl<'a> Burial<'a> {
+    fn new(unit: &'a Unit, source: Cairn, fuel: u64, answers: &'a Answers, ahead: bool) -> Self {
+        Burial {
+            unit,
+            source,
+            left: fuel,
+            spent: 0,
+            globals: vec![None; unit.globals.len()],
+            flow: None,
+            grind: Vec::new(),
+            answers,
+            named: Vec::new(),
+            known: HashSet::new(),
+            holes: Vec::new(),
+            deposits: Vec::new(),
+            asked: HashMap::new(),
+            served: HashMap::new(),
+            specialised: Vec::new(),
+            minted: HashMap::new(),
+            starved: None,
+            speculating: false,
+            ahead,
+        }
     }
-    let depth = demands.iter().fold(Depth::PURE, |acc, d| acc.join(d.depth));
-    Ok(Residue {
-        demands,
-        specialised: b.specialised,
-        named: b.named,
-        deposits: b.deposits,
-        holes: b.holes,
-        fuel_spent: b.spent,
-        depth,
-    })
+
+    /// Bury every demand, on this thread and up to `threads - 1` others.
+    fn burrow(self, threads: usize) -> Result<Residue, Halt> {
+        // This thread is the serial order's and the rest are workers. The
+        // browser has no threads, and is not made to download the handoff.
+        let workers = threads.min(self.unit.demands.len()).saturating_sub(1);
+        if workers == 0 || cfg!(target_family = "wasm") {
+            return self.demands(None);
+        }
+        let seed = Burial::new(self.unit, self.source, self.left, self.answers, true);
+        let (sent, early): (Vec<_>, Vec<_>) =
+            self.unit.demands.iter().map(|_| mpsc::channel()).unzip();
+        let handoff: Handoff = (sent.into_iter().map(|s| Mutex::new(Some(s))).collect(), early);
+        // The first demand is the serial order's at once, so a worker starts
+        // at the second, and stops when this runs past the last.
+        let next = AtomicUsize::new(1);
+        std::thread::scope(|s| {
+            for _ in 0..workers {
+                let work = || {
+                    loop {
+                        let i = next.fetch_add(1, Relaxed);
+                        let Some(m) = handoff.0.get(i) else { break };
+                        if let Some(tx) = m.lock().ok().and_then(|mut t| t.take()) {
+                            let _ = tx.send(seed.early(i));
+                        }
+                    }
+                };
+                if std::thread::Builder::new().stack_size(STACK).spawn_scoped(s, work).is_err() {
+                    break;
+                }
+            }
+            let out = self.demands(Some(&handoff));
+            next.store(usize::MAX / 2, Relaxed);
+            out
+        })
+    }
+
+    /// One demand buried from nothing, on its own. If it reached nothing
+    /// another demand could have changed, it is what the serial order would
+    /// get, so it may be done first and anywhere. §6.2.1.
+    fn early(&self, i: usize) -> Option<Residue> {
+        let mut b = Burial::new(self.unit, self.source, self.left, self.answers, true);
+        let d = self.unit.demands.get(i)?;
+        let v = b.expr(&d.value, &mut vec![None; self.unit.locals.len()]).ok()?;
+        b.ahead.then(|| b.finish(vec![Self::residual(v, &d.value)]))
+    }
+
+    /// Every demand, in source order, which §6.2 fixes: two burials of the
+    /// same input produce the same trace, and that includes the order things
+    /// were discovered in. A demand some worker took is waited for and kept
+    /// if it fits in the fuel left; any other is buried here, so the serial
+    /// order is what decides every hole, every halt and every step.
+    fn demands(mut self, handoff: Option<&Handoff>) -> Result<Residue, Halt> {
+        let mut demands = Vec::with_capacity(self.unit.demands.len());
+        for (i, d) in self.unit.demands.iter().enumerate() {
+            // Whoever reaches a demand first takes it, so nothing waits on a
+            // demand no worker started.
+            let got = handoff.and_then(|(sent, early)| {
+                let ours = sent.get(i).and_then(|m| m.lock().ok()?.take()).is_some();
+                if ours { None } else { early.get(i)?.recv().ok().flatten() }
+            });
+            match got {
+                Some(e) if e.fuel_spent <= self.left => {
+                    self.left -= e.fuel_spent;
+                    self.spent += e.fuel_spent;
+                    self.named.extend(e.named.into_iter().filter(|(c, _)| self.known.insert(*c)));
+                    self.deposits.extend(e.deposits);
+                    demands.extend(e.demands);
+                }
+                _ => match self.expr(&d.value, &mut vec![None; self.unit.locals.len()]) {
+                    Ok(v) => demands.push(Self::residual(v, &d.value)),
+                    Err(halt) => return Err(self.blame(halt)),
+                },
+            }
+        }
+        Ok(self.finish(demands))
+    }
+
+    fn finish(self, demands: Vec<Expr>) -> Residue {
+        let depth = demands.iter().fold(Depth::PURE, |acc, d| acc.join(d.depth));
+        Residue {
+            demands,
+            specialised: self.specialised,
+            named: self.named,
+            deposits: self.deposits,
+            holes: self.holes,
+            fuel_spent: self.spent,
+            depth,
+        }
+    }
+
+    /// The demand reached something demands share: a unit-level binding, the
+    /// world, or a minted function. Sent ahead, it is no use, so it stops.
+    fn shares(&mut self) {
+        if self.ahead {
+            self.ahead = false;
+            self.left = 0;
+        }
+    }
 }
 
 /// A value, as burial holds one.
@@ -546,6 +653,9 @@ struct Burial<'a> {
     /// Whether this is an arm of a branch the world has not decided. §6.5:
     /// such a reduction may produce a value or stop, and nothing else.
     speculating: bool,
+    /// Whether this is a demand sent ahead of the serial order that has not
+    /// yet reached anything another demand could change. §6.2.1.
+    ahead: bool,
     /// The block the body just starved in, on the way out of [`Burial::block`].
     ///
     /// A side channel because a block's residue is not its value: the value is
@@ -995,6 +1105,7 @@ impl Burial<'_> {
 
     /// A unit-level binding, evaluated once and only if something reaches it.
     fn global(&mut self, id: GlobalId, x: &Expr) -> Result<Val, Halt> {
+        self.shares();
         if let Some(v) = self.globals.get(id.0 as usize).and_then(Clone::clone) {
             return Ok(v);
         }
@@ -1043,6 +1154,7 @@ impl Burial<'_> {
             // §6.5: an undecided arm forms no hole, and does not take an answer
             // either, since taking one moves which answer the next act gets.
             if p.latent() > Depth::PURE && !self.speculating {
+                self.shares();
                 if let Some(args) = values.iter().map(as_value).collect::<Option<Vec<_>>>() {
                     // The arguments are named as values rather than wrapped
                     // in anything. A value has one name, and `seal` of the
@@ -1197,6 +1309,7 @@ impl Burial<'_> {
             return None;
         }
 
+        self.shares();
         let key = Self::constants(args).map(|k| (id, k));
         let found = key.as_ref().and_then(|k| self.minted.get(k)).copied();
         let minted = if let Some(minted) = found {
