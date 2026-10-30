@@ -57,7 +57,8 @@ fn a_draw_is_the_length_asked_for_and_is_recorded_before_it_is_returned() {
     assert_eq!(a.draw(0).expect("nothing is a length").len(), 0);
     assert_eq!(a.draw(32).expect("thirty-two").len(), 32);
     assert_eq!(a.world.depth(), Depth::ENTROPY);
-    assert!(a.world.holds(Capability::Net), "§1.1 is a total order");
+    assert!(a.world.holds(Capability::Entropy));
+    assert!(!a.world.holds(Capability::Net), "drawing bytes is fetching a URL");
 }
 
 #[test]

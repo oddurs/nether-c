@@ -8,7 +8,7 @@ git config core.hooksPath .githooks
 echo "setup: hooks wired to .githooks"
 
 if command -v cairn >/dev/null 2>&1; then
-  cairn init --git --force >/dev/null 2>&1 || true
+  cairn init --git >/dev/null
   echo "setup: cairn merge driver registered"
 else
   echo "setup: cairn is not installed; the roadmap is still readable in ROADMAP.md"
