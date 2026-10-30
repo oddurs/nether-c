@@ -418,13 +418,12 @@ A durable, inspectable store with measured retention costs. Export and integrity
 
 ## warden — The Warden
 
-`######····` 57% · 4 of 7 done · due 2028-07-15
+`########··` 71% · 5 of 7 done · due 2028-07-15
 
 A stated trust model and tested defenses across current entrypoints, not just the decoder.
 
 ### unmarked
 
-- [ ] [`0219`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0219-a-bound-on-every-path-that-reads-a-stranger-s-bytes.md) A bound on every path that reads a stranger's bytes <sup>chore · p1 · 0</sup>
 - [ ] [`0220`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0220-a-trace-s-claims-are-checkable-by-somebody-who-does-not-trust-it.md) A trace's claims are checkable by somebody who does not trust it <sup>feature · p1 · 1</sup>
 
 ### descending
@@ -436,6 +435,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 - [x] [`0216`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0216-write-the-threat-model-down.md) Write the threat model down <sup>docs · p0 · 0</sup>
 - [x] [`0217`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0217-a-hostile-writer-cannot-change-what-a-reader-sees.md) A hostile writer cannot change what a reader sees <sup>chore · p0 · 4</sup>
 - [x] [`0218`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0218-fuzz-every-parser-not-only-the-decoder.md) Fuzz every parser, not only the decoder <sup>chore · p0 · 0</sup>
+- [x] [`0219`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0219-a-bound-on-every-path-that-reads-a-stranger-s-bytes.md) A bound on every path that reads a stranger's bytes <sup>chore · p1 · 0</sup>
 - [x] [`0279`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0279-a-residue-can-print-deeper-than-it-may-be-read.md) A residue can print deeper than it may be read <sup>bug · p1 · 0</sup>
 
 ## assay — The Assay
