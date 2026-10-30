@@ -8,10 +8,12 @@
 //! There is no garbage collection and there is not going to be one. See
 //! `spec/07-ledger.md` §7.6, which also admits that this is a real cost.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::cairn::Cairn;
 use crate::codec::{DecodeError, Stored, decode_stored};
@@ -119,7 +121,27 @@ impl From<io::Error> for StoreError {
 #[derive(Debug, Clone)]
 pub struct Store {
     root: PathBuf,
+    /// What this process has already read and checked, shared by every clone.
+    seen: Arc<Mutex<Seen>>,
 }
+
+/// Objects read, hashed and decoded once, kept for the next `get`. 0201.
+///
+/// Sound for free: the bytes behind a cairn cannot change, so a value checked
+/// once is the value forever, and a later corruption on disk cannot reach a
+/// reader who already has it. Only what checked is kept. An absence or a
+/// corruption is asked about again, because either may be repaired.
+#[derive(Debug, Default)]
+struct Seen {
+    held: HashMap<Cairn, Stored>,
+    bytes: usize,
+    reads: u64,
+}
+
+/// How many encoded bytes `Seen` holds before it starts again. Starting again
+/// is the whole eviction policy: a burial reads its working set, and a bound
+/// that is simple to state is one that is simple to trust.
+const SEEN_BYTES: usize = 64 << 20;
 
 impl Store {
     /// Opens, creating the layout if it is not there.
@@ -132,7 +154,7 @@ impl Store {
         for dir in ["objects", "refs", "tmp"] {
             fs::create_dir_all(root.join(dir))?;
         }
-        Ok(Self { root })
+        Ok(Self { root, seen: Arc::default() })
     }
 
     fn fanned(&self, area: &str, cairn: Cairn) -> PathBuf {
@@ -260,6 +282,15 @@ impl Store {
     /// [`StoreError::Absent`] if nothing is there, [`StoreError::Corrupt`] if
     /// the bytes do not decode or do not hash to the name asked for.
     pub fn get(&self, cairn: Cairn) -> Result<Stored, StoreError> {
+        // Held to look and to keep, not across the read: two threads reading
+        // two objects should not queue for one lock while the disk works.
+        {
+            let mut seen = self.seen();
+            if let Some(stored) = seen.held.get(&cairn) {
+                return Ok(stored.clone());
+            }
+            seen.reads += 1;
+        }
         let path = self.fanned("objects", cairn);
         let bytes = match fs::read(&path) {
             Ok(b) => b,
@@ -270,11 +301,31 @@ impl Store {
         if actual != cairn {
             return Err(StoreError::Corrupt { asked: cairn, found: Some(actual), why: None });
         }
-        decode_stored(&bytes).map_err(|why| StoreError::Corrupt {
+        let stored = decode_stored(&bytes).map_err(|why| StoreError::Corrupt {
             asked: cairn,
             found: None,
             why: Some(why),
-        })
+        })?;
+        let mut seen = self.seen();
+        if seen.bytes + bytes.len() > SEEN_BYTES {
+            *seen = Seen { reads: seen.reads, ..Seen::default() };
+        }
+        seen.bytes += bytes.len();
+        seen.held.insert(cairn, stored.clone());
+        Ok(stored)
+    }
+
+    /// How many times `get` has gone to the disk, in this process. Here so
+    /// 0201's claim is measured rather than argued.
+    #[must_use]
+    pub fn disk_reads(&self) -> u64 {
+        self.seen().reads
+    }
+
+    /// The lock, whether or not a thread holding it once panicked: what it
+    /// guards is only ever values that checked, so nothing in it is half made.
+    fn seen(&self) -> std::sync::MutexGuard<'_, Seen> {
+        self.seen.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Every node that names this cairn.
@@ -726,5 +777,65 @@ mod tests {
                 "accepted {bad:?}"
             );
         }
+    }
+
+    // ── 0201: what `get` keeps ──────────────────────────────────────────────
+
+    #[test]
+    fn a_thousand_gets_of_one_object_read_the_disk_once() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let cairn = store.put(&value(7)).unwrap();
+        for _ in 0..1000 {
+            assert_eq!(store.get(cairn).unwrap(), value(7));
+        }
+        assert_eq!(store.disk_reads(), 1);
+        // A clone is the same store and shares what it has read.
+        assert_eq!(store.clone().get(cairn).unwrap(), value(7));
+        assert_eq!(store.disk_reads(), 1);
+    }
+
+    #[test]
+    fn a_failure_is_asked_again_and_not_remembered() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let cairn = Stored::Value(Value::Int(9)).cairn();
+        assert!(matches!(store.get(cairn), Err(StoreError::Absent(_))));
+        store.put(&value(9)).unwrap();
+        assert_eq!(store.get(cairn).unwrap(), value(9), "an absence was kept");
+
+        // A corrupt first read, repaired, reads as the object.
+        let other = store.put(&value(10)).unwrap();
+        let path = store.fanned("objects", other);
+        let good = std::fs::read(&path).unwrap();
+        std::fs::write(&path, b"not it").unwrap();
+        assert!(matches!(store.get(other), Err(StoreError::Corrupt { .. })));
+        std::fs::write(&path, good).unwrap();
+        assert_eq!(store.get(other).unwrap(), value(10), "a corruption was kept");
+    }
+
+    #[test]
+    fn what_was_read_is_what_is_returned_whatever_the_disk_says_later() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let cairn = store.put(&value(11)).unwrap();
+        assert_eq!(store.get(cairn).unwrap(), value(11));
+        // Replaced on disk by something else: the name is the content, and the
+        // content was checked, so the reader keeps what it checked.
+        std::fs::write(store.fanned("objects", cairn), value(12).encode()).unwrap();
+        assert_eq!(store.get(cairn).unwrap(), value(11));
+    }
+
+    #[test]
+    fn what_is_kept_stays_inside_its_bound() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let big = |b: u8| Stored::Value(Value::Bytes(vec![b; super::SEEN_BYTES / 2 + 1]));
+        let (a, b) = (store.put(&big(1)).unwrap(), store.put(&big(2)).unwrap());
+        store.get(a).unwrap();
+        store.get(b).unwrap();
+        assert!(store.seen().bytes <= super::SEEN_BYTES, "{}", store.seen().bytes);
+        assert_eq!(store.get(b).unwrap(), big(2));
+        assert_eq!(store.disk_reads(), 2, "the newest object was not the one kept");
     }
 }
