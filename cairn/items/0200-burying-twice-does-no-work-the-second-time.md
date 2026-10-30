@@ -2,15 +2,17 @@
 id: 200
 title: Burying twice does no work the second time
 type: feature
-status: unmarked
+status: descending
 milestone: quickening
+assignee: Oddur Sigurdsson
+claimed: 2026-10-30
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-10-30
 priority: p0
 effort: l
 area: crates/nether-bury
 stratum: '1'
-proof: Burying an unchanged program against a warm store spends zero fuel and produces the same cairn
+proof: Burying an unchanged program twice against one store evaluates nothing the second time, reports the same cairn and the same steps and that it remembered, and a --fuel below those steps runs out where a cold burial does
 ---
 
 ## Why this is the whole point
@@ -49,3 +51,7 @@ Content addressing alone does not supply a sound burial cache key. Zero warm-cac
 
 - [ ] A supported unchanged burial spends zero evaluation fuel and returns the same cairn; changed inputs cannot reuse stale results. Resolve the fuel/spec conflict in a separate specification PR first.
 - [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## 2026-10-30
+
+Specification: §8.2.1. The rite keeps a memo outside the ledger, keyed on the implementation's identity and the source's cairn, naming the trace and the steps it spent. A hit is honoured only if the trace is present with that source and no witnesses, and only if --fuel covers the recorded steps; the rite reports the recorded steps, which are a fresh burial's, and says it remembered. Burial holds no capability and the trace format does not move. §90.2 records burial holding stratum 1 (the original proposal) and reporting zero steps as the rejected alternatives. The proof is restated to match: the second burial evaluates nothing, and fuel still means the same thing on every implementation. Implementation is the next pull request: the memo file, the identity as the cairn of the executable, the four rules, and tests for a hit, a stale entry, a budget below the recorded steps, and a deleted memo.

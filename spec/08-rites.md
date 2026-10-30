@@ -97,6 +97,47 @@ asks a sealed trace to come back byte-identical, and replaying buries a residue
 that is already folded, which is a cheaper burial. A rite reports what it
 spent, because that is where it is a fact.
 
+### 8.2.1 Burying what is already buried
+
+A burial with no `--grant` is a function of two things: the source, and the
+implementation burying it. Nothing else can reach it — it holds no capability,
+and §6.4 makes its fuel deterministic — so burying the same bytes twice with
+the same implementation produces the same trace, to the cairn, and the second
+time is work the first already did.
+
+An implementation MAY remember. It keeps a **memo** from the pair *(its own
+identity, the source's cairn)* to the trace that burial wrote and the steps it
+spent. The memo is an index in [§7.4](07-ledger.md#74-provenance)'s sense, not
+part of the ledger: it holds no fact the store does not, and losing it loses
+time and nothing else.
+
+Its identity MUST change whenever what it would bury could, and a version
+number nobody remembered to bump does not. The cairn of the implementation's
+own executable is one that cannot be forgotten.
+
+A remembered burial MUST be indistinguishable from a fresh one in everything but
+time:
+
+- **It is honoured only if the trace is there.** The memo names a cairn, and
+  `get` on it MUST return a `Trace` whose `source` is that source and which
+  names no witness. Anything else is a stale entry, and the rite buries.
+- **It is honoured only within budget.** A fresh burial that needed more steps
+  than `--fuel` allows halts at the step where the budget ran out, and §6.4
+  requires every implementation to halt there. So a memo whose steps exceed the
+  budget is not honoured, and the burial runs out exactly where it would have.
+- **It reports what the burial costs.** The steps the rite reports are the ones
+  recorded, which are the ones a fresh burial spends, so two implementations
+  agree on them whether or not either remembered. The rite MUST also say that it
+  remembered, because that is the fact about this invocation.
+- **It writes nothing new.** Everything the trace names is already in the store,
+  or the first rule refused the entry.
+
+Burial still holds no capability. Reading a memo is the rite consulting its own
+index before it buries, the way writing the trace afterwards is the rite and not
+the program; the program asks the same questions of the same world either way,
+and a burial with a `--grant` is never remembered, because the world it asked
+may answer differently next time.
+
 ## 8.3 `exhume`
 
 ```

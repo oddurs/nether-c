@@ -371,10 +371,13 @@ Evidence-led performance work with canonical results and fuel semantics preserve
 
 - [ ] [`0198`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0198-benchmark-burial-and-fail-the-build-when-it-slows.md) Benchmark burial, and fail the build when it slows <sup>chore · p0 · 0</sup>
 - [ ] [`0199`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0199-profile-a-real-burial-and-say-where-the-time-goes.md) Profile a real burial and say where the time goes <sup>chore · p0 · 0</sup>
-- [ ] [`0200`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0200-burying-twice-does-no-work-the-second-time.md) Burying twice does no work the second time <sup>feature · p0 · 1</sup>
 - [ ] [`0201`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0201-the-store-s-read-path-does-not-go-to-disk-twice.md) The store's read path does not go to disk twice <sup>feature · p1 · 1</sup>
 - [ ] [`0202`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0202-encoding-allocates-once.md) Encoding allocates once <sup>chore · p2 · 0</sup>
 - [ ] [`0203`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0203-a-fuel-budget-that-means-something.md) A fuel budget that means something <sup>spec · p2 · 0</sup>
+
+### descending
+
+- [ ] [`0200`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0200-burying-twice-does-no-work-the-second-time.md) Burying twice does no work the second time <sup>feature · p0 · 1</sup>
 
 ### buried
 
