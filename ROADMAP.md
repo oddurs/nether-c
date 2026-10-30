@@ -427,6 +427,9 @@ A stated trust model and tested defenses across current entrypoints, not just th
 - [ ] [`0217`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0217-a-hostile-writer-cannot-change-what-a-reader-sees.md) A hostile writer cannot change what a reader sees <sup>chore · p0 · 4</sup>
 - [ ] [`0219`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0219-a-bound-on-every-path-that-reads-a-stranger-s-bytes.md) A bound on every path that reads a stranger's bytes <sup>chore · p1 · 0</sup>
 - [ ] [`0220`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0220-a-trace-s-claims-are-checkable-by-somebody-who-does-not-trust-it.md) A trace's claims are checkable by somebody who does not trust it <sup>feature · p1 · 1</sup>
+
+### descending
+
 - [ ] [`0221`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0221-build-the-binary-reproducibly.md) Build the binary reproducibly <sup>chore · p2 · 4</sup>
 
 ### buried

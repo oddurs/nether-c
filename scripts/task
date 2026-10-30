@@ -132,6 +132,17 @@ case "${1:-}" in
     # not got it rather than for CI. CI installs it and lets the install fail.
     if command -v cairn >/dev/null 2>&1; then cairn check; fi
     ;;
+  release:build)
+    # 0221: two machines build byte-identical binaries from one commit. Built
+    # twice, the only difference was where each machine keeps the sources of
+    # the dependencies, which their panic locations carry into the binary.
+    # A fixed name for that, and for this checkout, is the whole recipe.
+    target="${2:-}"
+    [ -n "$target" ] || { echo "usage: scripts/task release:build <target>" >&2; exit 2; }
+    RUSTFLAGS="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=$root=/nether" \
+      cargo build --release --locked --bin nether --target "$target"
+    shasum -a 256 "target/$target/release/nether"
+    ;;
   release)
     # Cut a release: check everything, then tag. The tag is the trigger --
     # `.github/workflows/release.yml` does the building and the publishing, so
@@ -164,7 +175,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "usage: scripts/task {fmt|fmt:check|lint|test|workflow:check|graph:check|browser:check|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check|release}" >&2
+    echo "usage: scripts/task {fmt|fmt:check|lint|test|workflow:check|graph:check|browser:check|build|proofs|fuzz|site|site:check|gfx|gfx:check|design|design:check|font|font:check|wasm|serve|decay|check|release|release:build}" >&2
     exit 2
     ;;
 esac
