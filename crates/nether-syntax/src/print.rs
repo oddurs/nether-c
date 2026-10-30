@@ -6,9 +6,11 @@
 //! becomes an `if` again, a loop becomes a `for`, and a select whose arms are
 //! a constant becomes the `&&` or `||` it came from.
 //!
-//! It is not a formatter. Every expression is parenthesised, because the round
-//! trip is about meaning and a printer that relies on §4.6 to reconstruct the
-//! shape is a printer that proves §4.6 rather than lowering.
+//! It is not a formatter, and it parenthesises exactly where §4.6 needs it to:
+//! a child whose level is looser than its place allows, read from the same
+//! table the parser climbs. That is what keeps a printed residue inside
+//! `MAX_NESTING` — minimal parentheses never nest deeper than the source that
+//! lowered — and §6.5 needs every residue to be read back in. 0279.
 
 use core::fmt::Write as _;
 
@@ -16,6 +18,8 @@ use nether_core::{
     Asserted, BinOp, Block, Expr, ExprKind, FuncDef, Literal, LocalId, Proj, Rite, Stmt, Type,
     UnOp, Unit,
 };
+
+use crate::parse::LEVELS;
 
 /// Write a unit out as Nether C.
 #[must_use]
@@ -202,8 +206,45 @@ fn short_circuit(x: &Expr) -> bool {
         || matches!(then.kind, ExprKind::Literal(Literal::Bool(true)))
 }
 
+/// An expression in a place that takes any expression.
 fn expr(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
+    within(x, ASSIGNMENT, unit, f)
+}
+
+/// §4.6's levels: postfix 1, prefix 2, the binary ladder 3 to 12, assignment
+/// 13. Everything that is not an operator is 0.
+const POSTFIX: u8 = 1;
+const PREFIX: u8 = 2;
+const ASSIGNMENT: u8 = 13;
+
+/// The level an operator sits at, by the spelling the parser reads.
+fn level(spelled: &str) -> u8 {
+    LEVELS.iter().find(|(p, _, _)| p.spelling() == spelled).map_or(ASSIGNMENT, |(_, l, _)| *l)
+}
+
+/// The level of what this expression prints as.
+fn level_of(x: &Expr) -> u8 {
+    match &x.kind {
+        ExprKind::Literal(Literal::Int(n)) if *n < 0 => PREFIX,
+        ExprKind::Call { .. } | ExprKind::Index { .. } | ExprKind::Field { .. } => POSTFIX,
+        ExprKind::Unary { .. } | ExprKind::Rite { .. } => PREFIX,
+        ExprKind::Binary { op, .. } => level(binary(*op)),
+        // The order `bare` tests them in, so the two never disagree.
+        ExprKind::Select { otherwise, .. } => level(if is_false(otherwise) { "&&" } else { "||" }),
+        ExprKind::Assign { .. } => ASSIGNMENT,
+        _ => 0,
+    }
+}
+
+/// An expression in a place that takes nothing looser than `allowed`.
+fn within(x: &Expr, allowed: u8, unit: &Unit, f: Option<&FuncDef>) -> String {
+    let bare = bare(x, unit, f);
+    if level_of(x) > allowed { format!("({bare})") } else { bare }
+}
+
+fn bare(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
     let go = |e: &Expr| expr(e, unit, f);
+    let at = |e: &Expr, allowed: u8| within(e, allowed, unit, f);
     match &x.kind {
         ExprKind::Literal(l) => literal(l),
         ExprKind::Local(id) => local_name(f, *id),
@@ -216,17 +257,20 @@ fn expr(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
         ExprKind::Prim(p) => p.name().to_string(),
         ExprKind::Call { callee, args } => {
             let args: Vec<String> = args.iter().map(go).collect();
-            format!("{}({})", go(callee), args.join(", "))
+            format!("{}({})", at(callee, POSTFIX), args.join(", "))
         }
-        ExprKind::Unary { op, operand } => format!("({}{})", unary(*op), go(operand)),
+        ExprKind::Unary { op, operand } => format!("{}{}", unary(*op), at(operand, PREFIX)),
+        // Left-associative, every level of it: the left may sit at this
+        // level and the right may not.
         ExprKind::Binary { op, lhs, rhs } => {
-            format!("({} {} {})", go(lhs), binary(*op), go(rhs))
+            let l = level(binary(*op));
+            format!("{} {} {}", at(lhs, l), binary(*op), at(rhs, l - 1))
         }
         ExprKind::Field { base, index } => {
             let name = field_name(&base.ty, *index, unit);
-            format!("{}.{name}", go(base))
+            format!("{}.{name}", at(base, POSTFIX))
         }
-        ExprKind::Index { base, index } => format!("{}[{}]", go(base), go(index)),
+        ExprKind::Index { base, index } => format!("{}[{}]", at(base, POSTFIX), go(index)),
         ExprKind::Assign { place, value } => {
             let mut out = local_name(f, place.local);
             let mut ty_of = f.and_then(|f| f.local(place.local)).map(|l| l.ty.clone());
@@ -248,16 +292,16 @@ fn expr(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
                     }
                 }
             }
-            format!("({out} = {})", go(value))
+            format!("{out} = {}", go(value))
         }
         // A block in expression position is its own tail, which is the only
         // way §04 lets one appear there.
         ExprKind::Block(b) => block(b, unit, f, 0),
         ExprKind::Select { cond, then, otherwise } => {
-            if matches!(otherwise.kind, ExprKind::Literal(Literal::Bool(false))) {
-                format!("({} && {})", go(cond), go(then))
+            if is_false(otherwise) {
+                format!("{} && {}", at(cond, level("&&")), at(then, level("&&") - 1))
             } else if matches!(then.kind, ExprKind::Literal(Literal::Bool(true))) {
-                format!("({} || {})", go(cond), go(otherwise))
+                format!("{} || {}", at(cond, level("||")), at(otherwise, level("||") - 1))
             } else {
                 // §04 has no `if` expression, so this cannot have come from
                 // source and cannot go back to it.
@@ -278,9 +322,13 @@ fn expr(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
                 Rite::Look => "look",
                 Rite::Opaque => "opaque",
             };
-            format!("({word} {})", go(operand))
+            format!("{word} {}", at(operand, PREFIX))
         }
     }
+}
+
+fn is_false(x: &Expr) -> bool {
+    matches!(x.kind, ExprKind::Literal(Literal::Bool(false)))
 }
 
 fn field_name(t: &Type, index: u32, unit: &Unit) -> String {

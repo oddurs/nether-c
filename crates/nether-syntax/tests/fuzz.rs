@@ -6,13 +6,17 @@
 //! these take text from the same strangers and had never been handed ten
 //! million malformed bytes. 0218.
 //!
-//! The property, held over every input: **nothing panics.** Any byte string
-//! lexes or is refused, parses or is refused, lowers or is refused, and what
-//! lowers checks and prints. A panicking front end is a denial of service in
-//! a shared store, and a crash is not one of §6.4's limits.
+//! Two properties, held over every input:
 //!
-//! That what lowers prints as a program that lowers is the property this
-//! harness found false on its first run, and it is 0279.
+//! 1. **Nothing panics.** Any byte string lexes or is refused, parses or is
+//!    refused, lowers or is refused, and what lowers checks and prints. A
+//!    panicking front end is a denial of service in a shared store, and a
+//!    crash is not one of §6.4's limits.
+//! 2. **What checks prints as a program that lowers.** §6.5 makes a residue a
+//!    program, and `print` is how one is written down; a unit whose printed
+//!    form does not read back is a trace nobody can exhume. This harness found
+//!    that false on its first run, and it is 0279. Only a unit that checks can
+//!    become a trace, so that is the unit the property is about.
 //!
 //! The generator is seeded and deterministic, so a failure is reproducible
 //! from the seed and round printed with it. `scripts/task fuzz` runs it longer.
@@ -148,8 +152,15 @@ fn one(bytes: &[u8], tally: &mut Tally) {
     tally.parsed += 1;
     let Ok(unit) = lower(&ast) else { return };
     tally.lowered += 1;
-    let _ = check(&unit);
-    let _ = parse(print(&unit).as_bytes());
+    if !check(&unit).is_empty() {
+        return;
+    }
+    let printed = print(&unit);
+    let read = parse(printed.as_bytes()).map(|ast| lower(&ast));
+    assert!(
+        matches!(read, Ok(Ok(_))),
+        "lowered, and printed as\n{printed}\nwhich does not: {read:?}"
+    );
 }
 
 fn run(seed: u64, rounds: usize) -> Tally {
@@ -169,13 +180,14 @@ fn run(seed: u64, rounds: usize) -> Tally {
                 b
             }
         };
-        // A panic here is the failure; the seed and round reproduce it.
+        // A panic here is the failure, whichever property it was; the seed
+        // and round reproduce it.
         let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             one(&bytes, &mut tally);
         }));
         assert!(
             caught.is_ok(),
-            "seed {seed:#x}, round {i} panicked on:\n{}",
+            "seed {seed:#x}, round {i} failed on:\n{}",
             String::from_utf8_lossy(&bytes)
         );
     }

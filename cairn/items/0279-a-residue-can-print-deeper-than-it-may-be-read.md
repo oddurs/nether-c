@@ -2,15 +2,17 @@
 id: 279
 title: A residue can print deeper than it may be read
 type: bug
-status: unmarked
+status: buried
 milestone: warden
+assignee: Oddur Sigurdsson
+claimed: 2026-10-30
 created: 2026-10-30
 updated: 2026-10-30
 priority: p1
 effort: m
 stratum: 0
 area: crates/nether-syntax
-proof: For every input that lowers in tests/fuzz, print of the unit parses and lowers, and a trace whose residue holds an 80-term sum exhumes
+proof: For every input that lowers and checks in tests/fuzz, print of the unit parses and lowers, and a trace whose residue holds an 80-term sum exhumes
 ---
 
 ## What happens
@@ -70,3 +72,7 @@ stated principle:
 Either way, put the round-trip property back into `tests/fuzz.rs` — it was
 there, and it is how this was found — and add the 80-term exhume as a rite
 test. The rejected shape goes in `spec/90-rationale.md`.
+
+## 2026-10-30
+
+Buried by printing by precedence. print parenthesises a child only when its level is looser than its place allows: the left operand of a binary operator may sit at the operator's level and the right may not, a prefix operand at 2, a postfix base at 1, and anything goes as an argument, an index, a value or a statement. The levels come from parse::LEVELS by spelling, so the printer and the parser read one table. Each operand and each parenthesis passes once through the parser's unary(), which is where MAX_NESTING is counted, so minimal parentheses never nest deeper than the source that lowered. a_long_sum_in_a_residue_exhumes in rites.rs fails on the old printer and passes now. tests/fuzz.rs holds the round-trip property again; stated over units that check, because only those become traces. Soak: NETHER_FUZZ_ROUNDS=10000000, seed 0x5EED0218F00DCAFE, 170 s, 2059693 lowered, no failures, 10 MiB peak. The first soak with the property found a local inside a global's initialiser printing as «local 0»; the checker already refuses that program, so it is 0280 and not this. §90.2 records keeping every parenthesis, and flattening chains, as the alternatives.
