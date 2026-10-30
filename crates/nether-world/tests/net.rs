@@ -144,7 +144,8 @@ fn a_post_carries_its_body_and_is_stratum_six() {
     assert!(heard.ends_with("what was sent"), "{heard}");
 
     assert_eq!(a.world.depth(), nether_core::Depth::NET_WRITE);
-    assert!(a.world.holds(nether_core::Capability::Net), "§1.1 is a total order");
+    assert!(a.world.holds(nether_core::Capability::NetWrite));
+    assert!(!a.world.holds(nether_core::Capability::Net), "a grant of net! is a grant of net");
 }
 
 #[test]

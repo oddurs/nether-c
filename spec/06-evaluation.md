@@ -384,7 +384,7 @@ $ nether bury build.nc
 buried   build.nc → 76c4b655   depth 3   holes 1   4 nodes
   hole ①  read("main.nc")                stratum 3  disk
 
-$ nether exhume 76c4b655 --grant disk
+$ nether exhume 76c4b655 --grant disk --root .
   ①  read("main.nc")  →  29 bytes  6940fecb
 sealed   76c4b655 + 6940fecb → bb9ed429   depth 3   holes 0
 ```

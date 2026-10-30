@@ -9,7 +9,7 @@ site/src/index.html § The first program #1	hello.nc	pinned	11d370eae3fd608a
 site/src/index.html § The first program #2	console	checked	7f9a7bf849a83e2b
 site/src/index.html § The Orpheus rule #1	c	pinned	9c06d713f8f79db4
 site/src/index.html § The Orpheus rule #2	console	checked	b95c9f3eb611ad61
-site/src/index.html § What a hole is #1	console	checked	cfa0b6847cb3c4ea
+site/src/index.html § What a hole is #1	console	checked	a4ba4858ca078d1e
 site/src/index.html § Where it actually is #1	console	checked	d838eaf97e53718b
 spec/00-overview.md § 0.7 A first program #1	c	pinned	d92d2096e7e25092
 spec/00-overview.md § 0.7 A first program #2	console	checked	7f9a7bf849a83e2b
@@ -45,10 +45,12 @@ spec/06-evaluation.md § 6.1 Burial #1	text	pinned	a825d7f02dc37188
 spec/06-evaluation.md § 6.1 Burial #2	console	checked	f0456e0a140e8d99
 spec/06-evaluation.md § 6.2 Demand #1	c	pinned	32047b898ae2a1c0
 spec/06-evaluation.md § 6.4 Starvation and fuel #1	text	pinned	07c9e60510dab9cc
-spec/06-evaluation.md § 6.6 Exhumation #1	console	checked	2eabda973722523e
+spec/06-evaluation.md § 6.6 Exhumation #1	console	checked	61e4082650fb0f96
 spec/06-evaluation.md § 6.7 Replay #1	console	checked	48b4f4a335379799
 spec/06-evaluation.md § 6.8 What burial prints #1	text	pinned	a39449193e40ee44
 spec/07-ledger.md § 7.2 Cairns #1	text	pinned	ef8410b2b1784b2f
+spec/07-ledger.md § 7.3.2 What a decoder cannot check #1	c	pinned	99f2b4a37918eaad
+spec/07-ledger.md § 7.3.2 What a decoder cannot check #2	console	checked	ac0d031ae27f9a0e
 spec/07-ledger.md § 7.5 The store #1	text	pinned	ebd628943dfe60de
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
 spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
@@ -62,8 +64,11 @@ spec/08-rites.md § 8.5 `cairn` #1	text	pinned	a0f5b8eab441d74a
 spec/08-rites.md § 8.6 `strata` #1	text	pinned	f2bdddcccdc852aa
 spec/08-rites.md § 8.6 `strata` #2	console	checked	fd204021b1466dbb
 spec/08-rites.md § 8.7 `graft` #1	text	pinned	f9ddf95151d63ade
-spec/09-prelude.md § 9.2 Depth 0 #1	signatures	pinned	42165e84073d2ffe
+spec/09-prelude.md § 9.2 Depth 0 #1	signatures	pinned	bca58628903ed8fd
 spec/09-prelude.md § 9.2 Depth 0 #2	c	pinned	67bb7c58077b7645
+spec/09-prelude.md § 9.2 Depth 0 #3	c	pinned	0a3acbdfff0272bc
+spec/09-prelude.md § 9.2 Depth 0 #4	console	checked	16120fe72724f29b
+spec/09-prelude.md § 9.2 Depth 0 #5	console	checked	cf959abe75e3616c
 spec/09-prelude.md § 9.3 Stratum 1 — `store` #1	signatures	pinned	480f7d18349a56f5
 spec/09-prelude.md § 9.4 Stratum 2 — `env` #1	signatures	pinned	ea824054bc313eff
 spec/09-prelude.md § 9.5 Strata 3 and 4 — `disk`, `disk!` #1	signatures	pinned	834d41e9dd803353
@@ -84,20 +89,20 @@ docs/manual/03-the-hole.md § The hole #2	console	pinned	5d5e33ebd2ef222b
 docs/manual/03-the-hole.md § The hole #3	console	checked	4968c59d1b7089ba
 docs/manual/03-the-hole.md § Burial has no world #1	console	checked	8b4ecbf0adaa6321
 docs/manual/03-the-hole.md § Burial has no world #2	console	checked	e5645553497d4c89
-docs/manual/04-the-grant.md § The grant #1	console	checked	76412f28ea64649f
-docs/manual/04-the-grant.md § The grant #2	console	checked	34879260aaf1312b
+docs/manual/04-the-grant.md § The grant #1	console	checked	cf7ef1406fe3729c
+docs/manual/04-the-grant.md § The grant #2	console	checked	127cde526edf2ec2
 docs/manual/04-the-grant.md § The grant #3	console	checked	278228f105b15dcf
-docs/manual/05-the-witness.md § The witness #1	console	checked	34879260aaf1312b
+docs/manual/05-the-witness.md § The witness #1	console	checked	127cde526edf2ec2
 docs/manual/05-the-witness.md § The witness #2	console	checked	b5b628b09d204d01
 docs/manual/05-the-witness.md § Reading it back #1	console	checked	eb470e4a8f20ee02
 docs/manual/05-the-witness.md § Reading it back #2	console	checked	fb816a6cad20f70f
-docs/manual/06-two-worlds.md § Two worlds #1	c	pinned	9272794b8f93515e
-docs/manual/06-two-worlds.md § Two worlds #2	console	checked	505eab833bb926be
-docs/manual/06-two-worlds.md § Two worlds #3	console	checked	f3122f27d42756a6
-docs/manual/06-two-worlds.md § Two worlds #4	console	checked	5eb9561e8e2c2240
-docs/manual/06-two-worlds.md § Two worlds #5	console	checked	48d3193268a19137
-docs/manual/06-two-worlds.md § Two worlds #6	console	checked	404080528c2d338b
-docs/manual/07-the-replay.md § The replay #1	console	checked	f2a8df5eeaa9935d
+docs/manual/06-two-worlds.md § Two worlds #1	c	pinned	0df1f4edf9f67cb1
+docs/manual/06-two-worlds.md § Two worlds #2	console	checked	2d070b6ffe9bef5f
+docs/manual/06-two-worlds.md § Two worlds #3	console	checked	8de60a1e6e8a1e76
+docs/manual/06-two-worlds.md § Two worlds #4	console	checked	2d36e0cebdb3375c
+docs/manual/06-two-worlds.md § Two worlds #5	console	checked	35d9aa227bc696fe
+docs/manual/06-two-worlds.md § Two worlds #6	console	checked	e93c346d4bf71f44
+docs/manual/07-the-replay.md § The replay #1	console	checked	9073b28479e185f3
 docs/manual/08-the-orpheus-rule.md § The Orpheus rule #1	c	pinned	ece8d8c71c722bbe
 docs/manual/08-the-orpheus-rule.md § The Orpheus rule #2	console	checked	b95c9f3eb611ad61
 docs/manual/08-the-orpheus-rule.md § Where it bites in practice #1	c	pinned	e6717adb0284a676

@@ -69,6 +69,9 @@ Refusal unreachable; exhausted; conflict;    // bound as prelude constants
 Bool    given(Answer<T> a)             @0;   // did the world say yes?
 Refusal refusal(Answer<T> a)           @0;   // which no was it? collapses if given
 T       must(Answer<T> a)              @0;   // the value. collapses if refused
+
+Answer<T> answered(T v)                @0;   // a yes a program built
+Answer<T> refused(Refusal r)           @0;   // a no a program built
 ```
 
 `given` and `refusal` are how a program handles a no. `must` is how it declares
@@ -91,25 +94,55 @@ if (given(a)) {
 }
 ```
 
-These three go one way. There is no constructor, so every `Answer` that exists
-came out of the prelude, and a function a program wrote cannot hand its caller
-the shape the prelude hands it: it has `must`, which collapses and so forbids
-the caller from handling anything, or a `Bool` and a value beside it, which is
-what `Answer` replaced.
+`answered` and `refused` go the other way, so a function a program writes can
+hand its caller the shape `utf8` hands it, and say no without collapsing:
 
-That is not a rule anybody chose. `utf8` is on this page, at depth 0, refusing
-`malformed` — so a pure prelude function does the thing a pure program function
-cannot, and [§9.9](#99-failure-and-the-difference-between-two-of-them) says
-which of those two is the odd one.
+```c
+// verdict.nc — a function that says no the way the prelude does. §9.2.
 
-> Whether the prelude gains `answered` and `refused` is open, and is item 0266.
-> The naming is the smaller half of it: `given` is already the predicate, so
-> the constructors cannot be named for
-> [§5.1.1](05-types.md#511-answers-and-refusals)'s two cases without one name
-> meaning both the question and an answer. The larger half is that
-> `refused(absent)` does not say what `T` is — the IR has no type variables,
-> and the three polymorphic signatures above all take their `T` from an
-> argument, which a refusal does not carry.
+Answer<Bytes> first(Bytes b)
+{
+  if (len(b) == 0) {
+    return refused(absent);
+  }
+  return answered(slice(b, 0, 1));
+}
+
+U0 report()
+{
+  Answer<Bytes> a = first(b"nether");
+  Answer<Bytes> none = first(b"");
+  if (given(a)) { concat(must(a), b"\n"); }
+  if (refusal(none) == absent) { "nothing there\n"; }
+}
+
+demand report();
+```
+
+```console
+$ nether lamp c7bb7baa
+n
+nothing there
+```
+
+`answered` takes its `T` from its argument, the way the three inspectors do.
+`refused` has no `T` to take: a refusal is a code and nothing else. It takes
+the one it is declared into, so it MUST be the whole value of a binding or a
+`return` whose declared type is an `Answer`. Anywhere else it is an error,
+because anywhere else nothing says what it is a refusal *of*:
+
+```console
+$ nether bury unlanded.nc
+error: expected a declared `Answer<T>` for `refused`
+ --> unlanded.nc:1:24
+  |
+1 | Answer<Bytes> x = must(refused(absent));
+  |                        ^^^^^^^^^^^^^^^
+```
+
+Both are at depth 0 and neither records a witness. Nothing was asked, so there
+is nobody whose answer [§1.4](01-strata.md#14-what-the-trace-records) would be
+recording — the same reason `utf8`'s `malformed` has none.
 
 `compile` is not in the prelude. Nether C does not know how to compile Nether
 C until [Self-Burial](../ROADMAP.md); until then it is an ordinary function a

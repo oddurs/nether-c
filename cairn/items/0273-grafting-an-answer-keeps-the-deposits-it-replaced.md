@@ -2,9 +2,11 @@
 id: 273
 title: Grafting an answer keeps the deposits it replaced
 type: bug
-status: unmarked
+status: buried
+assignee: Oddur Sigurdsson
+claimed: 2026-10-30
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-10-30
 priority: p1
 effort: m
 area: crates/nether-cli
@@ -69,3 +71,7 @@ Either fix it — re-bury from the trace that still had the hole, which is the
 only thing that can produce the right deposits — or refuse it, and say in §8.7
 that a graft replaces a hole. Refusing is defensible and is one `if`; the
 rejected alternative goes in `spec/90-rationale.md` either way.
+
+## 2026-10-30
+
+Buried by refusing, not by fixing. A sealed trace does not name the trace it was exhumed from, so re-burying from the one that still had the hole would mean searching the ledger for a parent that may be several or none, and re-burying the source instead reaches a different name for the same result. §8.7 now says a graft replaces a hole and MUST refuse, exit 1, an answer the trace was already given; §90.2 records the fix as the rejected alternative. graft names the answer and the trace and says to graft or exhume the trace that still has the hole. The witness-swapping code that only served the old path is gone, and the core is 10 lines smaller. grafting_an_answer_already_given_is_refused fails on the old code and passes now. The manual can document graft now: the path it would teach is the one that works.

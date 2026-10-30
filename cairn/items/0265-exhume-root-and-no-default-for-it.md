@@ -2,16 +2,19 @@
 id: 265
 title: 'exhume: --root, and no default for it'
 type: feature
-status: unmarked
+status: buried
 milestone: world
+assignee: Oddur Sigurdsson
+claimed: 2026-10-30
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-10-30
 priority: p1
 effort: m
 stratum: 4
 area: crates/nether-cli
 proof: Granting disk without --root is an error, and two roots answer read("main.nc") differently on purpose
-part_of: [262]
+part_of:
+- 262
 ---
 
 ## Problem
@@ -62,13 +65,17 @@ Not in scope: repeating the flag. §8.3.4 says once and §90.2 records why.
 
 ## Acceptance criteria
 
-- [ ] `--grant disk` without `--root` is a usage error naming §8.3.4
-- [ ] `--root` without `--grant disk` is a usage error
-- [ ] Two roots answer one `read("main.nc")` with two different values
-- [ ] A path that climbs out of the root is `denied` and not `absent`
+- [x] `--grant disk` without `--root` is a usage error naming §8.3.4
+- [x] `--root` without `--grant disk` is a usage error
+- [x] Two roots answer one `read("main.nc")` with two different values
+- [x] A path that climbs out of the root is `denied` and not `absent`
 
 ## Evidence to close
 
 Record the tested commit and the exact invocations. `scripts/task check` must
 pass with every existing disk-granting test and transcript updated, and the
 diff should show what each of them was implicitly rooted at before.
+
+## 2026-10-30
+
+Buried. exhume takes --root <dir>, at most once; granting disk or disk! without it is a usage error naming §8.3.4, and giving it without either is a usage error. world_from takes the root from the invocation and no longer calls current_dir. Every existing caller ran from the directory it read, so each was implicitly rooted at '.', and that is what each now says: fourteen exhume calls in crates/nether-cli/tests/rites.rs, the transcripts in §6.6 and manual chapters 4, 5 and 7, and the front page. Four tests settle the criteria: granting_the_disk_without_a_root_is_refused, a_root_without_the_disk_is_refused (and twice), two_roots_answer_one_read_differently, and a_path_that_climbs_out_of_the_root_is_denied, where read("../main.nc") under --root inner deposits denied with ../main.nc present. The --reach, --load and --root refusals are now one function. Core +15, to 8441.

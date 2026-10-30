@@ -2,9 +2,11 @@
 id: 274
 title: A comment changes what lamp prints first
 type: spec
-status: unmarked
+status: buried
+assignee: Oddur Sigurdsson
+claimed: 2026-10-30
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-10-30
 priority: p1
 effort: m
 area: spec/08-rites.md
@@ -18,7 +20,8 @@ proof: Adding a comment above a program does not change the order `nether lamp` 
 
 ## Open questions
 
-- [ ]
+- [x] Where is the order stated? §8.4, which says the list is the order the
+      deposits were made in and that `lamp` MUST NOT reorder it.
 
 ## Delivery steps and dependencies
 
@@ -27,9 +30,9 @@ proof: Adding a comment above a program does not change the order `nether lamp` 
 
 ## Acceptance criteria
 
-- [ ] Every normative claim is stated once, in one place
-- [ ] Every code sample in it is in `tests/transcripts/`
-- [ ] A reader who has not read the rest of the spec can follow it
+- [x] Every normative claim is stated once, in one place
+- [x] Every code sample in it is in `tests/transcripts/`
+- [x] A reader who has not read the rest of the spec can follow it
 
 §8.4 groups deposits by the cairn of the source they came from and says which
 group comes first is decided by sorting those cairns, "because a source has no
@@ -73,3 +76,7 @@ output is read", already claims. Removing it lowers `.decay-ceiling`.
 
 Found while writing the manual (0104), which needed a worked example whose
 output does not depend on a hash.
+
+## 2026-10-30
+
+Buried. lamp reads the trace's deposit list in the order it holds and no longer sorts it, and no longer walks the graph either: only the root trace's own list ever contributed. §8.4 says the list is the order the deposits were made in and lamp MUST NOT reorder it; §90.2 records sorting by source and offset as the rejected alternative. The mechanism was not quite the one described above: exhume re-parses the residue but tags its spans with the original source's cairn, so the sort compared an offset in the source with an offset in the residue, and a comment long enough moved the first past the second. a_comment_does_not_change_what_lamp_prints_first in crates/nether-cli/tests/rites.rs fails on the old code (worldHello,) and passes now. post.nc lost the paragraph that described this bug as current, so manual chapter 6's cairns moved. closing::deposits cited §6.8 for the order, which says nothing about it, and now cites §8.4. The core is 13 lines smaller.

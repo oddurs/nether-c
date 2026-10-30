@@ -53,6 +53,12 @@ struct Lowering<'a> {
     locals: Vec<ir::LocalDef>,
     /// The depth of every local bound so far, by position.
     depths: Vec<Depth>,
+    /// The declared type of what is being lowered, while it is the whole of a
+    /// binding's value or a `return`'s. `refused` has no other way to know its
+    /// `T`. §9.2.
+    landing: Option<ir::Type>,
+    /// What the function being lowered returns.
+    returning: Option<ir::Type>,
 }
 
 impl<'a> Lowering<'a> {
@@ -66,6 +72,8 @@ impl<'a> Lowering<'a> {
             scopes: Vec::new(),
             locals: Vec::new(),
             depths: Vec::new(),
+            landing: None,
+            returning: None,
         };
         // Declarations are visible to each other regardless of order, so the
         // shapes are collected before anything is lowered.
@@ -244,9 +252,10 @@ impl<'a> Lowering<'a> {
                 self.scopes.pop();
                 continue;
             };
-            let value = self.expr(init);
+            let ty = self.ty(&binding.ty);
+            let value = self.landed(init, Some(ty.clone()));
             self.scopes.pop();
-            let ty = self.binding_type(&binding.ty, &value);
+            let ty = Self::binding_type(ty, &value);
             let id = ir::GlobalId(u32::try_from(out.len()).unwrap_or(0));
             self.globals.insert(binding.name.text.as_str(), (id, ty.clone(), value.depth));
             out.push(ir::GlobalDef {
@@ -275,8 +284,7 @@ impl<'a> Lowering<'a> {
 
     /// The declared type of a binding, with a shade's origin taken from what
     /// it is bound to. §4.3: the origin is always inferred.
-    fn binding_type(&mut self, declared: &ast::Type, value: &ir::Expr) -> ir::Type {
-        let ty = self.ty(declared);
+    fn binding_type(ty: ir::Type, value: &ir::Expr) -> ir::Type {
         match (&ty, &value.ty) {
             (ir::Type::Shade { inner, .. }, ir::Type::Shade { origin, .. }) => {
                 ir::Type::Shade { origin: *origin, inner: inner.clone() }
@@ -304,12 +312,14 @@ impl<'a> Lowering<'a> {
             })
             .collect();
 
+        self.returning = Some(self.ty(&f.ret));
         let body = self.block(&f.body);
+        let ret = self.returning.take().unwrap_or(ir::Type::Unit);
         let ret_depth = body.tail.as_ref().map_or(Depth::PURE, |t| t.depth);
         ir::FuncDef {
             name: f.name.text.clone(),
             params,
-            ret: self.ty(&f.ret),
+            ret,
             ret_depth: ret_depth.join(Self::returns(&body)),
             asserted_ret: Self::asserted(&f.ret),
             latent: Self::needs(&body),
@@ -476,8 +486,9 @@ impl Lowering<'_> {
                     out.push(ir::Stmt::Declare { local });
                     return;
                 };
-                let value = self.expr(init);
-                let ty = self.binding_type(&binding.ty, &value);
+                let ty = self.ty(&binding.ty);
+                let value = self.landed(init, Some(ty.clone()));
+                let ty = Self::binding_type(ty, &value);
                 let asserted = Self::asserted(&binding.ty);
                 let depth = value.depth;
                 let local = self.bind(&binding.name, ty, asserted, depth, binding.span);
@@ -527,7 +538,8 @@ impl Lowering<'_> {
                 }
             }
             ast::Stmt::Return { value, span } => {
-                let value = value.as_ref().map(|v| Box::new(self.expr(v)));
+                let returning = self.returning.clone();
+                let value = value.as_ref().map(|v| Box::new(self.landed(v, returning)));
                 let depth = value.as_ref().map_or(Depth::PURE, |v| v.depth);
                 out.push(ir::Stmt::Expr(Self::at(
                     ir::ExprKind::Return(value),
@@ -650,6 +662,7 @@ impl Lowering<'_> {
 impl Lowering<'_> {
     fn expr(&mut self, e: &ast::Expr) -> ir::Expr {
         let span = e.span;
+        let landing = self.landing.take();
         match &e.kind {
             ast::ExprKind::Int(n) => Self::at(
                 ir::ExprKind::Literal(ir::Literal::Int(*n)),
@@ -715,7 +728,7 @@ impl Lowering<'_> {
             ast::ExprKind::Rite { rite, operand } => self.rite(*rite, operand, span),
             ast::ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs, span),
             ast::ExprKind::Assign { op, place, value } => self.assign(*op, place, value, span),
-            ast::ExprKind::Call { callee, args } => self.call(callee, args, span),
+            ast::ExprKind::Call { callee, args } => self.call(callee, args, landing, span),
             ast::ExprKind::Index { base, index } => {
                 let base = self.expr(base);
                 let index = self.expr(index);
@@ -904,15 +917,35 @@ impl Lowering<'_> {
         }
     }
 
-    fn call(&mut self, callee: &ast::Expr, args: &[ast::Expr], span: Span) -> ir::Expr {
+    /// An expression that is the whole of something with a declared type.
+    fn landed(&mut self, e: &ast::Expr, ty: Option<ir::Type>) -> ir::Expr {
+        self.landing = ty;
+        self.expr(e)
+    }
+
+    fn call(
+        &mut self,
+        callee: &ast::Expr,
+        args: &[ast::Expr],
+        landing: Option<ir::Type>,
+        span: Span,
+    ) -> ir::Expr {
         // Arguments first: three prelude functions are polymorphic in what
         // they are handed, and the callee's type is not known until they are.
         let args: Vec<ir::Expr> = args.iter().map(|a| self.expr(a)).collect();
         let types: Vec<ir::Type> = args.iter().map(|a| a.ty.clone()).collect();
-        let callee = match &callee.kind {
+        let mut callee = match &callee.kind {
             ast::ExprKind::Name(name) => self.name(name, &types),
             _ => self.expr(callee),
         };
+        // §9.2: a refusal carries no `T`, so it takes the one it is declared
+        // into, and anywhere nothing is declared it has none.
+        if matches!(callee.kind, ir::ExprKind::Prim(Prim::Refused)) {
+            match (landing, &mut callee.ty) {
+                (Some(t @ ir::Type::Answer(_)), ir::Type::Fn { result, .. }) => **result = t,
+                _ => self.fault(span, FaultKind::Expected("a declared `Answer<T>` for `refused`")),
+            }
+        }
         let (ty, result_depth) = if let ir::Type::Fn { result, result_depth, .. } = &callee.ty {
             ((**result).clone(), *result_depth)
         } else {
@@ -991,6 +1024,8 @@ fn prim_arrow(p: Prim, args: &[ir::Type]) -> ir::Type {
         Prim::Given => (vec![answer(held())], T::Bool),
         Prim::Refusal => (vec![answer(held())], T::Refusal),
         Prim::Must => (vec![answer(held())], held()),
+        Prim::Answered => (args.to_vec(), answer(args.first().cloned().unwrap_or(T::Unit))),
+        Prim::Refused => (vec![T::Refusal], answer(T::Unit)),
         Prim::FetchNode => (vec![T::Cairn], answer(T::Bytes)),
         Prim::HasNode => (vec![T::Cairn], T::Bool),
         Prim::Env => (vec![T::Str], answer(T::Str)),

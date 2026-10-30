@@ -118,15 +118,14 @@ impl World {
         self
     }
 
-    /// Whether this world can reach that capability's stratum.
+    /// Whether that capability was granted: `d ∈ δ`.
     ///
-    /// By the lattice and not by the name. §1.1 makes the strata a total order
-    /// and [DESCEND] raises the ambient depth to the one granted, so a
-    /// `descend disk!` may `read`: stratum 3 is within stratum 4. A world
-    /// granted `disk!` therefore holds `disk` as well.
+    /// A set and not the depth order. Authority is which doors are open, and
+    /// comparing it by maximum would make *may draw random bytes* mean *may
+    /// fetch a URL*. §2.1, and `nether_core::Held`.
     #[must_use]
     pub fn holds(&self, capability: Capability) -> bool {
-        self.depth() >= capability.stratum()
+        self.granted.iter().any(|p| p.capability() == capability)
     }
 
     /// The deepest stratum anything granted here can reach.

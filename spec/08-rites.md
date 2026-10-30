@@ -228,16 +228,15 @@ nether lamp <cairn> [--provenance] [--depth <n>] [--json]
 ```
 
 Carries light down. With no flags, renders the value at that cairn — including
-every `Deposit` node in a trace, in source order, which is how a program's
-output is read.
+every `Deposit` node in a trace, in the order they were made, which is how a
+program's output is read.
 
-*Source order* is by offset within one source, and a trace may hold more than
-one. Deposits are therefore grouped by the cairn of the source they were made
-from and ordered by offset within each group, rather than interleaved by
-offset across all of them — which would be an order corresponding to nothing
-anybody wrote. Which group comes first is the order the cairns sort in, because
-a source has no other order: one trace's two sources were never written down in
-a sequence.
+That order is the trace's own deposit list
+([§7.3.1](07-ledger.md#731-node-encoding)). A trace exhumed from another names
+the earlier trace's deposits first and then what burying its residue deposited,
+each in evaluation order, so the list is the order they were made in. `lamp`
+MUST NOT reorder it. Two spellings of one program that make
+the same deposits read the same, whatever their sources' cairns are.
 
 ```console
 $ nether lamp efed9b2a
@@ -314,9 +313,9 @@ rather than the number above it: the transcript is one of those traces — one
 `read`, still pending — and its number is what §7.3.2 says a trace's depth is.
 
 If the trace is marked as having reached stratum 8, `strata` MUST say so
-without being asked, and MUST report `replayable: no`. A witness deeper than
-the recorded depth is a malformed trace (§7.3.2), and `strata` is where it is
-caught.
+without being asked, and MUST report `replayable: no`. A hole or a witness
+deeper than the recorded depth is a malformed trace (§7.3.2), and `strata` is
+where it is caught.
 
 "Why is this value at depth 5" has to be a command, not an investigation.
 
@@ -326,8 +325,15 @@ caught.
 nether graft <cairn> --replace <cairn> --with <cairn> [--json]
 ```
 
-Substitutes a subtrace and re-buries only what changed, which
-[§6.5](06-evaluation.md#65-residue) guarantees is sound.
+Answers a hole differently and re-buries only what changed, which
+[§6.5](06-evaluation.md#65-residue) guarantees is sound. `--replace` names a
+hole the trace still has, and `--with` the value to answer it with.
+
+A graft replaces a hole and nothing else. If `--replace` names an answer the
+trace was already given, `graft` MUST refuse and exit 1: that answer has been
+consumed, what it produced is in the trace's deposits rather than its residue,
+and burying the residue again cannot change them. To answer it differently,
+graft or exhume the trace that still has the hole.
 
 `graft` MUST report how many nodes were reused and how many were recomputed.
 That ratio is the whole argument for content addressing, and a build tool that
