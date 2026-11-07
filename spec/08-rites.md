@@ -361,10 +361,35 @@ answered nothing has *reached* nothing, and that is the line under the list
 rather than the number above it: the transcript is one of those traces — one
 `read`, still pending — and its number is what §7.3.2 says a trace's depth is.
 
-If the trace is marked as having reached stratum 8, `strata` MUST say so
-without being asked, and MUST report `replayable: no`. A hole or a witness
-deeper than the recorded depth is a malformed trace (§7.3.2), and `strata` is
-where it is caught.
+If the trace is marked as having reached stratum 8, or if any witness under it
+reached stratum 8, `strata` MUST say so without being asked, and MUST report
+`replayable: no`. A hole or a witness deeper than the recorded depth, or a
+stratum-8 witness under a trace whose `unrecorded` mark is `false`, is a
+malformed trace ([§7.3.2](07-ledger.md#732-what-a-decoder-cannot-check)), and
+`strata` MUST reject it with exit code 65.
+
+A trace's claims fall into three classes:
+
+- **Derivable from verified objects in the store**: the `Trace` node and every
+  node reachable from it are checked against their content addresses on `get`
+  ([§7.5.1](07-ledger.md#751-what-survives-a-crash)); `strata` walks forward
+  `nodes()` edges and never the reverse index. From the nodes present, it
+  checks the hole and witness halves of `depth`, the `unrecorded` mark against
+  reachable `Witness` nodes, and the open `holes` list. The residue half of
+  `depth` and the well-formedness of `residue` and `source` are checked when
+  `exhume` re-buries `residue`.
+- **Bounded by missing objects, refused on corrupt ones**: a store does not
+  require a trace's entire graph to be present (§7.3.2). When a reachable node
+  is absent, `strata` reports how many nodes are missing and states that its
+  survey is a lower bound rather than an unqualified certificate. When a
+  reachable node is present and fails verification on `get`, that is a corrupt
+  object (§7.5.1) rather than an absent one, and `strata` MUST fail with exit
+  code 65 instead of counting it as missing.
+- **Externally trusted**: content addressing proves a `Witness` node is intact
+  and names the `call` and `answer` cairns it was written with; it cannot prove
+  the writer obtained `answer` from the world rather than inventing it.
+  Checking the world's answer means re-running `exhume` against the world or
+  comparing witnesses across independent stores.
 
 "Why is this value at depth 5" has to be a command, not an investigation.
 

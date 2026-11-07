@@ -324,7 +324,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     // replayable, in every rite that reports replayability — and `identical.`
     // is this rite reporting it. §6.7's law is written with the exception in
     // it for the same reason.
-    if replaying && marked {
+    if replaying && (marked || crate::closing::unrecorded(store, &witnesses)) {
         eprintln!("nether: {} reached stratum 8, so replaying it proves nothing.", cairn.short());
         eprintln!();
         eprintln!("  §1.7: nothing downstream of an unrecorded call is recorded, so a");
