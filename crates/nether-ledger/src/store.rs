@@ -72,6 +72,8 @@ pub enum StoreError {
     /// reported afterwards as [`StoreError::Corrupt`], which is the store's
     /// signal for bit rot. The store refuses at the door instead.
     Invalid(DecodeError),
+    /// A portable bundle (`spec/07-ledger.md` §7.5.4) failed framing or verification.
+    Bundle(&'static str),
 }
 
 impl std::fmt::Display for StoreError {
@@ -97,6 +99,7 @@ impl std::fmt::Display for StoreError {
             Self::Invalid(why) => {
                 write!(f, "refusing to write bytes that cannot be read back: {why}")
             }
+            Self::Bundle(why) => write!(f, "invalid store bundle: {why}"),
         }
     }
 }
@@ -143,6 +146,21 @@ struct Seen {
 /// is the whole eviction policy: a burial reads its working set, and a bound
 /// that is simple to state is one that is simple to trust.
 const SEEN_BYTES: usize = 64 << 20;
+const BUNDLE_MAGIC: &[u8] = b"netherc/cairn/v4\x00bundle\x00";
+const MAX_BUNDLE_OBJECT: usize = 16 << 20;
+
+fn verify_bytes(asked: Cairn, bytes: &[u8]) -> Result<Stored, StoreError> {
+    let stored = decode_stored(bytes).map_err(|why| StoreError::Corrupt {
+        asked,
+        found: None,
+        why: Some(why),
+    })?;
+    let actual = Cairn::of_encoded(bytes);
+    if actual != asked {
+        return Err(StoreError::Corrupt { asked, found: Some(actual), why: None });
+    }
+    Ok(stored)
+}
 
 impl Store {
     /// Opens, creating the layout if it is not there.
@@ -298,15 +316,7 @@ impl Store {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(StoreError::Absent(cairn)),
             Err(e) => return Err(StoreError::Io(e)),
         };
-        let actual = Cairn::of_encoded(&bytes);
-        if actual != cairn {
-            return Err(StoreError::Corrupt { asked: cairn, found: Some(actual), why: None });
-        }
-        let stored = decode_stored(&bytes).map_err(|why| StoreError::Corrupt {
-            asked: cairn,
-            found: None,
-            why: Some(why),
-        })?;
+        let stored = verify_bytes(cairn, &bytes)?;
         let mut seen = self.seen();
         if seen.bytes + bytes.len() > SEEN_BYTES {
             *seen = Seen { reads: seen.reads, ..Seen::default() };
@@ -558,6 +568,144 @@ impl Store {
             healthy_traces,
             affected_traces,
         })
+    }
+
+    /// Exports every verified object in topological dependency order as a
+    /// portable bundle (`spec/07-ledger.md` §7.5.4), returning the count.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError::Corrupt`] if any object on disk fails verification,
+    /// [`StoreError::Bundle`] if `objects/` contains a malformed filename, or
+    /// [`StoreError::Io`] if reading or writing fails.
+    pub fn export(&self, out: &mut impl io::Write) -> Result<usize, StoreError> {
+        let mut malformed = BTreeSet::new();
+        let files = self.scan_area("objects", &mut malformed)?;
+        if !malformed.is_empty() {
+            return Err(StoreError::Bundle("malformed path in objects/"));
+        }
+        let mut pending = BTreeMap::new();
+        for (cairn, path) in files {
+            let bytes = fs::read(path)?;
+            let stored = verify_bytes(cairn, &bytes)?;
+            pending.insert(cairn, (stored, bytes));
+        }
+        let mut entries = Vec::with_capacity(pending.len());
+        while !pending.is_empty() {
+            let ready: Vec<Cairn> = pending
+                .iter()
+                .filter(|(_, (s, _))| {
+                    !matches!(s, Stored::Node(n) if n.references().iter().any(|r| pending.contains_key(r)))
+                })
+                .map(|(&c, _)| c)
+                .collect();
+            let take = if ready.is_empty() {
+                pending.keys().next().copied().into_iter().collect()
+            } else {
+                ready
+            };
+            for c in take {
+                if let Some((_, bytes)) = pending.remove(&c) {
+                    entries.push((c, bytes));
+                }
+            }
+        }
+        let mut hasher = blake3::Hasher::new();
+        let mut send = |slice: &[u8]| -> io::Result<()> {
+            hasher.update(slice);
+            out.write_all(slice)
+        };
+        send(BUNDLE_MAGIC)?;
+        send(&(entries.len() as u64).to_be_bytes())?;
+        for (cairn, bytes) in &entries {
+            send(cairn.as_bytes())?;
+            send(&(bytes.len() as u64).to_be_bytes())?;
+            send(bytes)?;
+        }
+        out.write_all(hasher.finalize().as_bytes())?;
+        Ok(entries.len())
+    }
+
+    /// Imports a portable bundle (`spec/07-ledger.md` §7.5.4), verifying each
+    /// object before committing it and rebuilding `refs/`, returning the count.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError::Bundle`] if framing, bounds, ordering or trailer fail,
+    /// [`StoreError::Corrupt`] if an entry or existing destination object fails
+    /// verification, or [`StoreError::Io`] on I/O failure.
+    pub fn import(&self, src: &mut impl io::Read) -> Result<usize, StoreError> {
+        let mut hasher = blake3::Hasher::new();
+        let mut take = |buf: &mut [u8]| -> Result<(), StoreError> {
+            src.read_exact(buf).map_err(|e| {
+                if e.kind() == io::ErrorKind::UnexpectedEof {
+                    StoreError::Bundle("truncated bundle")
+                } else {
+                    StoreError::Io(e)
+                }
+            })?;
+            hasher.update(buf);
+            Ok(())
+        };
+        let mut hdr = [0u8; 24];
+        take(&mut hdr)?;
+        if hdr != BUNDLE_MAGIC {
+            return Err(StoreError::Bundle(
+                if hdr.starts_with(b"netherc/cairn/") && hdr.ends_with(b"\x00bundle\x00") {
+                    "incompatible bundle domain version"
+                } else {
+                    "not a store bundle"
+                },
+            ));
+        }
+        let mut u8s = [0u8; 8];
+        take(&mut u8s)?;
+        let count = usize::try_from(u64::from_be_bytes(u8s))
+            .map_err(|_| StoreError::Bundle("bundle count overflows usize"))?;
+        let mut seen = BTreeSet::new();
+        for _ in 0..count {
+            let mut raw = [0u8; 32];
+            take(&mut raw)?;
+            let cairn = Cairn::from_bytes(raw);
+            if !seen.insert(cairn) {
+                return Err(StoreError::Bundle("duplicate cairn in bundle"));
+            }
+            take(&mut u8s)?;
+            let len = usize::try_from(u64::from_be_bytes(u8s))
+                .ok()
+                .filter(|&n| n <= MAX_BUNDLE_OBJECT)
+                .ok_or(StoreError::Bundle("bundle object exceeds size bound"))?;
+            let mut bytes = vec![0u8; len];
+            take(&mut bytes)?;
+            let stored = verify_bytes(cairn, &bytes)?;
+            if self.has(cairn) {
+                self.get(cairn)?;
+                if let Stored::Node(node) = &stored {
+                    for target in node.references() {
+                        if !self.referrers(target)?.contains(&cairn) {
+                            self.add_ref(target, cairn)?;
+                        }
+                    }
+                }
+            } else {
+                self.put(&stored)?;
+            }
+        }
+        let mut trailer = [0u8; 32];
+        src.read_exact(&mut trailer).map_err(|e| {
+            if e.kind() == io::ErrorKind::UnexpectedEof {
+                StoreError::Bundle("truncated bundle")
+            } else {
+                StoreError::Io(e)
+            }
+        })?;
+        if trailer != *hasher.finalize().as_bytes() {
+            return Err(StoreError::Bundle("bundle trailer mismatch"));
+        }
+        if src.read(&mut [0u8; 1])? != 0 {
+            return Err(StoreError::Bundle("trailing bytes after bundle"));
+        }
+        Ok(count)
     }
 }
 
@@ -1209,5 +1357,131 @@ mod tests {
             audit.affected_traces.iter().find(|a| a.trace == missing_node).expect("missing_node");
         assert_eq!(affected.missing, vec![gone_wit]);
         assert!(affected.unknowable);
+    }
+
+    // ── 0213: a store that outlives its machine ─────────────────────────────
+
+    #[test]
+    fn an_exported_store_imported_into_an_empty_one_rebuilds_refs_and_answers_every_cairn() {
+        let src_dir = Scratch::new();
+        let src = src_dir.store();
+        let (t1, v1, d1, w1) = stored_trace(&src, 101);
+        let (t2, v2, d2, w2) = stored_trace(&src, 202);
+        let hole = src
+            .put(&Stored::Node(Node::Hole {
+                call: Call { function: "read".to_owned(), args: vec![v1] },
+                stratum: 3,
+                span: Span { source: v1, start: 0, end: 1 },
+            }))
+            .unwrap();
+        let staged = src
+            .put(&Stored::Node(Node::Trace {
+                residue: v2,
+                holes: vec![hole],
+                witnesses: vec![w1],
+                deposits: vec![d1],
+                source: v1,
+                depth: 3,
+                unrecorded: false,
+            }))
+            .unwrap();
+
+        let mut bundle = Vec::new();
+        let exported = src.export(&mut bundle).unwrap();
+        assert_eq!(exported, 14);
+
+        let dst_dir = Scratch::new();
+        let dst = dst_dir.store();
+        let imported = dst.import(&mut &bundle[..]).unwrap();
+        assert_eq!(imported, exported);
+        assert!(dst.audit().unwrap().is_clean());
+        assert_eq!(dst.audit().unwrap().healthy_traces, src.audit().unwrap().healthy_traces);
+
+        for c in [t1, v1, d1, w1, t2, v2, d2, w2, hole, staged] {
+            assert_eq!(dst.get(c).unwrap(), src.get(c).unwrap());
+            assert_eq!(dst.resolve(&c.short()).unwrap(), c);
+            let mut dst_refs = dst.referrers(c).unwrap();
+            let mut src_refs = src.referrers(c).unwrap();
+            dst_refs.sort();
+            src_refs.sort();
+            assert_eq!(dst_refs, src_refs, "referrers differed for {c}");
+        }
+
+        // Remove a derived `refs/` file in `dst`, re-import the same bundle,
+        // and verify that existing objects are kept and `refs/` is repaired.
+        std::fs::remove_file(dst.fanned("refs", v1)).unwrap();
+        assert!(!dst.audit().unwrap().is_clean());
+        assert_eq!(dst.import(&mut &bundle[..]).unwrap(), exported);
+        assert!(dst.audit().unwrap().is_clean());
+    }
+
+    #[test]
+    fn truncated_corrupt_and_incompatible_bundles_are_refused_and_partial_imports_stay_clean() {
+        let src_dir = Scratch::new();
+        let src = src_dir.store();
+        let (trace, val, _, _) = stored_trace(&src, 77);
+        let mut bundle = Vec::new();
+        let total = src.export(&mut bundle).unwrap();
+
+        // Every truncated prefix fails with `Bundle("truncated bundle")`, and
+        // because `export` emits leaves before referrers, whatever prefix was
+        // committed before EOF is dependency-closed and `audit` is clean.
+        for cut in [0, 10, 24, 31, 40, bundle.len() / 2, bundle.len() - 33, bundle.len() - 1] {
+            let dst_dir = Scratch::new();
+            let dst = dst_dir.store();
+            assert!(
+                matches!(
+                    dst.import(&mut &bundle[..cut]),
+                    Err(StoreError::Bundle("truncated bundle"))
+                ),
+                "cut at {cut} was not refused as truncated"
+            );
+            assert!(dst.audit().unwrap().is_clean(), "cut at {cut} left an unclean store");
+            // Resuming with the full bundle finishes the import cleanly.
+            assert_eq!(dst.import(&mut &bundle[..]).unwrap(), total);
+            assert!(dst.audit().unwrap().is_clean());
+            assert!(dst.audit().unwrap().healthy_traces.contains(&trace));
+        }
+
+        // Wrong domain version vs non-bundle magic.
+        let dst_dir = Scratch::new();
+        let dst = dst_dir.store();
+        let mut v3 = bundle.clone();
+        v3[15] = b'3';
+        assert!(matches!(
+            dst.import(&mut &v3[..]),
+            Err(StoreError::Bundle("incompatible bundle domain version"))
+        ));
+        assert!(matches!(
+            dst.import(&mut &b"not-a-netherc-bundle-at-all"[..]),
+            Err(StoreError::Bundle("not a store bundle"))
+        ));
+
+        // Corrupt payload bytes inside the first entry are caught before any
+        // object is written to the destination store.
+        let mut bad_payload = bundle.clone();
+        bad_payload[24 + 8 + 32 + 8] ^= 0xff;
+        assert!(matches!(dst.import(&mut &bad_payload[..]), Err(StoreError::Corrupt { .. })));
+        assert!(!dst.has(val));
+
+        // Tampered trailer and trailing garbage.
+        let mut bad_trailer = bundle.clone();
+        *bad_trailer.last_mut().unwrap() ^= 0x01;
+        let t_dir = Scratch::new();
+        assert!(matches!(
+            t_dir.store().import(&mut &bad_trailer[..]),
+            Err(StoreError::Bundle("bundle trailer mismatch"))
+        ));
+        let mut trailing = bundle.clone();
+        trailing.push(0x00);
+        let g_dir = Scratch::new();
+        assert!(matches!(
+            g_dir.store().import(&mut &trailing[..]),
+            Err(StoreError::Bundle("trailing bytes after bundle"))
+        ));
+
+        // Exporting a store with a corrupt object is refused.
+        std::fs::write(src.fanned("objects", val), b"corrupt").unwrap();
+        assert!(matches!(src.export(&mut Vec::new()), Err(StoreError::Corrupt { .. })));
     }
 }

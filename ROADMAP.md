@@ -403,7 +403,7 @@ Concurrency that preserves specified observable order, not an assumption that al
 
 ## ossuary — The Ossuary
 
-`####······` 33% · 2 of 6 done · due 2028-05-01
+`#####·····` 50% · 3 of 6 done · due 2028-05-01
 
 A durable, inspectable store with measured retention costs. Export and integrity inspection need not wait for the year-long study.
 
@@ -412,10 +412,10 @@ A durable, inspectable store with measured retention costs. Export and integrity
 - [ ] [`0210`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0210-measure-a-year-of-a-real-store.md) Measure a year of a real store <sup>chore · p0 · 4</sup>
 - [ ] [`0211`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0211-secondary-burial-move-a-thing-without-renaming-it.md) Secondary burial: move a thing without renaming it <sup>feature · p0 · 4</sup>
 - [ ] [`0212`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0212-what-a-prune-may-remove-and-what-it-may-never.md) What a prune may remove, and what it may never <sup>spec · p0 · 4</sup>
-- [ ] [`0213`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0213-a-store-that-outlives-its-machine.md) A store that outlives its machine <sup>feature · p1 · 4</sup>
 
 ### buried
 
+- [x] [`0213`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0213-a-store-that-outlives-its-machine.md) A store that outlives its machine <sup>feature · p1 · 4</sup>
 - [x] [`0214`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0214-what-a-damaged-store-can-still-tell-you.md) What a damaged store can still tell you <sup>feature · p1 · 3</sup>
 - [x] [`0215`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0215-a-second-store-and-what-they-owe-each-other.md) A second store, and what they owe each other <sup>spec · p2 · 5</sup>
 

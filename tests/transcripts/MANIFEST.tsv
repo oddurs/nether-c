@@ -58,6 +58,7 @@ spec/07-ledger.md § Exchange transcripts #1	text	pinned	3d24412ed24dfa56
 spec/07-ledger.md § Exchange transcripts #2	text	pinned	a68ffd58fe4ea3b3
 spec/07-ledger.md § Exchange transcripts #3	text	pinned	2b1c1a1e148af292
 spec/07-ledger.md § Exchange transcripts #4	text	pinned	9cfc88c6ed5e59c8
+spec/07-ledger.md § 7.5.4 Moving a store #1	text	pinned	34dd77ed43a3522c
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
 spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
 spec/08-rites.md § 8.2 `bury` #2	console	checked	50d0f77ea2722fdb

@@ -473,6 +473,54 @@ round 1 want [61a6cc41, 21ca4ef0, 8106589a]
 result  aborted 76c4b655: peer served corrupt bytes for 21ca4ef0 (2 committed, 21ca4ef0 not written)
 ```
 
+### 7.5.4 Moving a store
+
+Moving a store to another machine by copying its directory copies `refs/`,
+`memo/` and `tmp/`, none of which is canonical, and verifies nothing at the
+destination. A portable **bundle** carries only verified canonical objects in a
+single self-checking stream:
+
+```text
+BUNDLE = DOMAIN                      # b"netherc/cairn/v4\x00" (17 bytes, §7.2)
+       || b"bundle\x00"              # 7-byte stream marker
+       || u64_be(count)              # number of objects in the bundle
+       || ENTRY * count
+       || blake3(all preceding bytes) # 32-byte whole-stream trailer
+ENTRY  = cairn (32 bytes)
+       || u64_be(len)                # byte length of canonical payload
+       || payload (len bytes)
+```
+
+- **Export (`export`).** Walks `objects/`, verifies every object against its
+  cairn and the canonical decoder ([§7.1.1](#711-what-a-decoder-must-reject),
+  [§7.3.1](#731-node-encoding)), and refuses to export if any object is corrupt
+  or any filename under `objects/` is malformed ([§7.5.2](#752-what-a-damaged-store-can-still-tell-you)).
+  Verified objects are emitted in topological dependency order (every referenced
+  object in the store before the nodes that reference it, with ties broken
+  lexicographically by cairn) so any prefix of the stream is closed under
+  in-store forward references. `refs/`, `memo/` and `tmp/` are omitted.
+- **Import (`import`).** Checks the 24-byte header, refusing an unknown magic or
+  a mismatched domain version ([§7.7](#77-versioning)) before reading entries.
+  For each of the `count` entries, `import` enforces `len <= MAX_OBJECT_BYTES`
+  (16 MiB) before allocating, rejects duplicate cairns within the bundle,
+  verifies canonical decoding and `cairn(payload) == cairn` before touching the
+  destination store, and then commits the object:
+  - if the destination store does not yet hold `cairn`, via `put`
+    ([§7.5](#75-the-store)), which writes reverse edges to `refs/` first and
+    atomically renames the object into `objects/`;
+  - if the destination store already holds `cairn`, by verifying the existing
+    on-disk object via `get(cairn)` without overwriting it, and ensuring all of
+    its reverse edges are present in `refs/`.
+  After all `count` entries are read, `import` verifies the 32-byte `blake3`
+  trailer over the stream and requires end-of-stream with no trailing bytes.
+- **Interrupted or truncated import.** Because entries are ordered
+  leaves-before-referrers and each entry is verified before it is committed, an
+  import interrupted or truncated at any byte offset leaves the destination
+  store clean ([§7.5.2](#752-what-a-damaged-store-can-still-tell-you)) with a
+  verified, dependency-closed prefix of the bundle. Re-running `import` with the
+  complete bundle verifies the already-present prefix in place without
+  overwriting it and commits the remainder.
+
 ## 7.6 Garbage
 
 There is none.
