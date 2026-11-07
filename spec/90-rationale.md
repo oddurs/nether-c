@@ -1618,3 +1618,69 @@ than a display face would be and it is the price of one face.
 A second *weight* is a different question, and it is item 0231: bold is the
 same letterforms drawn heavier, not a second face, and the browser must not be
 allowed to invent one.
+
+### The four sizes it is read at, and where the grid gives way
+
+`Nether 8` is drawn on an 8×8 grid with a seven-unit fixed advance (six ink
+columns and one blank bearing column). `site/design.py` emits four sizes and no
+others (`TYPE = {8, 16, 24, 32}`), whole multiples of the drawing cell:
+
+- **8px (`--type-fine`, 1× cell, 7px advance):** the ASCII door sign
+  (`pre.sign`, `line-height: 1` = 8px), listing captions (`figcaption`), plaque
+  title bars (`.plaque > h3`), the footer, badges, the hit counter, and the 8×8
+  drawing grids and metadata on `site/specimen.html` (`line-height: 1.375` =
+  11px).
+- **16px (`--type-body`, 2× cell, 14px advance):** `body` prose, code listings
+  (`pre`, `code`), tables, navigation and directory drawers, terminal status
+  bars, controls (`button`, `textarea`), necropolis labels and previews, and
+  `h3`/`h4` (`line-height: 1.375` = 22px; `textarea` uses `1.5` = 24px). `html`
+  sets `font-size: 14px` solely to scale `rem` margins and padding; `body`
+  restores `16px` before any text is drawn, and `@media (max-width: 640px)`
+  tightens padding without lowering the body size.
+- **24px (`--type-head`, 3× cell, 21px advance):** `h1`, `h2`,
+  `.necropolis h2`, and `.box.covenant strong` (`line-height: 1.375` = 33px).
+- **32px (`--type-sign`, 4× cell, 28px advance):** `.necropolis h1`
+  (`line-height: 1.25` = 40px) and `.nc-selected h2` (`line-height: 1.375` =
+  44px), plus the 4× specimen row and glyph samples on `site/specimen.html`.
+
+Every `line-height` (`1`, `1.25`, `1.375`, `1.5`) and every `letter-spacing`
+(`.125em`) in `site/nether.css` is a multiple of one eighth (`1/8`), and because
+every allowed `font-size` is a multiple of `8px`, their products are always
+whole CSS pixels (`8/11/16/22/24/32/33/40/44px` leading; `1/2/3/4px` tracking,
+bringing a tracked character's pitch from `7/8 em` to `1em`). An earlier
+`.necropolis h1` rule at `48px` with `line-height: 1.2` (`57.6px` on desktop,
+`38.4px` on mobile) and decimal tracking (`.1em`, `.12em`, `.08em`, `.06em`,
+which shifted characters by `0.64px`–`2.4px`) were brought onto the eighth grid
+in 0234, and `tests/css/run` and `tests/necropolis/browser.mjs` refuse any
+element whose computed `font-size`, `line-height`, or `letter-spacing` leaves
+it.
+
+**Rejected:** scaling body or code down to `12px` or `14px` on mobile, or using
+`8px` for running text. At `12px` or `14px` (`1.5×` or `1.75×` the grid) every
+second stem straddles a device pixel at scale 1; at `8px` (`1×`) a bold stem is
+two pixels and a counter in `B`, `8`, `0`, `a`, `e`, or `g` is one pixel wide,
+which holds for short uppercase chrome and captions and is too tight for a
+paragraph or a code listing. Also rejected: retiring `8px` from chrome and
+captions altogether, which would double the height of the door sign and make
+listing title bars as tall as the code they label.
+
+**What it costs.** Three things CSS integer pixels cannot prevent:
+
+1. **At `8px` and device scale 1**, one drawing unit is one physical pixel.
+   Closed counters remain open across both weights, but dense forms (`@`, `%`,
+   `#`, `§`, `m`) have single-pixel gaps that only gain breathing room at
+   device scale 2 (`2×2` physical pixels per unit) or at `16px` and above.
+2. **Outline rasterisation on scanlines beside crossbars.** `Nether 8` ships as
+   quadratic contours in `glyf` rather than embedded bitmap strikes (`EBDT`), so
+   Chromium and CoreText still apply greyscale coverage antialiasing on rows
+   immediately adjacent to horizontal bars even when `-webkit-font-smoothing:
+   none` is set.
+3. **Non-integer browser and display zoom.** At `125%` (`1.25×`) only `32px`
+   (`40` physical pixels, `5×` the grid) lands on whole physical pixels; `8px`,
+   `16px`, and `24px` become `1.25×`, `2.5×`, and `3.75×` the grid, giving the
+   two stems of `H` asymmetric physical widths (`1.62` vs `1.82` pixels at
+   `8px`). At `150%` (`1.5×`) the even CSS sizes (`16px` and `32px`) land on
+   whole physical pixels (`3×` and `6×` the grid) while the odd sizes (`8px` and
+   `24px`) fall on halves (`1.5×` and `4.5×`). Integer CSS pixels keep `1×` and
+   `2×` screens exact and keep `16px` body text exact at `150%`, and cannot make
+   every zoom factor an integer multiple of eight.

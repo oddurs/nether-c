@@ -117,6 +117,7 @@ html[data-lamp="lit"] { background-image: url("gfx/bg-lit.gif"); }
 pre, code, kbd, samp, tt,
 button, input, optgroup, select, textarea {
   font-family: inherit;
+  font-size: inherit;
 }
 
 body {
@@ -357,7 +358,7 @@ h1 {
   color: var(--accent);
   font-size: 24px;
   font-weight: bold;
-  letter-spacing: .1em;
+  letter-spacing: .125em;
   text-transform: uppercase;
 }
 h1::before { content: "\2588\2588 "; }
@@ -437,7 +438,7 @@ figure.listing figcaption {
   background: var(--dim);
   color: var(--ground);
   font-size: 8px;
-  letter-spacing: .1em;
+  letter-spacing: .125em;
   text-transform: uppercase;
 }
 figure.listing pre {
@@ -513,7 +514,7 @@ div.box > :last-child { margin-bottom: 0; }
 div.box.shout { border-color: var(--warn); color: var(--warn); }
 /* The one sentence everything else follows from. It gets the room. */
 div.box.covenant { border-color: var(--accent); color: var(--accent); margin: 1.5rem 0; }
-div.box.covenant strong { font-size: 24px; letter-spacing: .1em; }
+div.box.covenant strong { font-size: 24px; letter-spacing: .125em; }
 div.box.covenant p + p { color: var(--dim); margin-top: .5rem; }
 
 p.small { color: var(--dim); }
@@ -626,7 +627,7 @@ img.specimen { width: 100%; max-width: 435px; margin: 1rem auto; image-rendering
   background: var(--dim);
   color: var(--ground);
   font-size: 8px;
-  letter-spacing: .12em;
+  letter-spacing: .125em;
 }
 .plaque > h3::before { content: none; }
 .plaque > div { padding: .7rem .9rem; }
@@ -647,7 +648,7 @@ ol.doctrine > li::before {
   color: var(--accent);
   font-weight: bold;
 }
-ol.doctrine > li b { display: block; color: var(--ink); text-transform: uppercase; letter-spacing: .06em; }
+ol.doctrine > li b { display: block; color: var(--ink); text-transform: uppercase; letter-spacing: .125em; }
 ol.doctrine > li span { color: var(--dim); }
 
 /* A diagram that carries labels is drawn small and shown at an exact 2x.
@@ -670,7 +671,7 @@ hr.gfx { height: 0; margin: 1.2rem 0; border: 0; }
    All controls remain ordinary HTML. The SVG only connects their boxes. */
 body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap); }
 .necropolis [hidden] { display: none !important; }
-.necropolis h1 { font-size: 48px; line-height: 1.2; margin: var(--tight) 0; }
+.necropolis h1 { font-size: 32px; line-height: 1.25; margin: var(--tight) 0; }
 .necropolis h2 { background: none; color: var(--ink); padding: 0; margin: 0 0 var(--hair); font-size: 24px; border: 0; }
 .necropolis h3 { color: var(--dim); font-size: 16px; margin: 0 0 var(--tight); }
 .necropolis h1::before, .necropolis h2::before, .necropolis h3::before { content: none; }
@@ -683,7 +684,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .necropolis code { background: transparent; padding: 0; }
 .nc-header { border-bottom: 1px solid var(--dimmer); padding-bottom: var(--tight); margin-bottom: var(--tight); }
 .nc-eyebrow, .nc-private, .nc-caption, .nc-footer { color: var(--dim); }
-.necropolis .nc-eyebrow { font-size: 16px; letter-spacing: .08em; }
+.necropolis .nc-eyebrow { font-size: 16px; letter-spacing: .125em; }
 .nc-header h1 { color: var(--accent); }
 .nc-private { margin-top: var(--tight) !important; }
 .nc-source { border: 1px solid var(--dimmer); padding: var(--hair) var(--tight); background: var(--sunk); }
@@ -701,7 +702,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .nc-navigation span { margin-left: auto; color: var(--dim); }
 .nc-neighbourhood { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--step); align-items: center; min-height: 300px; padding: var(--tight) 0 var(--step); }
 .nc-neighbourhood > section { position: relative; z-index: 1; min-width: 0; }
-.nc-neighbours h3 { text-transform: uppercase; letter-spacing: .08em; }
+.nc-neighbours h3 { text-transform: uppercase; letter-spacing: .125em; }
 .nc-object { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; width: 100%; margin-bottom: var(--hair); }
 .nc-object .nc-edge-label { grid-column: 1 / -1; color: var(--dim); font-size: 16px; }
 .nc-object strong { color: var(--ink); }
@@ -813,7 +814,7 @@ a.chapter:hover .n, a.chapter:focus-visible .n { color: var(--ground); }
 .glyph-meta {
   font-size: var(--type-fine);
   color: var(--dim);
-  letter-spacing: .08em;
+  letter-spacing: .125em;
   text-transform: uppercase;
 }
 .glyph-name {

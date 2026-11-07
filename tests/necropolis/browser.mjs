@@ -96,6 +96,23 @@ async function screenshot(name, selector) {
     clip });
   await writeFile(join(process.env.NETHER_SCREENSHOTS, name + ".png"), Buffer.from(data, "base64"));
 }
+async function checkTypeGrid(context) {
+  assert.deepEqual(await evaluate(`(() => {
+    const allowed = new Set(["8px", "16px", "24px", "32px"]);
+    const bad = [];
+    for (const el of [document.body, ...document.body.querySelectorAll("*")]) {
+      const cs = getComputedStyle(el);
+      const lh = parseFloat(cs.lineHeight);
+      const ls = cs.letterSpacing === "normal" ? 0 : parseFloat(cs.letterSpacing);
+      if (!allowed.has(cs.fontSize) || !Number.isInteger(lh) || !Number.isInteger(ls)) {
+        bad.push(el.tagName.toLowerCase() + (el.className ? "." + el.className : "")
+          + ":" + cs.fontSize + "/" + cs.lineHeight + "/" + cs.letterSpacing);
+        if (bad.length >= 5) break;
+      }
+    }
+    return bad;
+  })()`), [], "every element stays on the 8/16/24/32px type grid with integer leading and tracking at " + context);
+}
 try {
   const { targetId } = await command("Target.createTarget", { url: "about:blank" }, false);
   ({ sessionId: session } = await command("Target.attachToTarget", { targetId, flatten: true }, false));
@@ -156,6 +173,7 @@ try {
         one.remove(); two.remove();
         return same;
       })()`), true, "a strong run is the same width in the page");
+      await checkTypeGrid(path + "@" + width);
       if (path.includes("/spec/")) {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents li').length"), 12);
         assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
@@ -181,6 +199,64 @@ try {
             });
           });
         })()`), "every glyph card renders 8/16/24/32px in both weights at equal advance");
+        if (width === 1248) {
+          for (const [idx, px] of [8, 16, 24, 32].entries()) {
+            await screenshot(`face-${px}px-chrome-1248w-dpr1-dark`, `.specimen-scale .scale-row:nth-of-type(${idx + 1})`);
+          }
+          for (const dpr of [1, 2]) {
+            await command("Emulation.setDeviceMetricsOverride", { width: 1248, height: 1000, deviceScaleFactor: dpr, mobile: false });
+            assert.deepEqual(await evaluate(`(() => {
+              const dpr = window.devicePixelRatio;
+              const bad = [];
+              for (const size of [8, 16, 24, 32]) {
+                for (const weight of ["normal", "bold"]) {
+                  for (const ch of "08BDOPQRabdegopq") {
+                    const c = document.createElement("canvas");
+                    const w = Math.ceil(size * dpr), h = Math.ceil(size * dpr);
+                    c.width = w; c.height = h;
+                    const ctx = c.getContext("2d");
+                    ctx.scale(dpr, dpr);
+                    ctx.font = weight + ' ' + size + 'px "Nether 8"';
+                    ctx.textBaseline = "top";
+                    ctx.fillStyle = "#ffffff";
+                    ctx.fillText(ch, 0, 0);
+                    const data = ctx.getImageData(0, 0, w, h).data;
+                    let open = false;
+                    for (let y = 0; y < h && !open; y++) {
+                      let state = 0;
+                      for (let x = 0; x < w; x++) {
+                        const a = data[(y * w + x) * 4 + 3];
+                        if (state === 0 && a >= 200) state = 1;
+                        else if (state === 1 && a < 100) state = 2;
+                        else if (state === 2 && a >= 200) { open = true; break; }
+                      }
+                    }
+                    if (!open) bad.push(weight + "@" + size + ":" + ch);
+                  }
+                }
+              }
+              return bad;
+            })()`), [], "closed-loop counters stay open at 8/16/24/32px in both weights at dpr " + dpr);
+            await screenshot(`face-scale-chrome-1248w-dpr${dpr}-dark`, ".specimen-scale");
+            await click("[data-lamp-toggle]");
+            await screenshot(`face-scale-chrome-1248w-dpr${dpr}-lit`, ".specimen-scale");
+            await click("[data-lamp-toggle]");
+          }
+          for (const zoom of [1.25, 1.5]) {
+            await command("Emulation.setDeviceMetricsOverride", { width: 1248, height: 1000, deviceScaleFactor: zoom, mobile: false });
+            await screenshot(`face-scale-chrome-1248w-zoom${Math.round(zoom * 100)}-dark`, ".specimen-scale");
+          }
+          await command("Emulation.setDeviceMetricsOverride", { width: 1248, height: 1000, deviceScaleFactor: 1, mobile: false });
+        } else if (width === 390) {
+          for (const dpr of [1, 2]) {
+            await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: dpr, mobile: true });
+            await screenshot(`face-scale-chrome-390w-dpr${dpr}-dark`, ".specimen-scale");
+            await click("[data-lamp-toggle]");
+            await screenshot(`face-scale-chrome-390w-dpr${dpr}-lit`, ".specimen-scale");
+            await click("[data-lamp-toggle]");
+          }
+          await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
+        }
       } else {
         assert.equal(await evaluate("document.querySelector('img.hero').naturalWidth"), 600);
         // 28px is `2rem` at the root size site/nether.css sets. The chip is
@@ -236,6 +312,7 @@ try {
   assert.match(await text("summary"), /1 hole/);
   assert.equal(await text("selected-title"), "Trace");
   await until("document.querySelectorAll('.nc-wire').length > 0");
+  await checkTypeGrid("/web/necropolis/@1248");
   await screenshot("trace-desktop");
   console.log("browser: real worker burial and desktop graph");
 
@@ -265,6 +342,7 @@ try {
   assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), "mobile overflows horizontally");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.nc-wires')).display"), "none");
   assert.equal(await evaluate("getComputedStyle(document.getElementById('selected')).order"), "-1");
+  await checkTypeGrid("/web/necropolis/@390");
   await screenshot("hole-mobile");
   console.log("browser: 390px layout, same relationships, no horizontal overflow");
 

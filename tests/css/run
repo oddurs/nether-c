@@ -60,9 +60,56 @@ def check_the_face_reaches(css: str) -> list[str]:
     return sorted((on_page & UA_FONT) - opted_in(css))
 
 
+ALLOWED_FONT_SIZES = {
+    "8px", "16px", "24px", "32px",
+    "var(--type-fine)", "var(--type-body)", "var(--type-head)", "var(--type-sign)",
+    "inherit",
+}
+
+
+def check_the_type_scale(css: str) -> list[tuple[int, str, str]]:
+    """Every font-size (outside html's rem root), line-height and letter-spacing
+    must stay on the eight-pixel grid so glyphs and baselines land on whole pixels. 0234.
+    """
+    bad: list[tuple[int, str, str]] = []
+    for line, selector, body in blocks(css):
+        sel = " ".join(selector.split())
+        for m in re.finditer(r"\bfont-size\s*:\s*([^;]+)", body):
+            val = m.group(1).strip()
+            if sel == "html" and val == "14px":
+                continue
+            if val not in ALLOWED_FONT_SIZES:
+                bad.append((line, sel, f"font-size: {val}"))
+        for m in re.finditer(r"\bline-height\s*:\s*([^;]+)", body):
+            val = m.group(1).strip()
+            if val in ("inherit", "normal"):
+                continue
+            try:
+                num = float(val)
+                if abs(num * 8 - round(num * 8)) > 1e-6:
+                    bad.append((line, sel, f"line-height: {val}"))
+            except ValueError:
+                bad.append((line, sel, f"line-height: {val}"))
+        for m in re.finditer(r"\bletter-spacing\s*:\s*([^;]+)", body):
+            val = m.group(1).strip()
+            if val in ("0", "normal", "inherit"):
+                continue
+            if val.endswith("em"):
+                try:
+                    num = float(val[:-2])
+                    if abs(num * 8 - round(num * 8)) > 1e-6:
+                        bad.append((line, sel, f"letter-spacing: {val}"))
+                    continue
+                except ValueError:
+                    pass
+            bad.append((line, sel, f"letter-spacing: {val}"))
+    return bad
+
+
 def main() -> int:
+    css = CSS.read_text(encoding="utf-8")
     wrong = []
-    for line, selector, body in blocks(CSS.read_text(encoding="utf-8")):
+    for line, selector, body in blocks(css):
         axes = {m.group(1) for m in re.finditer(r"\boverflow-(x|y)\s*:", body)}
         if len(axes) == 1:
             said = f"overflow-{axes.pop()}"
@@ -79,7 +126,7 @@ def main() -> int:
         )
         return 1
 
-    missed = check_the_face_reaches(CSS.read_text(encoding="utf-8"))
+    missed = check_the_face_reaches(css)
     if missed:
         print("css: these are on a page and never get the face:", file=sys.stderr)
         for tag in missed:
@@ -91,8 +138,21 @@ def main() -> int:
         )
         return 1
 
+    off_grid = check_the_type_scale(css)
+    if off_grid:
+        print("css: type declaration off the eight-pixel grid:", file=sys.stderr)
+        for line, selector, decl in off_grid:
+            print(f"  site/nether.css:{line}  {selector}  sets {decl}", file=sys.stderr)
+        print(
+            "\n  font-size must be 8/16/24/32px (or --type-fine/body/head/sign),"
+            "\n  and line-height / letter-spacing must be multiples of 1/8.",
+            file=sys.stderr,
+        )
+        return 1
+
     print("css: every overflow names both axes")
     print("css: every element with a user-agent face is handed back the site's")
+    print("css: every font-size, line-height and letter-spacing stays on the eight-pixel grid")
     return 0
 
 
