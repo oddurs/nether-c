@@ -1419,6 +1419,35 @@ specific base trace `T`, and a retried or overlapping assignment whose world
 changed between attempts fails the merge with an explicit conflict rather than
 producing a trace.
 
+### Version ranges, a central package registry, and a dedicated ledger tag for packages
+
+[§7.5.5](07-ledger.md#755-packages) represents a package as a canonical
+`Struct` value (`"Package"` / `"Dep"`) addressed by its cairn, pairs local
+aliases with exact dependency cairns, and resolves dependency closures offline.
+Three alternatives were rejected.
+
+**Version ranges and a solver.** Rejected because a version range resolves to
+different bytes depending on when and against which index the solver runs. Two
+disconnected machines can only resolve a dependency to the same cairn offline if
+the dependency names the cairn directly.
+
+**A central registry for human names.** Rejected because a global namespace
+reintroduces a mutable mapping from names to bytes outside the ledger. Scoping
+an `alias` to the `"Package"` struct that declares it gives humans a readable
+local name while keeping every cross-package edge an immutable 32-byte cairn.
+
+**A new value tag or node kind for packages.** Rejected because a package is a
+record of existing ledger primitives (`Str`, `Cairn`, `Array`, `Struct`), and
+encoding it as an ordinary `Struct` under tag `0x10` requires no change to the
+frozen tag table ([§7.1](07-ledger.md#71-canonical-encoding)) or domain
+separator ([§7.2](07-ledger.md#72-cairns)).
+
+**What it costs.** Updating a deep dependency changes its cairn and therefore
+the cairn of every package above it in the DAG, and offline resolution requires
+the dependency closure to be imported into the local store beforehand
+([§7.5.3](07-ledger.md#753-a-second-store-and-what-they-owe-each-other),
+[§7.5.4](07-ledger.md#754-moving-a-store)).
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own

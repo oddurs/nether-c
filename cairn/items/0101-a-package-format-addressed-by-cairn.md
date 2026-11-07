@@ -2,12 +2,14 @@
 id: 101
 title: A package format, addressed by cairn
 type: feature
-status: unmarked
+status: descending
 milestone: after
+assignee: Oddur Sigurdsson
+claimed: 2026-11-07
 depends_on:
 - 215
 created: 2026-09-11
-updated: 2026-09-15
+updated: 2026-11-07
 priority: p1
 effort: xl
 area: crates/nether-ledger
@@ -32,9 +34,9 @@ deliberately rather than discovered.
 
 ## Open questions
 
-- [ ] How does a human name a package they have not seen? Cairns are not memorable
-- [ ] Version ranges have no meaning when a dependency is a hash. Is that a feature?
-- [ ] Who hosts the store, and what happens when they stop (see 'A public store')
+- [x] How does a human name a package they have not seen? Cairns are not memorable
+- [x] Version ranges have no meaning when a dependency is a hash. Is that a feature?
+- [x] Who hosts the store, and what happens when they stop (see 'A public store')
 
 ## Delivery plan — 2026-09-15
 
