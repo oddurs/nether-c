@@ -2,10 +2,12 @@
 id: 281
 title: Reduce past a statement that starved
 type: spec
-status: unmarked
+status: buried
 milestone: futamura
+assignee: Oddur Sigurdsson
+claimed: 2026-11-07
 created: 2026-10-30
-updated: 2026-10-30
+updated: 2026-11-07
 priority: p1
 effort: l
 stratum: 0
@@ -32,9 +34,9 @@ statements after a starved one may be reduced, and under what rules.
 
 ## Open questions
 
-- [ ] Are the statements after a starved one reduced speculatively, with the
+- [x] Are the statements after a starved one reduced speculatively, with the
       starved binding as an unknown, or not at all?
-- [ ] A `return` after the starved statement: does the residue keep the
+- [x] A `return` after the starved statement: does the residue keep the
       statement order exactly, so nothing it did moves before the starved one?
 
 ## Delivery steps and dependencies
@@ -54,8 +56,20 @@ general `evaluate_program`. The interpreter's branch on the answer is
 expression__91();`, is the one that starves. The block stops there and the
 branch is never reached.
 
+With reduction past a starved statement (`Burial::after_starved`), the
+bootstrap residue drops from 1,433 lines to 1,355 lines (21 minted functions,
+4,995,707 steps, one hole). `evaluate_program__` specialises `s` past
+`Bytes r = expression__91();`, `expression__` folds `cursor(args)` to `415`
+and drops `if (len(lookup(env, t)) > 0)`, and `block_value__` drops
+`if (!checking)` and folds `problem(b"unsupported deposit type", p)` inside
+the undecided branch after `r`.
+
 ## Acceptance criteria
 
-- [ ] Every normative claim is stated once, in one place
-- [ ] Every code sample in it is in `tests/transcripts/`
-- [ ] A reader who has not read the rest of the spec can follow it
+- [x] Every normative claim is stated once, in one place
+- [x] Every code sample in it is in `tests/transcripts/`
+- [x] A reader who has not read the rest of the spec can follow it
+
+## 2026-11-07
+
+Buried. §6.5 now specifies that once a statement in a block starves, that statement stays in place with any binding left as an unknown local, and the statements and tail after it are reduced speculatively in place under §6.5's three clauses while keeping statement order intact. §90.2 records the rejected alternatives (stopping the block at the first starved statement, or evaluating past it without speculation). Implemented in `crates/nether-bury/src/bury.rs` via `Burial::after_starved`, `Burial::try_expr`, and `Burial::ret_depth`. Tested in `crates/nether-bury/tests/projection.rs` (`the_residue_still_interprets_past_the_unanswered_question`) and `crates/nether-cli/tests/rites.rs` (`a_block_reduces_past_a_statement_that_starved`).

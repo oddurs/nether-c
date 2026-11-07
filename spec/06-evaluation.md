@@ -366,11 +366,13 @@ written down as a function of no parameters and the call site names that.
 > work this one already did, and nothing could ever be specialised to
 > anything.
 
-A block reduces its statements in order and stops at the first one that
-starves. Its residue is the bindings that finished, then that statement and
-every statement after it, unreduced. A statement that finished and bound
+A block reduces its statements in order. A statement that finished and bound
 nothing is not in the residue — it has already happened, and what it deposited
-is already in the trace.
+is already in the trace. Once a statement starves, that statement stays in
+place, with whatever it bound left as an unknown, and the statements and tail
+after it are reduced speculatively in place under the rules below. Statement
+order is kept: a `return` after a starved statement stays after it with its
+operand reduced, and nothing after that `return` is in the residue.
 
 **What this is for.** Bury an interpreter against a program it is to
 interpret, with the program's own questions unanswered, and the residue does
@@ -384,11 +386,12 @@ interpreter.
 
 An `if` whose condition waits on the world residualises whole. Both arms
 survive, because which one runs is a thing only the answer settles. But the
-arms may be **reduced** where they stand, and an implementation SHOULD reduce
-them: without it a first projection stops at the first branch on an unanswered
-value, which for an interpreter is the first one it reaches.
+arms may be **reduced** where they stand, and so may the statements after a
+starved statement in a block, and an implementation SHOULD reduce both: without
+them a first projection stops at the first binding of an unanswered value or
+the first branch on it, which for an interpreter is the first one it reaches.
 
-Reduction under an undecided branch is **speculative**, and a speculative
+Reduction in both places is **speculative**, and a speculative
 reduction may produce a value or it may stop. It MUST NOT do anything else.
 Three things in particular:
 
