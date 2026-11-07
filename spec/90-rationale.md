@@ -1392,6 +1392,33 @@ with nodes in `objects/` whose referenced children have not arrived yet.
 store to order and frame the bundle, and importing decodes, hashes and indexes
 every object again at the destination.
 
+### Assigning distributed holes by `Call` or resolving conflicting witnesses by arrival
+
+[§6.6](06-evaluation.md#answering-across-machines) assigns a trace's open
+questions across machines by their slot index `0..holes.len()`, commits merged
+witnesses in ascending slot order, and rejects conflicting witnesses for the
+same slot. Two alternatives were rejected.
+
+**Assigning and merging by `Call` or by `Hole` cairn.** Rejected because at act
+strata (`4`, `6`, `7` and `8`) two entries in `holes` are not merged
+([§6.3](06-evaluation.md#63-holes)): they may share the same `Call`, and when
+written at one source span they share the same `Hole` cairn
+([§7.3.1](07-ledger.md#731-node-encoding)). Keying a delivery by `Call` or by
+`Hole` cairn cannot tell whether two witnesses from two workers are answers to
+two distinct act slots or two competing answers to one slot.
+
+**Resolving conflicting witnesses by arrival order, worker rank or quorum.**
+Rejected because at the store level two divergent witnesses are both valid
+historical records ([§7.5.3](07-ledger.md#753-a-second-store-and-what-they-owe-each-other)),
+while a single trace can record only one witness per answered hole slot.
+Picking one silently discards a recorded observation of the world and makes the
+merged cairn depend on which worker answered first.
+
+**What it costs.** Every worker delivery carries explicit slot indices against a
+specific base trace `T`, and a retried or overlapping assignment whose world
+changed between attempts fails the merge with an explicit conflict rather than
+producing a trace.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own

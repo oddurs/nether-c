@@ -2,12 +2,14 @@
 id: 208
 title: Two machines, one trace
 type: feature
-status: unmarked
+status: descending
 milestone: cortege
+assignee: Oddur Sigurdsson
+claimed: 2026-11-07
 depends_on:
 - 215
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-11-07
 priority: p2
 effort: xl
 area: crates/nether-world

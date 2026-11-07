@@ -388,7 +388,7 @@ Evidence-led performance work with canonical results and fuel semantics preserve
 
 Concurrency that preserves specified observable order, not an assumption that all world questions commute.
 
-### unmarked
+### descending
 
 - [ ] [`0208`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0208-two-machines-one-trace.md) Two machines, one trace <sup>feature · p2 · 6</sup>
 
