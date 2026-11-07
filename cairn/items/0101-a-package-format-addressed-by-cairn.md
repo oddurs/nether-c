@@ -2,10 +2,11 @@
 id: 101
 title: A package format, addressed by cairn
 type: feature
-status: descending
+status: buried
 milestone: after
 assignee: Oddur Sigurdsson
 claimed: 2026-11-07
+closed_at: 2026-11-07
 depends_on:
 - 215
 created: 2026-09-11
@@ -52,5 +53,11 @@ A cairn establishes byte identity, not availability, trust or a human name. 0215
 
 ### Acceptance and evidence
 
-- [ ] Two disconnected machines with the same verified dependency closure resolve identical cairns. Missing bytes fail explicitly; a hash alone cannot fetch a package.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] Two disconnected machines with the same verified dependency closure resolve identical cairns. Missing bytes fail explicitly; a hash alone cannot fetch a package.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## 2026-11-07
+
+Specified canonical `"Package"` and `"Dep"` struct values, local aliases with exact 32-byte dependency cairns, `netherc/cairn/v4` compatibility checking, and topological post-order offline closure resolution in `spec/07-ledger.md` §7.5.5 and `spec/90-rationale.md` §90.2 (PR #249, `b2b3dbd`). Implemented `PACKAGE_DOMAIN`, `Package`, `ResolvedPackage`, and `PackageError` in `crates/nether-ledger` (stratum 1).
+
+Verified with `cargo test -p nether-ledger` (`two_disconnected_stores_resolve_the_same_package_closure_to_identical_cairns_offline` and `missing_corrupt_incompatible_and_malformed_packages_fail_explicitly`) and `cargo test -p nether-cli --test rites two_disconnected_machines_resolve_and_bury_a_package_closure_to_the_same_cairn`: two disconnected machines with independently populated stores resolve a diamond dependency closure to identical package cairns, alias bindings, topological closure order, and combined source cairn offline, and bury the resolved unit to the same trace cairn; missing objects fail with `StoreError::Absent`, corrupt objects fail with `StoreError::Corrupt`, incompatible domain strings fail with `PackageError::Incompatible`, and malformed or unsorted dependencies fail with `PackageError::Malformed`. Core line count rose from 9314 to 9452 (+138 lines in `crates/nether-ledger`). Remaining limits: offline resolution requires the dependency closure to be present in the local store beforehand via §7.5.3 or §7.5.4; entrypoints share a single top-level declaration namespace when concatenated in topological order.

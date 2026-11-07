@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use crate::cairn::Cairn;
 use crate::codec::{DecodeError, Stored, decode_stored};
 use crate::node::Node;
+use crate::value::Value;
 
 /// Why the store could not answer.
 #[derive(Debug)]
@@ -773,9 +774,181 @@ impl Audit {
     }
 }
 
+/// The domain version string a current package declares (`spec/07-ledger.md` §7.5.5).
+pub const PACKAGE_DOMAIN: &str = "netherc/cairn/v4";
+
+/// Why a package could not be written or resolved offline (`spec/07-ledger.md` §7.5.5).
+#[derive(Debug)]
+pub enum PackageError {
+    /// A package or entrypoint object was absent or corrupt in the store.
+    Store(StoreError),
+    /// A package `(cairn, domain)` declared a domain version other than [`PACKAGE_DOMAIN`].
+    Incompatible(Cairn, String),
+    /// A package or entrypoint `(cairn, why)` violated §7.5.5's structural rules.
+    Malformed(Cairn, &'static str),
+}
+
+impl From<StoreError> for PackageError {
+    fn from(e: StoreError) -> Self {
+        Self::Store(e)
+    }
+}
+
+/// An offline-resolved package closure (`spec/07-ledger.md` §7.5.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedPackage {
+    /// The root package cairn.
+    pub root: Cairn,
+    /// The root package's `entrypoint` `Bytes` cairn.
+    pub entrypoint: Cairn,
+    /// Direct alias-to-package-cairn bindings declared on `root`.
+    pub aliases: BTreeMap<String, Cairn>,
+    /// Distinct package cairns in topological post-order (dependencies first, `root` last).
+    pub closure: Vec<Cairn>,
+    /// Concatenated UTF-8 `entrypoint` bytes in `closure` order.
+    pub unit_source: Vec<u8>,
+    /// Content address of `Value::Bytes(unit_source)`.
+    pub unit_cairn: Cairn,
+}
+
+impl ResolvedPackage {
+    /// Resolves a direct alias declared on `root` to its exact package cairn.
+    #[must_use]
+    pub fn alias(&self, name: &str) -> Option<Cairn> {
+        self.aliases.get(name).copied()
+    }
+}
+
+/// Cairn-addressed package storage and offline dependency resolution (`spec/07-ledger.md` §7.5.5).
+pub struct Package;
+
+impl Package {
+    /// Writes `entrypoint_source` and a canonical `"Package"` struct with
+    /// sorted `deps` `(alias, package_cairn)` into `store`, returning the
+    /// package cairn.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PackageError::Malformed`] if `entrypoint_source` is not UTF-8
+    /// or if `deps` has an empty or duplicate alias, or [`PackageError::Store`]
+    /// if writing to `store` fails.
+    pub fn put(
+        store: &Store,
+        entrypoint_source: &[u8],
+        deps: &[(&str, Cairn)],
+    ) -> Result<Cairn, PackageError> {
+        let ep_val = Value::Bytes(entrypoint_source.to_vec());
+        if core::str::from_utf8(entrypoint_source).is_err() {
+            return Err(PackageError::Malformed(ep_val.cairn(), "entrypoint is not UTF-8"));
+        }
+        let mut sorted = BTreeMap::new();
+        for &(alias, dep) in deps {
+            if alias.is_empty() || sorted.insert(alias, dep).is_some() {
+                return Err(PackageError::Malformed(ep_val.cairn(), "invalid or duplicate alias"));
+            }
+        }
+        let entrypoint = store.put(&Stored::Value(ep_val))?;
+        let dep_items = sorted
+            .into_iter()
+            .map(|(alias, cairn)| Value::Struct {
+                name: "Dep".into(),
+                fields: vec![Value::Str(alias.into()), Value::Cairn(cairn)],
+            })
+            .collect();
+        let pkg = Value::Struct {
+            name: "Package".into(),
+            fields: vec![
+                Value::Str(PACKAGE_DOMAIN.into()),
+                Value::Cairn(entrypoint),
+                Value::Array(dep_items),
+            ],
+        };
+        Ok(store.put(&Stored::Value(pkg))?)
+    }
+
+    /// Resolves `root` and its transitive dependency closure offline in `store`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PackageError`] if any reachable package or entrypoint object
+    /// is absent, corrupt, incompatible or malformed.
+    pub fn resolve(store: &Store, root: Cairn) -> Result<ResolvedPackage, PackageError> {
+        let (mut visiting, mut visited) = (BTreeSet::new(), BTreeSet::new());
+        let (mut closure, mut unit_source) = (Vec::new(), Vec::new());
+        let (entrypoint, root_deps) =
+            Self::walk(store, root, &mut visiting, &mut visited, &mut closure, &mut unit_source)?;
+        let unit_cairn = Value::Bytes(unit_source.clone()).cairn();
+        Ok(ResolvedPackage {
+            root,
+            entrypoint,
+            aliases: root_deps.into_iter().collect(),
+            closure,
+            unit_source,
+            unit_cairn,
+        })
+    }
+
+    fn walk(
+        store: &Store,
+        pkg: Cairn,
+        visiting: &mut BTreeSet<Cairn>,
+        visited: &mut BTreeSet<Cairn>,
+        closure: &mut Vec<Cairn>,
+        unit_source: &mut Vec<u8>,
+    ) -> Result<(Cairn, Vec<(String, Cairn)>), PackageError> {
+        if !visiting.insert(pkg) {
+            return Err(PackageError::Malformed(pkg, "dependency cycle"));
+        }
+        let Stored::Value(Value::Struct { name, fields }) = store.get(pkg)? else {
+            return Err(PackageError::Malformed(pkg, "not a Package struct"));
+        };
+        let [Value::Str(domain), Value::Cairn(ep), Value::Array(raw_deps)] = &fields[..] else {
+            return Err(PackageError::Malformed(pkg, "wrong Package fields"));
+        };
+        if name != "Package" {
+            return Err(PackageError::Malformed(pkg, "not a Package struct"));
+        }
+        if domain != PACKAGE_DOMAIN {
+            return Err(PackageError::Incompatible(pkg, domain.clone()));
+        }
+        let mut deps = Vec::with_capacity(raw_deps.len());
+        let mut prev = "";
+        for item in raw_deps {
+            let Value::Struct { name: dname, fields: dfields } = item else {
+                return Err(PackageError::Malformed(pkg, "not a Dep struct"));
+            };
+            let [Value::Str(alias), Value::Cairn(target)] = &dfields[..] else {
+                return Err(PackageError::Malformed(pkg, "wrong Dep fields"));
+            };
+            if dname != "Dep" || alias.is_empty() || alias.as_str() <= prev || *target == pkg {
+                return Err(PackageError::Malformed(pkg, "invalid or unsorted Dep"));
+            }
+            prev = alias;
+            deps.push((alias.clone(), *target));
+        }
+        let Stored::Value(Value::Bytes(bytes)) = store.get(*ep)? else {
+            return Err(PackageError::Malformed(*ep, "entrypoint is not Bytes"));
+        };
+        if core::str::from_utf8(&bytes).is_err() {
+            return Err(PackageError::Malformed(*ep, "entrypoint is not UTF-8"));
+        }
+        for (_, dep) in &deps {
+            if !visited.contains(dep) {
+                Self::walk(store, *dep, visiting, visited, closure, unit_source)?;
+            }
+        }
+        visiting.remove(&pkg);
+        if visited.insert(pkg) {
+            closure.push(pkg);
+            unit_source.extend_from_slice(&bytes);
+        }
+        Ok((*ep, deps))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Store, StoreError};
+    use super::{PACKAGE_DOMAIN, Package, PackageError, Store, StoreError};
     use crate::cairn::Cairn;
     use crate::codec::Stored;
     use crate::node::{Call, Node, Span};
@@ -1483,5 +1656,131 @@ mod tests {
         // Exporting a store with a corrupt object is refused.
         std::fs::write(src.fanned("objects", val), b"corrupt").unwrap();
         assert!(matches!(src.export(&mut Vec::new()), Err(StoreError::Corrupt { .. })));
+    }
+
+    #[test]
+    fn two_disconnected_stores_resolve_the_same_package_closure_to_identical_cairns_offline() {
+        let dir_a = Scratch::new();
+        let dir_b = Scratch::new();
+        let store_a = dir_a.store();
+        let store_b = dir_b.store();
+
+        let base_src = b"I64 base_step(I64 x) { return x + 10; }\n";
+        let math_src = b"I64 math_dbl(I64 x) { return base_step(x) * 2; }\n";
+        let fmt_src = b"I64 fmt_tag(I64 x) { return base_step(x) + 1; }\n";
+        let app_src = b"U0 main_pkg() { math_dbl(3) + fmt_tag(4); }\ndemand main_pkg();\n";
+
+        // Machine A populates in bottom-up order with deps given as [fmt, math].
+        let base_a = Package::put(&store_a, base_src, &[]).unwrap();
+        let math_a = Package::put(&store_a, math_src, &[("core", base_a)]).unwrap();
+        let fmt_a = Package::put(&store_a, fmt_src, &[("base", base_a)]).unwrap();
+        let app_a = Package::put(&store_a, app_src, &[("fmt", fmt_a), ("math", math_a)]).unwrap();
+
+        // Machine B populates independently (with unrelated objects and reversed
+        // dep slice order [math, fmt]) without ever speaking to Machine A.
+        store_b.put(&Stored::Value(Value::Int(999))).unwrap();
+        let base_b = Package::put(&store_b, base_src, &[]).unwrap();
+        let fmt_b = Package::put(&store_b, fmt_src, &[("base", base_b)]).unwrap();
+        let math_b = Package::put(&store_b, math_src, &[("core", base_b)]).unwrap();
+        let app_b = Package::put(&store_b, app_src, &[("math", math_b), ("fmt", fmt_b)]).unwrap();
+
+        assert_eq!(base_a, base_b);
+        assert_eq!(math_a, math_b);
+        assert_eq!(fmt_a, fmt_b);
+        assert_eq!(app_a, app_b);
+
+        let res_a = Package::resolve(&store_a, app_a).unwrap();
+        let res_b = Package::resolve(&store_b, app_b).unwrap();
+        assert_eq!(res_a, res_b);
+        assert_eq!(res_a.alias("math"), Some(math_a));
+        assert_eq!(res_a.alias("fmt"), Some(fmt_a));
+        assert_eq!(res_a.alias("unknown"), None);
+        assert_eq!(res_a.closure, vec![base_a, fmt_a, math_a, app_a]);
+
+        // Also verify resolution after portable bundle transfer into a third store.
+        let mut bundle = Vec::new();
+        store_a.export(&mut bundle).unwrap();
+        let dir_c = Scratch::new();
+        let store_c = dir_c.store();
+        store_c.import(&mut &bundle[..]).unwrap();
+        assert_eq!(Package::resolve(&store_c, app_a).unwrap(), res_a);
+    }
+
+    #[test]
+    fn missing_corrupt_incompatible_and_malformed_packages_fail_explicitly() {
+        let dir = Scratch::new();
+        let store = dir.store();
+
+        let base = Package::put(&store, b"I64 f() { return 1; }\n", &[]).unwrap();
+        let missing_dep = Cairn::of_encoded(b"absent-package");
+        let with_missing =
+            Package::put(&store, b"I64 g() { return f(); }\n", &[("missing", missing_dep)])
+                .unwrap();
+
+        // Missing dependency package cairn fails explicitly with Absent(missing_dep).
+        assert!(matches!(
+            Package::resolve(&store, with_missing),
+            Err(PackageError::Store(StoreError::Absent(c))) if c == missing_dep
+        ));
+
+        // Incompatible domain version in a dependency fails with Incompatible.
+        let ep =
+            store.put(&Stored::Value(Value::Bytes(b"I64 h() { return 2; }\n".to_vec()))).unwrap();
+        let v3_pkg = store
+            .put(&Stored::Value(Value::Struct {
+                name: "Package".into(),
+                fields: vec![
+                    Value::Str("netherc/cairn/v3".into()),
+                    Value::Cairn(ep),
+                    Value::Array(vec![]),
+                ],
+            }))
+            .unwrap();
+        let root_v3 = Package::put(&store, b"I64 k() { return 3; }\n", &[("old", v3_pkg)]).unwrap();
+        assert!(matches!(
+            Package::resolve(&store, root_v3),
+            Err(PackageError::Incompatible(c, ref d)) if c == v3_pkg && d == "netherc/cairn/v3"
+        ));
+
+        // Unsorted Dep entries and non-UTF-8 entrypoints are rejected.
+        assert!(matches!(
+            Package::put(&store, &[0xff, 0xfe], &[]),
+            Err(PackageError::Malformed(_, "entrypoint is not UTF-8"))
+        ));
+        assert!(matches!(
+            Package::put(&store, b"I64 x() { return 0; }\n", &[("dup", base), ("dup", base)]),
+            Err(PackageError::Malformed(_, "invalid or duplicate alias"))
+        ));
+        let unsorted_pkg = store
+            .put(&Stored::Value(Value::Struct {
+                name: "Package".into(),
+                fields: vec![
+                    Value::Str(PACKAGE_DOMAIN.into()),
+                    Value::Cairn(ep),
+                    Value::Array(vec![
+                        Value::Struct {
+                            name: "Dep".into(),
+                            fields: vec![Value::Str("z".into()), Value::Cairn(base)],
+                        },
+                        Value::Struct {
+                            name: "Dep".into(),
+                            fields: vec![Value::Str("a".into()), Value::Cairn(base)],
+                        },
+                    ]),
+                ],
+            }))
+            .unwrap();
+        assert!(matches!(
+            Package::resolve(&store, unsorted_pkg),
+            Err(PackageError::Malformed(c, "invalid or unsorted Dep")) if c == unsorted_pkg
+        ));
+
+        // Corrupting the base package on disk fails with Corrupt(base).
+        std::fs::write(store.fanned("objects", base), b"damaged").unwrap();
+        let top = Package::put(&store, b"I64 top() { return 0; }\n", &[("b", base)]).unwrap();
+        assert!(matches!(
+            Package::resolve(&store, top),
+            Err(PackageError::Store(StoreError::Corrupt { asked, .. })) if asked == base
+        ));
     }
 }
