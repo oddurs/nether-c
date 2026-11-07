@@ -1725,6 +1725,75 @@ fn a_program_that_fetched_replays_with_no_network_at_all() {
 }
 
 #[test]
+fn many_network_holes_are_answered_concurrently_in_discovery_order() {
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("a port");
+    let port = listener.local_addr().expect("an address").port();
+    let server = std::thread::spawn(move || {
+        use std::io::{Read as _, Write as _};
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        std::thread::scope(|s| {
+            for _ in 0..3 {
+                let (mut socket, _) = listener.accept().expect("a connection");
+                let b = barrier.clone();
+                s.spawn(move || {
+                    let mut buf = [0u8; 4096];
+                    let n = socket.read(&mut buf).unwrap_or(0);
+                    let req = String::from_utf8_lossy(&buf[..n]);
+                    // None of the three answers until all three are connected.
+                    b.wait();
+                    let said = if req.starts_with("GET /first ") {
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                        "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\none"
+                    } else if req.starts_with("GET /second ") {
+                        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    } else {
+                        "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nthree"
+                    };
+                    let _ = socket.write_all(said.as_bytes());
+                });
+            }
+        });
+    });
+
+    let dir = a_build("fetches-many");
+    std::fs::write(
+        dir.join("many.nc"),
+        format!(
+            "Bytes@5 a = must(descend net {{ get(\"http://127.0.0.1:{port}/first\") }});\n\
+             Answer<Bytes>@5 b = descend net {{ get(\"http://127.0.0.1:{port}/second\") }};\n\
+             Bytes@5 c = must(descend net {{ get(\"http://127.0.0.1:{port}/third\") }});\n\
+             U0 one() {{ a; }}\n\
+             U0 two() {{ if (refusal(b) == absent) {{ b\"two\"; }} }}\n\
+             U0 three() {{ c; }}\n\
+             demand one();\ndemand two();\ndemand three();\n"
+        ),
+    )
+    .expect("many.nc");
+
+    let trace = field(&stdout(&there(&dir, &["bury", "many.nc", "--json"])), "cairn");
+    let out =
+        there(&dir, &["exhume", &trace, "--grant", "net", "--reach", &format!("127.0.0.1:{port}")]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    let first_at = text.find("/first").expect("first");
+    let second_at = text.find("/second").expect("second");
+    let third_at = text.find("/third").expect("third");
+    assert!(first_at < second_at && second_at < third_at, "{text}");
+    server.join().expect("the server finished");
+
+    let sealed = text
+        .lines()
+        .find_map(|l| l.strip_prefix("sealed").and_then(|r| r.split("→").nth(1)))
+        .and_then(|r| r.split_whitespace().next())
+        .expect("sealed cairn");
+    assert_eq!(stdout(&there(&dir, &["lamp", sealed])), "onetwothree\n");
+
+    let replayed = there(&dir, &["exhume", sealed, "--replay"]);
+    assert_eq!(code(&replayed), 0, "{}", stderr(&replayed));
+    assert_eq!(stdout(&replayed), "identical.\n", "{}", stderr(&replayed));
+}
+
+#[test]
 fn reaching_without_granting_net_is_refused() {
     // §8.3.2, on §8.3.1's reasoning: a reach nothing can use could not be
     // read, and accepting it would be §8.0's failure in a smaller place.

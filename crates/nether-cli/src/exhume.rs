@@ -212,11 +212,11 @@ pub fn run(args: &[String]) -> ExitCode {
 /// `Err` is the cairn of a hole this ledger cannot read. Dropping one instead
 /// left it a hole in the new trace, so a trace half of whose holes were missing
 /// exhumed to a trace with fewer holes and no complaint.
-fn questions(store: &Store, holes: &[Cairn]) -> Result<Vec<(Call, u8, Span)>, Cairn> {
+fn questions(store: &Store, holes: &[Cairn]) -> Result<Vec<(Call, Span)>, Cairn> {
     holes
         .iter()
         .map(|h| match store.get(*h) {
-            Ok(Stored::Node(Node::Hole { call, stratum, span })) => Ok((call, stratum, span)),
+            Ok(Stored::Node(Node::Hole { call, span, .. })) => Ok((call, span)),
             _ => Err(*h),
         })
         .collect()
@@ -348,7 +348,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
             Ok(asked) => asked,
             Err(hole) => return Err(no_such_hole(hole)),
         };
-        for (call, _, _) in &asked {
+        for (call, _) in &asked {
             if have.answer(call).is_none() {
                 eprintln!("nether: nothing recorded answers `{}`", call.function);
                 eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
@@ -372,8 +372,9 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
             Ok(asked) => asked,
             Err(hole) => return Err(no_such_hole(hole)),
         };
-        for (call, _, span) in asked {
-            match world.ask(&call, span, &into) {
+        let outcomes = world.ask_all(&asked, &into);
+        for ((call, _), res) in asked.into_iter().zip(outcomes) {
+            match res {
                 // A hole nothing granted answers stays a hole, which is what
                 // makes exhumation incremental rather than all or nothing.
                 Err(nether_world::Unanswered::Ungranted { .. }) => {}
