@@ -17,5 +17,8 @@ mod value;
 pub use cairn::{Cairn, ParseCairnError, SHORT_LEN};
 pub use codec::{DecodeError, MAX_DEPTH, Stored, decode, decode_node, decode_stored};
 pub use node::{Call, Node, Span};
-pub use store::{AffectedTrace, Audit, IndexError, Store, StoreError};
+pub use store::{
+    AffectedTrace, Audit, IndexError, PACKAGE_DOMAIN, Package, PackageError, ResolvedPackage,
+    Store, StoreError,
+};
 pub use value::{AnswerOf, MAX_REFUSAL, MAX_STRATUM, Refusal, Value};

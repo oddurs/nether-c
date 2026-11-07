@@ -2436,3 +2436,34 @@ fn two_machines_each_answer_half_a_traces_holes_and_seal_byte_identically_to_one
         "given Lack-1Rack-2\n"
     );
 }
+
+#[test]
+fn two_disconnected_machines_resolve_and_bury_a_package_closure_to_the_same_cairn() {
+    use nether_ledger::Package;
+
+    let east_dir = a_build("pkg-east");
+    let west_dir = a_build("pkg-west");
+    let east_store = Store::open(east_dir.join(".nether")).unwrap();
+    let west_store = Store::open(west_dir.join(".nether")).unwrap();
+
+    let math_src = b"I64 tri(I64 n) { return (n * (n + 1)) / 2; }\n";
+    let app_src = b"U0 run_pkg() { tri(6); }\ndemand run_pkg();\n";
+
+    let math_east = Package::put(&east_store, math_src, &[]).unwrap();
+    let app_east = Package::put(&east_store, app_src, &[("math", math_east)]).unwrap();
+
+    let math_west = Package::put(&west_store, math_src, &[]).unwrap();
+    let app_west = Package::put(&west_store, app_src, &[("math", math_west)]).unwrap();
+
+    let res_east = Package::resolve(&east_store, app_east).unwrap();
+    let res_west = Package::resolve(&west_store, app_west).unwrap();
+    assert_eq!(res_east, res_west);
+    assert_eq!(res_east.alias("math"), Some(math_east));
+
+    std::fs::write(east_dir.join("unit.nc"), &res_east.unit_source).unwrap();
+    std::fs::write(west_dir.join("unit.nc"), &res_west.unit_source).unwrap();
+    let bury_east = stdout(&there(&east_dir, &["bury", "unit.nc", "--json"]));
+    let bury_west = stdout(&there(&west_dir, &["bury", "unit.nc", "--json"]));
+    assert_eq!(field(&bury_east, "cairn"), field(&bury_west, "cairn"));
+    assert_eq!(stdout(&there(&east_dir, &["lamp", &field(&bury_east, "cairn")])), "21\n");
+}
