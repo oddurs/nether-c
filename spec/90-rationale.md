@@ -1376,6 +1376,22 @@ both has lost nothing and contradicted nothing.
 root's node graph instead of one round trip for the whole store, and the
 receiver decodes each object and rebuilds its own `refs/` entries on arrival.
 
+### Moving a store by copying its directory
+
+[§7.5.4](07-ledger.md#754-moving-a-store) exports a store as a dependency-ordered
+stream of verified objects with a whole-stream `blake3` trailer and rebuilds
+`refs/` on import.
+
+The alternative was to document `tar` (or a directory copy) followed by an audit
+at the destination. Rejected because a directory copy transfers `refs/`,
+`memo/` and leftover files in `tmp/`, trusts the source filesystem not to have
+corrupted an object silently before the copy, and leaves a truncated transfer
+with nodes in `objects/` whose referenced children have not arrived yet.
+
+**What it cost.** Exporting reads, decodes and hashes every object in the source
+store to order and frame the bundle, and importing decodes, hashes and indexes
+every object again at the destination.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own

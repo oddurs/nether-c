@@ -134,6 +134,7 @@ fn complain(e: &StoreError, prefix: &str, wants_json: bool) -> ExitCode {
         ),
         StoreError::Io(io) => (FAILED, format!("{io}")),
         StoreError::Invalid(why) => (FAILED, format!("{why}")),
+        StoreError::Bundle(why) => (FAILED, (*why).to_owned()),
     };
     if wants_json {
         println!(

@@ -1266,6 +1266,50 @@ fn replay_succeeds_with_the_source_deleted() {
     assert_eq!(stdout(&out), "identical.\n");
 }
 
+#[test]
+fn an_exported_store_imported_elsewhere_replays_a_sealed_trace() {
+    // 0213: a bundle carries only verified canonical objects, rebuilds `refs/`
+    // at the far end, and answers every cairn and replay the original did.
+    let origin = a_build("export-origin");
+    let buried = field(&stdout(&there(&origin, &["bury", "build.nc", "--json"])), "cairn");
+    let sealed = field(
+        &stdout(&there(&origin, &["exhume", &buried, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
+
+    let mut bundle = Vec::new();
+    let src_store = nether_ledger::Store::open(origin.join(".nether")).unwrap();
+    let exported = src_store.export(&mut bundle).unwrap();
+    assert!(exported > 0);
+    if let Some(path) = std::env::var_os("NETHER_BUNDLE_OUT") {
+        std::fs::write(&path, &bundle).unwrap();
+        println!(
+            "exported {exported} objects ({} bytes) buried={buried} sealed={sealed}",
+            bundle.len()
+        );
+    }
+    if let Some(path) = std::env::var_os("NETHER_BUNDLE_IN") {
+        bundle = std::fs::read(&path).unwrap();
+    }
+
+    let far = scratch("import-far");
+    let dst_store = nether_ledger::Store::open(far.join(".nether")).unwrap();
+    assert_eq!(dst_store.import(&mut &bundle[..]).unwrap(), exported);
+    assert!(dst_store.audit().unwrap().is_clean());
+
+    for args in [
+        &["lamp", &sealed][..],
+        &["lamp", &buried, "--provenance"],
+        &["strata", &sealed],
+        &["exhume", &sealed, "--replay"],
+    ] {
+        let a = there(&origin, args);
+        let b = there(&far, args);
+        assert_eq!(code(&b), 0, "{}", stderr(&b));
+        assert_eq!(stdout(&b), stdout(&a), "mismatch for {args:?}");
+    }
+}
+
 // ── §8.7 `graft` ────────────────────────────────────────────────────────────
 
 #[test]
