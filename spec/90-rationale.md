@@ -1448,6 +1448,28 @@ the dependency closure to be imported into the local store beforehand
 ([§7.5.3](07-ledger.md#753-a-second-store-and-what-they-owe-each-other),
 [§7.5.4](07-ledger.md#754-moving-a-store)).
 
+### A stateful language server for editor hover and provenance
+
+[§8.4.1](08-rites.md#841-inspecting-a-byte-offset-in-an-editor) serves editor
+hover, depth blame and provenance through a stateless `nether lamp <cairn> --at
+<byte> [--source <path>]` invocation backed by the trace already in the ledger,
+paired with a thin editor adapter (`tools/vim/nether.vim`).
+
+The alternative was a long-running Language Server Protocol (LSP) daemon that
+maintains an in-memory workspace and re-checks unsaved buffers on every edit.
+Rejected because provenance, holes, witnesses and deposits only exist for a
+program that has been **buried** into a trace: an unsaved buffer that differs
+from `trace.source` has no recorded nodes at its edited byte offsets, and
+walking provenance on an unburied buffer either serves shifted spans from an
+older trace or silently buries on every cursor movement. Refusing when
+`--source <path>` disagrees with `trace.source` states the boundary between
+unburied text and a recorded burial.
+
+**What it costs.** After editing a buffer, a programmer must run `nether bury`
+again before `lamp --at` will inspect the new trace, and the adapter covers
+hover depth, `descend` origin navigation and recorded-node provenance rather
+than general LSP features such as completions or rename.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own
