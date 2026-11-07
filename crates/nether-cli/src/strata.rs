@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::process::ExitCode;
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Cairn, Node, Span, Store, Stored, Value};
+use nether_ledger::{Cairn, Node, Span, Store, StoreError, Stored, Value};
 
 use crate::{code, json, lamp, usage_error};
 
@@ -32,24 +32,40 @@ pub fn run(args: &[String]) -> ExitCode {
         Ok(c) => c,
         Err(code) => return code,
     };
-    let Ok(Stored::Node(trace @ Node::Trace { depth, unrecorded, .. })) = store.get(cairn) else {
+    let Ok(Stored::Node(trace @ Node::Trace { depth, unrecorded: marked, .. })) = store.get(cairn)
+    else {
         return crate::not_a_trace(&store, cairn);
     };
 
     // A trace names its holes, its witnesses and its deposits. The residue and
     // the source it also names are `Bytes`.
-    let found = survey(&store, &trace.nodes());
+    let found = match survey(&store, &trace.nodes()) {
+        Ok(found) => found,
+        Err(e) => {
+            eprintln!("nether: {e}");
+            return match e {
+                StoreError::Corrupt { .. } => ExitCode::from(code::MALFORMED),
+                _ => crate::FAILED,
+            };
+        }
+    };
+    let unrecorded = marked
+        || found.reaches.iter().any(|r| r.answered && r.stratum == nether_ledger::MAX_STRATUM);
     let told = Reading { cairn, depth, unrecorded, found };
     if wants_json {
         println!("{}", told.json(&store));
     } else {
         print!("{}", told.text(&store));
     }
-    // A trace that under-reports its own depth is a trace lying about the one
-    // thing it is for. §8.8 calls that malformed.
+    // A trace that under-reports its own depth or hides a stratum-8 witness is
+    // a trace lying about the one thing it is for. §8.8 calls that malformed.
     if let Some(r) = told.found.reaches.iter().find(|r| r.stratum > told.depth) {
         let did = if r.answered { "a witness under it reached" } else { "a hole under it owes" };
         eprintln!("nether: this trace records depth {}, and {did} {}", told.depth, r.stratum);
+        return ExitCode::from(code::MALFORMED);
+    }
+    if !marked && told.unrecorded {
+        eprintln!("nether: this trace is not marked unrecorded, and a witness under it reached 8");
         return ExitCode::from(code::MALFORMED);
     }
     ExitCode::SUCCESS
@@ -98,8 +114,8 @@ fn order(r: &Reach) -> (Reverse<u8>, [u8; 32], u64, bool, &str) {
 /// making every unsealed source look like a gap in the record. §7.3 makes the
 /// graph acyclic by construction, so `seen` is an economy and not a safety
 /// measure.
-fn survey(store: &Store, roots: &[Cairn]) -> Survey {
-    let mut raw: Vec<Reach> = Vec::new();
+fn survey(store: &Store, roots: &[Cairn]) -> Result<Survey, StoreError> {
+    let mut reaches: Vec<Reach> = Vec::new();
     let mut missing = 0;
     let mut seen = HashSet::new();
     let mut stack: Vec<Cairn> = roots.to_vec();
@@ -107,25 +123,24 @@ fn survey(store: &Store, roots: &[Cairn]) -> Survey {
         if !seen.insert(at) {
             continue;
         }
-        let Ok(stored) = store.get(at) else {
-            missing += 1;
-            continue;
+        let stored = match store.get(at) {
+            Ok(stored) => stored,
+            Err(StoreError::Absent(_)) => {
+                missing += 1;
+                continue;
+            }
+            Err(e) => return Err(e),
         };
         let Stored::Node(n) = &stored else { continue };
-        match n {
-            Node::Hole { call, stratum, span, .. } => raw.push(Reach {
+        if let Node::Hole { call, stratum, span, .. } | Node::Witness { call, stratum, span, .. } =
+            n
+        {
+            reaches.push(Reach {
                 stratum: *stratum,
-                answered: false,
+                answered: matches!(n, Node::Witness { .. }),
                 call: lamp::said(store, &call.function, &call.args),
                 at: *span,
-            }),
-            Node::Witness { call, stratum, span, .. } => raw.push(Reach {
-                stratum: *stratum,
-                answered: true,
-                call: lamp::said(store, &call.function, &call.args),
-                at: *span,
-            }),
-            _ => {}
+            });
         }
         stack.extend(n.nodes());
     }
@@ -137,9 +152,8 @@ fn survey(store: &Store, roots: &[Cairn]) -> Survey {
     // on that, so two entries here are two nodes — and two witnesses of one
     // call at one place are two different answers, which is the thing a blame
     // tool exists to show rather than tidy away.
-    let mut reaches = raw;
     reaches.sort_by(|a, b| order(a).cmp(&order(b)));
-    Survey { reaches, missing }
+    Ok(Survey { reaches, missing })
 }
 
 // ── saying it ───────────────────────────────────────────────────────────────
@@ -172,20 +186,11 @@ impl Reading {
                 self.found.reaches.iter().map(|r| place(store, r.at)).collect();
             // Wide enough for the widest call, and never so narrow that the
             // positions crowd the calls.
-            let width = self
-                .found
-                .reaches
-                .iter()
-                .map(|r| r.call.chars().count())
-                .max()
-                .unwrap_or(0)
-                .max(24);
+            let width =
+                self.found.reaches.iter().map(|r| r.call.chars().count()).fold(24, usize::max);
             for (r, at) in self.found.reaches.iter().zip(&places) {
-                let _ = write!(out, "  {}  {:width$}  {at}", r.stratum, r.call);
-                if !r.answered {
-                    let _ = write!(out, "   pending");
-                }
-                let _ = writeln!(out);
+                let pending = if r.answered { "" } else { "   pending" };
+                let _ = writeln!(out, "  {}  {:width$}  {at}{pending}", r.stratum, r.call);
             }
             let _ = writeln!(out, "  0  everything else");
         }
@@ -204,9 +209,7 @@ impl Reading {
         if self.unrecorded {
             // §9.8: naming the symbol is the minimum, and the symbol is in the
             // call this already printed.
-            notes.push(
-                "stratum 8 was reached. Nothing downstream of it is recorded, ever.".to_string(),
-            );
+            notes.push("stratum 8 was reached. Nothing downstream of it is recorded, ever.".into());
         }
         // §7.3.2: `depth` already counts what the holes still reach, so what is
         // worth saying is how much of it has actually happened.
@@ -232,27 +235,22 @@ impl Reading {
             .reaches
             .iter()
             .map(|r| {
+                let (call, at) = (json::string(&r.call), json::string(&place(store, r.at)));
                 format!(
-                    "{{\"stratum\":{},\"call\":{},\"at\":{},\"answered\":{}}}",
-                    r.stratum,
-                    json::string(&r.call),
-                    json::string(&place(store, r.at)),
-                    r.answered
+                    "{{\"stratum\":{},\"call\":{call},\"at\":{at},\"answered\":{}}}",
+                    r.stratum, r.answered
                 )
             })
             .collect();
         let notes: Vec<String> = self.notes().iter().map(|n| json::string(n)).collect();
+        let s = json::string(stratum_name(self.depth));
+        let (cairn, depth, unrecorded, missing) =
+            (self.cairn, self.depth, self.unrecorded, self.found.missing);
+        let (reaches, notes) = (reaches.join(","), notes.join(","));
         format!(
-            "{{\"cairn\":\"{}\",\"depth\":{},\"stratum\":{},\"replayable\":{},\"unrecorded\":{},\
-             \"missing\":{},\"reaches\":[{}],\"notes\":[{}]}}",
-            self.cairn,
-            self.depth,
-            json::string(stratum_name(self.depth)),
-            !self.unrecorded,
-            self.unrecorded,
-            self.found.missing,
-            reaches.join(","),
-            notes.join(",")
+            "{{\"cairn\":\"{cairn}\",\"depth\":{depth},\"stratum\":{s},\"replayable\":{},\
+             \"unrecorded\":{unrecorded},\"missing\":{missing},\"reaches\":[{reaches}],\"notes\":[{notes}]}}",
+            !unrecorded
         )
     }
 }

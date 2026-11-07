@@ -539,7 +539,7 @@ fn a_shade_shows_its_origin_and_its_name_and_no_more() {
 
 /// A source a person could read, so the line `strata` blames can be checked
 /// against the text it points into.
-const BUILD: &str = "demand out;\n\nBytes@3 src = must(descend disk { read(\"main.nc\") });\n";
+const BUILD: &str = "demand src;\n\nBytes@3 src = must(descend disk { read(\"main.nc\") });\n";
 
 /// A store holding one burial of `BUILD`: the source, the call that went to
 /// disk, and the trace over it.
@@ -837,6 +837,90 @@ fn a_node_that_is_gone_is_a_lower_bound_and_says_so() {
     assert_eq!(code(&out), 0, "{}", stderr(&out));
     assert!(stdout(&out).contains("1 node(s)"), "{}", stdout(&out));
     assert!(stdout(&out).contains("lower bound"), "{}", stdout(&out));
+}
+
+#[test]
+fn a_trace_that_hides_a_stratum_8_witness_is_malformed() {
+    // 0220, and §8.6: `unrecorded` is derivable from the reachable witnesses.
+    // A trace that leaves its mark false while naming a stratum-8 witness is
+    // rejected as malformed (65), still reports `replayable: no`, and is
+    // refused by `exhume --replay`.
+    let (dir, trace, _) = a_trace_of("strata-hidden-unrecorded", 8, 8, false);
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 65, "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("not marked unrecorded, and a witness under it reached 8"),
+        "{}",
+        stderr(&out)
+    );
+    let text = stdout(&out);
+    assert!(text.contains("replayable: no"), "{text}");
+    assert!(text.contains("stratum 8 was reached"), "{text}");
+
+    let json = nether(Some(&dir), &["strata", &trace.to_string(), "--json"]);
+    assert_eq!(code(&json), 65, "{}", stderr(&json));
+    assert!(
+        stdout(&json).contains("\"replayable\":false,\"unrecorded\":true"),
+        "{}",
+        stdout(&json)
+    );
+
+    let replayed = nether(Some(&dir), &["exhume", &trace.to_string(), "--replay"]);
+    assert_eq!(code(&replayed), 1, "{}", stdout(&replayed));
+    assert!(stderr(&replayed).contains("proves nothing"), "{}", stderr(&replayed));
+}
+
+#[test]
+fn a_corrupt_node_under_a_trace_is_malformed_and_not_merely_missing() {
+    // 0220, and §8.6: an absent node makes the survey a lower bound; a present
+    // node whose bytes fail `get` is corrupt (§7.5.1) and fails with 65 rather
+    // than quietly becoming `missing: 1`.
+    let dir = scratch("strata-corrupt-node");
+    let store = Store::open(&dir).expect("a store");
+    let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
+    let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
+
+    let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
+    let span = Span { source, start: 0, end: 11 };
+    let path = put(Value::Str("main.nc".into()));
+    let call = Call { function: "read".into(), args: vec![path] };
+    let answer = put(Value::Bytes(b"x".to_vec()));
+    let witness = node(Node::Witness { stratum: 3, call, answer, span });
+    let trace = node(Node::Trace {
+        residue: source,
+        holes: vec![],
+        witnesses: vec![witness],
+        deposits: vec![],
+        source,
+        depth: 3,
+        unrecorded: false,
+    });
+
+    let hex = witness.to_string();
+    let object = dir.join("objects").join(&hex[..2]).join(&hex[2..]);
+    std::fs::write(&object, Value::Int(99).encode()).expect("tamper witness");
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 65, "{}", stderr(&out));
+    assert!(stderr(&out).contains(&hex), "{}", stderr(&out));
+    assert!(!stdout(&out).contains("lower bound"), "{}", stdout(&out));
+}
+
+#[test]
+fn a_poisoned_reverse_index_does_not_alter_what_strata_checks() {
+    // 0220: `strata` walks forward `nodes()` edges verified by `get`, never the
+    // reverse index (`refs/`).
+    let (dir, trace, _) = a_trace_of("strata-poisoned-refs", 3, 3, false);
+    let refs = dir.join("refs");
+    std::fs::remove_dir_all(&refs).expect("remove refs");
+    std::fs::create_dir_all(refs.join("00")).expect("recreate refs");
+    std::fs::write(refs.join("00").join("bad"), [0xffu8; 33]).expect("poison refs");
+
+    let out = nether(Some(&dir), &["strata", &trace.to_string()]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    assert!(stdout(&out).contains("depth 3   disk\n"), "{}", stdout(&out));
+    assert!(stdout(&out).contains("read(\"main.nc\")"), "{}", stdout(&out));
 }
 
 #[test]
