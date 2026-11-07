@@ -17,6 +17,7 @@ from __future__ import annotations
 import html
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -482,12 +483,13 @@ def load_chapters() -> list[dict[str, object]]:
 
 def navbar(current: str, depth: int) -> str:
     up = "../" if depth else ""
-    # Three documents, named for what they are. The specification used to be
+    # Four documents, named for what they are. The specification used to be
     # labelled "manual", which it is not and says so in its first paragraph.
     links = [
         ("index", f"{up}index.html", "front desk"),
         ("manual", f"{up}manual/index.html", "manual"),
         ("spec", f"{up}spec/index.html", "specification"),
+        ("specimen", f"{up}specimen.html", "the face"),
     ]
     items = []
     for name, href, label in links:
@@ -546,7 +548,7 @@ def page(title: str, body: str, *, current: str, depth: int, directory: str = ""
             ("start", "Start here"), ("first-program", "First burial"),
             ("nine-strata", "Nine strata"), ("six-rites", "The six rites"),
             ("manual", "The manual"), ("specification", "Specification"),
-            ("status", "Project status"),
+            ("status", "Project status"), ("the-face", "The face"),
         ]
         directory = '<nav class="desk-directory" aria-label="Front desk contents">' + "".join(
             f'<a href="{up}index.html#{anchor}"><span aria-hidden="true">{n:02}</span> {label}</a>'
@@ -566,6 +568,171 @@ def page(title: str, body: str, *, current: str, depth: int, directory: str = ""
         still = ' data-still' if Path(src).name in ("hero.gif", "descending.gif") else ""
         return f'<img{before}src="{src}" data-dark-src="{src}" data-lit-src="{lit}"{still}{after}>'
     return re.sub(r'<img\b([^>]*?)src="([^"]+\.gif)"([^>]*)>', themed_image, output)
+
+
+def specimen_page() -> str:
+    """Every glyph in both weights, read out of site/font.py."""
+    sys.path.insert(0, str(SITE))
+    import font  # noqa: E402 — a sibling, not a dependency
+
+    reg = font.G
+    bol = font.bold()
+    same = font.SAME
+    groups = [
+        ("punctuation", "Space and punctuation",
+         [c for c in sorted(reg, key=ord) if ord(c) < 128 and not c.isalnum()]),
+        ("digits", "Digits",
+         [c for c in sorted(reg, key=ord) if "0" <= c <= "9"]),
+        ("capitals", "Capitals",
+         [c for c in sorted(reg, key=ord) if "A" <= c <= "Z"]),
+        ("lowercase", "Lowercase",
+         [c for c in sorted(reg, key=ord) if "a" <= c <= "z"]),
+        ("symbols", "Signs, Greek, arrows and box drawing",
+         [c for c in sorted(reg, key=ord) if ord(c) >= 128]),
+    ]
+
+    nav_items = [
+        ("scale", "1. The four sizes"),
+        ("samples", "2. In use and in pairs"),
+        *[
+            (slug_id, f"{n}. {title} ({len(chars)})")
+            for n, (slug_id, title, chars) in enumerate(groups, 3)
+        ],
+    ]
+    directory = (
+        '<nav class="contents" aria-label="Specimen contents"><p>the face</p><ol role="list">'
+        + "".join(f'<li><a href="#{s}">{esc(label)}</a></li>' for s, label in nav_items)
+        + "</ol></nav>"
+    )
+
+    def grid_bits(rows: tuple[str, ...]) -> str:
+        return "\n".join(r.replace("#", "█").replace(".", "·") for r in rows)
+
+    def card(ch: str) -> str:
+        code = ord(ch)
+        name = unicodedata.name(ch, f"U+{code:04X}")
+        meta = "SAME" if ch in same else "400 + 700"
+        sizes = "".join(
+            f'<div class="glyph-size"><span class="glyph-px">{px}</span>'
+            f'<span class="s{px}">{esc(ch)}</span>'
+            f'<strong class="s{px}">{esc(ch)}</strong></div>'
+            for px in (8, 16, 24, 32)
+        )
+        return (
+            f'<article class="glyph-card" id="u-{code:04x}" data-codepoint="U+{code:04X}">'
+            f'<header class="glyph-head"><code>U+{code:04X}</code>'
+            f'<span class="glyph-meta">{meta}</span>'
+            f'<span class="glyph-name">{esc(name)}</span></header>'
+            f'<div class="glyph-grids">'
+            f'<figure class="glyph-cell"><figcaption>400</figcaption>'
+            f'<pre class="glyph-grid" data-weight="regular">{grid_bits(reg[ch])}</pre></figure>'
+            f'<figure class="glyph-cell"><figcaption>700</figcaption>'
+            f'<pre class="glyph-grid" data-weight="bold">{grid_bits(bol[ch])}</pre></figure>'
+            f'</div>'
+            f'<div class="glyph-sizes">{sizes}</div>'
+            f"</article>"
+        )
+
+    scale_rows = "".join(
+        f'<div class="scale-row">'
+        f'<p class="c">{px}px &middot; {px // 8}&times; cell &middot; {px * 7 // 8}px advance</p>'
+        f'<p class="scale-sample s{px}">{esc(sample)}</p>'
+        f'<p class="scale-sample s{px}"><strong>{esc(sample)}</strong></p>'
+        f"</div>"
+        for px, sample in (
+            (8, "NETHER C / DESK 00 · 0123456789 · U0 bury(Str p) @0 -> #efed9b2a"),
+            (16, "Nothing runs. A program is buried; what ships is a trace and its holes."),
+            (24, "■ Section 02 · Γ; δ ⊢ e : τ@d"),
+            (32, "██ NOTHING RUNS · @0..@8"),
+        )
+    )
+
+    nc_sample = paint_nc(
+        '// Every keyword and @n below is set in the 700 face.\n'
+        'Shade<Bytes>@3 load(Str p) @{3}\n'
+        '{\n'
+        '  return descend disk { shade must(read(p)) };\n'
+        '}\n\n'
+        'Cairn@0 witness = seal load("main.nc");\n'
+        'demand witness;'
+    )
+    sh_sample = paint_console(
+        '$ nether bury build.nc\n'
+        'buried   build.nc → 76c4b655   depth 3   holes 1   4 nodes\n'
+        '  hole ①  read("main.nc")                stratum 3  disk\n\n'
+        '$ nether lamp --provenance bb9ed429\n'
+        'bb9ed429  trace · depth 3 · sealed\n'
+        '└─ 6940fecb  witness ① · stratum 3 (disk) · read("main.nc") → 29 bytes'
+    )
+
+    sections_html = []
+    for n, (slug_id, title, chars) in enumerate(groups, 3):
+        cards = "".join(card(c) for c in chars)
+        sections_html.append(
+            f'<h2 id="{slug_id}"><a href="#{slug_id}">{n}. {esc(title)}</a></h2>'
+            f'<p class="small">{len(chars)} glyph(s) in this range.</p>'
+            f'<div class="glyph-catalogue">{cards}</div>'
+        )
+
+    drawn_twice = len(reg) - len(same)
+    body = (
+        f'<p class="c">{esc(font.NAME)} &middot; {esc(font.VERSION)} &middot; '
+        f'{font.CELL}&times;{font.CELL} cell &middot; {font.ADVANCE_COLS}-column mono advance '
+        f'&middot; {len(reg)} glyphs &middot; '
+        f'<a href="{REPO}/blob/main/site/font.py">edit the source</a></p>'
+        f"<h1>The face</h1>"
+        f"<p>Every page on this site is set in <strong>{esc(font.NAME)}</strong>, an "
+        f"{font.CELL}&times;{font.CELL} bitmap face drawn in "
+        f'<a href="{REPO}/blob/main/site/font.py">site/font.py</a> and packed into '
+        f'<a href="nether.woff">nether.woff</a> (regular, weight 400) and '
+        f'<a href="nether-bold.woff">nether-bold.woff</a> (bold, weight 700) without '
+        f"a font library. Six columns of ink (0..5) and one column of blank right "
+        f"bearing make a fixed seven-pixel ({font.ADVANCE}-unit) advance; rows 0..6 "
+        f"sit above the baseline and row 7 below it.</p>"
+        f"<p>Both weights are drawn by hand: {drawn_twice} glyphs have a separate "
+        f"700 drawing and {len(same)} are named in <code>SAME</code> where six "
+        f"columns cannot hold a second pixel without closing a counter, or where "
+        f"box-drawing rules must join across weights. <code>font-synthesis</code> is "
+        f"<code>none</code>, and <a href=\"{REPO}/blob/main/tests/font/run\">tests/font/run</a> "
+        f"fails if any glyph in either shipped file is missing from this page.</p>"
+        f'<p class="center"><img class="specimen" src="gfx/specimen.gif" width="435" '
+        f'height="246" alt="Every glyph in Nether 8, drawn at 3x across the nine stratum colours."></p>'
+        f'<h2 id="scale"><a href="#scale">1. The four sizes</a></h2>'
+        f"<p>A face drawn on an eight-pixel grid has four sizes at which one pixel of "
+        f"the drawing lands on a whole number of CSS pixels: <code>8px</code>, "
+        f"<code>16px</code>, <code>24px</code> and <code>32px</code>. Every rule on "
+        f"this site uses one of the four. Each pair below sets the regular (400) "
+        f"above the bold (700) at the same measure.</p>"
+        f'<div class="specimen-scale">{scale_rows}</div>'
+        f'<h2 id="samples"><a href="#samples">2. In use and in pairs</a></h2>'
+        f"<p>A synthetic bold widens every glyph and turns a monospace listing into a "
+        f"ragged one wherever a keyword or a depth annotation is coloured. Each pair "
+        f"of lines below puts 400 directly above 700 so any drift in advance or "
+        f"closed counter shows immediately.</p>"
+        f'<figure class="listing"><figcaption>narrow, wide and lookalike pairs (400 above, 700 below)</figcaption>'
+        f"<pre><code>"
+        f"400  |iiii|llll|1111||||||....|::::|;;;;|MMMM|WWWW|0000|8888|@@@@|####|%%%%|&&&&|\n"
+        f"700  <strong>|iiii|llll|1111||||||....|::::|;;;;|MMMM|WWWW|0000|8888|@@@@|####|%%%%|&&&&|</strong>\n\n"
+        f"400  |0O|1lI||2Z|5S|8B|aecugpq|bd|MWV|rn m|cl d|vv w|()[]{{}}|&lt;&gt;⟨⟩|!'.:&gt;|·ᵢ•|\n"
+        f"700  <strong>|0O|1lI||2Z|5S|8B|aecugpq|bd|MWV|rn m|cl d|vv w|()[]{{}}|&lt;&gt;⟨⟩|!'.:&gt;|·ᵢ•|</strong>\n\n"
+        f"400  Γ; δ ⊢ e : τ@d   dƒ ⊆ δ   d₁ ∪ d₂   d′ ≤ d ≥ 0   e ⟶ e′   ⟨v, s⟩ ∈ ℓ³ × 2⁶   «hole ① ②»\n"
+        f"700  <strong>Γ; δ ⊢ e : τ@d   dƒ ⊆ δ   d₁ ∪ d₂   d′ ≤ d ≥ 0   e ⟶ e′   ⟨v, s⟩ ∈ ℓ³ × 2⁶   «hole ① ②»</strong>"
+        f"</code></pre></figure>"
+        f'<figure class="listing"><figcaption>nether c</figcaption>'
+        f"<pre><code>{nc_sample}</code></pre></figure>"
+        f'<figure class="listing"><figcaption>shell</figcaption>'
+        f"<pre><code>{sh_sample}</code></pre></figure>"
+        f"<p>In running prose at <code>16px</code> on <code>22px</code> leading, "
+        f"<strong>bold weight</strong>, <em>underlined emphasis</em>, inline "
+        f"<code>code(0x1f)</code> and the nine stratum stains "
+        f"(<span class=\"d0\">@0</span> <span class=\"d1\">@1</span> "
+        f"<span class=\"d2\">@2</span> <span class=\"d3\">@3</span> "
+        f"<span class=\"d4\">@4</span> <span class=\"d5\">@5</span> "
+        f"<span class=\"d6\">@6</span> <span class=\"d7\">@7</span> "
+        f"<span class=\"d8\">@8</span>) share the same seven-pixel advance.</p>"
+        + "".join(sections_html)
+    )
+    return page("The face", body, current="specimen", depth=0, directory=directory)
 
 
 def build() -> dict[Path, str]:
@@ -593,6 +760,9 @@ def build() -> dict[Path, str]:
     files[SITE / "in-memoriam.html"] = page(
         "Terry A. Davis", memorial, current="", depth=0
     )
+
+    # the face specimen, generated from site/font.py
+    files[SITE / "specimen.html"] = specimen_page()
 
     # the manual
     chapters = load_chapters()

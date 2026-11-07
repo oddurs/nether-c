@@ -269,16 +269,16 @@ scripts/task font     # writes site/nether.woff, site/nether-bold.woff and the s
 scripts/task check    # the whole thing
 ```
 
-`scripts/task font` writes four files and they are all committed:
-`site/nether.woff`, `site/nether-bold.woff` and the two specimen GIFs. A
-binary in a diff is a bad review experience and these are in one anyway,
-because the thing a reviewer has to read is the bitmaps beside them and the
-files are a deterministic function of those — the same drawings give the same
-bytes on every machine, and `scripts/task font:check` rebuilds them and fails
-if what is committed differs. That is the opposite of
-`web/necropolis/nether.wasm`, which is never committed because a Rust release
-build is not byte-reproducible and a committed copy could only be checked by
-rebuilding it anyway.
+`scripts/task font` writes five files and they are all committed:
+`site/nether.woff`, `site/nether-bold.woff`, the two specimen GIFs and
+`site/specimen.html`. A binary in a diff is a bad review experience and the
+two `.woff` files are in one anyway, because the thing a reviewer has to read
+is the bitmaps beside them and `site/specimen.html`, and the files are a
+deterministic function of those — the same drawings give the same bytes on
+every machine, and `scripts/task font:check` rebuilds them and fails if what is
+committed differs. That is the opposite of `web/necropolis/nether.wasm`, which
+is never committed because a Rust release build is not byte-reproducible and a
+committed copy could only be checked by rebuilding it anyway.
 
 `scripts/task font` will refuse a bold that is wider than the regular, lighter
 than it, short of a counter it has, no heavier at all without saying so, or

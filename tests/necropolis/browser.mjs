@@ -104,7 +104,7 @@ try {
   await command("Emulation.setFocusEmulationEnabled", { enabled: true });
   for (const width of [1248, 768, 390, 320]) {
     await command("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width < 500 });
-    for (const path of ["/site/", "/site/spec/00-overview.html"]) {
+    for (const path of ["/site/", "/site/spec/00-overview.html", "/site/specimen.html"]) {
       await command("Page.navigate", { url: origin + path });
       await until("document.readyState === 'complete' && location.pathname === " + JSON.stringify(path));
       await evaluate("document.fonts.ready");
@@ -160,6 +160,27 @@ try {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents li').length"), 12);
         assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
         assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 11);
+      } else if (path.endsWith("/specimen.html")) {
+        assert.equal(await evaluate("document.querySelectorAll('.glyph-card').length"), 140);
+        assert.equal(await evaluate("document.querySelectorAll('pre.glyph-grid').length"), 280);
+        assert.ok(await evaluate(`(() => {
+          return [...document.querySelectorAll('pre.glyph-grid')].every(g => {
+            const r = g.getBoundingClientRect();
+            return g.scrollWidth <= g.clientWidth && r.left >= 0 && r.right <= innerWidth;
+          });
+        })()`), "specimen 8x8 grids fit without overflowing at " + width);
+        assert.ok(await evaluate(`(() => {
+          return [...document.querySelectorAll('.glyph-card')].every(card => {
+            return [8, 16, 24, 32].every(px => {
+              const reg = card.querySelector('span.s' + px);
+              const bol = card.querySelector('strong.s' + px);
+              return reg && bol
+                && getComputedStyle(reg).fontSize === px + 'px'
+                && getComputedStyle(bol).fontSize === px + 'px'
+                && reg.getBoundingClientRect().width === bol.getBoundingClientRect().width;
+            });
+          });
+        })()`), "every glyph card renders 8/16/24/32px in both weights at equal advance");
       } else {
         assert.equal(await evaluate("document.querySelector('img.hero').naturalWidth"), 600);
         // 28px is `2rem` at the root size site/nether.css sets. The chip is
@@ -185,12 +206,17 @@ try {
         assert.match(await evaluate("document.querySelector('.complaints').textContent"), /No complaint was sent/);
         await click(".complaints summary");
       }
-      await screenshot((path.includes("/spec/") ? "spec-" : "site-") + width);
+      await screenshot((path.includes("/spec/") ? "spec-" : path.endsWith("/specimen.html") ? "specimen-" : "site-") + width);
       if (path.includes("/spec/")) {
         await evaluate("document.querySelector('.directory-drawer').open = true");
         await click('nav.contents a[href="02-calculus.html"]');
         await until("location.pathname === '/site/spec/02-calculus.html' && document.readyState === 'complete'");
         assert.match(await evaluate("document.querySelector('nav.contents [aria-current]').textContent"), /calculus/);
+      } else if (path.endsWith("/specimen.html")) {
+        assert.ok(await evaluate("[...document.querySelectorAll('nav.contents a')].every(a => document.getElementById(a.hash.slice(1)))"));
+        await evaluate("document.querySelector('.directory-drawer').open = true");
+        await click('nav.contents a[href="#symbols"]');
+        assert.equal(await evaluate("location.hash"), "#symbols");
       } else {
         await click('.arrival-actions a[href="#first-program"]');
         assert.equal(await evaluate("location.hash"), "#first-program");

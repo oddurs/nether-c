@@ -24,6 +24,7 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+SPECIMEN = ROOT / "site" / "specimen.html"
 FACES = {
     "regular": (ROOT / "site" / "nether.woff", 400),
     "bold": (ROOT / "site" / "nether-bold.woff", 700),
@@ -33,10 +34,12 @@ FACES = {
 IGNORED = set("\n\r\t ﻿")
 
 
-def rendered() -> set[str]:
+def rendered(*, exclude_specimen: bool = False) -> set[str]:
     """Every character the pages and CSS-generated labels ask the face for."""
     seen: set[str] = set()
     for page in sorted(ROOT.glob("site/**/*.html")) + sorted(ROOT.glob("spec/*.md")):
+        if exclude_specimen and page == SPECIMEN:
+            continue
         text = page.read_text(encoding="utf-8")
         if page.suffix == ".html":
             text = re.sub(r"<(script|style)\b.*?</\1>", " ", text, flags=re.S | re.I)
@@ -129,6 +132,13 @@ def main() -> int:
             for why in bad_metrics:
                 print(f"  {why}", file=sys.stderr)
             return 1
+        unshown = specimen_coverage(have, drawings[weight], weight)
+        if unshown:
+            print(f"font: site/specimen.html does not show the {weight} face:",
+                  file=sys.stderr)
+            for why in unshown:
+                print(f"  {why}", file=sys.stderr)
+            return 1
 
     drawn = source.weigh()
     if drawn:
@@ -145,12 +155,62 @@ def main() -> int:
         return 1
 
     have = cmap_of(built["regular"][b"cmap"])
-    spare = len(have) - len(want)
-    print(f"font: {len(want)} glyph(s) rendered, both weights have them, {spare} spare")
+    prose_want = rendered(exclude_specimen=True)
+    spare = len(have) - len(prose_want)
+    print(f"font: {len(prose_want)} glyph(s) rendered, both weights have them, {spare} spare")
     print(f"font: {2 * len(have)} outline(s) decode to the pixels they were drawn from")
     print(f"font: {len(have) - len(source.SAME)} glyph(s) drawn twice, "
           f"{len(source.SAME)} the same at both weights")
+    print(f"font: {len(have)} glyph(s) catalogued on site/specimen.html at 8/16/24/32px in both weights")
     return 0
+
+
+def specimen_coverage(have: set[int], drawn: dict[str, tuple[str, ...]],
+                      weight: str) -> list[str]:
+    """Every glyph in the shipped face must appear on site/specimen.html."""
+    if not SPECIMEN.exists():
+        return ["site/specimen.html is missing; run python3 site/bake"]
+    text = SPECIMEN.read_text(encoding="utf-8")
+    cards = re.findall(
+        r'<article class="glyph-card" id="u-[0-9a-f]{4}" data-codepoint="U\+([0-9A-F]{4})">(.*?)</article>',
+        text,
+        flags=re.S,
+    )
+    by_code: dict[int, str] = {}
+    bad: list[str] = []
+    for hex_code, body in cards:
+        code = int(hex_code, 16)
+        if code in by_code:
+            bad.append(f"U+{code:04X} appears more than once on site/specimen.html")
+        by_code[code] = body
+
+    for code in sorted(have - set(by_code)):
+        ch = chr(code)
+        bad.append(f"U+{code:04X} ({ch}) is in the {weight} cmap and not on site/specimen.html")
+    for code in sorted(set(by_code) - have):
+        bad.append(f"U+{code:04X} is on site/specimen.html and not in the {weight} cmap")
+
+    for code in sorted(have & set(by_code)):
+        ch = chr(code)
+        body = by_code[code]
+        m = re.search(
+            rf'<pre class="glyph-grid" data-weight="{weight}">(.*?)</pre>',
+            body,
+            flags=re.S,
+        )
+        if not m:
+            bad.append(f"U+{code:04X} is missing its {weight} 8x8 grid on site/specimen.html")
+            continue
+        rows = tuple(m.group(1).replace("█", "#").replace("·", ".").split("\n"))
+        if rows != drawn[ch]:
+            bad.append(f"U+{code:04X} {weight} grid on site/specimen.html disagrees with site/font.py")
+        escaped = html.escape(ch, quote=True)
+        for px in (8, 16, 24, 32):
+            if f'<span class="s{px}">{escaped}</span>' not in body:
+                bad.append(f"U+{code:04X} is missing its {px}px regular sample on site/specimen.html")
+            if f'<strong class="s{px}">{escaped}</strong>' not in body:
+                bad.append(f"U+{code:04X} is missing its {px}px bold sample on site/specimen.html")
+    return bad
 
 
 def between(regular: dict[bytes, bytes], bold: dict[bytes, bytes]) -> list[str]:

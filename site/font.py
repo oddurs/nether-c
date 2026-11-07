@@ -21,6 +21,8 @@ Everything it emits is committed. Nothing here downloads anything.
 
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
 import struct
 import sys
 import zlib
@@ -1083,11 +1085,17 @@ def main() -> int:
         return 1
 
     check = "--check" in sys.argv
+    loader = importlib.machinery.SourceFileLoader("bake", str(OUT / "bake"))
+    spec = importlib.util.spec_from_loader("bake", loader)
+    assert spec is not None and spec.loader is not None
+    bake = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bake)
     work = [
         (OUT / "nether.woff", woff(build(G)), f"{len(G)} glyphs"),
         (OUT / "nether-bold.woff", woff(build(bold(), 700)), f"{len(G)} glyphs, bold"),
         (OUT / "gfx" / "specimen.gif", specimen(G), "the specimen"),
         (OUT / "gfx" / "specimen-lit.gif", specimen(G, "lit"), "the lit specimen"),
+        (OUT / "specimen.html", bake.specimen_page().encode("utf-8"), "the specimen page"),
     ]
 
     stale = []

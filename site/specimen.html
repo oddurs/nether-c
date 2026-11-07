@@ -1,0 +1,2110 @@
+<!doctype html>
+<html lang="en" data-lamp="out">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The face &mdash; Nether C</title>
+<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="color-scheme" content="dark light">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nether C">
+<meta property="og:title" content="The face &mdash; Nether C">
+<meta property="og:description" content="A C dialect in which nothing runs. Programs are buried, not executed; what ships is the trace and the holes the world still owes an answer to.">
+<meta property="og:image" content="https://oddurs.github.io/nether-c/gfx/card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Nether C. A C dialect in which nothing runs. The program has already run; you read what is left of it.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="nether.css">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script>
+/* Before paint, so nothing flashes. The lamp is out by default: the nether is
+   unlit, and seeing anything down here is something you choose to do. */
+try {
+  if (localStorage.getItem("nc-lamp") === "lit") {
+    document.documentElement.setAttribute("data-lamp", "lit");
+  }
+} catch (e) {}
+</script>
+</head>
+<body class="terminal">
+
+<a class="skip" href="#main">Skip to the text</a>
+
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<header class="terminal-header">
+<pre class="sign" aria-label="Nether C">
+█   █ █████ █████ █   █ █████ ████     ████
+██  █ █       █   █   █ █     █   █   █
+█ █ █ ████    █   █████ ████  ████    █
+█  ██ █       █   █   █ █     █  █    █
+█   █ █████   █   █   █ █████ █   █    ████
+</pre>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+
+</header>
+
+<nav class="bar" aria-label="Primary"><a href="index.html">front desk</a><a href="manual/index.html">manual</a><a href="spec/index.html">specification</a><a href="specimen.html" aria-current="page">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+
+<div class="terminal-workspace">
+<aside class="directory">
+<details open class="directory-drawer">
+<summary>Directory</summary>
+<nav class="contents" aria-label="Specimen contents"><p>the face</p><ol role="list"><li><a href="#scale">1. The four sizes</a></li><li><a href="#samples">2. In use and in pairs</a></li><li><a href="#punctuation">3. Space and punctuation (33)</a></li><li><a href="#digits">4. Digits (10)</a></li><li><a href="#capitals">5. Capitals (26)</a></li><li><a href="#lowercase">6. Lowercase (26)</a></li><li><a href="#symbols">7. Signs, Greek, arrows and box drawing (45)</a></li></ol></nav>
+<p class="directory-note">You are here.<br>Here is below.</p>
+</details>
+</aside>
+<div class="reading-pane">
+<div class="pane-title"><span>The face</span><span aria-hidden="true">[text]</span></div>
+<main id="main" tabindex="-1">
+<p class="c">Nether 8 &middot; Version 1.000 &middot; 8&times;8 cell &middot; 7-column mono advance &middot; 140 glyphs &middot; <a href="https://github.com/oddurs/nether-c/blob/main/site/font.py">edit the source</a></p><h1>The face</h1><p>Every page on this site is set in <strong>Nether 8</strong>, an 8&times;8 bitmap face drawn in <a href="https://github.com/oddurs/nether-c/blob/main/site/font.py">site/font.py</a> and packed into <a href="nether.woff">nether.woff</a> (regular, weight 400) and <a href="nether-bold.woff">nether-bold.woff</a> (bold, weight 700) without a font library. Six columns of ink (0..5) and one column of blank right bearing make a fixed seven-pixel (896-unit) advance; rows 0..6 sit above the baseline and row 7 below it.</p><p>Both weights are drawn by hand: 117 glyphs have a separate 700 drawing and 23 are named in <code>SAME</code> where six columns cannot hold a second pixel without closing a counter, or where box-drawing rules must join across weights. <code>font-synthesis</code> is <code>none</code>, and <a href="https://github.com/oddurs/nether-c/blob/main/tests/font/run">tests/font/run</a> fails if any glyph in either shipped file is missing from this page.</p><p class="center"><img class="specimen" src="gfx/specimen.gif" data-dark-src="gfx/specimen.gif" data-lit-src="gfx/specimen-lit.gif" width="435" height="246" alt="Every glyph in Nether 8, drawn at 3x across the nine stratum colours."></p><h2 id="scale"><a href="#scale">1. The four sizes</a></h2><p>A face drawn on an eight-pixel grid has four sizes at which one pixel of the drawing lands on a whole number of CSS pixels: <code>8px</code>, <code>16px</code>, <code>24px</code> and <code>32px</code>. Every rule on this site uses one of the four. Each pair below sets the regular (400) above the bold (700) at the same measure.</p><div class="specimen-scale"><div class="scale-row"><p class="c">8px &middot; 1&times; cell &middot; 7px advance</p><p class="scale-sample s8">NETHER C / DESK 00 · 0123456789 · U0 bury(Str p) @0 -&gt; #efed9b2a</p><p class="scale-sample s8"><strong>NETHER C / DESK 00 · 0123456789 · U0 bury(Str p) @0 -&gt; #efed9b2a</strong></p></div><div class="scale-row"><p class="c">16px &middot; 2&times; cell &middot; 14px advance</p><p class="scale-sample s16">Nothing runs. A program is buried; what ships is a trace and its holes.</p><p class="scale-sample s16"><strong>Nothing runs. A program is buried; what ships is a trace and its holes.</strong></p></div><div class="scale-row"><p class="c">24px &middot; 3&times; cell &middot; 21px advance</p><p class="scale-sample s24">■ Section 02 · Γ; δ ⊢ e : τ@d</p><p class="scale-sample s24"><strong>■ Section 02 · Γ; δ ⊢ e : τ@d</strong></p></div><div class="scale-row"><p class="c">32px &middot; 4&times; cell &middot; 28px advance</p><p class="scale-sample s32">██ NOTHING RUNS · @0..@8</p><p class="scale-sample s32"><strong>██ NOTHING RUNS · @0..@8</strong></p></div></div><h2 id="samples"><a href="#samples">2. In use and in pairs</a></h2><p>A synthetic bold widens every glyph and turns a monospace listing into a ragged one wherever a keyword or a depth annotation is coloured. Each pair of lines below puts 400 directly above 700 so any drift in advance or closed counter shows immediately.</p><figure class="listing"><figcaption>narrow, wide and lookalike pairs (400 above, 700 below)</figcaption><pre><code>400  |iiii|llll|1111||||||....|::::|;;;;|MMMM|WWWW|0000|8888|@@@@|####|%%%%|&&&&|
+700  <strong>|iiii|llll|1111||||||....|::::|;;;;|MMMM|WWWW|0000|8888|@@@@|####|%%%%|&&&&|</strong>
+
+400  |0O|1lI||2Z|5S|8B|aecugpq|bd|MWV|rn m|cl d|vv w|()[]{}|&lt;&gt;⟨⟩|!'.:&gt;|·ᵢ•|
+700  <strong>|0O|1lI||2Z|5S|8B|aecugpq|bd|MWV|rn m|cl d|vv w|()[]{}|&lt;&gt;⟨⟩|!'.:&gt;|·ᵢ•|</strong>
+
+400  Γ; δ ⊢ e : τ@d   dƒ ⊆ δ   d₁ ∪ d₂   d′ ≤ d ≥ 0   e ⟶ e′   ⟨v, s⟩ ∈ ℓ³ × 2⁶   «hole ① ②»
+700  <strong>Γ; δ ⊢ e : τ@d   dƒ ⊆ δ   d₁ ∪ d₂   d′ ≤ d ≥ 0   e ⟶ e′   ⟨v, s⟩ ∈ ℓ³ × 2⁶   «hole ① ②»</strong></code></pre></figure><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// Every keyword and @n below is set in the 700 face.</span>
+<span class="t">Shade</span>&lt;<span class="t">Bytes</span>&gt;<span class="d3">@3</span> load(<span class="t">Str</span> p) @{<span class="n">3</span>}
+{
+  <span class="k">return</span> <span class="k">descend</span> disk { <span class="k">shade</span> must(read(p)) };
+}
+
+<span class="t">Cairn</span><span class="d0">@0</span> witness = <span class="k">seal</span> load(<span class="s">&quot;main.nc&quot;</span>);
+<span class="k">demand</span> witness;</code></pre></figure><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">bury</span> build.nc
+buried   build.nc → <span class="h">76c4b655</span>   depth 3   holes 1   4 nodes
+  hole ①  read(&quot;main.nc&quot;)                stratum 3  disk
+
+<span class="p">$</span> nether <span class="k">lamp</span> --provenance bb9ed429
+<span class="h">bb9ed429</span>  trace · depth 3 · sealed
+└─ <span class="h">6940fecb</span>  witness ① · stratum 3 (disk) · read(&quot;main.nc&quot;) → 29 bytes</code></pre></figure><p>In running prose at <code>16px</code> on <code>22px</code> leading, <strong>bold weight</strong>, <em>underlined emphasis</em>, inline <code>code(0x1f)</code> and the nine stratum stains (<span class="d0">@0</span> <span class="d1">@1</span> <span class="d2">@2</span> <span class="d3">@3</span> <span class="d4">@4</span> <span class="d5">@5</span> <span class="d6">@6</span> <span class="d7">@7</span> <span class="d8">@8</span>) share the same seven-pixel advance.</p><h2 id="punctuation"><a href="#punctuation">3. Space and punctuation</a></h2><p class="small">33 glyph(s) in this range.</p><div class="glyph-catalogue"><article class="glyph-card" id="u-0020" data-codepoint="U+0020"><header class="glyph-head"><code>U+0020</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SPACE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8"> </span><strong class="s8"> </strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16"> </span><strong class="s16"> </strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24"> </span><strong class="s24"> </strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32"> </span><strong class="s32"> </strong></div></div></article><article class="glyph-card" id="u-0021" data-codepoint="U+0021"><header class="glyph-head"><code>U+0021</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">EXCLAMATION MARK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+········
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·····
+·██·····
+·██·····
+·██·····
+·██·····
+········
+·██·····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">!</span><strong class="s8">!</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">!</span><strong class="s16">!</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">!</span><strong class="s24">!</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">!</span><strong class="s32">!</strong></div></div></article><article class="glyph-card" id="u-0022" data-codepoint="U+0022"><header class="glyph-head"><code>U+0022</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">QUOTATION MARK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·█·█····
+·█·█····
+········
+········
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·██··
+·██·██··
+········
+········
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">&quot;</span><strong class="s8">&quot;</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">&quot;</span><strong class="s16">&quot;</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">&quot;</span><strong class="s24">&quot;</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">&quot;</span><strong class="s32">&quot;</strong></div></div></article><article class="glyph-card" id="u-0023" data-codepoint="U+0023"><header class="glyph-head"><code>U+0023</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">NUMBER SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·█·█····
+·█·█····
+██████··
+·█·█····
+██████··
+·█·█····
+·█·█····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·██··
+·██·██··
+██████··
+·██·██··
+██████··
+·██·██··
+·██·██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">#</span><strong class="s8">#</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">#</span><strong class="s16">#</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">#</span><strong class="s24">#</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">#</span><strong class="s32">#</strong></div></div></article><article class="glyph-card" id="u-0024" data-codepoint="U+0024"><header class="glyph-head"><code>U+0024</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DOLLAR SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+·█████··
+█·█·····
+·████···
+··█··█··
+█████···
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··██····
+·█████··
+█·██····
+·████···
+··██·█··
+█████···
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">$</span><strong class="s8">$</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">$</span><strong class="s16">$</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">$</span><strong class="s24">$</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">$</span><strong class="s32">$</strong></div></div></article><article class="glyph-card" id="u-0025" data-codepoint="U+0025"><header class="glyph-head"><code>U+0025</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">PERCENT SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██···█··
+██··█···
+···█····
+··█·····
+·█······
+█··██···
+···██···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">███··█··
+███·█···
+···█····
+··█·····
+·█······
+█·███···
+··███···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">%</span><strong class="s8">%</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">%</span><strong class="s16">%</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">%</span><strong class="s24">%</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">%</span><strong class="s32">%</strong></div></div></article><article class="glyph-card" id="u-0026" data-codepoint="U+0026"><header class="glyph-head"><code>U+0026</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">AMPERSAND</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·██·····
+█··█····
+█··█····
+·██·····
+██··█···
+█··██···
+·██··█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·····
+█··█····
+█··█····
+·██·····
+██··█···
+██·██···
+·██··█··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">&amp;</span><strong class="s8">&amp;</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">&amp;</span><strong class="s16">&amp;</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">&amp;</span><strong class="s24">&amp;</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">&amp;</span><strong class="s32">&amp;</strong></div></div></article><article class="glyph-card" id="u-0027" data-codepoint="U+0027"><header class="glyph-head"><code>U+0027</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">APOSTROPHE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+··█·····
+········
+········
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·····
+·██·····
+········
+········
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">&#x27;</span><strong class="s8">&#x27;</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">&#x27;</span><strong class="s16">&#x27;</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">&#x27;</span><strong class="s24">&#x27;</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">&#x27;</span><strong class="s32">&#x27;</strong></div></div></article><article class="glyph-card" id="u-0028" data-codepoint="U+0028"><header class="glyph-head"><code>U+0028</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LEFT PARENTHESIS</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">···█····
+··█·····
+·█······
+·█······
+·█······
+··█·····
+···█····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">···█····
+··█·····
+·██·····
+·██·····
+·██·····
+··█·····
+···█····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">(</span><strong class="s8">(</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">(</span><strong class="s16">(</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">(</span><strong class="s24">(</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">(</span><strong class="s32">(</strong></div></div></article><article class="glyph-card" id="u-0029" data-codepoint="U+0029"><header class="glyph-head"><code>U+0029</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">RIGHT PARENTHESIS</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·█······
+··█·····
+···█····
+···█····
+···█····
+··█·····
+·█······
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·█······
+··█·····
+··██····
+··██····
+··██····
+··█·····
+·█······
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">)</span><strong class="s8">)</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">)</span><strong class="s16">)</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">)</span><strong class="s24">)</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">)</span><strong class="s32">)</strong></div></div></article><article class="glyph-card" id="u-002a" data-codepoint="U+002A"><header class="glyph-head"><code>U+002A</code><span class="glyph-meta">SAME</span><span class="glyph-name">ASTERISK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+█·█·█···
+·███····
+█████···
+·███····
+█·█·█···
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+█·█·█···
+·███····
+█████···
+·███····
+█·█·█···
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">*</span><strong class="s8">*</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">*</span><strong class="s16">*</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">*</span><strong class="s24">*</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">*</span><strong class="s32">*</strong></div></div></article><article class="glyph-card" id="u-002b" data-codepoint="U+002B"><header class="glyph-head"><code>U+002B</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">PLUS SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+··█·····
+··█·····
+█████···
+··█·····
+··█·····
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+··██····
+··██····
+██████··
+··██····
+··██····
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">+</span><strong class="s8">+</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">+</span><strong class="s16">+</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">+</span><strong class="s24">+</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">+</span><strong class="s32">+</strong></div></div></article><article class="glyph-card" id="u-002c" data-codepoint="U+002C"><header class="glyph-head"><code>U+002C</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">COMMA</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+········
+··██····
+··██····
+··█·····</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+········
+··██····
+··██····
+··██····</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">,</span><strong class="s8">,</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">,</span><strong class="s16">,</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">,</span><strong class="s24">,</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">,</span><strong class="s32">,</strong></div></div></article><article class="glyph-card" id="u-002d" data-codepoint="U+002D"><header class="glyph-head"><code>U+002D</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">HYPHEN-MINUS</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+█████···
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+█████···
+█████···
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">-</span><strong class="s8">-</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">-</span><strong class="s16">-</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">-</span><strong class="s24">-</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">-</span><strong class="s32">-</strong></div></div></article><article class="glyph-card" id="u-002e" data-codepoint="U+002E"><header class="glyph-head"><code>U+002E</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">FULL STOP</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+········
+··██····
+··██····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+········
+·███····
+·███····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">.</span><strong class="s8">.</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">.</span><strong class="s16">.</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">.</span><strong class="s24">.</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">.</span><strong class="s32">.</strong></div></div></article><article class="glyph-card" id="u-002f" data-codepoint="U+002F"><header class="glyph-head"><code>U+002F</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SOLIDUS</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·····█··
+····█···
+···█····
+··█·····
+·█······
+█·······
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">····██··
+···██···
+··██····
+·██·····
+██······
+██······
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">/</span><strong class="s8">/</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">/</span><strong class="s16">/</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">/</span><strong class="s24">/</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">/</span><strong class="s32">/</strong></div></div></article><article class="glyph-card" id="u-003a" data-codepoint="U+003A"><header class="glyph-head"><code>U+003A</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">COLON</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+··██····
+··██····
+········
+··██····
+··██····
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+·███····
+·███····
+········
+·███····
+·███····
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">:</span><strong class="s8">:</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">:</span><strong class="s16">:</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">:</span><strong class="s24">:</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">:</span><strong class="s32">:</strong></div></div></article><article class="glyph-card" id="u-003b" data-codepoint="U+003B"><header class="glyph-head"><code>U+003B</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SEMICOLON</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+··██····
+··██····
+········
+··██····
+··██····
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+··██····
+··██····
+········
+··██····
+··██····
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">;</span><strong class="s8">;</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">;</span><strong class="s16">;</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">;</span><strong class="s24">;</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">;</span><strong class="s32">;</strong></div></div></article><article class="glyph-card" id="u-003c" data-codepoint="U+003C"><header class="glyph-head"><code>U+003C</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LESS-THAN SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">····█···
+···█····
+··█·····
+·█······
+··█·····
+···█····
+····█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">····██··
+···██···
+··██····
+·██·····
+··██····
+···██···
+····██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">&lt;</span><strong class="s8">&lt;</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">&lt;</span><strong class="s16">&lt;</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">&lt;</span><strong class="s24">&lt;</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">&lt;</span><strong class="s32">&lt;</strong></div></div></article><article class="glyph-card" id="u-003d" data-codepoint="U+003D"><header class="glyph-head"><code>U+003D</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">EQUALS SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█████···
+········
+█████···
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+█████···
+█████···
+········
+█████···
+█████···
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">=</span><strong class="s8">=</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">=</span><strong class="s16">=</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">=</span><strong class="s24">=</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">=</span><strong class="s32">=</strong></div></div></article><article class="glyph-card" id="u-003e" data-codepoint="U+003E"><header class="glyph-head"><code>U+003E</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">GREATER-THAN SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·█······
+··█·····
+···█····
+····█···
+···█····
+··█·····
+·█······
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██······
+·██·····
+··██····
+···██···
+··██····
+·██·····
+██······
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">&gt;</span><strong class="s8">&gt;</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">&gt;</span><strong class="s16">&gt;</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">&gt;</span><strong class="s24">&gt;</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">&gt;</span><strong class="s32">&gt;</strong></div></div></article><article class="glyph-card" id="u-003f" data-codepoint="U+003F"><header class="glyph-head"><code>U+003F</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">QUESTION MARK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+·····█··
+···██···
+··█·····
+········
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+█···██··
+····██··
+···██···
+··██····
+········
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">?</span><strong class="s8">?</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">?</span><strong class="s16">?</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">?</span><strong class="s24">?</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">?</span><strong class="s32">?</strong></div></div></article><article class="glyph-card" id="u-0040" data-codepoint="U+0040"><header class="glyph-head"><code>U+0040</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">COMMERCIAL AT</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+█·███···
+█·█·█···
+█·████··
+█·······
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+██···█··
+█·███···
+█·█·█···
+█·████··
+██······
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">@</span><strong class="s8">@</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">@</span><strong class="s16">@</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">@</span><strong class="s24">@</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">@</span><strong class="s32">@</strong></div></div></article><article class="glyph-card" id="u-005b" data-codepoint="U+005B"><header class="glyph-head"><code>U+005B</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LEFT SQUARE BRACKET</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··███···
+··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+··███···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··███···
+··██····
+··██····
+··██····
+··██····
+··██····
+··███···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">[</span><strong class="s8">[</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">[</span><strong class="s16">[</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">[</span><strong class="s24">[</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">[</span><strong class="s32">[</strong></div></div></article><article class="glyph-card" id="u-005c" data-codepoint="U+005C"><header class="glyph-head"><code>U+005C</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">REVERSE SOLIDUS</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█·······
+·█······
+··█·····
+···█····
+····█···
+·····█··
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██······
+·██·····
+··██····
+···██···
+····██··
+····██··
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">\</span><strong class="s8">\</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">\</span><strong class="s16">\</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">\</span><strong class="s24">\</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">\</span><strong class="s32">\</strong></div></div></article><article class="glyph-card" id="u-005d" data-codepoint="U+005D"><header class="glyph-head"><code>U+005D</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">RIGHT SQUARE BRACKET</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··███···
+····█···
+····█···
+····█···
+····█···
+····█···
+··███···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··███···
+···██···
+···██···
+···██···
+···██···
+···██···
+··███···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">]</span><strong class="s8">]</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">]</span><strong class="s16">]</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">]</span><strong class="s24">]</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">]</span><strong class="s32">]</strong></div></div></article><article class="glyph-card" id="u-005e" data-codepoint="U+005E"><header class="glyph-head"><code>U+005E</code><span class="glyph-meta">SAME</span><span class="glyph-name">CIRCUMFLEX ACCENT</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+·█·█····
+█···█···
+········
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··█·····
+·█·█····
+█···█···
+········
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">^</span><strong class="s8">^</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">^</span><strong class="s16">^</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">^</span><strong class="s24">^</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">^</span><strong class="s32">^</strong></div></div></article><article class="glyph-card" id="u-005f" data-codepoint="U+005F"><header class="glyph-head"><code>U+005F</code><span class="glyph-meta">SAME</span><span class="glyph-name">LOW LINE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+········
+········
+········
+██████··</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+········
+········
+········
+██████··</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">_</span><strong class="s8">_</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">_</span><strong class="s16">_</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">_</span><strong class="s24">_</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">_</span><strong class="s32">_</strong></div></div></article><article class="glyph-card" id="u-0060" data-codepoint="U+0060"><header class="glyph-head"><code>U+0060</code><span class="glyph-meta">SAME</span><span class="glyph-name">GRAVE ACCENT</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·█······
+··█·····
+········
+········
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·█······
+··█·····
+········
+········
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">`</span><strong class="s8">`</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">`</span><strong class="s16">`</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">`</span><strong class="s24">`</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">`</span><strong class="s32">`</strong></div></div></article><article class="glyph-card" id="u-007b" data-codepoint="U+007B"><header class="glyph-head"><code>U+007B</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LEFT CURLY BRACKET</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">···██···
+··█·····
+··█·····
+·█······
+··█·····
+··█·····
+···██···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">···██···
+··██····
+··██····
+·█······
+··██····
+··██····
+···██···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">{</span><strong class="s8">{</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">{</span><strong class="s16">{</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">{</span><strong class="s24">{</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">{</span><strong class="s32">{</strong></div></div></article><article class="glyph-card" id="u-007c" data-codepoint="U+007C"><header class="glyph-head"><code>U+007C</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">VERTICAL LINE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·····
+·██·····
+·██·····
+·██·····
+·██·····
+·██·····
+·██·····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">|</span><strong class="s8">|</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">|</span><strong class="s16">|</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">|</span><strong class="s24">|</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">|</span><strong class="s32">|</strong></div></div></article><article class="glyph-card" id="u-007d" data-codepoint="U+007D"><header class="glyph-head"><code>U+007D</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">RIGHT CURLY BRACKET</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··██····
+····█···
+····█···
+·····█··
+····█···
+····█···
+··██····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··██····
+···██···
+···██···
+·····█··
+···██···
+···██···
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">}</span><strong class="s8">}</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">}</span><strong class="s16">}</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">}</span><strong class="s24">}</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">}</span><strong class="s32">}</strong></div></div></article><article class="glyph-card" id="u-007e" data-codepoint="U+007E"><header class="glyph-head"><code>U+007E</code><span class="glyph-meta">SAME</span><span class="glyph-name">TILDE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+·██··█··
+█··██···
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+·██··█··
+█··██···
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">~</span><strong class="s8">~</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">~</span><strong class="s16">~</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">~</span><strong class="s24">~</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">~</span><strong class="s32">~</strong></div></div></article></div><h2 id="digits"><a href="#digits">4. Digits</a></h2><p class="small">10 glyph(s) in this range.</p><div class="glyph-catalogue"><article class="glyph-card" id="u-0030" data-codepoint="U+0030"><header class="glyph-head"><code>U+0030</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT ZERO</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+█···██··
+█·█··█··
+██···█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+██··██··
+██··██··
+██··██··
+██··██··
+██··██··
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">0</span><strong class="s8">0</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">0</span><strong class="s16">0</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">0</span><strong class="s24">0</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">0</span><strong class="s32">0</strong></div></div></article><article class="glyph-card" id="u-0031" data-codepoint="U+0031"><header class="glyph-head"><code>U+0031</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT ONE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+·██·····
+··█·····
+··█·····
+··█·····
+··█·····
+·███····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··██····
+·███····
+··██····
+··██····
+··██····
+··██····
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">1</span><strong class="s8">1</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">1</span><strong class="s16">1</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">1</span><strong class="s24">1</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">1</span><strong class="s32">1</strong></div></div></article><article class="glyph-card" id="u-0032" data-codepoint="U+0032"><header class="glyph-head"><code>U+0032</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT TWO</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+·····█··
+···██···
+··█·····
+·█······
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+█···██··
+····██··
+···██···
+··█·····
+·██·····
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">2</span><strong class="s8">2</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">2</span><strong class="s16">2</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">2</span><strong class="s24">2</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">2</span><strong class="s32">2</strong></div></div></article><article class="glyph-card" id="u-0033" data-codepoint="U+0033"><header class="glyph-head"><code>U+0033</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT THREE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+·····█··
+··███···
+·····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+█···██··
+····██··
+··███···
+····██··
+█···██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">3</span><strong class="s8">3</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">3</span><strong class="s16">3</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">3</span><strong class="s24">3</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">3</span><strong class="s32">3</strong></div></div></article><article class="glyph-card" id="u-0034" data-codepoint="U+0034"><header class="glyph-head"><code>U+0034</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT FOUR</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">····█···
+···██···
+··█·█···
+·█··█···
+██████··
+····█···
+····█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">····██··
+···███··
+··█·██··
+·█··██··
+██████··
+····██··
+····██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">4</span><strong class="s8">4</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">4</span><strong class="s16">4</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">4</span><strong class="s24">4</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">4</span><strong class="s32">4</strong></div></div></article><article class="glyph-card" id="u-0035" data-codepoint="U+0035"><header class="glyph-head"><code>U+0035</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT FIVE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██████··
+█·······
+█████···
+·····█··
+·····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+██······
+█████···
+····██··
+····██··
+█···██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">5</span><strong class="s8">5</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">5</span><strong class="s16">5</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">5</span><strong class="s24">5</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">5</span><strong class="s32">5</strong></div></div></article><article class="glyph-card" id="u-0036" data-codepoint="U+0036"><header class="glyph-head"><code>U+0036</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT SIX</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··███···
+·█······
+█·······
+█████···
+█····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··███···
+·█······
+██······
+█████···
+██··██··
+██··██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">6</span><strong class="s8">6</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">6</span><strong class="s16">6</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">6</span><strong class="s24">6</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">6</span><strong class="s32">6</strong></div></div></article><article class="glyph-card" id="u-0037" data-codepoint="U+0037"><header class="glyph-head"><code>U+0037</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT SEVEN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██████··
+·····█··
+····█···
+···█····
+··█·····
+··█·····
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+····██··
+····█···
+···█····
+··██····
+··██····
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">7</span><strong class="s8">7</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">7</span><strong class="s16">7</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">7</span><strong class="s24">7</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">7</span><strong class="s32">7</strong></div></div></article><article class="glyph-card" id="u-0038" data-codepoint="U+0038"><header class="glyph-head"><code>U+0038</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT EIGHT</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+█····█··
+·████···
+█····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+██··██··
+██··██··
+·████···
+██··██··
+██··██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">8</span><strong class="s8">8</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">8</span><strong class="s16">8</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">8</span><strong class="s24">8</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">8</span><strong class="s32">8</strong></div></div></article><article class="glyph-card" id="u-0039" data-codepoint="U+0039"><header class="glyph-head"><code>U+0039</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">DIGIT NINE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+█····█··
+·█████··
+·····█··
+····█···
+·███····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+██··██··
+██··██··
+·█████··
+····██··
+····█···
+·███····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">9</span><strong class="s8">9</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">9</span><strong class="s16">9</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">9</span><strong class="s24">9</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">9</span><strong class="s32">9</strong></div></div></article></div><h2 id="capitals"><a href="#capitals">5. Capitals</a></h2><p class="small">26 glyph(s) in this range.</p><div class="glyph-catalogue"><article class="glyph-card" id="u-0041" data-codepoint="U+0041"><header class="glyph-head"><code>U+0041</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER A</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··██····
+·█··█···
+█····█··
+█····█··
+██████··
+█····█··
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··██····
+·█··█···
+██··██··
+██··██··
+██████··
+██··██··
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">A</span><strong class="s8">A</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">A</span><strong class="s16">A</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">A</span><strong class="s24">A</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">A</span><strong class="s32">A</strong></div></div></article><article class="glyph-card" id="u-0042" data-codepoint="U+0042"><header class="glyph-head"><code>U+0042</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER B</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█████···
+█····█··
+█····█··
+█████···
+█····█··
+█····█··
+█████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">█████···
+██··██··
+██··██··
+█████···
+██··██··
+██··██··
+█████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">B</span><strong class="s8">B</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">B</span><strong class="s16">B</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">B</span><strong class="s24">B</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">B</span><strong class="s32">B</strong></div></div></article><article class="glyph-card" id="u-0043" data-codepoint="U+0043"><header class="glyph-head"><code>U+0043</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER C</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+█·······
+█·······
+█·······
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+██···█··
+██······
+██······
+██······
+██···█··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">C</span><strong class="s8">C</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">C</span><strong class="s16">C</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">C</span><strong class="s24">C</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">C</span><strong class="s32">C</strong></div></div></article><article class="glyph-card" id="u-0044" data-codepoint="U+0044"><header class="glyph-head"><code>U+0044</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER D</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">████····
+█···█···
+█····█··
+█····█··
+█····█··
+█···█···
+████····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">████····
+██··█···
+██··██··
+██··██··
+██··██··
+██··█···
+████····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">D</span><strong class="s8">D</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">D</span><strong class="s16">D</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">D</span><strong class="s24">D</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">D</span><strong class="s32">D</strong></div></div></article><article class="glyph-card" id="u-0045" data-codepoint="U+0045"><header class="glyph-head"><code>U+0045</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER E</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██████··
+█·······
+█·······
+█████···
+█·······
+█·······
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+██······
+██······
+█████···
+██······
+██······
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">E</span><strong class="s8">E</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">E</span><strong class="s16">E</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">E</span><strong class="s24">E</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">E</span><strong class="s32">E</strong></div></div></article><article class="glyph-card" id="u-0046" data-codepoint="U+0046"><header class="glyph-head"><code>U+0046</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER F</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██████··
+█·······
+█·······
+█████···
+█·······
+█·······
+█·······
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+██······
+██······
+█████···
+██······
+██······
+██······
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">F</span><strong class="s8">F</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">F</span><strong class="s16">F</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">F</span><strong class="s24">F</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">F</span><strong class="s32">F</strong></div></div></article><article class="glyph-card" id="u-0047" data-codepoint="U+0047"><header class="glyph-head"><code>U+0047</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER G</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+█·······
+█··███··
+█····█··
+█····█··
+·█████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+██···█··
+██······
+██·███··
+██··██··
+██··██··
+·█████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">G</span><strong class="s8">G</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">G</span><strong class="s16">G</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">G</span><strong class="s24">G</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">G</span><strong class="s32">G</strong></div></div></article><article class="glyph-card" id="u-0048" data-codepoint="U+0048"><header class="glyph-head"><code>U+0048</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER H</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+█····█··
+█····█··
+██████··
+█····█··
+█····█··
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██··██··
+██··██··
+██··██··
+██████··
+██··██··
+██··██··
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">H</span><strong class="s8">H</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">H</span><strong class="s16">H</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">H</span><strong class="s24">H</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">H</span><strong class="s32">H</strong></div></div></article><article class="glyph-card" id="u-0049" data-codepoint="U+0049"><header class="glyph-head"><code>U+0049</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER I</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·███····
+··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+·███····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·███····
+·██·····
+·██·····
+·██·····
+·██·····
+·██·····
+·███····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">I</span><strong class="s8">I</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">I</span><strong class="s16">I</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">I</span><strong class="s24">I</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">I</span><strong class="s32">I</strong></div></div></article><article class="glyph-card" id="u-004a" data-codepoint="U+004A"><header class="glyph-head"><code>U+004A</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER J</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">···███··
+·····█··
+·····█··
+·····█··
+·····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">···███··
+····██··
+····██··
+····██··
+····██··
+█···██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">J</span><strong class="s8">J</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">J</span><strong class="s16">J</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">J</span><strong class="s24">J</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">J</span><strong class="s32">J</strong></div></div></article><article class="glyph-card" id="u-004b" data-codepoint="U+004B"><header class="glyph-head"><code>U+004B</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER K</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+█···█···
+█··█····
+███·····
+█··█····
+█···█···
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██···█··
+██··█···
+██·█····
+███·····
+██·█····
+██··█···
+██···█··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">K</span><strong class="s8">K</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">K</span><strong class="s16">K</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">K</span><strong class="s24">K</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">K</span><strong class="s32">K</strong></div></div></article><article class="glyph-card" id="u-004c" data-codepoint="U+004C"><header class="glyph-head"><code>U+004C</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER L</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█·······
+█·······
+█·······
+█·······
+█·······
+█·······
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██······
+██······
+██······
+██······
+██······
+██······
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">L</span><strong class="s8">L</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">L</span><strong class="s16">L</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">L</span><strong class="s24">L</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">L</span><strong class="s32">L</strong></div></div></article><article class="glyph-card" id="u-004d" data-codepoint="U+004D"><header class="glyph-head"><code>U+004D</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER M</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+██··██··
+█·██·█··
+█·██·█··
+█····█··
+█····█··
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██··██··
+██··██··
+█·██·█··
+█·██·█··
+██··██··
+██··██··
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">M</span><strong class="s8">M</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">M</span><strong class="s16">M</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">M</span><strong class="s24">M</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">M</span><strong class="s32">M</strong></div></div></article><article class="glyph-card" id="u-004e" data-codepoint="U+004E"><header class="glyph-head"><code>U+004E</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER N</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+██···█··
+█·█··█··
+█··█·█··
+█···██··
+█····█··
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██··██··
+██··██··
+█·█··█··
+█··█·█··
+██··██··
+██··██··
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">N</span><strong class="s8">N</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">N</span><strong class="s16">N</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">N</span><strong class="s24">N</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">N</span><strong class="s32">N</strong></div></div></article><article class="glyph-card" id="u-004f" data-codepoint="U+004F"><header class="glyph-head"><code>U+004F</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER O</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+█····█··
+█····█··
+█····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+██··██··
+██··██··
+██··██··
+██··██··
+██··██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">O</span><strong class="s8">O</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">O</span><strong class="s16">O</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">O</span><strong class="s24">O</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">O</span><strong class="s32">O</strong></div></div></article><article class="glyph-card" id="u-0050" data-codepoint="U+0050"><header class="glyph-head"><code>U+0050</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER P</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█████···
+█····█··
+█····█··
+█████···
+█·······
+█·······
+█·······
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">█████···
+██··██··
+██··██··
+█████···
+██······
+██······
+██······
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">P</span><strong class="s8">P</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">P</span><strong class="s16">P</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">P</span><strong class="s24">P</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">P</span><strong class="s32">P</strong></div></div></article><article class="glyph-card" id="u-0051" data-codepoint="U+0051"><header class="glyph-head"><code>U+0051</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER Q</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█····█··
+█····█··
+█····█··
+█·█··█··
+█··█·█··
+·██··█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+██··██··
+██··██··
+██··██··
+██··██··
+██··██··
+·████···
+···███··</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">Q</span><strong class="s8">Q</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">Q</span><strong class="s16">Q</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">Q</span><strong class="s24">Q</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">Q</span><strong class="s32">Q</strong></div></div></article><article class="glyph-card" id="u-0052" data-codepoint="U+0052"><header class="glyph-head"><code>U+0052</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER R</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█████···
+█····█··
+█····█··
+█████···
+█··█····
+█···█···
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">█████···
+██··██··
+██··██··
+█████···
+█··█····
+██··█···
+██···█··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">R</span><strong class="s8">R</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">R</span><strong class="s16">R</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">R</span><strong class="s24">R</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">R</span><strong class="s32">R</strong></div></div></article><article class="glyph-card" id="u-0053" data-codepoint="U+0053"><header class="glyph-head"><code>U+0053</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER S</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·█████··
+█·······
+█·······
+·████···
+·····█··
+·····█··
+█████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·█████··
+██······
+██······
+·████···
+····██··
+····██··
+█████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">S</span><strong class="s8">S</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">S</span><strong class="s16">S</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">S</span><strong class="s24">S</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">S</span><strong class="s32">S</strong></div></div></article><article class="glyph-card" id="u-0054" data-codepoint="U+0054"><header class="glyph-head"><code>U+0054</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER T</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██████··
+··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+··██····
+··██····
+··██····
+··██····
+··██····
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">T</span><strong class="s8">T</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">T</span><strong class="s16">T</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">T</span><strong class="s24">T</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">T</span><strong class="s32">T</strong></div></div></article><article class="glyph-card" id="u-0055" data-codepoint="U+0055"><header class="glyph-head"><code>U+0055</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER U</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+█····█··
+█····█··
+█····█··
+█····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██··██··
+██··██··
+██··██··
+██··██··
+██··██··
+██··██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">U</span><strong class="s8">U</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">U</span><strong class="s16">U</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">U</span><strong class="s24">U</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">U</span><strong class="s32">U</strong></div></div></article><article class="glyph-card" id="u-0056" data-codepoint="U+0056"><header class="glyph-head"><code>U+0056</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER V</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+█····█··
+█····█··
+█····█··
+·█··█···
+·█··█···
+··██····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██··██··
+██··██··
+██··██··
+██··██··
+·█··█···
+·█··█···
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">V</span><strong class="s8">V</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">V</span><strong class="s16">V</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">V</span><strong class="s24">V</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">V</span><strong class="s32">V</strong></div></div></article><article class="glyph-card" id="u-0057" data-codepoint="U+0057"><header class="glyph-head"><code>U+0057</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER W</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+█····█··
+█····█··
+█·██·█··
+█·██·█··
+██··██··
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██··██··
+██··██··
+██··██··
+█·██·█··
+█·██·█··
+██··██··
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">W</span><strong class="s8">W</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">W</span><strong class="s16">W</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">W</span><strong class="s24">W</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">W</span><strong class="s32">W</strong></div></div></article><article class="glyph-card" id="u-0058" data-codepoint="U+0058"><header class="glyph-head"><code>U+0058</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER X</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+·█··█···
+··██····
+··██····
+··██····
+·█··█···
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██··██··
+·█··█···
+··██····
+··██····
+··██····
+·█··█···
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">X</span><strong class="s8">X</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">X</span><strong class="s16">X</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">X</span><strong class="s24">X</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">X</span><strong class="s32">X</strong></div></div></article><article class="glyph-card" id="u-0059" data-codepoint="U+0059"><header class="glyph-head"><code>U+0059</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER Y</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█····█··
+·█··█···
+··██····
+··█·····
+··█·····
+··█·····
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">█····█··
+·█··█···
+··██····
+··██····
+··██····
+··██····
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">Y</span><strong class="s8">Y</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">Y</span><strong class="s16">Y</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">Y</span><strong class="s24">Y</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">Y</span><strong class="s32">Y</strong></div></div></article><article class="glyph-card" id="u-005a" data-codepoint="U+005A"><header class="glyph-head"><code>U+005A</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN CAPITAL LETTER Z</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██████··
+·····█··
+····█···
+··██····
+·█······
+█·······
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+····██··
+····█···
+··██····
+·█······
+██······
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">Z</span><strong class="s8">Z</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">Z</span><strong class="s16">Z</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">Z</span><strong class="s24">Z</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">Z</span><strong class="s32">Z</strong></div></div></article></div><h2 id="lowercase"><a href="#lowercase">6. Lowercase</a></h2><p class="small">26 glyph(s) in this range.</p><div class="glyph-catalogue"><article class="glyph-card" id="u-0061" data-codepoint="U+0061"><header class="glyph-head"><code>U+0061</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER A</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+·████···
+·····█··
+·█████··
+█····█··
+·█████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+·████···
+····██··
+·█████··
+█···██··
+·█████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">a</span><strong class="s8">a</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">a</span><strong class="s16">a</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">a</span><strong class="s24">a</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">a</span><strong class="s32">a</strong></div></div></article><article class="glyph-card" id="u-0062" data-codepoint="U+0062"><header class="glyph-head"><code>U+0062</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER B</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█·······
+█·······
+█████···
+█····█··
+█····█··
+█····█··
+█████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██······
+██······
+█████···
+██··██··
+██··██··
+██··██··
+█████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">b</span><strong class="s8">b</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">b</span><strong class="s16">b</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">b</span><strong class="s24">b</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">b</span><strong class="s32">b</strong></div></div></article><article class="glyph-card" id="u-0063" data-codepoint="U+0063"><header class="glyph-head"><code>U+0063</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER C</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+·█████··
+█·······
+█·······
+█·······
+·█████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+·█████··
+██······
+██······
+██······
+·█████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">c</span><strong class="s8">c</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">c</span><strong class="s16">c</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">c</span><strong class="s24">c</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">c</span><strong class="s32">c</strong></div></div></article><article class="glyph-card" id="u-0064" data-codepoint="U+0064"><header class="glyph-head"><code>U+0064</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER D</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·····█··
+·····█··
+·█████··
+█····█··
+█····█··
+█····█··
+·█████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">····██··
+····██··
+·█████··
+██··██··
+██··██··
+██··██··
+·█████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">d</span><strong class="s8">d</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">d</span><strong class="s16">d</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">d</span><strong class="s24">d</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">d</span><strong class="s32">d</strong></div></div></article><article class="glyph-card" id="u-0065" data-codepoint="U+0065"><header class="glyph-head"><code>U+0065</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER E</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+·████···
+█····█··
+██████··
+█·······
+·█████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+·████···
+██··██··
+██████··
+██······
+·█████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">e</span><strong class="s8">e</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">e</span><strong class="s16">e</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">e</span><strong class="s24">e</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">e</span><strong class="s32">e</strong></div></div></article><article class="glyph-card" id="u-0066" data-codepoint="U+0066"><header class="glyph-head"><code>U+0066</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER F</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">···██···
+··█·····
+█████···
+··█·····
+··█·····
+··█·····
+··█·····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">···██···
+·██·····
+█████···
+·██·····
+·██·····
+·██·····
+·██·····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">f</span><strong class="s8">f</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">f</span><strong class="s16">f</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">f</span><strong class="s24">f</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">f</span><strong class="s32">f</strong></div></div></article><article class="glyph-card" id="u-0067" data-codepoint="U+0067"><header class="glyph-head"><code>U+0067</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER G</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+·█████··
+█····█··
+█····█··
+·█████··
+·····█··
+·████···</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+·█████··
+██··██··
+██··██··
+·█████··
+····██··
+·████···</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">g</span><strong class="s8">g</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">g</span><strong class="s16">g</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">g</span><strong class="s24">g</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">g</span><strong class="s32">g</strong></div></div></article><article class="glyph-card" id="u-0068" data-codepoint="U+0068"><header class="glyph-head"><code>U+0068</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER H</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█·······
+█·······
+█████···
+█····█··
+█····█··
+█····█··
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██······
+██······
+█████···
+██··██··
+██··██··
+██··██··
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">h</span><strong class="s8">h</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">h</span><strong class="s16">h</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">h</span><strong class="s24">h</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">h</span><strong class="s32">h</strong></div></div></article><article class="glyph-card" id="u-0069" data-codepoint="U+0069"><header class="glyph-head"><code>U+0069</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER I</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+········
+·██·····
+··█·····
+··█·····
+··█·····
+·███····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··██····
+········
+·███····
+··██····
+··██····
+··██····
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">i</span><strong class="s8">i</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">i</span><strong class="s16">i</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">i</span><strong class="s24">i</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">i</span><strong class="s32">i</strong></div></div></article><article class="glyph-card" id="u-006a" data-codepoint="U+006A"><header class="glyph-head"><code>U+006A</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER J</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">····█···
+········
+···██···
+····█···
+····█···
+····█···
+█···█···
+·███····</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">····██··
+········
+···███··
+····██··
+····██··
+····██··
+█···██··
+·████···</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">j</span><strong class="s8">j</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">j</span><strong class="s16">j</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">j</span><strong class="s24">j</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">j</span><strong class="s32">j</strong></div></div></article><article class="glyph-card" id="u-006b" data-codepoint="U+006B"><header class="glyph-head"><code>U+006B</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER K</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█·······
+█·······
+█···█···
+█··█····
+███·····
+█··█····
+█···█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██······
+██······
+██··█···
+██·█····
+███·····
+██·█····
+██··█···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">k</span><strong class="s8">k</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">k</span><strong class="s16">k</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">k</span><strong class="s24">k</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">k</span><strong class="s32">k</strong></div></div></article><article class="glyph-card" id="u-006c" data-codepoint="U+006C"><header class="glyph-head"><code>U+006C</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER L</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·██·····
+··█·····
+··█·····
+··█·····
+··█·····
+··█·····
+·███····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·····
+··██····
+··██····
+··██····
+··██····
+··██····
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">l</span><strong class="s8">l</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">l</span><strong class="s16">l</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">l</span><strong class="s24">l</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">l</span><strong class="s32">l</strong></div></div></article><article class="glyph-card" id="u-006d" data-codepoint="U+006D"><header class="glyph-head"><code>U+006D</code><span class="glyph-meta">SAME</span><span class="glyph-name">LATIN SMALL LETTER M</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+██·██···
+█·█·█···
+█·█·█···
+█·█·█···
+█·█·█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██·██···
+█·█·█···
+█·█·█···
+█·█·█···
+█·█·█···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">m</span><strong class="s8">m</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">m</span><strong class="s16">m</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">m</span><strong class="s24">m</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">m</span><strong class="s32">m</strong></div></div></article><article class="glyph-card" id="u-006e" data-codepoint="U+006E"><header class="glyph-head"><code>U+006E</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER N</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█████···
+█····█··
+█····█··
+█····█··
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+█████···
+██··██··
+██··██··
+██··██··
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">n</span><strong class="s8">n</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">n</span><strong class="s16">n</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">n</span><strong class="s24">n</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">n</span><strong class="s32">n</strong></div></div></article><article class="glyph-card" id="u-006f" data-codepoint="U+006F"><header class="glyph-head"><code>U+006F</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER O</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+·████···
+█····█··
+█····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+·████···
+██··██··
+██··██··
+██··██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">o</span><strong class="s8">o</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">o</span><strong class="s16">o</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">o</span><strong class="s24">o</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">o</span><strong class="s32">o</strong></div></div></article><article class="glyph-card" id="u-0070" data-codepoint="U+0070"><header class="glyph-head"><code>U+0070</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER P</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█████···
+█····█··
+█····█··
+█████···
+█·······
+█·······</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+█████···
+██··██··
+██··██··
+█████···
+██······
+██······</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">p</span><strong class="s8">p</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">p</span><strong class="s16">p</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">p</span><strong class="s24">p</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">p</span><strong class="s32">p</strong></div></div></article><article class="glyph-card" id="u-0071" data-codepoint="U+0071"><header class="glyph-head"><code>U+0071</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER Q</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+·█████··
+█····█··
+█····█··
+·█████··
+·····█··
+·····█··</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+·█████··
+██··██··
+██··██··
+·█████··
+····██··
+····██··</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">q</span><strong class="s8">q</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">q</span><strong class="s16">q</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">q</span><strong class="s24">q</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">q</span><strong class="s32">q</strong></div></div></article><article class="glyph-card" id="u-0072" data-codepoint="U+0072"><header class="glyph-head"><code>U+0072</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER R</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█·███···
+██······
+█·······
+█·······
+█·······
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+█·███···
+██······
+██······
+██······
+██······
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">r</span><strong class="s8">r</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">r</span><strong class="s16">r</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">r</span><strong class="s24">r</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">r</span><strong class="s32">r</strong></div></div></article><article class="glyph-card" id="u-0073" data-codepoint="U+0073"><header class="glyph-head"><code>U+0073</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER S</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+·█████··
+█·······
+·████···
+·····█··
+█████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+·█████··
+██······
+·████···
+····██··
+█████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">s</span><strong class="s8">s</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">s</span><strong class="s16">s</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">s</span><strong class="s24">s</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">s</span><strong class="s32">s</strong></div></div></article><article class="glyph-card" id="u-0074" data-codepoint="U+0074"><header class="glyph-head"><code>U+0074</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER T</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+··█·····
+█████···
+··█·····
+··█·····
+··█·█···
+···█····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·····
+·██·····
+█████···
+·██·····
+·██·····
+·██·█···
+···█····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">t</span><strong class="s8">t</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">t</span><strong class="s16">t</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">t</span><strong class="s24">t</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">t</span><strong class="s32">t</strong></div></div></article><article class="glyph-card" id="u-0075" data-codepoint="U+0075"><header class="glyph-head"><code>U+0075</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER U</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█····█··
+█····█··
+█····█··
+█····█··
+·█████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██··██··
+██··██··
+██··██··
+██··██··
+·█████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">u</span><strong class="s8">u</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">u</span><strong class="s16">u</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">u</span><strong class="s24">u</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">u</span><strong class="s32">u</strong></div></div></article><article class="glyph-card" id="u-0076" data-codepoint="U+0076"><header class="glyph-head"><code>U+0076</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER V</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█····█··
+█····█··
+·█··█···
+·█··█···
+··██····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██··██··
+██··██··
+·█··█···
+·█··█···
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">v</span><strong class="s8">v</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">v</span><strong class="s16">v</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">v</span><strong class="s24">v</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">v</span><strong class="s32">v</strong></div></div></article><article class="glyph-card" id="u-0077" data-codepoint="U+0077"><header class="glyph-head"><code>U+0077</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER W</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█····█··
+█·██·█··
+█·██·█··
+█·██·█··
+·█··█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██··██··
+█·██·█··
+█·██·█··
+█·██·█··
+·█··█···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">w</span><strong class="s8">w</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">w</span><strong class="s16">w</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">w</span><strong class="s24">w</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">w</span><strong class="s32">w</strong></div></div></article><article class="glyph-card" id="u-0078" data-codepoint="U+0078"><header class="glyph-head"><code>U+0078</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER X</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█····█··
+·█··█···
+··██····
+·█··█···
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██··██··
+·█··█···
+··██····
+·█··█···
+██··██··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">x</span><strong class="s8">x</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">x</span><strong class="s16">x</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">x</span><strong class="s24">x</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">x</span><strong class="s32">x</strong></div></div></article><article class="glyph-card" id="u-0079" data-codepoint="U+0079"><header class="glyph-head"><code>U+0079</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER Y</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█····█··
+█····█··
+█····█··
+·█████··
+·····█··
+·████···</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██··██··
+██··██··
+██··██··
+·█████··
+····██··
+·████···</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">y</span><strong class="s8">y</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">y</span><strong class="s16">y</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">y</span><strong class="s24">y</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">y</span><strong class="s32">y</strong></div></div></article><article class="glyph-card" id="u-007a" data-codepoint="U+007A"><header class="glyph-head"><code>U+007A</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER Z</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+██████··
+····█···
+··██····
+·█······
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██████··
+···██···
+··██····
+·██·····
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">z</span><strong class="s8">z</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">z</span><strong class="s16">z</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">z</span><strong class="s24">z</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">z</span><strong class="s32">z</strong></div></div></article></div><h2 id="symbols"><a href="#symbols">7. Signs, Greek, arrows and box drawing</a></h2><p class="small">45 glyph(s) in this range.</p><div class="glyph-catalogue"><article class="glyph-card" id="u-00a7" data-codepoint="U+00A7"><header class="glyph-head"><code>U+00A7</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SECTION SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·███····
+█···█···
+·██·····
+█··█····
+··██····
+█···█···
+·███····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·███····
+█···█···
+·██·····
+█·██····
+··██····
+█···█···
+·███····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">§</span><strong class="s8">§</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">§</span><strong class="s16">§</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">§</span><strong class="s24">§</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">§</span><strong class="s32">§</strong></div></div></article><article class="glyph-card" id="u-00ab" data-codepoint="U+00AB"><header class="glyph-head"><code>U+00AB</code><span class="glyph-meta">SAME</span><span class="glyph-name">LEFT-POINTING DOUBLE ANGLE QUOTATION MARK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+··█··█··
+·█··█···
+█··█····
+·█··█···
+··█··█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+··█··█··
+·█··█···
+█··█····
+·█··█···
+··█··█··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">«</span><strong class="s8">«</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">«</span><strong class="s16">«</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">«</span><strong class="s24">«</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">«</span><strong class="s32">«</strong></div></div></article><article class="glyph-card" id="u-00b3" data-codepoint="U+00B3"><header class="glyph-head"><code>U+00B3</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SUPERSCRIPT THREE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██······
+·██·····
+██······
+········
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██······
+███·····
+██······
+········
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">³</span><strong class="s8">³</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">³</span><strong class="s16">³</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">³</span><strong class="s24">³</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">³</span><strong class="s32">³</strong></div></div></article><article class="glyph-card" id="u-00b7" data-codepoint="U+00B7"><header class="glyph-head"><code>U+00B7</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">MIDDLE DOT</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+··██····
+··██····
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+·███····
+·███····
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">·</span><strong class="s8">·</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">·</span><strong class="s16">·</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">·</span><strong class="s24">·</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">·</span><strong class="s32">·</strong></div></div></article><article class="glyph-card" id="u-00bb" data-codepoint="U+00BB"><header class="glyph-head"><code>U+00BB</code><span class="glyph-meta">SAME</span><span class="glyph-name">RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█··█····
+·█··█···
+··█··█··
+·█··█···
+█··█····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+█··█····
+·█··█···
+··█··█··
+·█··█···
+█··█····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">»</span><strong class="s8">»</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">»</span><strong class="s16">»</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">»</span><strong class="s24">»</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">»</span><strong class="s32">»</strong></div></div></article><article class="glyph-card" id="u-00d7" data-codepoint="U+00D7"><header class="glyph-head"><code>U+00D7</code><span class="glyph-meta">SAME</span><span class="glyph-name">MULTIPLICATION SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█···█···
+·█·█····
+··█·····
+·█·█····
+█···█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+█···█···
+·█·█····
+··█·····
+·█·█····
+█···█···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">×</span><strong class="s8">×</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">×</span><strong class="s16">×</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">×</span><strong class="s24">×</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">×</span><strong class="s32">×</strong></div></div></article><article class="glyph-card" id="u-0192" data-codepoint="U+0192"><header class="glyph-head"><code>U+0192</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SMALL LETTER F WITH HOOK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">···██···
+··█·····
+█████···
+··█·····
+··█·····
+··█·····
+█·█·····
+·█······</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">···██···
+·██·····
+█████···
+·██·····
+·██·····
+·██·····
+█·█·····
+·█······</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">ƒ</span><strong class="s8">ƒ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">ƒ</span><strong class="s16">ƒ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">ƒ</span><strong class="s24">ƒ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">ƒ</span><strong class="s32">ƒ</strong></div></div></article><article class="glyph-card" id="u-0393" data-codepoint="U+0393"><header class="glyph-head"><code>U+0393</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">GREEK CAPITAL LETTER GAMMA</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██████··
+█·······
+█·······
+█·······
+█·······
+█·······
+█·······
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+██······
+██······
+██······
+██······
+██······
+██······
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">Γ</span><strong class="s8">Γ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">Γ</span><strong class="s16">Γ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">Γ</span><strong class="s24">Γ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">Γ</span><strong class="s32">Γ</strong></div></div></article><article class="glyph-card" id="u-03b4" data-codepoint="U+03B4"><header class="glyph-head"><code>U+03B4</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">GREEK SMALL LETTER DELTA</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·████···
+█···█···
+··██····
+·█··█···
+█····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·████···
+█··██···
+··██····
+·█··█···
+██··██··
+██··██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">δ</span><strong class="s8">δ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">δ</span><strong class="s16">δ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">δ</span><strong class="s24">δ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">δ</span><strong class="s32">δ</strong></div></div></article><article class="glyph-card" id="u-03ba" data-codepoint="U+03BA"><header class="glyph-head"><code>U+03BA</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">GREEK SMALL LETTER KAPPA</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█···█···
+█··█····
+███·····
+█··█····
+█···█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██··█···
+██·█····
+███·····
+██·█····
+██··█···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">κ</span><strong class="s8">κ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">κ</span><strong class="s16">κ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">κ</span><strong class="s24">κ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">κ</span><strong class="s32">κ</strong></div></div></article><article class="glyph-card" id="u-03bb" data-codepoint="U+03BB"><header class="glyph-head"><code>U+03BB</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">GREEK SMALL LETTER LAMDA</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██······
+·█······
+·█······
+·██·····
+█··█····
+█···█···
+█····█··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">███·····
+·██·····
+·██·····
+·██·····
+██·█····
+██··█···
+██···█··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">λ</span><strong class="s8">λ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">λ</span><strong class="s16">λ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">λ</span><strong class="s24">λ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">λ</span><strong class="s32">λ</strong></div></div></article><article class="glyph-card" id="u-03c4" data-codepoint="U+03C4"><header class="glyph-head"><code>U+03C4</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">GREEK SMALL LETTER TAU</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█████···
+··█·····
+··█·····
+··█·····
+···██···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+█████···
+·██·····
+·██·····
+·██·····
+···██···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">τ</span><strong class="s8">τ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">τ</span><strong class="s16">τ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">τ</span><strong class="s24">τ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">τ</span><strong class="s32">τ</strong></div></div></article><article class="glyph-card" id="u-1d48" data-codepoint="U+1D48"><header class="glyph-head"><code>U+1D48</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">MODIFIER LETTER SMALL D</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+·███····
+█·██····
+·███····
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·····
+·███····
+█·██····
+·███····
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">ᵈ</span><strong class="s8">ᵈ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">ᵈ</span><strong class="s16">ᵈ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">ᵈ</span><strong class="s24">ᵈ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">ᵈ</span><strong class="s32">ᵈ</strong></div></div></article><article class="glyph-card" id="u-1d62" data-codepoint="U+1D62"><header class="glyph-head"><code>U+1D62</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LATIN SUBSCRIPT SMALL LETTER I</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+·█······
+········
+·█······
+·█······</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+·█······
+········
+██······
+██······</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">ᵢ</span><strong class="s8">ᵢ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">ᵢ</span><strong class="s16">ᵢ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">ᵢ</span><strong class="s24">ᵢ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">ᵢ</span><strong class="s32">ᵢ</strong></div></div></article><article class="glyph-card" id="u-2013" data-codepoint="U+2013"><header class="glyph-head"><code>U+2013</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">EN DASH</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+·████···
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+·████···
+·████···
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">–</span><strong class="s8">–</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">–</span><strong class="s16">–</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">–</span><strong class="s24">–</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">–</span><strong class="s32">–</strong></div></div></article><article class="glyph-card" id="u-2014" data-codepoint="U+2014"><header class="glyph-head"><code>U+2014</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">EM DASH</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+██████··
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+██████··
+██████··
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">—</span><strong class="s8">—</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">—</span><strong class="s16">—</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">—</span><strong class="s24">—</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">—</span><strong class="s32">—</strong></div></div></article><article class="glyph-card" id="u-2022" data-codepoint="U+2022"><header class="glyph-head"><code>U+2022</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">BULLET</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+··██····
+·████···
+·████···
+··██····
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+·████···
+██████··
+██████··
+·████···
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">•</span><strong class="s8">•</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">•</span><strong class="s16">•</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">•</span><strong class="s24">•</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">•</span><strong class="s32">•</strong></div></div></article><article class="glyph-card" id="u-2026" data-codepoint="U+2026"><header class="glyph-head"><code>U+2026</code><span class="glyph-meta">SAME</span><span class="glyph-name">HORIZONTAL ELLIPSIS</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+········
+········
+█·█·█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+········
+········
+█·█·█···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">…</span><strong class="s8">…</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">…</span><strong class="s16">…</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">…</span><strong class="s24">…</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">…</span><strong class="s32">…</strong></div></div></article><article class="glyph-card" id="u-2032" data-codepoint="U+2032"><header class="glyph-head"><code>U+2032</code><span class="glyph-meta">SAME</span><span class="glyph-name">PRIME</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+·█······
+········
+········
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··█·····
+·█······
+········
+········
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">′</span><strong class="s8">′</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">′</span><strong class="s16">′</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">′</span><strong class="s24">′</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">′</span><strong class="s32">′</strong></div></div></article><article class="glyph-card" id="u-2076" data-codepoint="U+2076"><header class="glyph-head"><code>U+2076</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SUPERSCRIPT SIX</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·██·····
+█·······
+███·····
+·██·····
+········
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·██·····
+██······
+███·····
+███·····
+········
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">⁶</span><strong class="s8">⁶</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">⁶</span><strong class="s16">⁶</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">⁶</span><strong class="s24">⁶</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">⁶</span><strong class="s32">⁶</strong></div></div></article><article class="glyph-card" id="u-2081" data-codepoint="U+2081"><header class="glyph-head"><code>U+2081</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SUBSCRIPT ONE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+·█······
+██······
+·█······
+███·····</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+██······
+██······
+██······
+███·····</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">₁</span><strong class="s8">₁</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">₁</span><strong class="s16">₁</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">₁</span><strong class="s24">₁</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">₁</span><strong class="s32">₁</strong></div></div></article><article class="glyph-card" id="u-2082" data-codepoint="U+2082"><header class="glyph-head"><code>U+2082</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SUBSCRIPT TWO</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+██······
+··█·····
+·█······
+███·····</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+██······
+··█·····
+██······
+███·····</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">₂</span><strong class="s8">₂</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">₂</span><strong class="s16">₂</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">₂</span><strong class="s24">₂</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">₂</span><strong class="s32">₂</strong></div></div></article><article class="glyph-card" id="u-2099" data-codepoint="U+2099"><header class="glyph-head"><code>U+2099</code><span class="glyph-meta">SAME</span><span class="glyph-name">LATIN SUBSCRIPT SMALL LETTER N</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+········
+███·····
+█·█·····
+█·█·····</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+········
+███·····
+█·█·····
+█·█·····</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">ₙ</span><strong class="s8">ₙ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">ₙ</span><strong class="s16">ₙ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">ₙ</span><strong class="s24">ₙ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">ₙ</span><strong class="s32">ₙ</strong></div></div></article><article class="glyph-card" id="u-2113" data-codepoint="U+2113"><header class="glyph-head"><code>U+2113</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SCRIPT SMALL L</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··██····
+·█··█···
+·█··█···
+·██·····
+·█······
+·█······
+··██····
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··██····
+·█··█···
+·█··█···
+·██·····
+·██·····
+·██·····
+··██····
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">ℓ</span><strong class="s8">ℓ</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">ℓ</span><strong class="s16">ℓ</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">ℓ</span><strong class="s24">ℓ</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">ℓ</span><strong class="s32">ℓ</strong></div></div></article><article class="glyph-card" id="u-2190" data-codepoint="U+2190"><header class="glyph-head"><code>U+2190</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LEFTWARDS ARROW</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+·█······
+██████··
+·█······
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+·██·····
+██████··
+·██·····
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">←</span><strong class="s8">←</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">←</span><strong class="s16">←</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">←</span><strong class="s24">←</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">←</span><strong class="s32">←</strong></div></div></article><article class="glyph-card" id="u-2192" data-codepoint="U+2192"><header class="glyph-head"><code>U+2192</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">RIGHTWARDS ARROW</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+····█···
+██████··
+····█···
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+···██···
+██████··
+···██···
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">→</span><strong class="s8">→</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">→</span><strong class="s16">→</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">→</span><strong class="s24">→</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">→</span><strong class="s32">→</strong></div></div></article><article class="glyph-card" id="u-2208" data-codepoint="U+2208"><header class="glyph-head"><code>U+2208</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">ELEMENT OF</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+··████··
+·█······
+·████···
+·█······
+··████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+··████··
+·██·····
+·████···
+·██·····
+··████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">∈</span><strong class="s8">∈</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">∈</span><strong class="s16">∈</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">∈</span><strong class="s24">∈</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">∈</span><strong class="s32">∈</strong></div></div></article><article class="glyph-card" id="u-2212" data-codepoint="U+2212"><header class="glyph-head"><code>U+2212</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">MINUS SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+██████··
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+██████··
+██████··
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">−</span><strong class="s8">−</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">−</span><strong class="s16">−</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">−</span><strong class="s24">−</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">−</span><strong class="s32">−</strong></div></div></article><article class="glyph-card" id="u-222a" data-codepoint="U+222A"><header class="glyph-head"><code>U+222A</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">UNION</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+█····█··
+█····█··
+█····█··
+█····█··
+·████···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██··██··
+██··██··
+██··██··
+██··██··
+·████···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">∪</span><strong class="s8">∪</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">∪</span><strong class="s16">∪</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">∪</span><strong class="s24">∪</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">∪</span><strong class="s32">∪</strong></div></div></article><article class="glyph-card" id="u-2261" data-codepoint="U+2261"><header class="glyph-head"><code>U+2261</code><span class="glyph-meta">SAME</span><span class="glyph-name">IDENTICAL TO</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+██████··
+········
+██████··
+········
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+██████··
+········
+██████··
+········
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">≡</span><strong class="s8">≡</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">≡</span><strong class="s16">≡</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">≡</span><strong class="s24">≡</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">≡</span><strong class="s32">≡</strong></div></div></article><article class="glyph-card" id="u-2264" data-codepoint="U+2264"><header class="glyph-head"><code>U+2264</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LESS-THAN OR EQUAL TO</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+···██···
+·██·····
+█·······
+·██·····
+···██···
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+···██···
+·██·····
+█·······
+·██·····
+··███···
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">≤</span><strong class="s8">≤</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">≤</span><strong class="s16">≤</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">≤</span><strong class="s24">≤</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">≤</span><strong class="s32">≤</strong></div></div></article><article class="glyph-card" id="u-2265" data-codepoint="U+2265"><header class="glyph-head"><code>U+2265</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">GREATER-THAN OR EQUAL TO</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+██······
+··██····
+····██··
+··██····
+██······
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+██······
+··██····
+····██··
+··██····
+███·····
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">≥</span><strong class="s8">≥</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">≥</span><strong class="s16">≥</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">≥</span><strong class="s24">≥</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">≥</span><strong class="s32">≥</strong></div></div></article><article class="glyph-card" id="u-2286" data-codepoint="U+2286"><header class="glyph-head"><code>U+2286</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SUBSET OF OR EQUAL TO</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+··████··
+·█······
+·█······
+·█······
+··████··
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+··████··
+·██·····
+·██·····
+·██·····
+··████··
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">⊆</span><strong class="s8">⊆</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">⊆</span><strong class="s16">⊆</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">⊆</span><strong class="s24">⊆</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">⊆</span><strong class="s32">⊆</strong></div></div></article><article class="glyph-card" id="u-2295" data-codepoint="U+2295"><header class="glyph-head"><code>U+2295</code><span class="glyph-meta">SAME</span><span class="glyph-name">CIRCLED PLUS</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+·████···
+█··█·█··
+█·███···
+█··█·█··
+·████···
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+·████···
+█··█·█··
+█·███···
+█··█·█··
+·████···
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">⊕</span><strong class="s8">⊕</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">⊕</span><strong class="s16">⊕</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">⊕</span><strong class="s24">⊕</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">⊕</span><strong class="s32">⊕</strong></div></div></article><article class="glyph-card" id="u-22a2" data-codepoint="U+22A2"><header class="glyph-head"><code>U+22A2</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">RIGHT TACK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">█·······
+█·······
+█·······
+█████···
+█·······
+█·······
+█·······
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██······
+██······
+██······
+█████···
+██······
+██······
+██······
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">⊢</span><strong class="s8">⊢</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">⊢</span><strong class="s16">⊢</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">⊢</span><strong class="s24">⊢</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">⊢</span><strong class="s32">⊢</strong></div></div></article><article class="glyph-card" id="u-2460" data-codepoint="U+2460"><header class="glyph-head"><code>U+2460</code><span class="glyph-meta">SAME</span><span class="glyph-name">CIRCLED DIGIT ONE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+·████···
+█··█·█··
+█··█·█··
+█··█·█··
+·████···
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+·████···
+█··█·█··
+█··█·█··
+█··█·█··
+·████···
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">①</span><strong class="s8">①</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">①</span><strong class="s16">①</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">①</span><strong class="s24">①</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">①</span><strong class="s32">①</strong></div></div></article><article class="glyph-card" id="u-2461" data-codepoint="U+2461"><header class="glyph-head"><code>U+2461</code><span class="glyph-meta">SAME</span><span class="glyph-name">CIRCLED DIGIT TWO</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+·████···
+█·██·█··
+█··█·█··
+█·██·█··
+·████···
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+·████···
+█·██·█··
+█··█·█··
+█·██·█··
+·████···
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">②</span><strong class="s8">②</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">②</span><strong class="s16">②</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">②</span><strong class="s24">②</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">②</span><strong class="s32">②</strong></div></div></article><article class="glyph-card" id="u-2500" data-codepoint="U+2500"><header class="glyph-head"><code>U+2500</code><span class="glyph-meta">SAME</span><span class="glyph-name">BOX DRAWINGS LIGHT HORIZONTAL</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+········
+██████··
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+········
+██████··
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">─</span><strong class="s8">─</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">─</span><strong class="s16">─</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">─</span><strong class="s24">─</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">─</span><strong class="s32">─</strong></div></div></article><article class="glyph-card" id="u-2514" data-codepoint="U+2514"><header class="glyph-head"><code>U+2514</code><span class="glyph-meta">SAME</span><span class="glyph-name">BOX DRAWINGS LIGHT UP AND RIGHT</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">··█·····
+··█·····
+··█·····
+··█·····
+··████··
+········
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">··█·····
+··█·····
+··█·····
+··█·····
+··████··
+········
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">└</span><strong class="s8">└</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">└</span><strong class="s16">└</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">└</span><strong class="s24">└</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">└</span><strong class="s32">└</strong></div></div></article><article class="glyph-card" id="u-2588" data-codepoint="U+2588"><header class="glyph-head"><code>U+2588</code><span class="glyph-meta">SAME</span><span class="glyph-name">FULL BLOCK</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">██████··
+██████··
+██████··
+██████··
+██████··
+██████··
+██████··
+██████··</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">██████··
+██████··
+██████··
+██████··
+██████··
+██████··
+██████··
+██████··</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">█</span><strong class="s8">█</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">█</span><strong class="s16">█</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">█</span><strong class="s24">█</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">█</span><strong class="s32">█</strong></div></div></article><article class="glyph-card" id="u-25a0" data-codepoint="U+25A0"><header class="glyph-head"><code>U+25A0</code><span class="glyph-meta">SAME</span><span class="glyph-name">BLACK SQUARE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+██████··
+██████··
+██████··
+██████··
+██████··
+██████··
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+██████··
+██████··
+██████··
+██████··
+██████··
+██████··
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">■</span><strong class="s8">■</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">■</span><strong class="s16">■</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">■</span><strong class="s24">■</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">■</span><strong class="s32">■</strong></div></div></article><article class="glyph-card" id="u-25b8" data-codepoint="U+25B8"><header class="glyph-head"><code>U+25B8</code><span class="glyph-meta">SAME</span><span class="glyph-name">BLACK RIGHT-POINTING SMALL TRIANGLE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+█·······
+·██·····
+···██···
+·██·····
+█·······
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+█·······
+·██·····
+···██···
+·██·····
+█·······
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">▸</span><strong class="s8">▸</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">▸</span><strong class="s16">▸</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">▸</span><strong class="s24">▸</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">▸</span><strong class="s32">▸</strong></div></div></article><article class="glyph-card" id="u-27e8" data-codepoint="U+27E8"><header class="glyph-head"><code>U+27E8</code><span class="glyph-meta">SAME</span><span class="glyph-name">MATHEMATICAL LEFT ANGLE BRACKET</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">····█···
+···█····
+··█·····
+·█······
+··█·····
+···█····
+····█···
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">····█···
+···█····
+··█·····
+·█······
+··█·····
+···█····
+····█···
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">⟨</span><strong class="s8">⟨</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">⟨</span><strong class="s16">⟨</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">⟨</span><strong class="s24">⟨</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">⟨</span><strong class="s32">⟨</strong></div></div></article><article class="glyph-card" id="u-27e9" data-codepoint="U+27E9"><header class="glyph-head"><code>U+27E9</code><span class="glyph-meta">SAME</span><span class="glyph-name">MATHEMATICAL RIGHT ANGLE BRACKET</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">·█······
+··█·····
+···█····
+····█···
+···█····
+··█·····
+·█······
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">·█······
+··█·····
+···█····
+····█···
+···█····
+··█·····
+·█······
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">⟩</span><strong class="s8">⟩</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">⟩</span><strong class="s16">⟩</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">⟩</span><strong class="s24">⟩</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">⟩</span><strong class="s32">⟩</strong></div></div></article><article class="glyph-card" id="u-27f6" data-codepoint="U+27F6"><header class="glyph-head"><code>U+27F6</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">LONG RIGHTWARDS ARROW</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+········
+········
+····█···
+██████··
+····█···
+········
+········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
+········
+········
+···██···
+██████··
+···██···
+········
+········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">⟶</span><strong class="s8">⟶</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">⟶</span><strong class="s16">⟶</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">⟶</span><strong class="s24">⟶</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">⟶</span><strong class="s32">⟶</strong></div></div></article></div>
+</main>
+</div>
+</div>
+
+<div class="terminal-status"><span>END OF BUFFER</span><a href="#main">Back to text ^</a></div>
+
+<footer>
+<p>Nether C is in the <strong>public domain</strong>.
+Take it. It was always there.</p>
+<div class="badges">
+<img src="gfx/badge-norun.gif" data-dark-src="gfx/badge-norun.gif" data-lit-src="gfx/badge-norun-lit.gif" width="88" height="31" alt="There is no run">
+<img src="gfx/badge-unlit.gif" data-dark-src="gfx/badge-unlit.gif" data-lit-src="gfx/badge-unlit-lit.gif" width="88" height="31" alt="Best viewed unlit">
+<img src="gfx/badge-handmade.gif" data-dark-src="gfx/badge-handmade.gif" data-lit-src="gfx/badge-handmade-lit.gif" width="88" height="31" alt="No libraries, written from scratch">
+<img src="gfx/badge-80col.gif" data-dark-src="gfx/badge-80col.gif" data-lit-src="gfx/badge-80col-lit.gif" width="88" height="31" alt="80 columns">
+<img src="gfx/badge-decay.gif" data-dark-src="gfx/badge-decay.gif" data-lit-src="gfx/badge-decay-lit.gif" width="88" height="31" alt="The core only decays">
+<img src="gfx/badge-public.gif" data-dark-src="gfx/badge-public.gif" data-lit-src="gfx/badge-public-lit.gif" width="88" height="31" alt="Public domain, take it">
+</div>
+
+<div class="counter">
+  <span>the world still owes</span>
+  <img src="gfx/counter.gif" data-dark-src="gfx/counter.gif" data-lit-src="gfx/counter-lit.gif" width="84" height="26" alt="Holes still owed, counted off the board">
+  <span>holes</span>
+</div>
+
+<p class="center">Every graphic on this site is drawn by
+<a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
+which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
+There is no image library in this repository. There is not going to be one.</p>
+<p><a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+</footer>
+
+<script>
+/* The whole of the site's JavaScript. */
+(function () {
+  var directory = document.querySelector(".directory-drawer");
+  if (directory && window.matchMedia("(max-width: 1050px)").matches) directory.open = false;
+  var root = document.documentElement;
+  var btn = document.querySelector("[data-lamp-toggle]");
+  var label = document.querySelector("[data-lamp-state]");
+  var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  function paintImages() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    document.querySelectorAll("img[data-dark-src]").forEach(function (img) {
+      var src = lit ? img.dataset.litSrc : img.dataset.darkSrc;
+      if (motion.matches && img.hasAttribute("data-still")) src = src.replace(".gif", "-still.gif");
+      if (img.getAttribute("src") !== src) img.setAttribute("src", src);
+    });
+  }
+  function paint() {
+    var lit = root.getAttribute("data-lamp") === "lit";
+    if (label) label.textContent = lit ? "lit" : "out";
+    if (btn) btn.setAttribute("aria-pressed", lit ? "true" : "false");
+    paintImages();
+  }
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var lit = root.getAttribute("data-lamp") === "lit";
+      root.setAttribute("data-lamp", lit ? "out" : "lit");
+      try { localStorage.setItem("nc-lamp", lit ? "out" : "lit"); } catch (e) {}
+      paint();
+    });
+  }
+  paint();
+  motion.addEventListener("change", paintImages);
+})();
+</script>
+
+</body>
+</html>
