@@ -1331,6 +1331,22 @@ call in list order.
 sequential read batches around the write, even when the paths are disjoint, and
 a fast hole after a slow one waits to be committed in discovery order.
 
+### Walking the reverse index to find damaged traces
+
+[§7.5.2](07-ledger.md#752-what-a-damaged-store-can-still-tell-you) derives
+affected traces by walking forward from verified `Trace` nodes rather than
+walking `refs/` backwards from corrupt objects.
+
+The alternative considered was to start at each corrupt object and follow
+`referrers` up to every `Trace` that names it. Rejected because an audit has to
+ inspect `objects/` anyway to find the corrupt objects, and `refs/` is the very
+derived index the audit is checking: a missing reverse edge would make a
+damaged trace look healthy, and a corrupt object that was itself a `Hole`,
+`Witness` or `Deposit` has outgoing edges that cannot be decoded at all.
+
+**What it cost.** An audit decodes every verified node in the store to read its
+forward references, even when only one object is corrupt.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own
