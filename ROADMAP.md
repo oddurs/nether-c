@@ -384,13 +384,9 @@ Evidence-led performance work with canonical results and fuel semantics preserve
 
 ## cortege — The Cortege
 
-`#########·` 86% · 6 of 7 done · due 2028-02-15
+`##########` 100% · 7 of 7 done · due 2028-02-15
 
 Concurrency that preserves specified observable order, not an assumption that all world questions commute.
-
-### descending
-
-- [ ] [`0208`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0208-two-machines-one-trace.md) Two machines, one trace <sup>feature · p2 · 6</sup>
 
 ### buried
 
@@ -398,6 +394,7 @@ Concurrency that preserves specified observable order, not an assumption that al
 - [x] [`0205`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0205-one-program-one-cairn-however-many-threads.md) One program, one cairn, however many threads <sup>chore · p0 · 0</sup>
 - [x] [`0206`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0206-answer-many-holes-at-once.md) Answer many holes at once <sup>feature · p1 · 5</sup>
 - [x] [`0207`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0207-sixteen-processes-one-store.md) Sixteen processes, one store <sup>chore · p1 · 4</sup>
+- [x] [`0208`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0208-two-machines-one-trace.md) Two machines, one trace <sup>feature · p2 · 6</sup>
 - [x] [`0209`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0209-say-what-a-parallel-burial-may-and-may-not-do.md) Say what a parallel burial may and may not do <sup>spec · p0 · 0</sup>
 - [x] [`0269`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0269-the-release-workflow-is-four-majors-behind-on-its-artifacts.md) The release workflow is four majors behind on its artifacts <sup>chore · p3 · 0</sup>
 

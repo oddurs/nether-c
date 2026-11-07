@@ -28,5 +28,5 @@ pub use ledger::Ledger;
 pub use net::Net;
 pub use provider::{Provider, Refuse, Unanswered, World};
 pub use recorder::{Recorded, Recorder};
-pub use replay::Replay;
+pub use replay::{MergeError, Replay};
 pub use unrecorded::Unrecorded;
