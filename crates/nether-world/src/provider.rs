@@ -1,9 +1,15 @@
 //! Who answers what, and what a grant is.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
+
 use nether_core::{Capability, Depth, Prim};
 use nether_ledger::{AnswerOf, Call, Refusal, Span, StoreError, Value};
 
 use crate::recorder::{Recorded, Recorder};
+
+/// The most read-stratum holes [`World::ask_all`] puts in flight at once.
+const MOST_IN_FLIGHT: usize = 8;
 
 /// Something that can answer one of §09's world-touching prelude functions.
 ///
@@ -11,7 +17,7 @@ use crate::recorder::{Recorded, Recorder};
 /// way to make one is [`Recorder::record`], and that writes before it returns —
 /// so a provider cannot hand back a value it has not first written to the
 /// ledger. §1.4 is a fact about this trait rather than a thing to remember.
-pub trait Provider {
+pub trait Provider: Sync {
     /// The capability this provider is. §9.1 fixes the names.
     fn capability(&self) -> Capability;
 
@@ -153,6 +159,80 @@ impl World {
             Refuse::Collapse(why) => Unanswered::Collapsed(why),
             Refuse::Unavailable(why) => Unanswered::Unavailable(why),
         })
+    }
+
+    /// Answer a slice of holes in discovery order, overlapping contiguous runs
+    /// of read-stratum holes (strata 1, 2, 3 and 5) up to [`MOST_IN_FLIGHT`] at
+    /// a time.
+    ///
+    /// Act-stratum holes (strata 4, 6, 7 and 8) are answered alone in sequence,
+    /// and a fatal failure stops at the first failing hole in discovery order
+    /// while cancelling any later hole in the run that has not started yet.
+    #[must_use]
+    pub fn ask_all(
+        &self,
+        asked: &[(Call, Span)],
+        into: &Recorder,
+    ) -> Vec<Result<Recorded, Unanswered>> {
+        let mut out = Vec::with_capacity(asked.len());
+        let mut i = 0;
+        while i < asked.len() {
+            let end = asked[i..]
+                .iter()
+                .position(|(c, _)| !Self::reads(&c.function))
+                .map_or(asked.len(), |n| i + n);
+            if end <= i + 1 {
+                let res = self.ask(&asked[i].0, asked[i].1, into);
+                let stop = Self::fatal(&res);
+                out.push(res);
+                if stop {
+                    return out;
+                }
+                i += 1;
+                continue;
+            }
+            let (run, next, cutoff) =
+                (&asked[i..end], AtomicUsize::new(0), AtomicUsize::new(end - i));
+            let slots: Vec<Mutex<Option<Result<Recorded, Unanswered>>>> =
+                (0..run.len()).map(|_| Mutex::new(None)).collect();
+            std::thread::scope(|s| {
+                for _ in 0..run.len().min(MOST_IN_FLIGHT) {
+                    s.spawn(|| {
+                        loop {
+                            let idx = next.fetch_add(1, Ordering::Relaxed);
+                            if idx >= cutoff.load(Ordering::Acquire) {
+                                break;
+                            }
+                            let res = self.ask(&run[idx].0, run[idx].1, into);
+                            if Self::fatal(&res) {
+                                cutoff.fetch_min(idx, Ordering::AcqRel);
+                            }
+                            *slots[idx].lock().unwrap_or_else(PoisonError::into_inner) = Some(res);
+                        }
+                    });
+                }
+            });
+            for res in slots
+                .into_iter()
+                .map_while(|s| s.into_inner().unwrap_or_else(PoisonError::into_inner))
+            {
+                let stop = Self::fatal(&res);
+                out.push(res);
+                if stop {
+                    return out;
+                }
+            }
+            i = end;
+        }
+        out
+    }
+
+    fn reads(function: &str) -> bool {
+        Prim::from_name(function).is_some_and(|p| p.latent().reads())
+    }
+
+    const fn fatal(res: &Result<Recorded, Unanswered>) -> bool {
+        !matches!(res, Ok(_) | Err(Unanswered::Ungranted { .. }))
     }
 }
 

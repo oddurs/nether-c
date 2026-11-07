@@ -1308,6 +1308,29 @@ differ between them anyway.
 commit results in it, which is bookkeeping a free order would not need, and a
 collapse found early on another thread has to wait to be reported.
 
+### Answering every hole in a trace at once
+
+[§6.6](06-evaluation.md#66-exhumation) lets an exhumation overlap a contiguous
+run of read-stratum holes and keeps act-stratum holes sequential. Two broader
+rules were considered.
+
+**Overlap every hole in the trace, since [§6.3](06-evaluation.md#63-holes)
+guarantees finished arguments.** Rejected because finished arguments mean no
+hole waits on another hole's *value*; they do not mean the world is indifferent
+to the order in which it is touched. A `read` asked concurrently with a `write`
+to the same path sees one of two files depending on which thread won, and two
+`post`s in flight at once arrive in network order rather than demand order.
+
+**Record witnesses in completion order.** Rejected for the same reason
+[§6.2.1](06-evaluation.md#621-burying-in-parallel) rejected completion order
+for holes: the `witnesses` list is part of the `Trace` node, so its order is in
+the cairn, and [§6.3](06-evaluation.md#63-holes) serves multiple answers to one
+call in list order.
+
+**What it cost.** A `write` between two `read`s splits the exhumation into two
+sequential read batches around the write, even when the paths are disjoint, and
+a fast hole after a slow one waits to be committed in discovery order.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own

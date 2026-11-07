@@ -473,6 +473,28 @@ already recorded.
 
 A trace with no holes is **sealed**. A sealed trace has a value.
 
+### Answering in parallel
+
+A trace's `holes` list is in the order [§6.2](#62-demand) discovered them, and
+the new trace's `witnesses` list MUST record the answers in that same order. An
+implementation MAY answer a contiguous run of read-stratum holes (strata 1, 2,
+3 and 5) concurrently, under a fixed bound on how many questions are in flight
+at once, provided that:
+
+1. No hole at an act stratum (strata 4, 6, 7 and 8) overlaps any other hole. An
+   act is answered alone, in sequence, after every hole before it in the trace
+   has been answered and before any hole after it is asked, so a `read` never
+   races a `write` or `remove` in the same exhumation and two `post`s or
+   `draw`s never reorder.
+2. Every answer is written to the ledger before it is returned
+   ([§1.4](01-strata.md#14-what-the-trace-records)), and the witnesses and
+   answers are committed to the trace and to the resumed burial in the order
+   the holes were listed, whatever order the threads finished in.
+3. If a hole fails with a collapse or an unavailable provider, the rite stops
+   at the first such hole in discovery order, cancels any hole after it in the
+   run that has not yet been asked, and reports that first failure without
+   writing a new trace.
+
 ## 6.7 Replay
 
 ```console

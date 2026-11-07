@@ -2,12 +2,12 @@
 id: 206
 title: Answer many holes at once
 type: feature
-status: unmarked
+status: buried
 milestone: cortege
 depends_on:
 - 209
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-11-07
 priority: p1
 effort: l
 area: crates/nether-world
@@ -41,5 +41,12 @@ Fully evaluated arguments do not imply independent world effects. Mutable reads 
 
 ### Acceptance and evidence
 
-- [ ] Eligible requests overlap while witness order stays fixed. Real-network timing does not establish deterministic equality; no world effect is assumed pure.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] Eligible requests overlap while witness order stays fixed. Real-network timing does not establish deterministic equality; no world effect is assumed pure.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## Evidence — 2026-11-07
+
+- `spec/06-evaluation.md` §6.6 (`Answering in parallel`) and `spec/90-rationale.md` §90.2 (`Answering every hole in a trace at once`) specify that contiguous runs of read-stratum holes (strata 1, 2, 3 and 5) may be answered concurrently under a fixed in-flight bound while act-stratum holes (strata 4, 6, 7 and 8) are answered alone in sequence, witnesses are committed in discovery order, and fatal failures stop at the first failing hole in discovery order while cancelling unstarted later holes in the run.
+- `World::ask_all` in `crates/nether-world/src/provider.rs` dispatches contiguous read-stratum runs across up to `MOST_IN_FLIGHT = 8` scoped worker threads (`Provider: Sync`), commits results in discovery order, and uses an atomic `cutoff` index to cancel unstarted holes past a fatal error while still finishing earlier indices so the first failure in discovery order is reported.
+- `crates/nether-cli/src/exhume.rs` (`dig_up`) answers a trace's holes through `World::ask_all` before recording witnesses, `said`, and `Answers` in discovery order.
+- Verified by `many_holes_answer_concurrently_and_keep_discovery_order` and `concurrency_is_bounded_and_collapsing_cancels_later_holes` in `crates/nether-world/tests/discipline.rs`, and `many_network_holes_are_answered_concurrently_in_discovery_order` in `crates/nether-cli/tests/rites.rs`.

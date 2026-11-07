@@ -157,3 +157,7 @@ impl Drop for Object {
         unsafe { dlclose(self.handle) };
     }
 }
+
+// SAFETY: `Object` only reads `self.handle` after `open`, and stratum 8 calls
+// are never dispatched concurrently.
+unsafe impl Sync for Object {}
