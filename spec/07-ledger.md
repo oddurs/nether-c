@@ -521,6 +521,61 @@ ENTRY  = cairn (32 bytes)
   complete bundle verifies the already-present prefix in place without
   overwriting it and commits the remainder.
 
+### 7.5.5 Packages
+
+A **package** is an ordinary canonical `Struct` value ([§7.1](#71-canonical-encoding),
+tag `0x10`) stored in the ledger and addressed by its cairn. There is no
+central registry and no version-range solver: a dependency is the exact cairn
+of another package value, and resolution is an offline lookup in a verified
+store.
+
+A package root is a `Struct` with type name `"Package"` and three fields in
+declaration order:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `domain` | `Str` | `"netherc/cairn/v4"` — the canonical domain ([§7.2](#72-cairns), without the trailing NUL) under which the package and its closure were formed |
+| `entrypoint` | `Cairn` | the cairn of a `Bytes` value in the store holding the package's well-formed UTF-8 source unit ([§3.1](03-lexical.md#31-source-encoding)) |
+| `deps` | `Array` of `Struct "Dep"` | direct dependencies, sorted in strictly ascending byte order of `alias` |
+
+Each element of `deps` is a `Struct` with type name `"Dep"` and two fields in
+declaration order:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `alias` | `Str` | local human-readable alias (non-empty, unique within this package's `deps`) |
+| `cairn` | `Cairn` | exact 32-byte cairn of the dependency `"Package"` value |
+
+An implementation that writes or resolves a package MUST enforce five rules:
+
+1. **Canonical dependency order.** Within a `"Package"` value, `deps` MUST be
+   ordered by strictly ascending UTF-8 bytes of `alias` with no empty or
+   duplicate `alias`, so a given entrypoint and dependency set have exactly one
+   encoding and one cairn.
+2. **Local aliases, global cairns.** An `alias` is local to the `"Package"`
+   value that declares it. Two packages in one closure MAY bind the same alias
+   to different dependency cairns or different aliases to the same dependency
+   cairn; global identity is always the 32-byte `cairn`.
+3. **Compatibility check.** Before walking `entrypoint` or `deps`, resolution
+   MUST check that `domain` equals `"netherc/cairn/v4"`. A package whose
+   `domain` names any other version ([§7.7](#77-versioning)) MUST be refused
+   explicitly as incompatible rather than interpreted.
+4. **Offline closure and topological order.** Resolution reads every reachable
+   `"Package"` and `entrypoint` `Bytes` object from the local store via `get`
+   ([§7.5.1](#751-what-survives-a-crash)), walking `deps` depth-first in `deps`
+   order and emitting each distinct package cairn once in topological
+   post-order (every dependency before the packages that depend on it, ending
+   with the root package). The resolved source unit is the concatenation of
+   each package's verified `entrypoint` bytes in that topological order,
+   addressed by the cairn of the resulting `Bytes` value.
+5. **Explicit failure on missing, corrupt or malformed objects.** A cairn
+   establishes byte identity, not availability. If the root package, any
+   transitive dependency package, or any `entrypoint` `Bytes` object is absent
+   from the store, fails verification on `get`, is not a well-formed `"Package"`
+   or UTF-8 `Bytes` value, or forms a dependency cycle, resolution MUST fail
+   explicitly naming the offending cairn and reason. It MUST NOT fetch from the
+   network or substitute an empty unit.
+
 ## 7.6 Garbage
 
 There is none.
