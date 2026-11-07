@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use nether_core::{Capability, Depth, Prim};
-use nether_ledger::{AnswerOf, Call, Refusal, Span, StoreError, Value};
+use nether_ledger::{AnswerOf, Cairn, Call, Node, Refusal, Span, StoreError, Stored, Value};
 
 use crate::recorder::{Recorded, Recorder};
 
@@ -225,6 +225,46 @@ impl World {
             i = end;
         }
         out
+    }
+
+    /// Answer the assigned slot indices of a trace's `holes` list in ascending
+    /// slot order (`spec/06-evaluation.md` §6.6), recording each witness in
+    /// `into` before returning its `(slot, witness_cairn)` pair.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Unanswered`] if a slot index is out of range, if a referenced
+    /// hole is missing or not a `Node::Hole` in the store, or if a provider
+    /// fails with a collapse, unavailable source or store write error.
+    pub fn ask_slots(
+        &self,
+        holes: &[Cairn],
+        slots: &[usize],
+        into: &Recorder,
+    ) -> Result<Vec<(usize, Cairn)>, Unanswered> {
+        let mut ordered: Vec<usize> = slots.to_vec();
+        ordered.sort_unstable();
+        ordered.dedup();
+        let mut asked = Vec::with_capacity(ordered.len());
+        for &slot in &ordered {
+            let Some(&hole) = holes.get(slot) else {
+                return Err(Unanswered::NotRecorded(format!("hole slot {slot} out of range")));
+            };
+            match into.store().get(hole) {
+                Ok(Stored::Node(Node::Hole { call, span, .. })) => asked.push((call, span)),
+                Ok(_) => return Err(Unanswered::NotRecorded(format!("{hole} is not a hole"))),
+                Err(e) => return Err(Unanswered::NotRecorded(e.to_string())),
+            }
+        }
+        let mut delivered = Vec::new();
+        for (slot, res) in ordered.into_iter().zip(self.ask_all(&asked, into)) {
+            match res {
+                Ok(rec) => delivered.push((slot, rec.witness())),
+                Err(Unanswered::Ungranted { .. }) => {}
+                Err(fatal) => return Err(fatal),
+            }
+        }
+        Ok(delivered)
     }
 
     fn reads(function: &str) -> bool {

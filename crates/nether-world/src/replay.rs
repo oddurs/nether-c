@@ -2,7 +2,26 @@
 
 use std::collections::HashMap;
 
-use nether_ledger::{Cairn, Call, Node, Store, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
+
+/// Why worker deliveries could not be merged into one trace (`spec/06-evaluation.md` §6.6).
+#[derive(Debug)]
+pub enum MergeError {
+    /// A hole, witness or answer object was absent or corrupt in the store.
+    Store(StoreError),
+    /// A delivery named `(slot, holes.len())` outside `0..holes.len()`.
+    OutOfRange(usize, usize),
+    /// A witness `(slot, hole, witness)` did not match its slot or left an earlier call open.
+    Mismatched(usize, Cairn, Cairn),
+    /// Two deliveries `(slot, hole, first, second)` disagreed on the same question.
+    Conflict(usize, Cairn, Cairn, Cairn),
+}
+
+impl From<StoreError> for MergeError {
+    fn from(e: StoreError) -> Self {
+        Self::Store(e)
+    }
+}
 
 /// What a trace already recorded, and nothing else.
 ///
@@ -89,5 +108,86 @@ impl Replay {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.said.is_empty()
+    }
+
+    /// Merge verified worker deliveries `(slot, witness_cairn)` for `holes`
+    /// on top of `base_witnesses` in ascending slot order (`spec/06-evaluation.md` §6.6),
+    /// holding no world capabilities.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MergeError`] if any referenced object is absent or corrupt in
+    /// `store`, if a slot is out of range, if a witness does not match its hole
+    /// slot's `(call, stratum, span)`, or if two deliveries disagree on the
+    /// witness for a slot or on the answer to a read-stratum call.
+    pub fn merge(
+        store: &Store,
+        base_witnesses: &[Cairn],
+        holes: &[Cairn],
+        deliveries: &[&[(usize, Cairn)]],
+    ) -> Result<(Vec<Cairn>, Self), MergeError> {
+        for &w in base_witnesses {
+            let Stored::Node(Node::Witness { answer, .. }) = store.get(w)? else {
+                return Err(MergeError::Mismatched(0, w, w));
+            };
+            if !matches!(store.get(answer)?, Stored::Value(_)) {
+                return Err(MergeError::Mismatched(0, w, answer));
+            }
+        }
+        let mut open: Vec<(Call, u8, Span)> = Vec::with_capacity(holes.len());
+        for (slot, &h) in holes.iter().enumerate() {
+            let Stored::Node(Node::Hole { call, stratum, span }) = store.get(h)? else {
+                return Err(MergeError::Mismatched(slot, h, h));
+            };
+            open.push((call, stratum, span));
+        }
+        let mut chosen: Vec<Option<(Cairn, Cairn, Value)>> = vec![None; holes.len()];
+        for &(slot, witness) in deliveries.iter().copied().flatten() {
+            let Some((h_call, h_stratum, h_span)) = open.get(slot) else {
+                return Err(MergeError::OutOfRange(slot, holes.len()));
+            };
+            let hole = holes[slot];
+            let Stored::Node(Node::Witness { stratum, call, answer, span }) = store.get(witness)?
+            else {
+                return Err(MergeError::Mismatched(slot, hole, witness));
+            };
+            let Stored::Value(val) = store.get(answer)? else {
+                return Err(MergeError::Mismatched(slot, hole, answer));
+            };
+            if (stratum, &call, span) != (*h_stratum, h_call, *h_span) {
+                return Err(MergeError::Mismatched(slot, hole, witness));
+            }
+            if let Some((first, _, _)) = chosen[slot] {
+                if first == witness {
+                    continue;
+                }
+                return Err(MergeError::Conflict(slot, hole, first, witness));
+            }
+            if matches!(h_stratum, 1 | 2 | 3 | 5)
+                && let Some((first, _, _)) = open
+                    .iter()
+                    .zip(&chosen)
+                    .find_map(|((c, _, _), got)| (c == h_call).then_some(got.as_ref())?)
+                    .filter(|(_, first_ans, _)| *first_ans != answer)
+            {
+                return Err(MergeError::Conflict(slot, hole, *first, witness));
+            }
+            chosen[slot] = Some((witness, answer, val));
+        }
+        let (mut witnesses, mut said) =
+            (base_witnesses.to_vec(), HashMap::<Call, Vec<Value>>::new());
+        for (slot, (witness, _, val)) in
+            chosen.into_iter().enumerate().filter_map(|(s, g)| Some((s, g?)))
+        {
+            let call = &open[slot].0;
+            if said.get(call).map_or(0, Vec::len)
+                != open[..slot].iter().filter(|(c, _, _)| c == call).count()
+            {
+                return Err(MergeError::Mismatched(slot, holes[slot], witness));
+            }
+            witnesses.push(witness);
+            said.entry(call.clone()).or_default().push(val);
+        }
+        Ok((witnesses, Self { said }))
     }
 }

@@ -2288,3 +2288,151 @@ fn a_block_reduces_past_a_statement_that_starved() {
     let ret_at = minted.find("return len(s) + 14;").expect("the return");
     assert!(s_at < ret_at, "the return moved ahead of the starved statement:\n{minted}");
 }
+
+fn serve_twice(reply: &'static str) -> (u16, std::thread::JoinHandle<()>) {
+    use std::io::{Read as _, Write as _};
+    use std::net::TcpListener;
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+    let port = listener.local_addr().unwrap().port();
+    let handle = std::thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut sock, _) = listener.accept().expect("accept");
+            let mut buf = [0u8; 1024];
+            let _ = sock.read(&mut buf);
+            let msg = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+            let _ = sock.write_all(msg.as_bytes());
+        }
+    });
+    (port, handle)
+}
+
+fn worker_bundle(
+    tag: &str,
+    base: &[u8],
+    dir: &Path,
+    reach: String,
+    holes: &[Cairn],
+    slots: &[usize],
+) -> (Vec<(usize, Cairn)>, Vec<u8>) {
+    let store = Store::open(scratch(tag)).unwrap();
+    store.import(&mut &base[..]).unwrap();
+    let world = nether_world::World::sealed()
+        .granting(Box::new(nether_world::Disk::reading(dir)))
+        .granting(Box::new(nether_world::Net::sending(vec![reach])));
+    let deliv = world.ask_slots(holes, slots, &nether_world::Recorder::new(&store)).unwrap();
+    let mut bundle = Vec::new();
+    store.export(&mut bundle).unwrap();
+    (deliv, bundle)
+}
+
+#[test]
+fn two_machines_each_answer_half_a_traces_holes_and_seal_byte_identically_to_one() {
+    let (p1, h1) = serve_twice("ack-1");
+    let (p2, h2) = serve_twice("ack-2");
+
+    let dir = a_build("two-machines-one-trace");
+    std::fs::write(dir.join("left.txt"), b"L").unwrap();
+    std::fs::write(dir.join("right.txt"), b"R").unwrap();
+    let prog = format!(
+        "Bytes@3 a = must(descend disk {{ read(\"left.txt\") }});\n\
+         Bytes@6 b = must(descend net! {{ post(\"http://127.0.0.1:{p1}/a\", b\"m1\") }});\n\
+         Bytes@3 c = must(descend disk {{ read(\"right.txt\") }});\n\
+         Bytes@6 d = must(descend net! {{ post(\"http://127.0.0.1:{p2}/b\", b\"m2\") }});\n\n\
+         U0 go() {{ utf8(concat(concat(a, b), concat(c, d))); }}\n\ndemand go();\n"
+    );
+    std::fs::write(dir.join("split.nc"), prog).unwrap();
+
+    let buried_hex = field(&stdout(&there(&dir, &["bury", "split.nc", "--json"])), "cairn");
+    let origin_store = Store::open(dir.join(".nether")).unwrap();
+    let buried_cairn = origin_store.resolve(&buried_hex).unwrap();
+    let mut base_bundle = Vec::new();
+    origin_store.export(&mut base_bundle).unwrap();
+
+    let (reach1, reach2) = (format!("127.0.0.1:{p1}"), format!("127.0.0.1:{p2}"));
+    let root_arg = dir.to_str().unwrap();
+    let serial_args = [
+        "exhume",
+        &buried_hex,
+        "--grant",
+        "disk",
+        "--root",
+        root_arg,
+        "--grant",
+        "net!",
+        "--reach",
+        &reach1,
+        "--reach",
+        &reach2,
+        "--json",
+    ];
+    let serial_out = there(&dir, &serial_args);
+    assert_eq!(code(&serial_out), 0, "{}", stderr(&serial_out));
+    let serial_cairn = origin_store.resolve(&field(&stdout(&serial_out), "sealed")).unwrap();
+    let serial_trace = origin_store.get(serial_cairn).unwrap();
+
+    let Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. }) =
+        origin_store.get(buried_cairn).unwrap()
+    else {
+        panic!("expected trace");
+    };
+    let (east_deliv, east_bundle) =
+        worker_bundle("east", &base_bundle, &dir, reach1, &holes, &[0, 1]);
+    let (west_deliv, west_bundle) =
+        worker_bundle("west", &base_bundle, &dir, reach2, &holes, &[2, 3]);
+    h1.join().unwrap();
+    h2.join().unwrap();
+
+    let coord_store_path = scratch("coord-merge").join(".nether");
+    let coord_store = Store::open(&coord_store_path).unwrap();
+    coord_store.import(&mut &base_bundle[..]).unwrap();
+    coord_store.import(&mut &west_bundle[..]).unwrap();
+    coord_store.import(&mut &east_bundle[..]).unwrap();
+
+    let (merged_witnesses, merged_replay) =
+        nether_world::Replay::merge(&coord_store, &witnesses, &holes, &[&west_deliv, &east_deliv])
+            .unwrap();
+    let Stored::Value(Value::Bytes(res_bytes)) = coord_store.get(residue).unwrap() else {
+        panic!("expected residue bytes");
+    };
+    let unit = nether_syntax::lower(&nether_syntax::parse(&res_bytes).unwrap()).unwrap();
+    let mut answers = nether_bury::Answers::none();
+    for (call, val) in merged_replay.all() {
+        answers = answers.and(call.clone(), val.clone());
+    }
+    let resumed = nether_bury::bury_with(&unit, source, 1_000_000, &answers).unwrap();
+    for (_, stored) in &resumed.named {
+        coord_store.put(stored).unwrap();
+    }
+    let next_res = coord_store
+        .put(&Stored::Value(Value::Bytes(
+            nether_syntax::print(&resumed.as_unit(&unit)).into_bytes(),
+        )))
+        .unwrap();
+    let mut all_deposits = deposits;
+    all_deposits.extend_from_slice(&resumed.deposits);
+    let merged_node = Stored::Node(Node::Trace {
+        residue: next_res,
+        holes: resumed.holes,
+        witnesses: merged_witnesses,
+        deposits: all_deposits,
+        source,
+        depth: 6,
+        unrecorded: false,
+    });
+    let merged_cairn = coord_store.put(&merged_node).unwrap();
+
+    assert_eq!(merged_cairn, serial_cairn);
+    assert_eq!(merged_node.encode(), serial_trace.encode());
+
+    let replay_out =
+        nether(Some(&coord_store_path), &["exhume", &merged_cairn.to_string(), "--replay"]);
+    assert_eq!(code(&replay_out), 0, "{}", stderr(&replay_out));
+    assert_eq!(stdout(&replay_out), "identical.\n");
+    assert_eq!(
+        stdout(&nether(Some(&coord_store_path), &["lamp", &merged_cairn.to_string()])),
+        "given Lack-1Rack-2\n"
+    );
+}
