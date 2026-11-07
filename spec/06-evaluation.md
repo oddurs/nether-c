@@ -495,6 +495,62 @@ at once, provided that:
    run that has not yet been asked, and reports that first failure without
    writing a new trace.
 
+### Answering across machines
+
+A trace's open questions MAY be partitioned across isolated machines whose
+stores exchange verified objects ([§7.5.3](07-ledger.md#753-a-second-store-and-what-they-owe-each-other),
+[§7.5.4](07-ledger.md#754-moving-a-store)). Content addressing verifies the
+objects exchanged; it does not decide which question a witness answered or
+reconcile two machines that observed different answers from the world. An
+implementation that distributes hole answering across workers and merges their
+results into one trace MUST obey four rules:
+
+1. **Assignment by hole slot.** A trace's `holes` list is ordered by discovery
+   ([§6.2](#62-demand)), and at act strata (`4`, `6`, `7` and `8`) two entries
+   in `holes` may share the same `call` or the same `Hole` cairn
+   ([§7.3.1](07-ledger.md#731-node-encoding)). A worker assignment for a base
+   trace `T` is therefore a subset of **slot indices** `i` in `0..T.holes.len()`,
+   not a set of `Call`s or deduplicated `Hole` cairns. A worker answers its
+   assigned slots in ascending slot order, obeying the act-stratum sequencing
+   and failure rules of [§6.6](#answering-in-parallel) within its assignment,
+   records each answer and `Witness` node in its own store before returning
+   ([§1.4](01-strata.md#14-what-the-trace-records)), and delivers `(i, w)` pairs
+   naming the slot index `i` and the recorded `Witness` cairn `w` alongside its
+   store objects.
+2. **Answer identity.** A delivered pair `(i, w)` is valid for `T` if and only
+   if `i < T.holes.len()`, `T.holes[i]` decodes from the store as
+   `Node::Hole { call, stratum, span }`, `w` decodes from the store as
+   `Node::Witness { stratum: w_stratum, call: w_call, answer, span: w_span }`,
+   `answer` decodes from the store as a `Value`, and
+   `(w_stratum, w_call, w_span) == (stratum, call, span)`. If any of those
+   objects is absent or corrupt in the merging store (for example, after an
+   interrupted transfer), or if `w` does not match `T.holes[i]`, merging MUST
+   fail rather than skip the slot.
+3. **Duplicate delivery and conflicts.** If two deliveries (from a worker retry
+   or overlapping assignments) supply the same `(i, w)` — identical slot `i` and
+   identical `Witness` cairn `w` — the duplicate delivery is idempotent and
+   accepted once. If two deliveries supply `(i, w_1)` and `(i, w_2)` with
+   `w_1 != w_2` for the same slot `i`, or if at a read stratum (`1`, `2`, `3`
+   or `5`) two slots with the same `call` were given different `answer` cairns,
+   the workers observed conflicting answers. Merging MUST reject the conflict,
+   naming the slot and both witness cairns, rather than picking one by arrival
+   order.
+4. **Deterministic merge order and capability-free assembly.** Merging holds no
+   world capabilities ([§6.7](#67-replay)). Starting from `T.witnesses`, it
+   appends the verified witness `w_i` for each answered slot `i` in strict
+   ascending slot order `0..T.holes.len()`, regardless of the order in which
+   workers finished or delivered their bundles, feeds each answered slot's
+   `(call, value)` in that same ascending slot order to the resumed burial of
+   `T.residue`, and leaves any unanswered slot open.
+
+When the union of worker assignments covers `0..T.holes.len()` with the same
+recorded answers as a single serial machine, the merged trace is byte-identical
+to the serial trace and satisfies [§6.7](#67-replay)'s replay law. No equality
+is promised when workers independently sample nondeterministic or mutable worlds
+without agreeing on the recorded answers, and content addressing does not
+prevent a retried act-stratum worker from repeating an external effect before
+its witness reaches the coordinator.
+
 ## 6.7 Replay
 
 ```console
