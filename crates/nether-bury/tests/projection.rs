@@ -6,11 +6,10 @@
 //! `interpret`. The syntax read before that question is not read again.
 //!
 //! What it is not is a compiler. The residue is specialised up to the first
-//! unanswered question on its path and interprets from there. An `if` whose
-//! condition waits on the world has its arms reduced now (0251, 0270), but the
-//! interpreter never reaches one: the statement that binds the unanswered
-//! value starves first, and §6.5 stops a block there. That boundary is 0281
-//! and is asserted here so that it cannot move quietly.
+//! unanswered question on its path and reduces past the binding of that
+//! answer where the arguments do not depend on it (0251, 0270, 0281); where
+//! the next cursor or memory depends on the packed result record `r`, the
+//! call waits on `r`.
 
 use nether_bury::{Answers, Residue, bury, bury_with};
 use nether_core::{ExprKind, Literal, check};
@@ -109,21 +108,32 @@ fn burying_the_residue_again_leaves_the_same_residue() {
     assert_eq!(printed, print(&twice.as_unit(&again)));
 }
 
-/// The boundary, stated as a test rather than as a comment. A block stops at
-/// the statement that starves (§6.5), so the residue still calls the general
-/// interpreter for whatever comes after the guest's question. When 0281
-/// settles, this is the assertion that has to change.
+/// The boundary, stated as a test rather than as a comment. A block reduces
+/// speculatively past a statement that starves (§6.5, 0281), so the minted
+/// functions specialise the guest source, environment and cursor into the
+/// statements and branches after `Bytes r = expression__...();`, while still
+/// calling `evaluate_program` where the next offset and memory wait on the
+/// packed result record `r`.
 #[test]
 fn the_residue_still_interprets_past_the_unanswered_question() {
     let source = against(BUILD);
     let unit = lower(&parse(source.as_bytes()).expect("parses")).expect("lowers");
     let residue = bury(&unit, Cairn::of_encoded(source.as_bytes()), 100_000_000).expect("buries");
     let printed = print(&residue.as_unit(&unit));
-    let minted = printed.split("\nBytes ").filter(|f| f.contains("__")).count();
-    assert!(minted > 0);
+    let minted: String = printed.split("\nBytes ").filter(|f| f.contains("__")).collect();
+    assert!(!minted.is_empty());
+    // `evaluate_program__` specialised `s` past `Bytes r = expression__...();`
+    // and pruned the binding, while `next` and `memory_of(r)` still wait on `r`.
+    assert!(!minted.contains("evaluate_program(s,"), "s was not specialised:\n{minted}");
+    assert!(minted.contains("evaluate_program(b\""), "the tail call disappeared:\n{minted}");
+    // And the statements and branches after the starved bindings in
+    // `expression`, `block_value` and `global_value` reduced in place.
+    assert!(minted.contains("return relocate(r, 415);"), "cursor(args) did not fold:\n{minted}");
+    assert!(!minted.contains("lookup(env, t)"), "branch after args did not fold:\n{minted}");
+    assert!(!minted.contains("if (!checking)"), "branch after r did not fold:\n{minted}");
     assert!(
-        printed.contains("evaluate_program(s,"),
-        "nothing calls the general evaluator any more, which would mean 0281 landed"
+        minted.contains("b\"5:Error1:0unsupported deposit type at byte 399\""),
+        "problem(...) inside the undecided branch after r did not fold:\n{minted}"
     );
 }
 

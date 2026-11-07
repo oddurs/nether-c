@@ -865,6 +865,39 @@ for a path that may not exist and the residue carries both. That is the
 ordinary price of a polyvariant specialiser and it is why `opaque` is in §6.4
 rather than here.
 
+### Stopping a block at the first statement that starved
+
+[§6.5](06-evaluation.md#65-residue) used to stop a block at the first statement
+that starved and leave every statement after it unreduced, even after
+undecided branches began reducing their arms in place.
+
+**Leave it stopped.** On contact with `lib/interpreter.nc`, that rule undid
+branch speculation completely. An interpreter binds the result of evaluating a
+sub-expression before branching on it (`Bytes r = expression(...); if
+(failed(found(r))) ...`), so the statement before the branch starves first and
+the branch is never reached. Stopping at the binding meant the bootstrap
+residue was unchanged to the byte.
+
+**Reduce what follows without speculation, or reorder pure statements ahead of
+the starved one.** The statements after a starved binding are not undecided in
+the way an `if` arm is — if the starved statement finishes, the next statement
+runs — so it is tempting to evaluate them ordinarily. Rejected because the
+starved statement has not happened yet: a deposit after it that was recorded
+now would appear in the trace before whatever the starved statement deposits
+when the world answers, and a `return` after it that left the block now would
+discard the starved statement and the hole inside it. And a statement after an
+`if` that branches on the starved binding may never be reached at all if the
+branch returns, so a collapse or a hole there has the same standing as one
+inside an undecided arm.
+
+So the statements and tail after a starved one are reduced in place under the
+same three clauses as an undecided arm, with the starved binding held as an
+unknown local and statement order preserved.
+
+**What it cost.** A statement that collapses or jumps out of a loop after a
+starved one has its speculative work rolled back and leaves the remainder of
+the block unreduced.
+
 ### Depth as a monad stack
 
 The obvious alternative to a lattice. Rejected because effects that compose by

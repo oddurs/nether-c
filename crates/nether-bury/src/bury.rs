@@ -943,6 +943,7 @@ impl Burial<'_> {
             ExprKind::Literal(l) => Self::known(l.clone(), x),
 
             ExprKind::Local(id) => match env.get(id.0 as usize).and_then(Clone::clone) {
+                Some(v) if v.is_stuck() => Self::rebuild(ExprKind::Local(*id), x, v.depth),
                 Some(v) => v,
                 None => Self::stuck(x),
             },
@@ -1051,7 +1052,8 @@ impl Burial<'_> {
                 let cond = Box::new(Self::residual(c, cond));
                 let then = Box::new(self.speculate(then, env)?);
                 let otherwise = Box::new(self.speculate(otherwise, env)?);
-                Self::rebuild(ExprKind::Select { cond, then, otherwise }, x, x.depth)
+                let depth = cond.depth.join(then.depth).join(otherwise.depth);
+                Self::rebuild(ExprKind::Select { cond, then, otherwise }, x, depth)
             }
         })
     }
@@ -1060,26 +1062,36 @@ impl Burial<'_> {
     ///
     /// On a copy of the environment, because an assignment in an arm that may
     /// not run cannot be seen after it. An arm that collapsed, or that reached
-    /// a `break`, `continue` or `return`, stays as it was written: the first is
-    /// §6.5's third clause, and folding the second to its value would drop the
-    /// jump. Fuel is charged as for anything else, and running out of it is
-    /// still a halt (§6.4).
+    /// a `break` or `continue`, stays as it was written: the first is §6.5's
+    /// third clause, and folding the second to its value would drop the jump.
+    /// Fuel is charged as for anything else, and running out of it is still a
+    /// halt (§6.4).
     fn speculate(&mut self, arm: &Expr, env: &Env) -> Result<Expr, Halt> {
         let was = std::mem::replace(&mut self.speculating, true);
-        let (grind, minted, outer) =
-            (self.grind.len(), self.specialised.len(), self.starved.take());
-        let out = self.expr(arm, &mut env.clone());
-        self.speculating = was;
-        let jumped = self.flow.take().is_some();
+        let out = self.try_expr(arm, &mut env.clone());
+        (self.speculating, self.flow) = (was, None);
+        Ok(out?.map_or_else(|| arm.clone(), |v| Self::residual(v, arm)))
+    }
+
+    /// Evaluate `x` speculatively, rolling back what it changed if it collapses
+    /// or jumps out of a loop.
+    fn try_expr(&mut self, x: &Expr, env: &mut Env) -> Result<Option<Val>, Halt> {
+        let (grind, minted, outer, before) =
+            (self.grind.len(), self.specialised.len(), self.starved.take(), env.clone());
+        let out = self.expr(x, env);
         self.starved = outer;
         match out {
-            Ok(v) if !jumped => Ok(Self::residual(v, arm)),
-            Ok(_) => Ok(arm.clone()),
+            Ok(v) if !matches!(self.flow, Some(Flow::Broke | Flow::Continued)) => Ok(Some(v)),
+            Ok(_) => {
+                (*env, self.flow) = (before, None);
+                Ok(None)
+            }
             Err(Halt { kind: HaltKind::Collapsed(_), .. }) => {
                 self.grind.truncate(grind);
                 self.specialised.truncate(minted);
                 self.minted.retain(|_, id| (id.0 as usize) < self.unit.funcs.len() + minted);
-                Ok(arm.clone())
+                (*env, self.flow) = (before, None);
+                Ok(None)
             }
             Err(halt) => Err(halt),
         }
@@ -1275,7 +1287,7 @@ impl Burial<'_> {
         // could be built for, so the residue would be the body as written and
         // the call is the shorter way to say that.
         let Some(body) = body else { return Ok(None) };
-        Ok(self.specialise(id, args, exprs, site, body, out.depth))
+        Ok(self.specialise(id, args, exprs, site, body))
     }
 
     /// §6.5: what a starved call residualises as.
@@ -1291,7 +1303,6 @@ impl Burial<'_> {
         exprs: &[Expr],
         site: &Expr,
         body: Block,
-        depth: Depth,
     ) -> Option<Val> {
         let f = self.unit.func(id).expect("apply found it");
         let mut stmts: Vec<Stmt> = Vec::with_capacity(f.params.len() + body.stmts.len());
@@ -1308,6 +1319,7 @@ impl Burial<'_> {
         if body == f.body {
             return None;
         }
+        let depth = Self::ret_depth(&body);
 
         self.shares();
         let key = Self::constants(args).map(|k| (id, k));
@@ -1469,9 +1481,43 @@ impl Burial<'_> {
         }
     }
 
-    /// §6.5: a block reduces its statements in order and stops at the first
-    /// one that starves. What it leaves behind is the bindings that finished,
-    /// then that statement and every statement after it, unreduced.
+    /// [ABS]: the return depth of a reduced body is the join of its tail and
+    /// every `return` in it.
+    fn ret_depth(b: &Block) -> Depth {
+        b.tail.as_ref().map_or(Depth::PURE, |t| t.depth).join(Self::returns_in(b))
+    }
+
+    fn returns_in(b: &Block) -> Depth {
+        let tail = b.tail.as_deref().map_or(Depth::PURE, Self::returns);
+        b.stmts.iter().fold(tail, |d, s| match s {
+            Stmt::Let { value: x, .. } | Stmt::Expr(x) => d.join(Self::returns(x)),
+            Stmt::Declare { .. } => d,
+        })
+    }
+
+    fn returns(x: &Expr) -> Depth {
+        match &x.kind {
+            ExprKind::Return(v) => {
+                v.as_deref().map_or(Depth::PURE, |r| r.depth.join(Self::returns(r)))
+            }
+            ExprKind::Block(b) => Self::returns_in(b),
+            ExprKind::Select { cond, then, otherwise } => {
+                Self::returns(cond).join(Self::returns(then)).join(Self::returns(otherwise))
+            }
+            ExprKind::Loop { body, step } => {
+                Self::returns(body).join(step.as_deref().map_or(Depth::PURE, Self::returns))
+            }
+            ExprKind::Descend { body, .. }
+            | ExprKind::Unary { operand: body, .. }
+            | ExprKind::Rite { operand: body, .. } => Self::returns(body),
+            ExprKind::Binary { lhs, rhs, .. } => Self::returns(lhs).join(Self::returns(rhs)),
+            _ => Depth::PURE,
+        }
+    }
+
+    /// §6.5: a block reduces its statements in order. Once a statement starves,
+    /// the statements and tail after it are reduced speculatively in place,
+    /// with any starved binding kept as an unknown local.
     ///
     /// The residue goes into [`Burial::starved`] rather than coming back as a
     /// value, because a block's value is what starved in it and its residue is
@@ -1498,7 +1544,10 @@ impl Burial<'_> {
                 // Nothing to evaluate. The local stays empty until something
                 // is written to it, and reading it before that collapses,
                 // which `Place` handles. §5.4.
-                Stmt::Declare { .. } => Self::unit(),
+                Stmt::Declare { local } => {
+                    kept.push(Stmt::Declare { local: *local });
+                    Self::unit()
+                }
                 Stmt::Expr(x) => {
                     let v = self.expr(x, env)?;
                     // §4.7: a value here is deposited, not discarded. `U0` has
@@ -1528,23 +1577,22 @@ impl Burial<'_> {
                 }
             };
             // A statement that is not here takes the block with it: everything
-            // after it depends on a world that has not answered yet. A jump
-            // takes it too, and carries its own value.
+            // after it is reduced speculatively in place. A jump takes it too,
+            // and carries its own value.
             if v.is_stuck() || self.flow.is_some() {
                 // A `return` that carries something that is not here left the
                 // block by returning, so the residue ends by returning it and
                 // nothing below it is in the residue at all. Which statement
                 // the `return` was written inside does not matter: it leaves
                 // the function either way.
-                let returned = matches!(&self.flow, Some(Flow::Returned(r)) if r.is_stuck());
+                let returned = matches!(&self.flow, Some(Flow::Returned(r)) if r.is_stuck() || self.speculating);
                 if returned {
-                    kept.push(Self::returning(v.clone(), s, b.span));
+                    kept.push(Self::returning(v.clone(), s));
                     return Ok(self.residue(kept, None, b, &v));
                 }
                 if v.is_stuck() && self.flow.is_none() {
                     kept.push(Self::halted(v.clone(), s));
-                    kept.extend(b.stmts[i + 1..].iter().cloned());
-                    return Ok(self.residue(kept, b.tail.clone(), b, &v));
+                    return self.after_starved(b, i + 1, kept, &v, env);
                 }
                 return Ok(v);
             }
@@ -1560,6 +1608,73 @@ impl Burial<'_> {
             }
             None => Ok(Self::unit()),
         }
+    }
+
+    /// Reduce the statements and tail after a starved statement in a block.
+    fn after_starved(
+        &mut self,
+        b: &Block,
+        from: usize,
+        mut kept: Vec<Stmt>,
+        starved: &Val,
+        env: &mut Env,
+    ) -> Result<Val, Halt> {
+        let was = std::mem::replace(&mut self.speculating, true);
+        for (i, s) in b.stmts.iter().enumerate().skip(from) {
+            let x = match s {
+                Stmt::Declare { local } => {
+                    if let Some(slot) = env.get_mut(local.0 as usize) {
+                        *slot = None;
+                    }
+                    kept.push(Stmt::Declare { local: *local });
+                    continue;
+                }
+                Stmt::Let { value, .. } | Stmt::Expr(value) => value,
+            };
+            let res = self.try_expr(x, env);
+            let Some(v) = res.inspect_err(|_| self.speculating = was)? else {
+                self.speculating = was;
+                kept.extend(b.stmts[i..].iter().cloned());
+                return Ok(self.residue(kept, b.tail.clone(), b, starved));
+            };
+            if let Some(Flow::Returned(r)) = self.flow.take() {
+                kept.push(Self::returning(v, s));
+                self.speculating = was;
+                let out = self.residue(kept, None, b, &r);
+                self.flow = Some(Flow::Returned(out.clone()));
+                return Ok(out);
+            }
+            match s {
+                Stmt::Let { local, value } => {
+                    if let Some(slot) = env.get_mut(local.0 as usize) {
+                        *slot = Some(v.clone());
+                    }
+                    kept.push(Stmt::Let { local: *local, value: Self::residual(v, value) });
+                }
+                Stmt::Expr(x)
+                    if v.is_stuck() || as_value(&v).is_some_and(|val| val != Value::Unit) =>
+                {
+                    kept.push(Stmt::Expr(Self::residual(v, x)));
+                }
+                Stmt::Expr(_) | Stmt::Declare { .. } => {}
+            }
+        }
+        let tail = match &b.tail {
+            Some(t) => {
+                let out = self.try_expr(t, env);
+                self.speculating = was;
+                match out? {
+                    Some(v) if self.flow.take().is_none() => {
+                        let tail = Some(Box::new(Self::residual(v.clone(), t)));
+                        return Ok(self.residue(kept, tail, b, &v));
+                    }
+                    _ => b.tail.clone(),
+                }
+            }
+            None => None,
+        };
+        self.speculating = was;
+        Ok(self.residue(kept, tail, b, starved))
     }
 
     /// What a block that did not finish residualises as.
@@ -1617,22 +1732,12 @@ impl Burial<'_> {
 
     /// `return e`, where `e` is what the block was carrying out of the
     /// function when it starved.
-    fn returning(v: Val, s: &Stmt, span: Span) -> Stmt {
-        let span = match s {
-            Stmt::Expr(x) => x.span,
-            _ => span,
-        };
-        let here = Expr {
-            kind: ExprKind::Literal(Literal::Unit),
-            ty: Type::Unit,
-            depth: Depth::PURE,
-            span,
-        };
-        let inner = match s {
-            Stmt::Expr(x) => Self::residual(v, x),
-            Stmt::Let { value, .. } => Self::residual(v, value),
-            Stmt::Declare { .. } => here,
-        };
+    fn returning(v: Val, s: &Stmt) -> Stmt {
+        if matches!(s, Stmt::Expr(Expr { kind: ExprKind::Return(None), .. })) {
+            return s.clone();
+        }
+        let (Stmt::Expr(x) | Stmt::Let { value: x, .. }) = s else { return s.clone() };
+        let inner = Self::residual(v, if let ExprKind::Return(Some(e)) = &x.kind { e } else { x });
         // A `return` whose operand has no value form residualises as the
         // `return` it was, and a block that already ends by returning says it
         // where it happens. Either way, saying it again would say it twice.
@@ -1643,7 +1748,7 @@ impl Burial<'_> {
         };
         let depth = inner.depth;
         let kind = ExprKind::Return(Some(Box::new(inner)));
-        Stmt::Expr(Expr { kind, ty: Type::Unit, depth, span })
+        Stmt::Expr(Expr { kind, ty: Type::Unit, depth, span: x.span })
     }
 
     /// Unroll a loop as far as it will go, and abandon the unrolling whole if

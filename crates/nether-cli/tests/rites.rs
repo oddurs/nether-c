@@ -2152,3 +2152,26 @@ fn speculation_buries_to_the_same_trace_and_the_same_steps_every_time() {
     assert_eq!(field(&first, "cairn"), field(&again, "cairn"));
     assert_eq!(steps(&first), steps(&again));
 }
+
+#[test]
+fn a_block_reduces_past_a_statement_that_starved() {
+    let dir = a_build("speculate-after-starved");
+    std::fs::write(
+        dir.join("after.nc"),
+        "I64 f(I64 a)\n{\n  Bytes@3 s = must(descend disk { read(\"main.nc\") });\n  \
+         I64 b = a + 4;\n  if (len(s) == 0) { return b + 1; }\n  \
+         \"waits\";\n  return len(s) + (b * 2);\n}\n\ndemand f(3);\n",
+    )
+    .expect("after.nc");
+    let told = stdout(&there(&dir, &["bury", "after.nc", "--json"]));
+    assert_eq!(told.matches("\"call\":").count(), 1, "{told}");
+    let lamped = stdout(&there(&dir, &["lamp", &field(&told, "cairn")]));
+    assert!(!lamped.contains("waits"), "deposited before the starved statement:\n{lamped}");
+    let residue = stdout(&there(&dir, &["lamp", &field(&told, "residue")]));
+    let minted = residue.split_once("I64 f__").expect("minted f").1;
+    assert!(minted.contains("return 8;"), "undecided arm after s did not fold:\n{minted}");
+    assert!(minted.contains("return len(s) + 14;"), "return after s did not fold:\n{minted}");
+    let s_at = minted.find("read(\"main.nc\")").expect("the starved binding");
+    let ret_at = minted.find("return len(s) + 14;").expect("the return");
+    assert!(s_at < ret_at, "the return moved ahead of the starved statement:\n{minted}");
+}
