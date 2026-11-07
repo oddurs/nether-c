@@ -1347,6 +1347,35 @@ damaged trace look healthy, and a corrupt object that was itself a `Hole`,
 **What it cost.** An audit decodes every verified node in the store to read its
 forward references, even when only one object is corrupt.
 
+### Reconciling stores by whole-inventory diff or by shipping `refs/`
+
+[§7.5.3](07-ledger.md#753-a-second-store-and-what-they-owe-each-other) reconciles
+two stores top-down from explicit root cairns $R$ in bounded `want` batches and
+exchanges only canonical objects. Three alternatives were rejected.
+
+**Whole-store inventory exchange** — trading a full list of stored cairns, a
+Bloom filter, or a prefix trie over the whole store so the difference can be
+computed in one pass. Rejected because a store never shrinks
+([§7.6](07-ledger.md#76-garbage)) and holds every unrelated burial that
+machine has ever run. An inventory exchange scales with the size of both
+stores rather than the size of the trace being asked for, and hands a stranger
+the names of every private trace in the store.
+
+**Shipping `refs/` or `memo/` alongside `objects/`.** Rejected because both are
+derived indexes: a receiver that trusted a peer's `refs/` would accept forged
+provenance edges without the peer having to forge a blake3 hash, and `memo/` is
+keyed by a single machine's executable ([§8.2.1](08-rites.md#821-burying-what-is-already-buried)).
+
+**Treating divergent witnesses for one call as a conflict.** Rejected because a
+`Witness` node records what the world answered at one exhumation, not a mutable
+slot for "the current answer". Two exhumations that received different answers
+have different witness cairns and different trace cairns, and a store that holds
+both has lost nothing and contradicted nothing.
+
+**What it cost.** Top-down reconciliation takes one round trip per level of the
+root's node graph instead of one round trip for the whole store, and the
+receiver decodes each object and rebuilds its own `refs/` entries on arrival.
+
 ### `https`, and the one dependency exception
 
 `CLAUDE.md` permits exactly one kind of dependency — "do not write your own

@@ -54,6 +54,10 @@ spec/07-ledger.md § 7.2 Cairns #1	text	pinned	ef8410b2b1784b2f
 spec/07-ledger.md § 7.3.2 What a decoder cannot check #1	c	pinned	99f2b4a37918eaad
 spec/07-ledger.md § 7.3.2 What a decoder cannot check #2	console	checked	b141b789d32c34fd
 spec/07-ledger.md § 7.5 The store #1	text	pinned	ebd628943dfe60de
+spec/07-ledger.md § Exchange transcripts #1	text	pinned	3d24412ed24dfa56
+spec/07-ledger.md § Exchange transcripts #2	text	pinned	a68ffd58fe4ea3b3
+spec/07-ledger.md § Exchange transcripts #3	text	pinned	2b1c1a1e148af292
+spec/07-ledger.md § Exchange transcripts #4	text	pinned	9cfc88c6ed5e59c8
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
 spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
 spec/08-rites.md § 8.2 `bury` #2	console	checked	50d0f77ea2722fdb

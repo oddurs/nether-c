@@ -326,6 +326,153 @@ as incomplete rather than claiming its listed faults are the whole of what was
 lost. Healthy objects and healthy traces remain readable while damaged ones are
 reported.
 
+### 7.5.3 A second store, and what they owe each other
+
+Two stores under the same domain separator ([§7.2](#72-cairns)) have a
+set-difference problem and nothing else: a cairn is either present or absent,
+and if it is present and verified ([§7.5.1](#751-what-survives-a-crash)), it
+names the same canonical bytes in both.
+
+Possessing or naming a cairn establishes **byte identity** and nothing else:
+
+- It does **not** establish availability. A store holding a `Trace` node may
+  lack the nodes or values its lists name ([§7.3.2](#732-what-a-decoder-cannot-check)).
+- It does **not** establish authentication or mutation authority. Knowing a
+  cairn is not permission to write to another store, and a store that accepts
+  writes from a peer does so under its own capability gate, never because the
+  peer knew a name.
+- It does **not** establish agreement about what the world said. Two stores
+  that exhumed the same stage-one trace against different worlds hold different
+  `Witness` nodes and therefore different sealed `Trace` cairns. Reconciling
+  them keeps both traces and both witnesses without conflict, because their
+  cairns differ.
+
+#### Root closure and bounded comparison
+
+Reconciliation is defined over an explicit set of root cairns $R$, never over
+an unrooted enumeration of a peer's store. For a verified object at cairn $c$,
+its immediate forward references $\operatorname{refs}(c)$ are empty when $c$
+decodes to a `Value` (`0x00`..`0x11`) and are the cairn fields of its payload
+([§7.3.1](#731-node-encoding)) when $c$ decodes to a `Node` (`0x20`). The
+**root closure** $\operatorname{cl}(R)$ is the least set containing $R$ and
+closed under $\operatorname{refs}$. Because the node graph is acyclic by
+construction ([§7.3](#73-nodes)), $\operatorname{cl}(R)$ is finite.
+
+An exchange proceeds top-down in bounded rounds from a frontier Queue initialized
+to $\{r \in R \mid \neg\text{has}(r)\}$:
+
+1. **Domain handshake.** Both sides state their domain separator
+   (`netherc/cairn/v4\x00`, [§7.2](#72-cairns)). A peer speaking any other
+   domain MUST be refused before any cairn is requested or any object is read
+   ([§7.7](#77-versioning)).
+2. **Bounded `want` batch.** The requester pops at most `MAX_WANT` (1,024)
+   full 32-byte cairns from its frontier and asks the peer for them.
+3. **Bounded response.** For each requested cairn $c$ in batch order, the peer
+   checks its own copy via `get(c)` and replies with either:
+   - `object(c, bytes)`, where `len(bytes)` does not exceed `MAX_OBJECT_BYTES`
+     (16 MiB), or
+   - `absent(c)` if the peer does not hold $c$. A peer whose local copy of $c$
+     fails verification MUST NOT transmit the corrupt bytes; it MUST treat $c$
+     as locally corrupt and refuse to serve it.
+4. **Receiver verification and frontier expansion.** For each `object(c, bytes)`
+   received, the requester MUST:
+   - reject the response if $c$ was not in the current `want` batch or if
+     `len(bytes) > MAX_OBJECT_BYTES`;
+   - decode `bytes` under [§7.1.1](#711-what-a-decoder-must-reject) and
+     [§7.3.1](#731-node-encoding), verifying `encode(decode(bytes)) == bytes`;
+   - verify `cairn(bytes) == c` under `DOMAIN`;
+   - commit `(c, bytes)` via `put` ([§7.5](#75-the-store)), which derives the
+     local reverse index entries in `refs/` before atomically placing the
+     object in `objects/`;
+   - for each $d \in \operatorname{refs}(c)$ with $\neg\text{has}(d)$, push $d$
+     onto the frontier.
+
+Only canonical objects are exchanged. The reverse index `refs/`
+([§7.4](#74-provenance)) and burial memo ([§8.2.1](08-rites.md#821-burying-what-is-already-buried))
+MUST NOT be transmitted or accepted from another store; every receiver derives
+its own index from objects it has verified itself.
+
+#### Interruption, resume and discovery privacy
+
+Because each verified object is committed atomically via `put` before its
+children enter the frontier, an interrupted exchange leaves the receiving store
+clean ([§7.5.2](#752-what-a-damaged-store-can-still-tell-you)) with a verified
+upper prefix of $\operatorname{cl}(R)$ already on disk. Repeating the exchange
+for $R$ tests `has` at each step, skips the prefix already present, and asks
+only for the remaining frontier.
+
+A peer answers only about full 32-byte cairns named in a `want` batch. Prefix
+resolution (`resolve`, [§7.2](#72-cairns)) and store-wide listing are local
+operations and MUST NOT be answered for an untrusted peer, so a stranger cannot
+enumerate private traces by probing two-character fan-out prefixes. Asking
+`want(c)` still discloses to the peer that the requester knows the cairn $c$
+([§90.3](90-rationale.md#903-things-nether-c-is-worse-at)).
+
+#### Strata of exchange
+
+Reading objects from a second directory on the local filesystem is a stratum-3
+(`disk`) read coupled with a stratum-4 (`disk!`) write to commit verified
+objects into the receiving store. Fetching missing objects from a remote store
+over a socket is a stratum-5 (`net`) read coupled with stratum 4 (`disk!`)
+locally. Actively pushing (`send`) objects to a remote store is a stratum-6
+(`net!`) act, because it alters state outside the machine and cannot be unsent
+([§1.8](01-strata.md#18-why-write-is-deeper-than-read)).
+
+#### Exchange transcripts
+
+Four transcripts fix the observable behaviour across equal, partial, divergent
+and hostile peers:
+
+```text
+# 1. Equal stores: local already holds cl({efed9b2a}) (6 objects)
+domain  netherc/cairn/v4
+root    efed9b2a
+round 0 want 0 (6 already present)
+result  reconciled efed9b2a: 6 present, 0 fetched, 0 absent
+```
+
+```text
+# 2. Partial peer: local has nothing; peer holds efed9b2a but lacks witness 9a40c112
+domain  netherc/cairn/v4
+root    efed9b2a
+round 0 want [efed9b2a]
+        recv object efed9b2a (Trace, verified)
+round 1 want [61a6cc41, 9a40c112, 3f08d119, 8106589a]
+        recv object 61a6cc41 (Bytes, verified)
+        recv absent 9a40c112
+        recv object 3f08d119 (Deposit, verified)
+        recv object 8106589a (Bytes, verified)
+round 2 want [04e2b771]
+        recv object 04e2b771 (Str, verified)
+result  incomplete efed9b2a: 5 fetched, 1 absent (9a40c112)
+```
+
+```text
+# 3. Divergent stores: two exhumations of 76c4b655 with different world answers
+domain  netherc/cairn/v4
+roots   efed9b2a 4c19e08d
+round 0 want [4c19e08d] (efed9b2a already present: 6 objects)
+        recv object 4c19e08d (Trace, verified)
+round 1 want [d17a8803, 5b2209ce] (residue 61a6cc41 and source 8106589a shared)
+        recv object d17a8803 (Witness, verified)
+        recv object 5b2209ce (Deposit, verified)
+round 2 want [7e91a440]
+        recv object 7e91a440 (Bytes, verified)
+result  reconciled 2 roots: 6 shared, 4 fetched, 0 absent
+```
+
+```text
+# 4. Hostile peer: serves tampered bytes for 21ca4ef0 (hash is b8019f44)
+domain  netherc/cairn/v4
+root    76c4b655
+round 0 want [76c4b655]
+        recv object 76c4b655 (Trace, verified)
+round 1 want [61a6cc41, 21ca4ef0, 8106589a]
+        recv object 61a6cc41 (Bytes, verified)
+        recv object 21ca4ef0 -> refused: corrupt from peer (asked 21ca4ef0, found b8019f44)
+result  aborted 76c4b655: peer served corrupt bytes for 21ca4ef0 (2 committed, 21ca4ef0 not written)
+```
+
 ## 7.6 Garbage
 
 There is none.
