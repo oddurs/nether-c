@@ -302,6 +302,30 @@ implementation MUST detect a partial one rather than read past it — a record
 half written is a record that would otherwise be read as a different cairn, and
 a wrong edge in a provenance walk is worse than a missing one.
 
+### 7.5.2 What a damaged store can still tell you
+
+`get` checks one object when something asks for it. A read-only audit of the
+whole store walks every entry on disk without modifying anything and separates
+four kinds of damage:
+
+1. **Corrupt objects** — files under `objects/` whose names are valid cairns
+   and whose bytes either do not decode or do not hash to that name.
+2. **Missing references** — cairns named by the forward references of a
+   verified node ([§7.4](#74-provenance)) that are absent from `objects/`.
+3. **Malformed filenames** — entries under `objects/` or `refs/` whose path is
+   not a two-hex-digit fan-out directory followed by a sixty-two-hex-digit file.
+4. **Derived-index errors** — ragged files in `refs/` ([§7.5.1](#751-what-survives-a-crash))
+   or forward edges of verified nodes that are missing from `refs/`.
+
+Which traces are affected MUST be derived from verified forward edges and not
+from `refs/`: a broken reverse index does not damage a trace, and a missing
+reverse edge would hide one that is damaged. When a trace's `holes`,
+`witnesses` or `deposits` list names a corrupt or absent node, what that node in
+turn referenced cannot be read, and the audit MUST mark the trace's reachability
+as incomplete rather than claiming its listed faults are the whole of what was
+lost. Healthy objects and healthy traces remain readable while damaged ones are
+reported.
+
 ## 7.6 Garbage
 
 There is none.

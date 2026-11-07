@@ -8,7 +8,7 @@
 //! There is no garbage collection and there is not going to be one. See
 //! `spec/07-ledger.md` §7.6, which also admits that this is a real cost.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::cairn::Cairn;
 use crate::codec::{DecodeError, Stored, decode_stored};
+use crate::node::Node;
 
 /// Why the store could not answer.
 #[derive(Debug)]
@@ -417,6 +418,210 @@ impl Store {
         }
 
         found.first().copied().ok_or_else(|| StoreError::NoMatch(prefix.to_owned()))
+    }
+
+    fn scan_area(
+        &self,
+        area: &str,
+        malformed: &mut BTreeSet<PathBuf>,
+    ) -> io::Result<Vec<(Cairn, PathBuf)>> {
+        let mut files = Vec::new();
+        for b in fs::read_dir(self.root.join(area))? {
+            let b = b?;
+            let path = b.path();
+            let h = b.file_name().into_string().ok().filter(|s| {
+                s.len() == 2 && s.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f'))
+            });
+            let Some(h) = h.filter(|_| b.file_type().is_ok_and(|t| t.is_dir())) else {
+                malformed.insert(path);
+                continue;
+            };
+            for e in fs::read_dir(&path)? {
+                let e = e?;
+                let ep = e.path();
+                let cairn = e
+                    .file_name()
+                    .to_str()
+                    .filter(|s| s.len() == 62)
+                    .and_then(|t| format!("{h}{t}").parse::<Cairn>().ok());
+                if let Some(cairn) = cairn.filter(|_| e.file_type().is_ok_and(|t| t.is_file())) {
+                    files.push((cairn, ep));
+                } else {
+                    malformed.insert(ep);
+                }
+            }
+        }
+        Ok(files)
+    }
+
+    /// Audits the store on disk without modifying it. `spec/07-ledger.md` §7.5.2.
+    ///
+    /// # Errors
+    ///
+    /// [`io::Error`] if the store directories or files cannot be read.
+    pub fn audit(&self) -> io::Result<Audit> {
+        let (mut malformed, mut verified, mut corrupt) =
+            (BTreeSet::new(), BTreeMap::new(), BTreeSet::new());
+        for (cairn, path) in self.scan_area("objects", &mut malformed)? {
+            let bytes = fs::read(path)?;
+            if let Some(Ok(s)) = (Cairn::of_encoded(&bytes) == cairn).then(|| decode_stored(&bytes))
+            {
+                verified.insert(cairn, s);
+            } else {
+                corrupt.insert(cairn);
+            }
+        }
+        let mut missing = BTreeSet::new();
+        let mut expected: BTreeMap<Cairn, BTreeSet<Cairn>> = BTreeMap::new();
+        for (&referrer, stored) in &verified {
+            if let Stored::Node(node) = stored {
+                for target in node.references() {
+                    expected.entry(target).or_default().insert(referrer);
+                    if !verified.contains_key(&target) && !corrupt.contains(&target) {
+                        missing.insert((referrer, target));
+                    }
+                }
+            }
+        }
+        let (mut healthy_traces, mut affected_traces) = (Vec::new(), Vec::new());
+        for (&trace, stored) in &verified {
+            let Stored::Node(node @ Node::Trace { .. }) = stored else { continue };
+            let (mut bad_c, mut bad_m, mut unknowable) = (BTreeSet::new(), BTreeSet::new(), false);
+            let mut seen_r = BTreeSet::new();
+            let nodes = node.nodes();
+            let mut todo: Vec<(Cairn, bool)> =
+                node.references().into_iter().map(|r| (r, nodes.contains(&r))).collect();
+            while let Some((r, is_node)) = todo.pop() {
+                if !seen_r.insert((r, is_node)) {
+                    continue;
+                }
+                match verified.get(&r) {
+                    Some(Stored::Node(child)) => {
+                        let cn = child.nodes();
+                        todo.extend(
+                            child.references().into_iter().map(|cr| (cr, cn.contains(&cr))),
+                        );
+                    }
+                    Some(Stored::Value(_)) if !is_node => {}
+                    Some(Stored::Value(_)) => {
+                        bad_c.insert(r);
+                        unknowable = true;
+                    }
+                    None => {
+                        if corrupt.contains(&r) {
+                            bad_c.insert(r);
+                        } else {
+                            bad_m.insert(r);
+                        }
+                        unknowable |= is_node;
+                    }
+                }
+            }
+            if bad_c.is_empty() && bad_m.is_empty() {
+                healthy_traces.push(trace);
+            } else {
+                affected_traces.push(AffectedTrace {
+                    trace,
+                    corrupt: bad_c.into_iter().collect(),
+                    missing: bad_m.into_iter().collect(),
+                    unknowable,
+                });
+            }
+        }
+        let mut index = BTreeSet::new();
+        let mut recorded: BTreeMap<Cairn, BTreeSet<Cairn>> = BTreeMap::new();
+        for (cairn, path) in self.scan_area("refs", &mut malformed)? {
+            let bytes = fs::read(path)?;
+            if bytes.len() % 32 != 0 {
+                index.insert(IndexError::Ragged { of: cairn, bytes: bytes.len() });
+            } else {
+                let set = bytes
+                    .chunks_exact(32)
+                    .filter_map(|c| <[u8; 32]>::try_from(c).ok())
+                    .map(Cairn::from_bytes)
+                    .collect();
+                recorded.insert(cairn, set);
+            }
+        }
+        for (target, referrers) in expected {
+            for referrer in referrers {
+                if !recorded.get(&target).is_some_and(|s| s.contains(&referrer)) {
+                    index.insert(IndexError::Missing { target, referrer });
+                }
+            }
+        }
+        Ok(Audit {
+            corrupt: corrupt.into_iter().collect(),
+            missing: missing.into_iter().collect(),
+            malformed: malformed.into_iter().collect(),
+            index: index.into_iter().collect(),
+            healthy_traces,
+            affected_traces,
+        })
+    }
+}
+
+/// What is wrong with a reverse-index file in `refs/`. `spec/07-ledger.md` §7.5.2.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum IndexError {
+    /// A file in `refs/` whose length is not a multiple of 32 bytes.
+    Ragged {
+        /// Whose index it is.
+        of: Cairn,
+        /// The byte length on disk.
+        bytes: usize,
+    },
+    /// A verified node `referrer` names `target` and `refs/<target>` does not
+    /// record `referrer`.
+    Missing {
+        /// The referenced cairn.
+        target: Cairn,
+        /// The verified node that names it.
+        referrer: Cairn,
+    },
+}
+
+/// A verified `Trace` node whose forward provenance chain is damaged. §7.5.2.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AffectedTrace {
+    /// The `Trace` node's cairn.
+    pub trace: Cairn,
+    /// Reachable cairns from `trace` whose objects are corrupt.
+    pub corrupt: Vec<Cairn>,
+    /// Reachable cairns from `trace` that are absent from `objects/`.
+    pub missing: Vec<Cairn>,
+    /// `true` when one of `trace`'s node references (`holes`, `witnesses` or
+    /// `deposits`) is corrupt or absent, so what that node referenced in turn
+    /// cannot be known.
+    pub unknowable: bool,
+}
+
+/// A read-only whole-store audit. `spec/07-ledger.md` §7.5.2.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Audit {
+    /// Objects in `objects/` whose bytes do not decode or do not match their name.
+    pub corrupt: Vec<Cairn>,
+    /// Forward edges `(referrer, target)` from verified nodes to absent cairns.
+    pub missing: Vec<(Cairn, Cairn)>,
+    /// Paths under `objects/` or `refs/` that are not valid fanned cairn files.
+    pub malformed: Vec<PathBuf>,
+    /// Errors in the derived `refs/` reverse index.
+    pub index: Vec<IndexError>,
+    /// Verified `Trace` nodes whose reachable subgraph is complete and valid.
+    pub healthy_traces: Vec<Cairn>,
+    /// Verified `Trace` nodes with corrupt or absent dependencies.
+    pub affected_traces: Vec<AffectedTrace>,
+}
+
+impl Audit {
+    /// Whether the store has no corrupt objects, missing references, malformed
+    /// filenames or reverse-index errors.
+    #[must_use]
+    pub fn is_clean(&self) -> bool {
+        self.corrupt.is_empty()
+            && self.missing.is_empty()
+            && self.malformed.is_empty()
+            && self.index.is_empty()
     }
 }
 
@@ -909,5 +1114,100 @@ mod tests {
         assert!(store.seen().bytes <= super::SEEN_BYTES, "{}", store.seen().bytes);
         assert_eq!(store.get(b).unwrap(), big(2));
         assert_eq!(store.disk_reads(), 2, "the newest object was not the one kept");
+    }
+
+    // ── 0214: what a damaged store can still tell you ───────────────────────
+
+    fn stored_trace(store: &Store, tag: i64) -> (Cairn, Cairn, Cairn, Cairn) {
+        let src = store.put(&Stored::Value(Value::Bytes(format!("s{tag}").into_bytes()))).unwrap();
+        let res = store.put(&Stored::Value(Value::Bytes(format!("r{tag}").into_bytes()))).unwrap();
+        let val = store.put(&value(tag)).unwrap();
+        let span = Span { source: src, start: 0, end: 1 };
+        let dep = store.put(&Stored::Node(Node::Deposit { value: val, span })).unwrap();
+        let wit = store
+            .put(&Stored::Node(Node::Witness {
+                stratum: 3,
+                call: Call { function: "read".to_owned(), args: vec![val] },
+                answer: val,
+                span,
+            }))
+            .unwrap();
+        let trace = store
+            .put(&Stored::Node(Node::Trace {
+                residue: res,
+                holes: Vec::new(),
+                witnesses: vec![wit],
+                deposits: vec![dep],
+                source: src,
+                depth: 3,
+                unrecorded: false,
+            }))
+            .unwrap();
+        (trace, val, dep, wit)
+    }
+
+    #[test]
+    fn n_corrupt_objects_are_reported_and_affected_traces_are_named() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let (healthy, ok_val, _, _) = stored_trace(&store, 1);
+        let (leaf_bad, bad_val, _, _) = stored_trace(&store, 2);
+        let (node_bad, _, bad_dep, bad_wit) = stored_trace(&store, 3);
+        assert!(store.audit().unwrap().is_clean());
+
+        for c in [bad_val, bad_dep, bad_wit] {
+            std::fs::write(store.fanned("objects", c), b"tampered").unwrap();
+        }
+
+        let audit = store.audit().unwrap();
+        let mut expected_corrupt = vec![bad_val, bad_dep, bad_wit];
+        expected_corrupt.sort();
+        assert_eq!(audit.corrupt, expected_corrupt);
+        assert!(audit.missing.is_empty());
+        assert!(audit.malformed.is_empty());
+        assert_eq!(audit.healthy_traces, vec![healthy]);
+        assert_eq!(store.get(ok_val).unwrap(), value(1));
+
+        let by_leaf = audit.affected_traces.iter().find(|a| a.trace == leaf_bad).expect("leaf_bad");
+        assert_eq!(by_leaf.corrupt, vec![bad_val]);
+        assert!(!by_leaf.unknowable, "a corrupt leaf value has no outgoing references to hide");
+
+        let by_node = audit.affected_traces.iter().find(|a| a.trace == node_bad).expect("node_bad");
+        let mut node_corrupt = vec![bad_dep, bad_wit];
+        node_corrupt.sort();
+        assert_eq!(by_node.corrupt, node_corrupt);
+        assert!(by_node.unknowable, "corrupt deposit/witness nodes have unknowable references");
+    }
+
+    #[test]
+    fn broken_indexes_malformed_names_and_absent_children_are_distinguished() {
+        let scratch = Scratch::new();
+        let store = scratch.store();
+        let (healthy, ok_val, _, _) = stored_trace(&store, 10);
+        let (missing_node, _, _, gone_wit) = stored_trace(&store, 20);
+
+        // Break the reverse index of `healthy` and remove `gone_wit` from `objects/`.
+        std::fs::write(store.fanned("refs", ok_val), [0u8; 7]).unwrap();
+        std::fs::remove_file(store.fanned("objects", gone_wit)).unwrap();
+        let stray_dir = scratch.0.join("objects").join("zz");
+        std::fs::create_dir_all(&stray_dir).unwrap();
+        let stray_obj = stray_dir.join("not-hex");
+        std::fs::write(&stray_obj, b"x").unwrap();
+
+        let audit = store.audit().unwrap();
+        assert!(audit.corrupt.is_empty(), "{audit:?}");
+        // `healthy` is still healthy: affected traces come from verified forward edges, not `refs/`.
+        assert_eq!(audit.healthy_traces, vec![healthy]);
+        assert_eq!(audit.missing, vec![(missing_node, gone_wit)]);
+        assert_eq!(audit.malformed, vec![stray_dir]);
+        assert!(
+            audit.index.contains(&super::IndexError::Ragged { of: ok_val, bytes: 7 }),
+            "{:?}",
+            audit.index
+        );
+        let affected =
+            audit.affected_traces.iter().find(|a| a.trace == missing_node).expect("missing_node");
+        assert_eq!(affected.missing, vec![gone_wit]);
+        assert!(affected.unknowable);
     }
 }

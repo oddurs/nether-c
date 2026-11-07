@@ -2,10 +2,10 @@
 id: 214
 title: What a damaged store can still tell you
 type: feature
-status: unmarked
+status: buried
 milestone: ossuary
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-11-07
 priority: p1
 effort: m
 area: crates/nether-ledger
@@ -34,5 +34,11 @@ Store::get already detects tampering. The missing feature is a read-only whole-s
 
 ### Acceptance and evidence
 
-- [ ] Exactly N corrupt objects are distinguished from other errors; healthy objects remain readable. Do not claim complete dependency knowledge for undecodable objects; repair is out of scope.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] Exactly N corrupt objects are distinguished from other errors; healthy objects remain readable. Do not claim complete dependency knowledge for undecodable objects; repair is out of scope.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## Evidence — 2026-11-07
+
+- `spec/07-ledger.md` §7.5.2 (`What a damaged store can still tell you`) and `spec/90-rationale.md` §90.2 (`Walking the reverse index to find damaged traces`) specify the four classes of store damage (`corrupt` objects, `missing` forward references, `malformed` filenames, and `index` reverse-index errors), require deriving affected traces from verified forward edges rather than `refs/`, and require marking a trace's reachability as `unknowable` when one of its node references (`holes`, `witnesses` or `deposits`) is corrupt or absent.
+- `Store::audit`, `Audit`, `AffectedTrace` and `IndexError` in `crates/nether-ledger/src/store.rs` perform a read-only whole-store audit independently of `refs/` and `Seen`.
+- Verified by `n_corrupt_objects_are_reported_and_affected_traces_are_named` and `broken_indexes_malformed_names_and_absent_children_are_distinguished` in `crates/nether-ledger/src/store.rs`.
