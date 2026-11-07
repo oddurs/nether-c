@@ -2,10 +2,10 @@
 id: 215
 title: A second store, and what they owe each other
 type: spec
-status: unmarked
+status: buried
 milestone: ossuary
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-11-07
 priority: p2
 effort: l
 area: spec/07-ledger.md
@@ -34,5 +34,16 @@ Cairns establish identity, not availability, authorization or witness agreement.
 
 ### Acceptance and evidence
 
-- [ ] Verified objects reconcile under a precise bounded contract. Possessing a cairn does not imply authentication, mutation authority or agreement about world answers.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] Verified objects reconcile under a precise bounded contract. Possessing a cairn does not imply authentication, mutation authority or agreement about world answers.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+### Evidence — 2026-11-07
+
+- Base commit: `fa193cf` (`spec/07-ledger.md` §7.5.3 `A second store, and what they owe each other`, `spec/90-rationale.md` §90.2 `Reconciling stores by whole-inventory diff or by shipping refs/`).
+- Specified:
+  - What a cairn establishes (byte identity under `DOMAIN`) and what it does not (availability, authentication/mutation authority, or agreement across world witnesses).
+  - Forward root closure $\operatorname{cl}(R)$ over verified `Node` references, domain-separator handshake (`netherc/cairn/v4\x00`), bounded `want` batches (`MAX_WANT = 1,024`) and object byte bounds (`MAX_OBJECT_BYTES = 16 MiB`).
+  - Receiver verification (`len <= MAX_OBJECT_BYTES`, canonical `encode(decode(bytes)) == bytes`, `cairn(bytes) == asked`, atomic commit via `put` deriving `refs/` locally, refusal of unsolicited or corrupt objects and of peers with a different domain separator).
+  - Interruption/resume safety via verified upper prefixes of $\operatorname{cl}(R)$, discovery privacy (refusing prefix resolution and store-wide enumeration from untrusted peers), and stratum boundaries (stratum 3 `disk` + 4 `disk!` locally, stratum 5 `net` + 4 `disk!` for remote fetch, stratum 6 `net!` for active push).
+  - Pinned exchange transcripts for equal, partial, divergent and hostile stores in `tests/transcripts/MANIFEST.tsv`.
+- Remaining limits: specification only; wire transport and CLI rites are deferred to implementation items (starting with `0213` for portable export/import and `0101` for package resolution).
