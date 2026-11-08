@@ -361,10 +361,11 @@ The arguments were all values, so the reduced body needs none of them: it is
 written down as a function of no parameters and the call site names that.
 
 > An implementation MUST residualise a starved call whose arguments are all
-> values as its reduced body. Leaving the call as written is also a program
-> and also correct, and it is not a residue: the next burial would redo the
-> work this one already did, and nothing could ever be specialised to
-> anything.
+> values as its reduced body, except where
+> [a residue keeps its depths](#a-residue-keeps-its-depths) says the call
+> stays. Leaving the call as written is also a program and also correct, and
+> it is not a residue: the next burial would redo the work this one already
+> did, and nothing could ever be specialised to anything.
 
 A block reduces its statements in order. A statement that finished and bound
 nothing is not in the residue — it has already happened, and what it deposited
@@ -446,6 +447,59 @@ was meant, and is why that sentence is in §6.4. It is also the only control:
 there is no construct that makes burial reduce *more*, because everything here
 already reduces as far as it can and the one direction worth asking for is
 less.
+
+### A residue keeps its depths
+
+A residue is a program, so it is checked like one, and it MUST check wherever
+the program it came from checked. Reduction may lower a depth
+([§2.4](02-calculus.md#24-metatheory)), and most of the time that is the point.
+[LOOK] is where it is not. Its premise is membership, `d ∈ δ`, not a ceiling
+([§1.6](01-strata.md#16-shade-and-the-orpheus-rule)), and a depth that falls
+can fall out of what a `look` holds:
+
+```c
+Bytes@5 g(Bool c) {
+  Bytes x;
+  if (c) { x = must(descend net { get("u") }); }
+  else   { x = must(descend disk { read("f") }); }
+  descend net { look shade x }
+}
+demand g(false);
+```
+
+One arm writes `x` from 5 and the other from 3, so `x` is 5 deep, the shade
+comes from 5, and `descend net` holds 5. The condition is decided, and taking
+the `else` arm leaves an `x` written only from 3. `net` does not hold 3. The
+program checks and the residue that reduction would leave does not.
+
+The depth reaches the shade by more than one path. A local can lose the deeper
+of the arms that wrote it, as here. A call specialised to a constant can return
+less deeply than its function says. And in a unit built other than from §04
+source, a branch can sit under the shade itself. So the rule is stated about
+depths, not about `shade`:
+
+> A residual that is not a value MUST NOT be shallower than the code it
+> replaced. Where reducing would make it so, the code stays as written, with
+> what it reads assigned first as in the rest of this section:
+>
+> 1. A branch whose condition is decided stays whole, its condition reduced,
+>    when the arm not taken is deeper than the arm taken, or writes a local
+>    more deeply than the arm taken does.
+> 2. A starved call whose reduced body would return less deeply than the
+>    function stays the call, its arguments reduced.
+
+A value is exempt. It is pure, and stratum 0 is in every δ
+([section 02](02-calculus.md)), so no `look` can be refused for one.
+
+**What it costs.** Less is specialised. A branch decided by a constant, with
+arms of different depths, is no longer folded, and a call that the constant
+would have made shallower is no longer minted. For an interpreter, that is a
+branch on a guest's syntax whose arms reach the world differently. The residue
+is larger, and the next burial decides the same branch the same way and leaves
+it the same, so the staging law is untouched.
+
+The rejected forms of this rule are in
+[§90.2](90-rationale.md#a-residue-that-lowers-a-depth).
 
 ## 6.6 Exhumation
 

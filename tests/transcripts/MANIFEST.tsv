@@ -47,6 +47,7 @@ spec/06-evaluation.md § 6.2 Demand #1	c	pinned	32047b898ae2a1c0
 spec/06-evaluation.md § 6.2.1 Burying in parallel #1	c	pinned	75e62458a483e4ed
 spec/06-evaluation.md § 6.2.1 Burying in parallel #2	console	checked	796c7ed1117d338c
 spec/06-evaluation.md § 6.4 Starvation and fuel #1	text	pinned	07c9e60510dab9cc
+spec/06-evaluation.md § A residue keeps its depths #1	c	pinned	4ecc3b9d19c88a6e
 spec/06-evaluation.md § 6.6 Exhumation #1	console	checked	61e4082650fb0f96
 spec/06-evaluation.md § 6.7 Replay #1	console	checked	48b4f4a335379799
 spec/06-evaluation.md § 6.8 What burial prints #1	text	pinned	a39449193e40ee44

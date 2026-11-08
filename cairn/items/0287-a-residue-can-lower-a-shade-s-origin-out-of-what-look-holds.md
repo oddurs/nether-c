@@ -3,10 +3,12 @@ id: 287
 uid: 9d922ffe-212c-4bf7-a9d0-73e4cc21b367
 title: A residue can lower a shade's origin out of what look holds
 type: spec
-status: unmarked
+status: buried
 milestone: assay
+assignee: Oddur Sigurdsson
 created: 2026-11-08
 updated: 2026-11-08
+closed_at: 2026-11-08
 priority: p0
 effort: m
 stratum: '0'
@@ -51,6 +53,15 @@ CI did not see it.
   `proof/orpheus.py` is why.
 - §6.5: a residue is a program, and burying it again leaves it.
 
+## Answer
+
+[§6.5, *A residue keeps its depths*](../../spec/06-evaluation.md): a residual
+that is not a value MUST NOT be shallower than the code it replaced. A decided
+branch whose untaken arm is deeper, or writes a local more deeply, stays whole;
+a starved call whose reduced body returns less deeply stays the call. The
+rejected answers are in §90.2, *A residue that lowers a depth*. The
+implementation is a separate item.
+
 ## Candidate answers
 
 - Burial does not reduce under `shade` past what changes the origin: the
@@ -59,3 +70,7 @@ CI did not see it.
 - [LOOK] changes. This reopens §90.2.
 
 Record the rejected ones in `spec/90-rationale.md`.
+
+## 2026-11-08
+
+Keeping only a branch under shade misses two paths, both checked with the binary on main: a specialised call (net_or_disk(false) becomes a function returning from 3) and a local whose net-deep arm was dropped (the example now in 6.5). Both residues are refused with 'cannot look at a shade from stratum 3; 5 is held here'. So the rule is stated about depths.

@@ -144,6 +144,34 @@ up.
   with `[APP]`'s `dƒ ⊆ δ_caller` still forces `d ∈ δ_caller` at every call
   site.
 
+### A residue that lowers a depth
+
+[§6.5](06-evaluation.md#a-residue-keeps-its-depths) leaves code as written
+where reducing it would lower a depth. The monotone soak found the case it
+answers: a residue that the checker refused, from a program the checker
+accepted, because a `look` asked for a stratum the shallower residue no longer
+came from. Three other answers were weighed.
+
+**Keep only a branch under `shade`.** The narrowest fix, and it misses two of
+the three paths. A call specialised to a constant can return from 3 where its
+function returns from 5, and a local can lose the arm that wrote it deeply.
+Both reach a `shade` with no branch under it.
+
+**Let a residue state a shade's origin.** Syntax for `shade@5 e`, so that a
+reduced operand keeps the origin it had. That is a program stating a depth its
+operand does not have. [§5.6](05-types.md#56-types-are-written-depths-are-inferred)
+makes a written depth a checked assertion, and an error where inference gives
+another, so a residue would be allowed to say what a program may not.
+
+**Change [LOOK] to a ceiling.** `d ≤ max(δ)` is monotone, so a falling depth
+could never fall out of it. It is rejected above, with
+`numeric_vs_membership_counterexample` as the reason: under `net`, a ceiling
+lets a program look at what came from the disk.
+
+The rule chosen costs specialisation, which
+[§6.5](06-evaluation.md#a-residue-keeps-its-depths) states. It is a rule about
+what a residue may be, so it holds whatever path the depth takes.
+
 ### What a grant gates: a call, or a depth
 
 [§6.1](06-evaluation.md#61-burial) said burial could evaluate an expression
@@ -1993,7 +2021,12 @@ These claims are relied on as assumptions or tracked as open items in
    `--remap-path-prefix` and `--locked`) is in the tree, and the two-host tag
    attestation remains open until a release tag is built and compared across two
    independent machines.
-4. **Remaining open roadmap items**, among them `0075` (the trace graph
+4. **A residue checks wherever its program checked.**
+   [§6.5](06-evaluation.md#a-residue-keeps-its-depths) states the rule that
+   makes it so. The monotone soak in `crates/nether-bury/tests/monotone.rs`
+   tests it over ten million programs. Nothing in `proof/` proves subject
+   reduction for [LOOK] under burial.
+5. **Remaining open roadmap items**, among them `0075` (the trace graph
    browser), `0078` (a stranger explains a hole), `0081` and `0082` (the second
    and third projections), `0103` (a pilot), `0104` (an introduction), `0105`
    (a conformance suite), `0106` (a public store), `0108` (a 24-hour decoder
