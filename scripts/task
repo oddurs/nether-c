@@ -37,6 +37,8 @@ case "${1:-}" in
     python3 tests/css/run
     # A release is published with whatever `scripts/notes` returns.
     python3 tests/notes/run
+    # Mechanized metatheory in `proof/`, rejecting admitted obligations.
+    python3 proof/check.py
     ;;
   build)
     cargo build --workspace
@@ -56,9 +58,8 @@ case "${1:-}" in
     cargo test --release --workspace --test fuzz --test monotone -- --ignored --nocapture
     ;;
   proofs)
-    # The size demonstrations. Not part of `check`: they are evidence for a
-    # roadmap item rather than a gate. `check` still compiles them, so they
-    # cannot rot unnoticed, and cargo test runs the ones that are cheap.
+    # Mechanized metatheory in `proof/` and the size demonstrations.
+    python3 proof/check.py
     cargo test --release --workspace --test proofs -- --ignored --nocapture
     ;;
   site)

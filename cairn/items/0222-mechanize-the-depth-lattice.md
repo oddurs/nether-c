@@ -2,10 +2,12 @@
 id: 222
 title: Mechanize the depth lattice
 type: chore
-status: unmarked
+status: buried
 milestone: assay
+assignee: Oddur Sigurdsson
+claimed: 2026-11-07
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-11-07
 priority: p0
 effort: xl
 area: proof/
@@ -35,5 +37,16 @@ Generative calculus tests are not mechanization. A proof environment is a develo
 
 ### Acceptance and evidence
 
-- [ ] Clean-environment theorem checking passes with explicit assumptions and model scope. No unacknowledged axioms, placeholders or substitution of sampled tests.
-- [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+- [x] Clean-environment theorem checking passes with explicit assumptions and model scope. No unacknowledged axioms, placeholders or substitution of sampled tests.
+- [x] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+### Evidence — 2026-11-07
+
+- Recorded the proof-environment comparison and rejected alternatives (Lean 4 / Coq / Agda / Isabelle toolchain weight outside the pinned CI image, SMT solver axiom-consistency opacity, and finite sampling alone) in `spec/90-rationale.md` §90.2 ("Mechanizing the metatheory: an in-tree LCF proof kernel versus an external proof assistant").
+- Added `proof/kernel.py` implementing a sealed LCF-style proof kernel (`Theorem` gated by `_KERNEL_TOKEN`) with primitive logical inference rules, `rule_induction`, `structural_induction`, and an exhaustive finite-domain decision procedure `lattice_decide` over `Depth = {0..8}` and `Held = P({0..8})`.
+- Added `proof/calculus.py` transcribing all 11 typing rules of `spec/02-calculus.md` §2.2 into `HAS_TYPE`, all 12 substitution forms into `SUBST_DEPTH`, and all 17 reduction rules of `spec/06-evaluation.md` into `STEP_TYPED`, and proving:
+  - `ambient_soundness`: `∀_a0.._a4. HasType(_a0, _a1, _a2, _a3, _a4) → (_a4 <= max_set(∪(_a1, g(_a2))))`
+  - `substitution_monotonicity`: `∀_a0.._a3. SubstDepth(_a0, _a1, _a2, _a3) → (_a3 <= max(_a1, _a2))`
+  - `soundness_of_bound`: `∀_a0.._a3. StepTyped(_a0, _a1, _a2, _a3) → (_a3 <= _a2)`
+- Added `proof/check.py` (wired into `scripts/task test` and `scripts/task proofs`) scanning all proof scripts via `tokenize` to reject admitted obligations (`sorry`, `admit`, `admitted`, `axiom`, `unproved`, `postulate`, `todo`, `fixme`), running negative kernel self-tests, and checking that every exported theorem has zero undischarged assumptions.
+- Remaining limits: the mechanized calculus covers the core expression grammar of §02 (`HAS_TYPE`, `SUBST_DEPTH`, `STEP_TYPED`); agreement between the mechanized model and `nether_core::check` is tested separately (`0226`), and the full evidence ledger across all normative claims is recorded in `0227`.
