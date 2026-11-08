@@ -22,6 +22,7 @@ from kernel import (
     var,
 )
 import calculus
+import encoding
 import orpheus
 import staging
 
@@ -187,13 +188,33 @@ def main(argv: Sequence[str] = ()) -> int:
     for name, thm in staging_thms:
         verify_closed_theorem(name, thm)
 
-    print(f"checked {scanned} proof modules (0 admitted obligations, kernel guards verified)")
+    n_fixtures = encoding.verify_codec_fixtures_and_exclusions()
+    encoding_thms = [
+        ("value_decode_encode", encoding.prove_value_decode_encode()),
+        ("node_decode_encode", encoding.prove_node_decode_encode()),
+        (
+            "injectivity_from_left_inverse",
+            encoding.prove_injectivity_from_left_inverse(),
+        ),
+        (
+            "cairn_preimage_injectivity",
+            encoding.prove_cairn_preimage_injectivity(),
+        ),
+    ]
+    for name, thm in encoding_thms:
+        verify_closed_theorem(name, thm)
+
+    print(
+        f"checked {scanned} proof modules (0 admitted obligations, kernel guards verified, {n_fixtures} codec fixtures verified)"
+    )
     print(f"  [OK] ambient_soundness          ({len(calculus.HAS_TYPE.rules)} typing rules)   |- {t_amb.conclusion}")
     print(f"  [OK] substitution_monotonicity  ({len(calculus.SUBST_DEPTH.rules)} subst rules)    |- {t_sub.conclusion}")
     print(f"  [OK] soundness_of_bound         ({len(calculus.STEP_TYPED.rules)} step rules)     |- {t_mon.conclusion}")
     for name, thm in orpheus_thms:
         print(f"  [OK] {name:42s} |- {thm.conclusion}")
     for name, thm in staging_thms:
+        print(f"  [OK] {name:42s} |- {thm.conclusion}")
+    for name, thm in encoding_thms:
         print(f"  [OK] {name:42s} |- {thm.conclusion}")
     return 0
 
