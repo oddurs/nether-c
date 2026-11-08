@@ -136,9 +136,19 @@ cmd_pr() {
   if [ "${1:-}" = --draft ]; then
     case "$existing" in *' false') die "existing PR is ready; --draft will not silently change it" ;; esac
   fi
-  # pre-push is the one local full gate. Do not run it a second time here.
+  # The full gate runs here, once, before the push opens a connection. Run
+  # inside pre-push it held GitHub's connection idle for as long as the checks
+  # took, and GitHub closes an idle one: `git push` died of SIGPIPE, exit 141,
+  # and `set -e` took this script with it without a word. pre-push trusts the
+  # stamp for this exact commit, once, and still runs everything for a push
+  # typed by hand. 0292.
+  say "checking $head"
+  ./scripts/task check
+  cmd_clean
+  [ "$head" = "$(git rev-parse HEAD)" ] || die "HEAD changed during checks; retry against the new commit"
+  printf '%s\n' "$head" > "$(git rev-parse --git-dir)/nether-checked"
   say "pushing $branch"
-  git push -u origin "$branch"
+  git push -u origin "$branch" || die "push of $branch failed (exit $?); nothing was opened or armed"
   # `--fill-first`, not `--fill`. With one commit they agree; with more than
   # one, `--fill` titles the pull request after the *branch* — and a squash
   # merge takes its subject from the title, so what lands on `main` is

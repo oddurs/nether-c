@@ -437,7 +437,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 
 ## assay — The Assay
 
-`##########` 94% · 15 of 16 done · due 2028-10-01
+`##########` 94% · 16 of 17 done · due 2028-10-01
 
 Mechanized claims about a stated calculus, plus measured correspondence with Rust. Tooling and assumptions remain outside the trusted language core.
 
@@ -462,6 +462,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0288`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0288-five-things-the-review-found-in-what-this-descent-built.md) Five things the review found in what this descent built <sup>chore · p1 · 8</sup>
 - [x] [`0289`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0289-publish-at-netherc-org.md) Publish at netherc.org <sup>docs · p2</sup>
 - [x] [`0290`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0290-burial-leaves-code-as-written-that-would-lower-a-depth.md) Burial leaves code as written that would lower a depth <sup>bug · p0 · 0</sup>
+- [x] [`0292`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0292-push-without-holding-github-s-connection-open-through-the-checks.md) Push without holding GitHub's connection open through the checks <sup>bug · p1</sup>
 
 ## Unscheduled
 

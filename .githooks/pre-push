@@ -25,7 +25,14 @@ while read -r _local_ref local_sha remote_ref _remote_sha; do
   esac
 done
 
-./scripts/task check
+# `scripts/agent pr` ran the checks for this commit before the push opened a
+# connection, and left a stamp saying so. Anything else runs them here. 0292.
+stamp="$(git rev-parse --git-dir)/nether-checked"
+if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$head" ]; then
+  rm -f "$stamp"
+else
+  ./scripts/task check
+fi
 ./scripts/agent clean
 [ "$head" = "$(git rev-parse HEAD)" ] || {
   echo "pre-push: HEAD changed during checks; retry against the new commit" >&2
