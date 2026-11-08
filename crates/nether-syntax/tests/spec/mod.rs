@@ -60,6 +60,7 @@ pub const SAMPLES: &[(&str, Shape)] = &[
     ("05-types.md § 5.4 Mutation #2", Shape::Illegal("h was named by `seal h`")),
     ("06-evaluation.md § 6.2 Demand #1", Shape::Unit),
     ("06-evaluation.md § 6.2.1 Burying in parallel #1", Shape::Unit),
+    ("06-evaluation.md § A residue keeps its depths #1", Shape::Unit),
     ("07-ledger.md § 7.3.2 What a decoder cannot check #1", Shape::Unit),
     ("09-prelude.md § 9.2 Depth 0 #1", Shape::Statements),
     ("09-prelude.md § 9.2 Depth 0 #2", Shape::Unit),
