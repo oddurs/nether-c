@@ -1,5 +1,6 @@
 ---
 id: 202
+uid: e543ebcf-7d3f-47ae-aa5c-f8c889600e0f
 title: Encoding allocates once
 type: chore
 status: buried

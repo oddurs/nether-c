@@ -43,7 +43,7 @@ jobs:
       # install did, `scripts/task check` skipped `cairn check` and the run
       # stayed green. A gate that cannot fail is not one.
       - name: Install cairn
-        run: cargo install --locked --git https://github.com/oddurs/cairn --tag v0.2.0 cairn-md
+        run: cargo install --locked --git https://github.com/oddurs/cairn --tag v1.0.0-alpha.1 cairn-md
 
       # CI and the local hooks run the same command, so they cannot drift.
       - name: scripts/task check

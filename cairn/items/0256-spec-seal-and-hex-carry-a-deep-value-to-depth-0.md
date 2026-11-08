@@ -1,5 +1,6 @@
 ---
 id: 256
+uid: cb712bcc-ff2f-43aa-99b6-c2d8448a3293
 title: 'Spec: seal and hex carry a deep value to depth 0'
 type: spec
 status: buried

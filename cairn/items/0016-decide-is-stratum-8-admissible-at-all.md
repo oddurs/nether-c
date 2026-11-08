@@ -1,5 +1,6 @@
 ---
 id: 16
+uid: 4cff0073-50db-4d7c-ad99-09688bcbcc43
 title: 'Decide: is stratum 8 admissible at all?'
 type: spec
 status: buried

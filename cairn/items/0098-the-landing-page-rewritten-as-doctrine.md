@@ -1,5 +1,6 @@
 ---
 id: 98
+uid: 15c3e5c6-3b15-44af-9679-254a3bbc84ae
 title: The landing page, rewritten as doctrine
 type: feature
 status: buried

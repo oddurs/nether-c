@@ -1,5 +1,6 @@
 ---
 id: 271
+uid: d03cdb64-858c-4c8f-8502-7e22e4af5455
 title: The released binary says it is 0.0.0
 type: bug
 status: buried

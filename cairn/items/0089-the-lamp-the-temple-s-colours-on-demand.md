@@ -1,5 +1,6 @@
 ---
 id: 89
+uid: 95079f0c-284d-4301-b056-d0fdd7415f71
 title: 'The lamp: the temple''s colours, on demand'
 type: feature
 status: buried

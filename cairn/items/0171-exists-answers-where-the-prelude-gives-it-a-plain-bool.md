@@ -1,5 +1,6 @@
 ---
 id: 171
+uid: e0d66016-8585-4ffd-bb22-bbff5d6cd050
 title: exists answers where the prelude gives it a plain Bool
 type: bug
 status: buried

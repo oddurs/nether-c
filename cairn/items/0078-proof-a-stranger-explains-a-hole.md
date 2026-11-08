@@ -1,5 +1,6 @@
 ---
 id: 78
+uid: bd50af6b-c6e9-4702-97a5-ffc54f6a0df8
 title: 'Proof: a stranger explains a hole'
 type: chore
 status: unmarked

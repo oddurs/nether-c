@@ -1,5 +1,6 @@
 ---
 id: 164
+uid: b58b7c9f-749b-4ced-9977-c5f8e6313cb8
 title: The attribution ban is not enforced
 type: bug
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 221
+uid: 00ef69fe-479b-43a0-b3a8-dd97d8298b2e
 title: Build the binary reproducibly
 type: chore
 status: descending

@@ -1,5 +1,6 @@
 ---
 id: 220
+uid: 15fc1173-3891-4a8b-9355-4fdb9e2b9e50
 title: A trace's claims are checkable by somebody who does not trust it
 type: feature
 status: buried

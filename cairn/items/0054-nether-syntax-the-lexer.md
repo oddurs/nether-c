@@ -1,5 +1,6 @@
 ---
 id: 54
+uid: c07d4c64-a2ff-4211-b8ee-2b6c07c7669b
 title: 'nether-syntax: the lexer'
 type: feature
 status: buried

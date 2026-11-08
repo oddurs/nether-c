@@ -1,5 +1,6 @@
 ---
 id: 131
+uid: b317f82e-82dd-46f1-96f1-f692de69edbc
 title: 'Spec: section 3.6 does not say what an integer literal may hold'
 type: spec
 status: buried

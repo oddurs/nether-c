@@ -1,5 +1,6 @@
 ---
 id: 83
+uid: 53acbece-f6f2-4fdf-a35d-0376f2a6050f
 title: 'The Decay Rule: CI fails if the trusted core grows'
 type: chore
 status: buried

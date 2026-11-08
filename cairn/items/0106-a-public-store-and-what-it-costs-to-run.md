@@ -1,5 +1,6 @@
 ---
 id: 106
+uid: 0c13255e-062e-4576-a3cb-23e7bcce8bf9
 title: A public store, and what it costs to run
 type: chore
 status: unmarked

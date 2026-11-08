@@ -1,5 +1,6 @@
 ---
 id: 90
+uid: 2ba40743-b4e5-42f2-bb3b-4872b4318449
 title: Icon, metadata and social preview
 type: chore
 status: buried

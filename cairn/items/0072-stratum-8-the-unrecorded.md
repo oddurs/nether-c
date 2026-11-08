@@ -1,5 +1,6 @@
 ---
 id: 72
+uid: 5a321fe7-7827-4df1-af65-e36f9b572f23
 title: 'Stratum 8: the Unrecorded'
 type: feature
 status: buried

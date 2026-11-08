@@ -1,5 +1,6 @@
 ---
 id: 185
+uid: fb4dd8f2-dd35-4613-bbee-332edc8b244c
 title: Two wordmarks on the front page
 type: bug
 status: buried

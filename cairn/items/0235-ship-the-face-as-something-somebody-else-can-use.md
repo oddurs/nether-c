@@ -1,5 +1,6 @@
 ---
 id: 235
+uid: 1d947add-3320-433f-b5b7-d158ac87505b
 title: Ship the face as something somebody else can use
 type: chore
 status: unmarked

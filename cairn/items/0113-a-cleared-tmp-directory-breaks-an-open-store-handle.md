@@ -1,5 +1,6 @@
 ---
 id: 113
+uid: cc0daa50-5935-4942-ba4e-37597729a8c5
 title: A cleared tmp directory breaks an open Store handle
 type: bug
 status: buried

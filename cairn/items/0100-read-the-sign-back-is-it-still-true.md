@@ -1,5 +1,6 @@
 ---
 id: 100
+uid: 3891cc3b-b1d2-48f5-a16b-3baaf1300fc1
 title: 'Read the sign back: is it still true?'
 type: chore
 status: buried

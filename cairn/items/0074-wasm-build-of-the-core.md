@@ -1,5 +1,6 @@
 ---
 id: 74
+uid: 68c639d7-d8a5-4b49-bde0-c37b6b2cc5b8
 title: WASM build of the core
 type: chore
 status: buried

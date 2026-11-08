@@ -1,5 +1,6 @@
 ---
 id: 95
+uid: e783a73b-7240-478d-8fcb-e3c2621d9479
 title: 'Decide: may the workspace take a dependency on blake3?'
 type: spec
 status: buried

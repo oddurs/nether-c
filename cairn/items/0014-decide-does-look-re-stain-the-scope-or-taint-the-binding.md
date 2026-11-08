@@ -1,5 +1,6 @@
 ---
 id: 14
+uid: 4b2d96ba-f54a-4def-b6a1-da2fb53131f0
 title: 'Decide: does look re-stain the scope, or taint the binding?'
 type: spec
 status: buried

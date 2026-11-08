@@ -1,5 +1,6 @@
 ---
 id: 94
+uid: b68f269e-0e86-4db2-be9c-fbc8be82754a
 title: 'Decide: what a prelude function does when it cannot answer'
 type: spec
 status: buried

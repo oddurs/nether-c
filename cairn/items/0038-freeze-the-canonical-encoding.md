@@ -1,5 +1,6 @@
 ---
 id: 38
+uid: 64c7ff68-fd8e-4b42-b56c-6dab7c7dc602
 title: Freeze the canonical encoding
 type: chore
 status: buried

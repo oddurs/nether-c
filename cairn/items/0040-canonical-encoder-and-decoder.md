@@ -1,5 +1,6 @@
 ---
 id: 40
+uid: e471eba2-6ea4-46ab-b004-83165f926980
 title: Canonical encoder and decoder
 type: feature
 status: buried

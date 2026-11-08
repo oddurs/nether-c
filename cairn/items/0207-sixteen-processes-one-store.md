@@ -1,5 +1,6 @@
 ---
 id: 207
+uid: 8a40025a-b159-4413-9eb1-8a5fe6a0f809
 title: Sixteen processes, one store
 type: chore
 status: buried

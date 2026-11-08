@@ -1,5 +1,6 @@
 ---
 id: 262
+uid: 90c047f5-fa06-4240-824e-22e4ab47f798
 title: 'Spec: the disk is the one bounded capability the invocation cannot bound'
 type: spec
 status: buried

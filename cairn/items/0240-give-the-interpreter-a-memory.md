@@ -1,5 +1,6 @@
 ---
 id: 240
+uid: e4d3978d-1abb-4a0e-af62-52f5703b3aeb
 title: Give the interpreter a memory
 type: feature
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 229
+uid: 4397fbaf-6238-4edd-91ca-b0c11d7db09b
 title: The diagrams that teach were too small to read
 type: bug
 status: buried

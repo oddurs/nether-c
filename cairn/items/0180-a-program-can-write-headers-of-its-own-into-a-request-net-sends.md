@@ -1,5 +1,6 @@
 ---
 id: 180
+uid: a7188ffa-5378-4cef-b3db-926311b3af69
 title: A program can write headers of its own into a request net sends
 type: bug
 status: buried

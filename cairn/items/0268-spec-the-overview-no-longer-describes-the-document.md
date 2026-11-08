@@ -1,5 +1,6 @@
 ---
 id: 268
+uid: 7226381e-bd6f-426b-88c9-518a7d1618d9
 title: 'Spec: the overview no longer describes the document'
 type: spec
 status: buried

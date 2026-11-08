@@ -1,5 +1,6 @@
 ---
 id: 108
+uid: f401960a-e9b8-43cd-9619-6a8a9207374b
 title: Soak the decoder for twenty-four hours
 type: chore
 status: unmarked

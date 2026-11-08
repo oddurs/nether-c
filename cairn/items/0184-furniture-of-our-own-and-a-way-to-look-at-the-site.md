@@ -1,5 +1,6 @@
 ---
 id: 184
+uid: 948e646b-2c0b-4093-99a0-6d1c0772b015
 title: Furniture of our own, and a way to look at the site
 type: feature
 status: buried

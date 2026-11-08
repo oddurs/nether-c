@@ -1,5 +1,6 @@
 ---
 id: 152
+uid: 8be709f0-99aa-41c6-aaab-acdad5fd6e70
 title: lamp adds a newline to a value that has one
 type: bug
 status: buried

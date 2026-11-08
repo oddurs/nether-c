@@ -1,5 +1,6 @@
 ---
 id: 137
+uid: 5b0d976f-1e82-4c16-8883-8ff5b2c79c7c
 title: Sample tables in tests are keyed by line number
 type: chore
 status: buried

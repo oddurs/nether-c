@@ -1,5 +1,6 @@
 ---
 id: 136
+uid: 49fa8a6c-7b1d-4e50-9a8f-36ebc8cf380e
 title: 'Spec: a trace that under-reports its own depth is not called malformed'
 type: spec
 status: buried

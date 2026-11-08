@@ -1,5 +1,6 @@
 ---
 id: 255
+uid: e17d333c-d54b-40a1-9053-589ec77ff27d
 title: 'Spec: two identical sends are one hole'
 type: spec
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 187
+uid: 94ceb985-221e-43a1-8fba-ed6b808ebf9a
 title: A design system, generated, instead of a borrowed palette
 type: feature
 status: buried

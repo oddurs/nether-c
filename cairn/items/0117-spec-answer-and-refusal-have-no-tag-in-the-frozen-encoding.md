@@ -1,5 +1,6 @@
 ---
 id: 117
+uid: ad19d204-7047-44f8-9724-4d6f494a29f4
 title: 'Spec: Answer and Refusal have no tag in the frozen encoding'
 type: spec
 status: buried

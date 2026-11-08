@@ -1,5 +1,6 @@
 ---
 id: 52
+uid: 908dd433-6996-47fb-bfee-2bd82e0fc3a5
 title: 'Property test: depth is monotone'
 type: chore
 status: buried

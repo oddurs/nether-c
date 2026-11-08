@@ -1,5 +1,6 @@
 ---
 id: 49
+uid: 9bf5898e-1d06-47cb-b14b-b46c07fafad0
 title: Holes and residualization
 type: feature
 status: buried

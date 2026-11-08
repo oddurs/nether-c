@@ -1,5 +1,6 @@
 ---
 id: 189
+uid: dd29202a-17a3-47a6-b13b-8743d62724fc
 title: The background is a legible grid, not a texture
 type: bug
 status: buried

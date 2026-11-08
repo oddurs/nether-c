@@ -1,5 +1,6 @@
 ---
 id: 20
+uid: 0d2ca211-9e0c-4839-a5c9-e3d93e7784b8
 title: 'Spec: burial, demand, holes and residualization'
 type: spec
 status: buried

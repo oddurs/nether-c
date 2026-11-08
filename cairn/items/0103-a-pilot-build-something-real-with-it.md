@@ -1,5 +1,6 @@
 ---
 id: 103
+uid: 4c0ec403-deb9-48e5-8415-f49432a3217e
 title: 'A pilot: build something real with it'
 type: chore
 status: unmarked

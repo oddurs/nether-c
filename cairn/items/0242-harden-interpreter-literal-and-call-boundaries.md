@@ -1,5 +1,6 @@
 ---
 id: 242
+uid: ee041927-991c-434f-afdf-f1c5771b85d6
 title: Harden interpreter literal and call boundaries
 type: bug
 status: buried

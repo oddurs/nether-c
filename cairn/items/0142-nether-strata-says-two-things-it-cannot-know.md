@@ -1,5 +1,6 @@
 ---
 id: 142
+uid: 3aaf5a4b-be43-45ba-a2d7-f7c1b98cd217
 title: nether strata says two things it cannot know
 type: bug
 status: buried

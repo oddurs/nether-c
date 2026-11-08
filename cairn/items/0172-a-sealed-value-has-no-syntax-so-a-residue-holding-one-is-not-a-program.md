@@ -1,5 +1,6 @@
 ---
 id: 172
+uid: c4a14765-4e35-4087-b32a-cfc8fadd7011
 title: A sealed value has no syntax, so a residue holding one is not a program
 type: spec
 status: buried

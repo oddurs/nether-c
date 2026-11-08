@@ -1,5 +1,6 @@
 ---
 id: 125
+uid: abc58fb0-744e-4e2b-b56e-db5054e05bdd
 title: 'Spec: an implementation''s own limits are not mentioned'
 type: spec
 status: buried

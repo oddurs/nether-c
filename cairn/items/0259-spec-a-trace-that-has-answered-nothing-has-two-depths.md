@@ -1,5 +1,6 @@
 ---
 id: 259
+uid: 924230e7-29ff-4829-947b-cfcb89414896
 title: 'Spec: a trace that has answered nothing has two depths'
 type: spec
 status: buried

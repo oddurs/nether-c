@@ -1,5 +1,6 @@
 ---
 id: 141
+uid: 781715de-1c33-45a9-9754-3c9c1b372002
 title: Nothing bounds recursion outside burial
 type: bug
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 282
+uid: 946c6e60-6e7a-41dc-84bb-99fef9086dc2
 title: Say what the proofs say, and number it once
 type: spec
 status: buried

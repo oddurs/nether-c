@@ -1,5 +1,6 @@
 ---
 id: 109
+uid: 3915cedd-d415-4817-911e-a0baccbe6b04
 title: Cairn::from_str panics on 64-byte non-ASCII input
 type: bug
 status: buried

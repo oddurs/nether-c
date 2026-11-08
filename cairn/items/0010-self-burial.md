@@ -1,5 +1,6 @@
 ---
 id: 10
+uid: 4f8d7346-5d56-4495-87ba-f27aeeef678f
 key: futamura
 title: Self-Burial
 type: milestone

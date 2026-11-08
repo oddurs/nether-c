@@ -1,5 +1,6 @@
 ---
 id: 236
+uid: fba53139-c6cc-41e6-9530-64ebfeac5a72
 title: Decide whether the headings are the same face
 type: spec
 status: buried

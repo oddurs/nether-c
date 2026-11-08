@@ -1,5 +1,6 @@
 ---
 id: 244
+uid: d6dfc337-9f0c-4a1d-960e-bcd2557bfbb9
 title: Navigate trace objects and inspect their recorded contents
 type: feature
 status: buried

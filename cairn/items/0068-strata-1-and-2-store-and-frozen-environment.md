@@ -1,5 +1,6 @@
 ---
 id: 68
+uid: 5c14b83e-a699-48f3-9785-6c776db8b1bf
 title: 'Strata 1 and 2: store and frozen environment'
 type: feature
 status: buried

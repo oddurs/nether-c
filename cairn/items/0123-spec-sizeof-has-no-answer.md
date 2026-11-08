@@ -1,5 +1,6 @@
 ---
 id: 123
+uid: da6b40eb-ffe9-40dc-b36d-54d79f20d0f7
 title: 'Spec: sizeof has no answer'
 type: spec
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 176
+uid: 585036bf-34b3-44ea-aa96-20ff6674f3c8
 title: The stratum-8 proof builds one object into one path from five tests
 type: bug
 status: buried

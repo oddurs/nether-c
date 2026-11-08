@@ -1,5 +1,6 @@
 ---
 id: 19
+uid: bce252f6-d162-4c39-becd-cb6ba766bbb4
 title: 'Spec: the type system and data model'
 type: spec
 status: buried

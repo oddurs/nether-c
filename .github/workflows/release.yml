@@ -37,7 +37,7 @@ jobs:
 
       # From the repository it is published from, pinned, and with no `||`.
       - name: Install cairn
-        run: cargo install --locked --git https://github.com/oddurs/cairn --tag v0.2.0 cairn-md
+        run: cargo install --locked --git https://github.com/oddurs/cairn --tag v1.0.0-alpha.1 cairn-md
 
       - name: scripts/task check
         run: scripts/task check

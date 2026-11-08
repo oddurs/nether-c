@@ -1,5 +1,6 @@
 ---
 id: 58
+uid: 080ed4a9-5dbb-4eef-950c-3285c4c415e0
 title: Diagnostics with source spans
 type: feature
 status: buried

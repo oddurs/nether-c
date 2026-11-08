@@ -1,5 +1,6 @@
 ---
 id: 281
+uid: 75113947-7fb3-4c68-aedd-4a7a56b00377
 title: Reduce past a statement that starved
 type: spec
 status: buried

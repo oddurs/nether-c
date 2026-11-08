@@ -1,5 +1,6 @@
 ---
 id: 70
+uid: 9002d7ac-95ba-4825-beb7-3c602d46e6d2
 title: 'Strata 5 and 6: the network'
 type: feature
 status: buried

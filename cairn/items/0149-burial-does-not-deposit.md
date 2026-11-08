@@ -1,5 +1,6 @@
 ---
 id: 149
+uid: 71aa8844-c827-4a7f-9ec4-8d0d4a87e68a
 title: Burial does not deposit
 type: bug
 status: buried

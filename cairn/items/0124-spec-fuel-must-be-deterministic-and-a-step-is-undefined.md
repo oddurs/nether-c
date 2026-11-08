@@ -1,5 +1,6 @@
 ---
 id: 124
+uid: adf3fe27-1766-4e47-bffd-4dc4f27e8c26
 title: 'Spec: fuel must be deterministic and a step is undefined'
 type: spec
 status: buried

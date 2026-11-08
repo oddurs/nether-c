@@ -1,5 +1,6 @@
 ---
 id: 263
+uid: 12612a66-9d05-4bde-bf17-c98b5519aa22
 title: 'Spec: a program can inspect an Answer and cannot build one'
 type: spec
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 53
+uid: 9aa0f433-066c-4034-95cb-cc9d29b54491
 title: 'Proof: one read, one hole'
 type: chore
 status: buried

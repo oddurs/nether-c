@@ -1,5 +1,6 @@
 ---
 id: 279
+uid: 710faa6c-3805-4ce6-aa72-7409f4585f35
 title: A residue can print deeper than it may be read
 type: bug
 status: buried

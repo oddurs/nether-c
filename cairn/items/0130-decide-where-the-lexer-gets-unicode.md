@@ -1,5 +1,6 @@
 ---
 id: 130
+uid: 9700dc7f-c0a9-41e9-86f3-97739d517bfe
 title: 'Decide: where the lexer gets Unicode'
 type: spec
 status: buried

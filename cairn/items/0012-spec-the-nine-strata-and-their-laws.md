@@ -1,5 +1,6 @@
 ---
 id: 12
+uid: 70d9f934-dc91-478f-b6ac-b4efc5756865
 title: 'Spec: the nine strata and their laws'
 type: spec
 status: buried

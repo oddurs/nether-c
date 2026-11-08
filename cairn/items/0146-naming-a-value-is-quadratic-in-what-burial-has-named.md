@@ -1,5 +1,6 @@
 ---
 id: 146
+uid: 5407e560-6377-4f2a-82fa-c16e45075156
 title: Naming a value is quadratic in what burial has named
 type: chore
 status: buried

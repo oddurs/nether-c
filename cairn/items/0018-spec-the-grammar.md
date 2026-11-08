@@ -1,5 +1,6 @@
 ---
 id: 18
+uid: f147a7e5-311d-4512-b5b2-2fff2bb2a7e0
 title: 'Spec: the grammar'
 type: spec
 status: buried

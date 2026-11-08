@@ -1,5 +1,6 @@
 ---
 id: 206
+uid: 29439edb-464f-444e-9da5-6ce8d1019f6a
 title: Answer many holes at once
 type: feature
 status: buried

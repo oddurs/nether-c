@@ -1,5 +1,6 @@
 ---
 id: 213
+uid: 0260523d-e965-4ca9-b04e-789ad00244e6
 title: A store that outlives its machine
 type: feature
 status: buried

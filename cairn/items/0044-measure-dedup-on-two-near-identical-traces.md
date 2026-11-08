@@ -1,5 +1,6 @@
 ---
 id: 44
+uid: 3cf0e3db-c94c-4a15-b0cd-a0da7c8dcbd2
 title: Measure dedup on two near-identical traces
 type: chore
 status: buried

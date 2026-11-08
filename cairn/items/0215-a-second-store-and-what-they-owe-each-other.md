@@ -1,5 +1,6 @@
 ---
 id: 215
+uid: 45db6dc5-c1e3-46ba-9356-823b43ce4d39
 title: A second store, and what they owe each other
 type: spec
 status: buried

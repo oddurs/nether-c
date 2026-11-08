@@ -1,5 +1,6 @@
 ---
 id: 143
+uid: 72b13500-955f-4207-9ea9-8ce21cba04c8
 title: A span that lands mid-character panics the reporter
 type: bug
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 3
+uid: 8c15a884-ac91-4f46-a2a5-e501e8e8ab0a
 key: lamp
 title: The Lamp
 type: milestone

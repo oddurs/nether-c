@@ -1,5 +1,6 @@
 ---
 id: 277
+uid: 0ae2d357-9920-496f-a422-26fe60ab26b9
 title: Setup overwrites the roadmap schema
 type: bug
 status: buried

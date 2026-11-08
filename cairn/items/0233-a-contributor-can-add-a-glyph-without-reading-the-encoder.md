@@ -1,5 +1,6 @@
 ---
 id: 233
+uid: 745a4b57-f19c-4acc-b5e9-9d49061d78fc
 title: A contributor can add a glyph without reading the encoder
 type: docs
 status: buried

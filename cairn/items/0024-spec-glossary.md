@@ -1,5 +1,6 @@
 ---
 id: 24
+uid: e21f6927-6e6c-4acf-8ea1-f31139fa4f69
 title: 'Spec: glossary'
 type: spec
 status: buried

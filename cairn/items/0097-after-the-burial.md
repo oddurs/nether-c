@@ -1,5 +1,6 @@
 ---
 id: 97
+uid: c2babc0b-4481-435d-bda8-ec8d90094206
 key: after
 title: After the Burial
 type: milestone

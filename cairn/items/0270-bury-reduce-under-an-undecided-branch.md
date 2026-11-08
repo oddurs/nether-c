@@ -1,5 +1,6 @@
 ---
 id: 270
+uid: 3ca9d12e-873c-4a53-b898-5e0cedac8aa1
 title: 'bury: reduce under an undecided branch'
 type: feature
 status: buried

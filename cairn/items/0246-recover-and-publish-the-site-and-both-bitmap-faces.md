@@ -1,5 +1,6 @@
 ---
 id: 246
+uid: 33ea830d-f17b-405e-a885-28695fa6a201
 title: Recover and publish the site and both bitmap faces
 type: chore
 status: buried

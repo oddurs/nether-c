@@ -1,5 +1,6 @@
 ---
 id: 25
+uid: ec10facc-8fee-496f-b389-c45e56b03f4f
 title: 'Spec: rationale, and what each inversion costs'
 type: docs
 status: buried

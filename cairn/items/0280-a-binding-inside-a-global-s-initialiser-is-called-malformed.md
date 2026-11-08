@@ -1,5 +1,6 @@
 ---
 id: 280
+uid: 20592382-a56f-4cdb-940c-c0063a21f47e
 title: A binding inside a global's initialiser is called malformed
 type: bug
 status: buried

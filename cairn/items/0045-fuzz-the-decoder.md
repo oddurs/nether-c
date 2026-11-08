@@ -1,5 +1,6 @@
 ---
 id: 45
+uid: 305fb215-bceb-45b4-877b-a85e5a751ee8
 title: Fuzz the decoder
 type: chore
 status: buried

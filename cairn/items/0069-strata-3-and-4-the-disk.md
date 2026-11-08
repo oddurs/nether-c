@@ -1,5 +1,6 @@
 ---
 id: 69
+uid: d32fe6a1-0515-4637-a728-638ec08b4043
 title: 'Strata 3 and 4: the disk'
 type: feature
 status: buried

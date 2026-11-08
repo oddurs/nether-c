@@ -1,5 +1,6 @@
 ---
 id: 75
+uid: eee0b978-2a15-4cad-9f8a-df0c1df9fa39
 title: The trace graph browser
 type: feature
 status: starved

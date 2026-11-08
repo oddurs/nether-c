@@ -1,5 +1,6 @@
 ---
 id: 51
+uid: f3b4de99-2331-4e5a-926d-552c00a1ab0f
 title: seal, shade and look
 type: feature
 status: buried

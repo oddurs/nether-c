@@ -1,5 +1,6 @@
 ---
 id: 181
+uid: 61228b1d-e183-4d7d-a114-f36e795d0a69
 title: A vertical scrollbar in the header of every page
 type: bug
 status: buried

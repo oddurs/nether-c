@@ -1,5 +1,6 @@
 ---
 id: 179
+uid: 20d96a76-7e61-4127-91de-997a7c9d691f
 title: The front page says the compiler does not exist
 type: bug
 status: buried

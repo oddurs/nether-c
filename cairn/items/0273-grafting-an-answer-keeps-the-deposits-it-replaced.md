@@ -1,5 +1,6 @@
 ---
 id: 273
+uid: 0f1d41c8-5ff9-4746-9b76-8a86d2e75b26
 title: Grafting an answer keeps the deposits it replaced
 type: bug
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 57
+uid: b1e4bbd3-8b98-454b-b89d-9bb0fa26544a
 title: Depth inference
 type: feature
 status: buried

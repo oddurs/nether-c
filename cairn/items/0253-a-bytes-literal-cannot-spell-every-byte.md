@@ -1,5 +1,6 @@
 ---
 id: 253
+uid: 066f139a-e736-475f-bc3b-e690331e4208
 title: A Bytes literal cannot spell every byte
 type: bug
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 135
+uid: 83c5ec29-3515-4750-aadc-f84533729233
 title: 'Spec: the rites print a path a span cannot hold'
 type: spec
 status: buried

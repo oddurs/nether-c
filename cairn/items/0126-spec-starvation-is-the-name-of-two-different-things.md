@@ -1,5 +1,6 @@
 ---
 id: 126
+uid: 33692b6d-c0c1-4600-ac21-f9766534b825
 title: 'Spec: starvation is the name of two different things'
 type: spec
 status: buried

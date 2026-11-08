@@ -1,5 +1,6 @@
 ---
 id: 118
+uid: dcc03db2-4f12-4012-b661-30e69bd3883c
 title: 'Spec: Json is bound in the prelude scope and never defined'
 type: spec
 status: buried

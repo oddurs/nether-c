@@ -1,5 +1,6 @@
 ---
 id: 77
+uid: 9ad043f3-11db-49ed-b5d4-7308c278150c
 title: The playground editor
 type: feature
 status: unmarked

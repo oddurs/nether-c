@@ -1,5 +1,6 @@
 ---
 id: 71
+uid: 49489064-1ee6-4a0b-acd4-22c32d3b96f0
 title: 'Stratum 7: entropy'
 type: feature
 status: buried
