@@ -431,9 +431,11 @@ impl<'a> Checker<'a> {
             Some(slot) => *slot = Some(depth),
             None => self.malformed(span, "this binding names no local"),
         }
+        if let Some(slot) = self.named.get_mut(id.0 as usize) {
+            *slot = None;
+        }
         if let Some(l) = self.func.map_or_else(|| self.unit.local(id), |f| f.local(id)) {
-            let (span, asserted) = (l.span, l.asserted);
-            self.asserted(span, depth, asserted, blame);
+            self.asserted(l.span, depth, l.asserted, blame);
         }
     }
 
@@ -526,15 +528,17 @@ impl<'a> Checker<'a> {
             ExprKind::Func(id) => {
                 match self.unit.func(*id) {
                     Some(f) => {
+                        let params = f
+                            .params
+                            .iter()
+                            .filter_map(|p| f.local(*p))
+                            .map(|l| l.ty.clone())
+                            .collect();
+                        let result = Box::new(f.ret.clone());
                         let want = Type::Fn {
-                            params: f
-                                .params
-                                .iter()
-                                .filter_map(|p| f.local(*p))
-                                .map(|l| l.ty.clone())
-                                .collect(),
+                            params,
                             latent: f.latent,
-                            result: Box::new(f.ret.clone()),
+                            result,
                             result_depth: f.ret_depth,
                         };
                         self.expect_ty(x, &want, "this is not the signature of that function");
@@ -611,12 +615,16 @@ impl<'a> Checker<'a> {
             // because it is named for everything *after* the block.
             ExprKind::Select { cond, then, otherwise } => {
                 let d_cond = self.expr(cond, ambient);
-                let before = self.named.clone();
+                let (named, locals) = (self.named.clone(), self.locals.clone());
                 let d_then = self.expr(then, ambient);
-                let from_then = core::mem::replace(&mut self.named, before);
+                let from_then = core::mem::replace(&mut self.named, named);
+                let locals_then = core::mem::replace(&mut self.locals, locals);
                 let d_else = self.expr(otherwise, ambient);
                 for (slot, was) in self.named.iter_mut().zip(&from_then) {
                     *slot = slot.or(*was);
+                }
+                for (s, w) in self.locals.iter_mut().zip(&locals_then) {
+                    *s = s.zip(*w).map(|(a, b)| a.join(b)).or(*s).or(*w);
                 }
                 d_cond.join(d_then).join(d_else)
             }

@@ -67,3 +67,39 @@ fn a_declaration_survives_being_printed_and_lowered_again() {
 fn an_array_is_built_by_index() {
     checks("U0 g() @0 { I64[3] xs; xs[0] = 1; xs[1] = 2; seal xs; }\n");
 }
+
+/// Writing a deep value into a field or across a branch or loop deepens the
+/// local, and lowering and checking agree on the resulting depth. 0226.
+#[test]
+fn assigning_a_deep_value_deepens_the_local_across_blocks_branches_and_loops() {
+    checks(
+        "struct Stamp { I64 when; };\n\
+         I64@2 stamp() @0 {\n\
+           Stamp s;\n\
+           descend env { s.when = clock(); };\n\
+           return s.when;\n\
+         }\n",
+    );
+    checks(
+        "struct Stamp { I64 when; };\n\
+         I64@2 branched(Bool c) @0 {\n\
+           Stamp s;\n\
+           if (c) {\n\
+             descend env { s.when = clock(); };\n\
+           } else {\n\
+             s.when = 0;\n\
+             I64@0 pure_arm = s.when;\n\
+           }\n\
+           return s.when;\n\
+         }\n",
+    );
+    checks(
+        "I64@2 looped(I64 n) @0 {\n\
+           I64 total = 0;\n\
+           for (I64 i = 0; i < n; i += 1) {\n\
+             total += descend env { clock() };\n\
+           }\n\
+           return total;\n\
+         }\n",
+    );
+}

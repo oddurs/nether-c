@@ -437,13 +437,12 @@ A stated trust model and tested defenses across current entrypoints, not just th
 
 ## assay — The Assay
 
-`#######···` 67% · 4 of 6 done · due 2028-10-01
+`#########·` 83% · 5 of 6 done · due 2028-10-01
 
 Mechanized claims about a stated calculus, plus measured correspondence with Rust. Tooling and assumptions remain outside the trusted language core.
 
 ### unmarked
 
-- [ ] [`0226`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0226-the-implementation-agrees-with-the-model.md) The implementation agrees with the model <sup>chore · p1 · 0</sup>
 - [ ] [`0227`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0227-say-what-the-proofs-are-worth.md) Say what the proofs are worth <sup>docs · p2 · 0</sup>
 
 ### buried
@@ -452,6 +451,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0223`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0223-mechanize-the-orpheus-rule.md) Mechanize the Orpheus rule <sup>chore · p0 · 0</sup>
 - [x] [`0224`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0224-mechanize-the-staging-law.md) Mechanize the staging law <sup>chore · p0 · 0</sup>
 - [x] [`0225`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0225-the-canonical-encoding-is-injective.md) The canonical encoding is injective <sup>chore · p1 · 0</sup>
+- [x] [`0226`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0226-the-implementation-agrees-with-the-model.md) The implementation agrees with the model <sup>chore · p1 · 0</sup>
 
 ## Unscheduled
 

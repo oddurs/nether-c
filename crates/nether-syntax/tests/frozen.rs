@@ -163,6 +163,24 @@ fn a_loop_body_precedes_itself() {
     frozen("U0 g(Bool c) @0 { I64 n; n = 1; while (c) { seal n; n = 2; } }\n");
 }
 
+/// A local declared *inside* the loop body is a fresh binding on each turn, so
+/// naming it at the end of the turn does not freeze the next turn's binding.
+#[test]
+fn a_local_declared_inside_a_loop_is_fresh_each_turn() {
+    clean(
+        "struct Header { I64 magic; };\n\
+         Cairn g(I64 n) @0 {\n\
+           Cairn last = seal 0;\n\
+           for (I64 i = 0; i < n; i += 1) {\n\
+             Header h;\n\
+             h.magic = i;\n\
+             last = seal h;\n\
+           }\n\
+           return last;\n\
+         }\n",
+    );
+}
+
 /// The counter still advances. Its step assigns a local that arithmetic never
 /// named, which is what §5.4's naming-rather-than-reading rule is for.
 #[test]
