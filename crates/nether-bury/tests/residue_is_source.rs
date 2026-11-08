@@ -83,3 +83,71 @@ fn a_bytes_value_survives_whatever_bytes_are_in_it() {
     residue_survives("demand \"\u{e9}\u{96ea}\";\n");
     residue_survives("demand concat(b\"\\x00\\xff\", b\"\\x80\");\n");
 }
+
+#[test]
+fn rites_descents_loops_aggregates_and_precedence_survive_round_trip() {
+    for src in [
+        "demand opaque (1 + 2 * 3);\n",
+        "demand seal b\"stone\";\n",
+        "Shade<Bytes> s = descend disk { shade must(read(\"a.txt\")) };\ndemand descend disk { look s };\n",
+        "Bool b = must(descend env { env(\"FLAG\") }) == \"1\";\nI64 f(Bool c) @0 {\n  if (c && !false || false) {\n    return (1 + 2) * 3;\n  } else {\n    return 10 - (4 - 1);\n  }\n}\ndemand f(b);\n",
+        "struct Pair { I64 a; I64 b; };\nI64 sum_pair(I64 x) @0 {\n  Pair p;\n  p.a = x;\n  p.b = x + 1;\n  return p.a + p.b;\n}\nI64 n = len(must(descend disk { read(\"in.bin\") }));\ndemand sum_pair(n);\n",
+    ] {
+        residue_survives(src);
+    }
+}
+
+#[test]
+fn staged_burial_through_printed_residue_matches_direct_burial() {
+    // Program with two holes at different strata (stratum 1 `env` and stratum 3 `disk`),
+    // pure arithmetic, and a speculative branch.
+    let src = r#"Str@1 mode = must(descend env { env("MODE") });
+Bytes@3 body = must(descend disk { read("payload.bin") });
+I64 pick(Str m, Bytes b) @0 {
+  if (m == "fast") {
+    return len(b) + (2 * 3);
+  } else {
+    return len(b) + (10 - 1);
+  }
+}
+demand pick(mode, body);
+"#;
+
+    // Stage 0: initial burial leaves both `env("MODE")` and `read("payload.bin")`
+    let u0 = unit(src);
+    let r0 = bury(&u0, Cairn::of_encoded(src.as_bytes()), u64::MAX).expect("buries stage 0");
+    assert_eq!(r0.holes.len(), 2);
+
+    // Stage A (`env` answered) followed by Stage B (`disk` answered) via source print/parse/lower
+    let printed_r0 = print(&r0.as_unit(&u0));
+    let env_hole = "must(descend env {\n  env(\"MODE\")\n})";
+    let disk_hole = "must(descend disk {\n  read(\"payload.bin\")\n})";
+    assert!(printed_r0.contains(env_hole), "unexpected printed r0:\n{printed_r0}");
+    assert!(printed_r0.contains(disk_hole), "unexpected printed r0:\n{printed_r0}");
+
+    let src_after_a = printed_r0.replace(env_hole, "\"fast\"");
+    let u_a = unit(&src_after_a);
+    let r_a =
+        bury(&u_a, Cairn::of_encoded(src_after_a.as_bytes()), u64::MAX).expect("buries stage A");
+    assert_eq!(r_a.holes.len(), 1);
+
+    let src_after_ab_staged = print(&r_a.as_unit(&u_a)).replace(disk_hole, "b\"hello\"");
+    let u_ab_staged = unit(&src_after_ab_staged);
+    let r_ab_staged =
+        bury(&u_ab_staged, Cairn::of_encoded(src_after_ab_staged.as_bytes()), u64::MAX)
+            .expect("buries stage B");
+
+    // Direct single-stage burial with `A ∪ B` (`env` and `disk` both answered at once)
+    let src_direct = printed_r0.replace(env_hole, "\"fast\"").replace(disk_hole, "b\"hello\"");
+    let u_direct = unit(&src_direct);
+    let r_direct =
+        bury(&u_direct, Cairn::of_encoded(src_direct.as_bytes()), u64::MAX).expect("buries direct");
+
+    assert_eq!(r_ab_staged.holes.len(), 0);
+    assert_eq!(r_direct.holes.len(), 0);
+    assert_eq!(
+        print(&r_ab_staged.as_unit(&u_ab_staged)),
+        print(&r_direct.as_unit(&u_direct)),
+        "staged burial residue diverged from direct burial residue"
+    );
+}

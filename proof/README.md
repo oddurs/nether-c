@@ -30,6 +30,15 @@ This directory holds the machine-checked metatheory of NetherC.
   `d <= max_set(δ)` from `d ∈ δ` (`numeric_vs_membership_counterexample` on
   `d = 3, δ = {0, 5}`), and the two rejected alternatives from §90.2
   (`binding_taint_violates_ambient`, `scope_restain_shifts_obligation_to_caller`).
+- **`staging.py`** — Formalization of the staging law (`spec/06-evaluation.md`
+  §6.5 & §6.8), proving residual round-trip identity (`roundtrip_identity` over
+  12 constructors), capability-set union and idempotence (`hole_set_union_law`,
+  `staging_idempotence_set`), structural staged/direct equivalence (`staging_law`
+  over 17 evaluation/residualisation rules under a fixed answer environment and
+  sufficient fuel), the non-monotone dependent-hole counterexample
+  (`dependent_hole_non_monotone_counterexample` on `A = {0, 3}, B = {0, 5}`),
+  and the cumulative dependent-hole theorem (`cumulative_dependent_hole_law`
+  under `A ⊆ B`).
 - **`check.py`** — Entry point invoked by `scripts/task proofs` and
   `scripts/task test`. Scans all proof modules via `tokenize` to reject any
   admitted obligation (`sorry`, `admit`, `axiom`, `postulate`, `todo`, `fixme`),

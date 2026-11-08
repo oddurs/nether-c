@@ -23,6 +23,7 @@ from kernel import (
 )
 import calculus
 import orpheus
+import staging
 
 PROOF_DIR = Path(__file__).resolve().parent
 
@@ -169,11 +170,30 @@ def main(argv: Sequence[str] = ()) -> int:
     for name, thm in orpheus_thms:
         verify_closed_theorem(name, thm)
 
+    staging_thms = [
+        ("roundtrip_identity", staging.prove_roundtrip_identity()),
+        ("hole_set_union_law", staging.prove_hole_set_union_law()),
+        ("staging_idempotence_set", staging.prove_staging_idempotence_set()),
+        ("staging_law", staging.prove_staging_law()),
+        (
+            "dependent_hole_non_monotone_counterexample",
+            staging.prove_dependent_hole_non_monotone_counterexample(),
+        ),
+        (
+            "cumulative_dependent_hole_law",
+            staging.prove_cumulative_dependent_hole_law(),
+        ),
+    ]
+    for name, thm in staging_thms:
+        verify_closed_theorem(name, thm)
+
     print(f"checked {scanned} proof modules (0 admitted obligations, kernel guards verified)")
     print(f"  [OK] ambient_soundness          ({len(calculus.HAS_TYPE.rules)} typing rules)   |- {t_amb.conclusion}")
     print(f"  [OK] substitution_monotonicity  ({len(calculus.SUBST_DEPTH.rules)} subst rules)    |- {t_sub.conclusion}")
     print(f"  [OK] soundness_of_bound         ({len(calculus.STEP_TYPED.rules)} step rules)     |- {t_mon.conclusion}")
     for name, thm in orpheus_thms:
+        print(f"  [OK] {name:42s} |- {thm.conclusion}")
+    for name, thm in staging_thms:
         print(f"  [OK] {name:42s} |- {thm.conclusion}")
     return 0
 
