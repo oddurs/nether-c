@@ -2,12 +2,14 @@
 id: 102
 title: 'Editor support: spans, depth and provenance'
 type: feature
-status: unmarked
+status: descending
 milestone: after
+assignee: Oddur Sigurdsson
+claimed: 2026-11-07
 depends_on:
 - 58
 created: 2026-09-11
-updated: 2026-09-15
+updated: 2026-11-07
 priority: p1
 effort: l
 area: tools/

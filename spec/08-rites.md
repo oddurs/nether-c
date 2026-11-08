@@ -325,6 +325,41 @@ program cannot invoke it, cannot reach a terminal, and has no way to know
 whether anyone is looking. This separation makes it structurally impossible
 for a Nether C program to leak to a log.
 
+### 8.4.1 Inspecting a byte offset in an editor
+
+```
+nether lamp <cairn> --at <byte> [--source <path>] [--depth <n>] [--json]
+```
+
+Inspects an already buried `Trace` node at a 0-based UTF-8 byte offset `<byte>`
+into its `source` ([§7.3](07-ledger.md#73-nodes)). An editor adapter calls this
+rite instead of reimplementing the depth checker or running a stateful language
+server.
+
+1. **Named source versus stale buffer.** A trace's spans are byte offsets into
+   the `Bytes` value named by `trace.source`. When `--source <path>` is given,
+   `lamp` hashes the bytes at `<path>` as a canonical `Bytes` value
+   ([§7.1](07-ledger.md#71-canonical-encoding)) and compares that cairn against
+   `trace.source`. If the two cairns differ, the editor buffer is **stale** with
+   respect to the trace, and `lamp` MUST refuse with exit code 1 naming both
+   short cairns rather than guessing shifted offsets.
+2. **Absent objects and bounds.** `lamp` reads the `Bytes` value at
+   `trace.source` from the store. If `trace.source` or any reachable trace node
+   covering `<byte>` is absent or corrupt, `lamp` MUST fail with exit code 1
+   reporting the store error. If `<byte>` is at or past the byte length of
+   `trace.source`, or falls outside every expression in the unit, `lamp` MUST
+   fail with exit code 1 rather than clamping the offset.
+3. **Depth, origin and provenance from the compiler and ledger.** `lamp` runs
+   the parser, lowerer and depth checker on `trace.source` and reports for
+   `<byte>`:
+   - the innermost expression whose byte span `start..end` contains `<byte>`,
+     its derived depth `0..8`, its type, and its byte span `start..end`;
+   - the innermost enclosing `descend κ` span (if any) and the deepest call
+     inside the expression (if any) responsible for its depth; and
+   - any recorded `Deposit`, `Hole` or `Witness` node under `<cairn>` whose
+     `span` covers `<byte>`, together with its cairn, summary and backward
+     provenance walk ([§7.4](07-ledger.md#74-provenance)) up to `--depth <n>`.
+
 ## 8.5 `cairn`
 
 ```
