@@ -125,6 +125,25 @@ a propagation, gives an error that names the exact fix, and keeps the myth
 intact. Orpheus could have kept her; what he could not do was look on the way
 up.
 
+`proof/orpheus.py` checks both halves of `[LOOK]`'s premise `d ∈ δ`:
+
+- **Sufficiency:** `d ∈ δ` implies both `max(d, d′) ≤ max(δ ∪ g(s))` when
+  `d′ ≤ max(δ ∪ g(s))` (preserving [§2.4](02-calculus.md#24-metatheory)'s
+  ambient soundness) and `{d} ⊆ δ ∪ g(s)` (preserving per-stratum capability
+  confinement).
+- **Necessity and the non-interval counterexample:** for a closed shade value
+  (`g(s) = {}`, `d′ = 0`), capability confinement `{d} ⊆ δ` is equivalent to
+  `d ∈ δ`, whereas the numeric ceiling `max(d, 0) ≤ max(δ)` of §2.4 alone is
+  equivalent to `d ≤ max(δ)`. When `δ` is not a downward-closed interval — for
+  example `d = 3` (`disk`) and `δ = {0, 5}` (`net`) — `3 ≤ max({0, 5})` holds
+  (`3 ≤ 5`) while `3` is not in `{0, 5}`. Requiring `d ∈ δ` rather than
+  `d ≤ max(δ)` is therefore stronger than §2.4's numeric ceiling alone and
+  exactly what §1.6's per-capability rule requires. Dropping the premise
+  altogether (*binding taint*) fails even §2.4 (`d = 3, d′ = 0, δ = {0}`), and
+  pushing `{d} ⊆ dƒ` onto the enclosing function (*scope re-stain*) combined
+  with `[APP]`'s `dƒ ⊆ δ_caller` still forces `d ∈ δ_caller` at every call
+  site.
+
 ### What a grant gates: a call, or a depth
 
 [§6.1](06-evaluation.md#61-burial) said burial could evaluate an expression
