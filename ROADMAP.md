@@ -87,7 +87,7 @@ Buried. Twelve specification sections, every design question settled and every r
 
 `##########` 100% · 10 of 10 done · due 2026-10-31
 
-Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphic drawn by site/gfx.py — a GIF89a encoder, an LZW compressor, a PNG encoder and a 5x7 bitmap font, none of them imported, because a link preview is not worth a dependency. The palette is the VGA sixteen complemented; fourteen land back inside it and the two that do not are named ROT and BILE. Published at https://oddurs.github.io/nether-c/ from site/ as committed. Every colour pair clears WCAG AA on both grounds, enforced by tests/contrast/run in CI.
+Buried. Raw HTML and one stylesheet, baked from spec/ by site/bake. Every graphic drawn by site/gfx.py — a GIF89a encoder, an LZW compressor, a PNG encoder and a 5x7 bitmap font, none of them imported, because a link preview is not worth a dependency. The palette is the VGA sixteen complemented; fourteen land back inside it and the two that do not are named ROT and BILE. Published at https://netherc.org/ from site/ as committed. Every colour pair clears WCAG AA on both grounds, enforced by tests/contrast/run in CI.
 
 ### buried
 
@@ -437,7 +437,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 
 ## assay — The Assay
 
-`#########·` 85% · 11 of 13 done · due 2028-10-01
+`#########·` 86% · 12 of 14 done · due 2028-10-01
 
 Mechanized claims about a stated calculus, plus measured correspondence with Rust. Tooling and assumptions remain outside the trusted language core.
 
@@ -459,6 +459,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0284`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0284-a-depth-a-loop-carries-is-found-however-many-turns-it-takes.md) A depth a loop carries is found however many turns it takes <sup>bug · p0 · 0</sup>
 - [x] [`0285`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0285-code-left-as-written-reads-what-the-burial-assigned.md) Code left as written reads what the burial assigned <sup>bug · p0 · 0</sup>
 - [x] [`0288`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0288-five-things-the-review-found-in-what-this-descent-built.md) Five things the review found in what this descent built <sup>chore · p1 · 8</sup>
+- [x] [`0289`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0289-publish-at-netherc-org.md) Publish at netherc.org <sup>docs · p2</sup>
 
 ## Unscheduled
 
