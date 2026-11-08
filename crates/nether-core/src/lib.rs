@@ -28,7 +28,7 @@ mod report;
 mod ty;
 mod unit;
 
-pub use check::{Blame, Fault, FaultKind, check};
+pub use check::{Blame, Fault, FaultKind, bound_to, check, children};
 pub use depth::{Capability, Depth, Held};
 pub use ir::{
     BinOp, Block, Expr, ExprKind, FuncId, GlobalId, Literal, LocalId, Place, Proj, Rite, Span,

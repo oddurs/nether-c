@@ -751,7 +751,8 @@ impl<'a> Checker<'a> {
 }
 
 /// What bound this local, if anything in this block did.
-fn bound_to(block: &Block, id: LocalId) -> Option<&Expr> {
+#[must_use]
+pub fn bound_to(block: &Block, id: LocalId) -> Option<&Expr> {
     for s in &block.stmts {
         match s {
             Stmt::Let { local, value } if *local == id => return Some(value),
@@ -774,7 +775,8 @@ fn bound_to(block: &Block, id: LocalId) -> Option<&Expr> {
 }
 
 /// The subexpressions of an expression, in evaluation order.
-fn children(x: &Expr) -> Vec<&Expr> {
+#[must_use]
+pub fn children(x: &Expr) -> Vec<&Expr> {
     match &x.kind {
         ExprKind::Literal(_)
         | ExprKind::Local(_)
