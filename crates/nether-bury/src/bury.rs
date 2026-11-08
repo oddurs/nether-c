@@ -1094,35 +1094,65 @@ impl Burial<'_> {
         env: &mut Env,
     ) -> Result<Val, Halt> {
         let c = self.expr(cond, env)?;
-        Ok(match c.bool() {
-            Some(true) => self.expr(then, env)?,
-            Some(false) => self.expr(otherwise, env)?,
-            None => {
-                let cond = Box::new(Self::residual(c, cond));
-                // An arm that writes a local the branch outlives cannot be
-                // folded to its value: the write is the part that matters, and
-                // which arm makes it is what the world has not said. So both
-                // stay as written, and the local is not known after the branch.
-                let arms = if Self::writes(&[then, otherwise]).is_empty() {
-                    [self.speculate(then, env)?, self.speculate(otherwise, env)?]
-                } else {
-                    [then.clone(), otherwise.clone()]
-                };
-                // An arm left as written reads its locals in the residue, so
-                // they have to hold there what they hold here.
-                let unreduced: Vec<&Expr> = arms
-                    .iter()
-                    .zip([then, otherwise])
-                    .filter(|(arm, src)| arm == src)
-                    .map(|(arm, _)| arm)
-                    .collect();
-                let depth = arms.iter().fold(cond.depth, |d, arm| d.join(arm.depth));
-                let settled = Self::leave(&unreduced, depth, env);
-                self.settling.extend(settled);
-                let [then, otherwise] = arms.map(Box::new);
-                Self::rebuild(ExprKind::Select { cond, then, otherwise }, x, depth)
-            }
-        })
+        let Some(taken) = c.bool() else {
+            let cond = Box::new(Self::residual(c, cond));
+            // An arm that writes a local the branch outlives cannot be
+            // folded to its value: the write is the part that matters, and
+            // which arm makes it is what the world has not said. So both
+            // stay as written, and the local is not known after the branch.
+            let arms = if Self::writes(&[then, otherwise]).is_empty() {
+                [self.speculate(then, env)?, self.speculate(otherwise, env)?]
+            } else {
+                [then.clone(), otherwise.clone()]
+            };
+            // An arm left as written reads its locals in the residue, so
+            // they have to hold there what they hold here.
+            let unreduced: Vec<&Expr> = arms
+                .iter()
+                .zip([then, otherwise])
+                .filter(|(arm, src)| arm == src)
+                .map(|(arm, _)| arm)
+                .collect();
+            let depth = arms.iter().fold(cond.depth, |d, arm| d.join(arm.depth));
+            let settled = Self::leave(&unreduced, depth, env);
+            self.settling.extend(settled);
+            let [then, otherwise] = arms.map(Box::new);
+            return Ok(Self::rebuild(ExprKind::Select { cond, then, otherwise }, x, depth));
+        };
+        let (arm, other) = if taken { (then, otherwise) } else { (otherwise, then) };
+        if !Self::lowers(arm, other) {
+            return self.expr(arm, env);
+        }
+        // §6.5, a residue keeps its depths: taking the shallower arm
+        // would leave a residue shallower than the branch, and a
+        // `look` that held the branch's depth may not hold the arm's.
+        // A value is exempt, so the arm runs. If it does not finish,
+        // the branch stays as written: what the arm deposited is the
+        // branch's to deposit again, and the questions it asked, the
+        // residue asks too.
+        let marks = (self.deposits.len(), self.specialised.len(), self.settling.len());
+        let (outer, mut ran) = (self.starved.take(), env.clone());
+        let v = self.expr(arm, &mut ran)?;
+        if !v.is_stuck() {
+            self.starved = outer;
+            *env = ran;
+            return Ok(v);
+        }
+        self.starved = outer;
+        self.flow = None;
+        self.deposits.truncate(marks.0);
+        self.specialised.truncate(marks.1);
+        self.minted.retain(|_, id| (id.0 as usize) < self.unit.funcs.len() + marks.1);
+        self.settling.truncate(marks.2);
+        let whole = Expr {
+            kind: ExprKind::Select {
+                cond: Box::new(Self::residual(c, cond)),
+                then: Box::new(then.clone()),
+                otherwise: Box::new(otherwise.clone()),
+            },
+            ..x.clone()
+        };
+        Ok(self.unreduced(&whole, env))
     }
 
     /// One arm of an undecided branch, reduced as far as speculation allows.
@@ -1343,6 +1373,7 @@ impl Burial<'_> {
         // Whatever block the caller was in is not this one. It goes back
         // afterwards: the caller's own statement is still being evaluated.
         let outer = self.starved.take();
+        let (deposited, minted) = (self.deposits.len(), self.specialised.len());
         let fell = self.block(&f.body, &mut frame)?;
         self.grind.pop();
         let out = match self.flow.take() {
@@ -1363,6 +1394,16 @@ impl Burial<'_> {
         // could be built for, so the residue would be the body as written and
         // the call is the shorter way to say that.
         let Some(body) = body else { return Ok(None) };
+        // §6.5, a residue keeps its depths: a body that returns less deeply
+        // than its function would leave a residue shallower than the call. The
+        // call stays as written, so what the body deposited is the call's to
+        // deposit again; the questions it asked, the residue asks too.
+        if Self::ret_depth(&body) < f.ret_depth {
+            self.deposits.truncate(deposited);
+            self.specialised.truncate(minted);
+            self.minted.retain(|_, id| (id.0 as usize) < self.unit.funcs.len() + minted);
+            return Ok(None);
+        }
         Ok(self.specialise(id, args, exprs, site, body))
     }
 
@@ -1490,6 +1531,39 @@ impl Burial<'_> {
         }
         kept.reverse();
         body.stmts = kept;
+    }
+
+    /// Whether dropping `other` for `arm` lowers a depth: `other` is deeper, or
+    /// writes a local the branch outlives more deeply than `arm` does. §6.5.
+    fn lowers(arm: &Expr, other: &Expr) -> bool {
+        // The deepest write to each local, by its id, less the locals the arm
+        // binds itself, which the branch does not outlive.
+        let deepest = |x: &Expr| {
+            let (mut todo, mut most, mut bound) = (vec![x], Vec::new(), BTreeSet::new());
+            while let Some(x) = todo.pop() {
+                if let ExprKind::Assign { place, value } = &x.kind {
+                    let id = place.local.0 as usize;
+                    if most.len() <= id {
+                        most.resize(id + 1, Depth::PURE);
+                    }
+                    most[id] = most[id].join(value.depth);
+                }
+                Self::binds(x, &mut bound);
+                todo.extend(children(x));
+            }
+            for id in bound {
+                if let Some(d) = most.get_mut(id as usize) {
+                    *d = Depth::PURE;
+                }
+            }
+            most
+        };
+        let (taken, dropped) = (deepest(arm), deepest(other));
+        other.depth > arm.depth
+            || dropped
+                .iter()
+                .enumerate()
+                .any(|(id, &d)| d > taken.get(id).copied().unwrap_or(Depth::PURE))
     }
 
     /// Every local `code` assigns and does not bind itself.

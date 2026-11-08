@@ -395,6 +395,21 @@ fn run(seed: u64, rounds: usize) -> usize {
     deep
 }
 
+/// The soak's first counterexample: a branch under `shade` whose condition is
+/// decided, with a shallower arm taken, left a residue `look` refused. §6.5, a
+/// residue keeps its depths. 0290.
+#[test]
+fn the_round_that_lowered_a_shade_s_origin_holds() {
+    let seed = 0x78dd_e6e5_f03f_f054;
+    let mut make = Gen { rng: Rng(seed) };
+    for _ in 0..10_265 {
+        make.unit();
+    }
+    let unit = make.unit();
+    let mut rng = Rng(seed ^ 10_265u64.wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    assert_eq!(hold(&unit, &mut rng), None);
+}
+
 /// Runs on every commit. Enough to catch a regression the same day it lands.
 #[test]
 fn a_depth_is_a_bound_evaluation_never_exceeds() {
