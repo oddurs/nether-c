@@ -756,6 +756,55 @@ fn select_arms_join_local_depths_without_bleeding_across_branches() {
     clean(&unit);
 }
 
+/// `f()` declares `l0..=lN`, loops over `l0 = l1; …; lN-1 = lN; lN = clock;`
+/// under `descend env`, and returns `l0`, which the tail says is `said` deep.
+///
+/// Each link takes the depth one more turn to reach `l0`, so a checker that
+/// stops walking the body early calls `l0` pure. 0284.
+fn loop_chain(links: u32, said: Depth) -> FuncDef {
+    let assign = |to: u32, value: Expr| {
+        e(
+            ExprKind::Assign {
+                place: Place { local: LocalId(to), path: Vec::new() },
+                value: Box::new(value),
+            },
+            Type::Unit,
+            Depth::ENV,
+        )
+    };
+    let clock = call(prim(Prim::Clock, Vec::new(), Type::Int), Vec::new(), Type::Int, Depth::ENV);
+    let mut stmts: Vec<Stmt> =
+        (0..links).map(|i| Stmt::Expr(assign(i, local(i + 1, Type::Int, Depth::ENV)))).collect();
+    stmts.push(Stmt::Expr(descend(Capability::Env, assign(links, clock))));
+    // A block is as deep as its tail, and this one has none: the depth the
+    // body reaches leaves it only through `l0`.
+    let body =
+        pure(ExprKind::Block(Block { stmts, tail: None, span: Span::default() }), Type::Unit);
+    let looping = pure(ExprKind::Loop { body: Box::new(body), step: None }, Type::Unit);
+    let mut decls: Vec<Stmt> = (0..=links).map(|i| Stmt::Declare { local: LocalId(i) }).collect();
+    decls.push(Stmt::Expr(looping));
+    let locals = (0..=links).map(|i| binding(&format!("l{i}"), Type::Int)).collect();
+    let mut unit = in_a_function(locals, decls, Some(local(0, Type::Int, said)), Depth::PURE);
+    let mut f = unit.funcs.remove(0);
+    f.name = "chain".into();
+    f
+}
+
+#[test]
+fn a_depth_a_loop_carries_reaches_every_link_of_a_chain() {
+    // 0284. Two walks of the body carried a depth one link: `l0 = l1; l1 =
+    // clock;` was refused when it said `l0` was pure, and `l0 = l1; l1 = l2;
+    // l2 = clock;` was not.
+    for links in 1..=6 {
+        let deep = Unit { funcs: vec![loop_chain(links, Depth::ENV)], ..Unit::default() };
+        assert_eq!(kinds(&deep), model_check(&deep), "{links} link(s), said env");
+        clean(&deep);
+        let pure = Unit { funcs: vec![loop_chain(links, Depth::PURE)], ..Unit::default() };
+        assert_eq!(kinds(&pure), model_check(&pure), "{links} link(s), said pure");
+        assert!(!check(&pure).is_empty(), "{links} link(s): l0 is env-deep and was called pure");
+    }
+}
+
 /// Clean-room reference model of the 11 rules in `spec/02-calculus.md` §2.2
 /// (`proof/calculus.py`), plus §5.4 single-assignment naming and §5.6 depth
 /// assertions. Written without sharing any code with `nether_core::check`.
@@ -1053,19 +1102,24 @@ impl<'a> Model<'a> {
                 }
                 d_c.join(d_t).join(d_e)
             }
-            ExprKind::Loop { body, step } => {
+            // A turn starts in the state the last one ended in, so walk until
+            // a turn ends where it started. Every rule only joins, so this
+            // stops. The whole state is compared, on purpose: the model is the
+            // obvious version, and the checker's cheaper comparison is what it
+            // is checked against.
+            ExprKind::Loop { body, step } => loop {
                 let mark = self.faults.len();
-                self.eval_expr(body, delta);
-                if let Some(s) = step {
-                    self.eval_expr(s, delta);
-                }
-                self.faults.truncate(mark);
+                let was = (self.gamma_local.clone(), self.named.clone());
                 let d_b = self.eval_expr(body, delta);
-                match step {
+                let d = match step {
                     Some(s) => d_b.join(self.eval_expr(s, delta)),
                     None => d_b,
+                };
+                if (&self.gamma_local, &self.named) == (&was.0, &was.1) {
+                    break d;
                 }
-            }
+                self.faults.truncate(mark);
+            },
             ExprKind::Return(v) => {
                 let d = match v {
                     Some(inner) => {
@@ -1640,7 +1694,7 @@ fn gen_unit(rng: &mut Rng) -> Unit {
     }
 
     // 55% of the time, inject one of the 8 FaultKind classes (or a combination).
-    let mode = rng.below(18);
+    let mode = rng.below(19);
     match mode {
         // 0..=7: keep valid!
         0..=7 => {}
@@ -1817,6 +1871,12 @@ fn gen_unit(rng: &mut Rng) -> Unit {
                     Type::Unit,
                 )));
             }
+        }
+        // 18: a depth a loop carries down a chain of assignments, said right or
+        // said pure (0284)
+        18 => {
+            let said = if rng.below(2) == 0 { Depth::ENV } else { Depth::PURE };
+            unit.funcs.push(loop_chain(1 + u32_of(rng.below(4)), said));
         }
         // 15..=17: FaultKind::Malformed (unbound local/global/func, bad prim/shade/look/call/assign)
         _ => {
