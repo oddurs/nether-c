@@ -179,4 +179,9 @@ fn conflicting_and_mismatched_worker_witnesses_are_rejected() {
     // Out-of-range slot index is rejected.
     let oob = Replay::merge(&store, &[], &holes, &[&[(9, w0_a.witness())]]);
     assert!(matches!(oob, Err(MergeError::OutOfRange(9, 2))));
+
+    // A base witness that is not a witness answers no slot, so the error names
+    // the object rather than slot 0, which it has nothing to do with.
+    let base = Replay::merge(&store, &[h1], &holes, &[]);
+    assert!(matches!(base, Err(MergeError::BaseWitness(w)) if w == h1), "{base:?}");
 }

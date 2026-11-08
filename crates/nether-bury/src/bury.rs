@@ -27,8 +27,8 @@
 //! 0116.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
-use std::sync::{Mutex, mpsc};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
+use std::sync::{Arc, Mutex, mpsc};
 
 use nether_core::{
     BinOp, Block, Capability, Demand, Depth, Diagnostic, Expr, ExprKind, FuncDef, FuncId, GlobalId,
@@ -442,6 +442,7 @@ impl<'a> Burial<'a> {
             speculating: false,
             settling: Vec::new(),
             ahead,
+            stop: None,
         }
     }
 
@@ -460,6 +461,7 @@ impl<'a> Burial<'a> {
         // The first demand is the serial order's at once, so a worker starts
         // at the second, and stops when this runs past the last.
         let next = AtomicUsize::new(1);
+        let stop = Arc::new(AtomicBool::new(false));
         std::thread::scope(|s| {
             for _ in 0..workers {
                 let work = || {
@@ -467,7 +469,7 @@ impl<'a> Burial<'a> {
                         let i = next.fetch_add(1, Relaxed);
                         let Some(m) = handoff.0.get(i) else { break };
                         if let Some(tx) = m.lock().ok().and_then(|mut t| t.take()) {
-                            let _ = tx.send(seed.early(i));
+                            let _ = tx.send(seed.early(i, &stop));
                         }
                     }
                 };
@@ -477,6 +479,7 @@ impl<'a> Burial<'a> {
             }
             let out = self.demands(Some(&handoff));
             next.store(usize::MAX / 2, Relaxed);
+            stop.store(true, Relaxed);
             out
         })
     }
@@ -484,8 +487,9 @@ impl<'a> Burial<'a> {
     /// One demand buried from nothing, on its own. If it reached nothing
     /// another demand could have changed, it is what the serial order would
     /// get, so it may be done first and anywhere. §6.2.1.
-    fn early(&self, i: usize) -> Option<Residue> {
+    fn early(&self, i: usize, stop: &Arc<AtomicBool>) -> Option<Residue> {
         let mut b = Burial::new(self.unit, self.source, self.left, self.answers, true);
+        b.stop = Some(Arc::clone(stop));
         let d = self.unit.demands.get(i)?;
         let v = b.expr(&d.value, &mut Env::new(self.unit.locals.len())).ok()?;
         b.ahead.then(|| b.finish(vec![Self::residual(v, &d.value)]))
@@ -661,6 +665,10 @@ struct Burial<'a> {
     /// Whether this is a demand sent ahead of the serial order that has not
     /// yet reached anything another demand could change. §6.2.1.
     ahead: bool,
+    /// Raised when the serial order is done with a worker's demand, whatever
+    /// became of it. A worker stops at its next step rather than spending the
+    /// rest of its fuel on a demand nobody will take. Only workers have one.
+    stop: Option<Arc<AtomicBool>>,
     /// The block the body just starved in, on the way out of [`Burial::block`].
     ///
     /// A side channel because a block's residue is not its value: the value is
@@ -845,7 +853,9 @@ impl Burial<'_> {
     }
 
     fn burn(&mut self, span: Span) -> Result<(), Halt> {
-        if self.left == 0 {
+        // A stopped worker's halt never reaches anybody: `early` turns it into
+        // no early result, and the serial order has already moved on.
+        if self.left == 0 || self.stop.as_deref().is_some_and(|s| s.load(Relaxed)) {
             let kind = HaltKind::OutOfFuel { spent: self.spent };
             return Err(Halt { span, kind, grinding: None });
         }

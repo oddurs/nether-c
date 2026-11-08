@@ -154,3 +154,26 @@ fn a_symbol_in_nothing_loaded_is_denied() {
     let b = Asked::loading("empty", &[]);
     assert_eq!(b.call("said", b"x").expect("granted"), AnswerOf::Refused(Refusal::Denied));
 }
+
+/// Calls into one object take turns, whichever threads make them. The type
+/// says so now: `Object` is `Sync` because of the lock in it, not because
+/// callers agree not to share it.
+#[test]
+fn calls_into_one_object_take_turns_across_threads() {
+    let Some(path) = object("turns") else { return };
+    let loaded = nether_foreign::Object::open(std::path::Path::new(&path)).expect("loads");
+    let overlapped = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|s| {
+        for _ in 0..8 {
+            s.spawn(|| {
+                for _ in 0..25 {
+                    let (code, _) = loaded.call("alone", b"").expect("has alone");
+                    if code != 0 {
+                        overlapped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+            });
+        }
+    });
+    assert_eq!(overlapped.into_inner(), 0, "two calls were inside the object at once");
+}

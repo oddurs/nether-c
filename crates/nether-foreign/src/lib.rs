@@ -16,6 +16,7 @@
 
 use std::ffi::{CString, c_char, c_int, c_void};
 use std::path::Path;
+use std::sync::{Mutex, PoisonError};
 
 // `dlopen`, `dlsym`, `dlclose`, `dlerror`. Three declarations and an error
 // string, which is less than a binding crate and all of what is needed.
@@ -35,11 +36,23 @@ const NOW_AND_LOCAL: c_int = 0x2;
 type Foreign = unsafe extern "C" fn(*const u8, usize, *mut u8, usize, *mut usize) -> i32;
 
 /// One shared object, kept open for as long as symbols may be called in it.
+///
+/// Calls into it take turns. §9.8.1 promises a callee nothing about threads,
+/// so two at once would be a race in code nobody here can see.
 pub struct Object {
-    handle: *mut c_void,
+    handle: Mutex<Handle>,
     /// What it was loaded from, for saying which object answered.
     pub path: String,
 }
+
+/// What `dlopen` returned.
+struct Handle(*mut c_void);
+
+// SAFETY: a `dlopen` handle names the object for the whole process, and
+// `dlsym` and `dlclose` may be called on it from any thread. Calling into the
+// object from two threads at once is what is not safe, and the `Mutex` in
+// `Object` is held for every use of the handle, so that cannot happen.
+unsafe impl Send for Handle {}
 
 /// What went wrong, in the words `dlerror` used.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,21 +94,26 @@ impl Object {
         // call. Everything after this point is the loader's to get right, and
         // §1.7 is the specification admitting that.
         let handle = unsafe { dlopen(name.as_ptr(), NOW_AND_LOCAL) };
-        if handle.is_null() { Err(Failed(last_error())) } else { Ok(Self { handle, path: shown }) }
+        if handle.is_null() {
+            Err(Failed(last_error()))
+        } else {
+            Ok(Self { handle: Mutex::new(Handle(handle)), path: shown })
+        }
     }
 
     /// Whether this object has that symbol.
     #[must_use]
     pub fn has(&self, symbol: &str) -> bool {
-        self.find(symbol).is_some()
+        let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
+        Self::find(&handle, symbol).is_some()
     }
 
     /// The symbol, if this object has it.
-    fn find(&self, symbol: &str) -> Option<Foreign> {
+    fn find(handle: &Handle, symbol: &str) -> Option<Foreign> {
         let name = CString::new(symbol).ok()?;
-        // SAFETY: `self.handle` came from `dlopen` and has not been closed;
-        // `name` is NUL-terminated and outlives the call.
-        let found = unsafe { dlsym(self.handle, name.as_ptr()) };
+        // SAFETY: `handle` came from `dlopen` and has not been closed; `name`
+        // is NUL-terminated and outlives the call.
+        let found = unsafe { dlsym(handle.0, name.as_ptr()) };
         if found.is_null() {
             return None;
         }
@@ -119,7 +137,9 @@ impl Object {
     /// [`Failed`] if this object does not have that symbol, or if it asked
     /// twice for more room.
     pub fn call(&self, symbol: &str, args: &[u8]) -> Result<(i32, Vec<u8>), Failed> {
-        let Some(function) = self.find(symbol) else {
+        // Held to the end of the call, both tries: that is the turn.
+        let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(function) = Self::find(&handle, symbol) else {
             return Err(Failed(format!("{} has no `{symbol}`", self.path)));
         };
         // Enough for most answers without asking, and small enough that being
@@ -153,11 +173,8 @@ impl Object {
 
 impl Drop for Object {
     fn drop(&mut self) {
-        // SAFETY: `self.handle` came from `dlopen` and is closed once, here.
-        unsafe { dlclose(self.handle) };
+        let handle = self.handle.get_mut().unwrap_or_else(PoisonError::into_inner);
+        // SAFETY: `handle` came from `dlopen` and is closed once, here.
+        unsafe { dlclose(handle.0) };
     }
 }
-
-// SAFETY: `Object` only reads `self.handle` after `open`, and stratum 8 calls
-// are never dispatched concurrently.
-unsafe impl Sync for Object {}
