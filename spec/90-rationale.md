@@ -1841,7 +1841,7 @@ combinator and induction scripts rather than interactive tactic blocks, which is
 noisier for large algebraic proofs and entirely manageable for an eleven-rule
 calculus and an eleven-tag wire format.
 
-## 90.3 What is proved, what is tested, and what is believed
+## 90.7 What is proved, what is tested, and what is believed
 
 A project that mechanizes part of its metatheory and tests the rest owes a
 reader a boundary between the two. Differential testing (`0226`) and generative
@@ -1859,7 +1859,8 @@ and no claim is counted in more than one tier.
 Reproduced by `scripts/task proofs` (and on every `scripts/task test` via
 `python3 proof/check.py`, which also token-scans `proof/*.py` to forbid
 `sorry`, `admit`, `admitted`, `axiom`, `unproved`, `postulate`, `todo`, and
-`fixme`). Each theorem below is a sealed `proof.kernel.Theorem` derived over the
+`fixme`, and to forbid any file but `proof/kernel.py` to name the kernel's
+seal). Each theorem below is a sealed `proof.kernel.Theorem` derived over the
 explicit inductive relations and finite-domain decision procedure in `proof/`:
 
 1. **Ambient soundness of the eleven typing rules**
@@ -1897,10 +1898,14 @@ explicit inductive relations and finite-domain decision procedure in `proof/`:
    `roundtrip_identity`, `hole_set_union_law`, `staging_idempotence_set`,
    `staging_law`, `dependent_hole_non_monotone_counterexample`, and
    `cumulative_dependent_hole_law` in `proof/staging.py`): in the core calculus
-   model, `parse(print(r)) = r` over all 11 residual constructors,
-   stage composition for independent holes satisfies
-   `bury(bury(e, A), B) = bury(e, A ∪ B)` (with `A = B` giving idempotence), and
-   dependent holes whose inner capability is gated by an outer answer require
+   model, `parse(print(r)) = r` over all 11 residual constructors. The
+   staging law is weaker than its name: `StagedEval` defines the two-stage
+   reduction `bury(bury(e, A), B)` and the one-stage reduction `bury(e, A ∪ B)`
+   rule by rule, side by side, and `staging_law` proves that every derivation
+   gives both the same result. That the 17 rules of `StagedEval` describe what
+   `nether-bury` does is believed, not proved. `staging_idempotence_set` is
+   only the set identity `A ∪ A = A`, which turns the law into idempotence when
+   `A = B`. Dependent holes whose inner capability is gated by an outer answer require
    the cumulative hypothesis `A ⊆ B` (witnessed by the non-monotone counterexample
    `A = {0, 3}, B = {0, 5}`).
 6. **Prefix-free stream round-trip and injectivity of the canonical wire model**
@@ -1924,13 +1929,15 @@ the generated site (`site/`). None of them is proved by `proof/`; each is held
 by deterministic and generative test suites run by `scripts/task test` and
 `scripts/task fuzz`:
 
-1. **Correspondence between `nether_core::check` and the mechanized 11-rule model**
-   (`0226`, `crates/nether-core/tests/calculus.rs`): a clean-room transcription
-   of the 11 rules and `nether_core::check` agree on `50,000` seeded valid and
+1. **Correspondence between `nether_core::check` and a Rust transcription of the 11 rules**
+   (`0226`, `crates/nether-core/tests/calculus.rs`): `model_check`, a clean-room
+   transcription of the 11 rules, and `nether_core::check` agree on `50,000` seeded valid and
    invalid `Unit`s on every `cargo test`
    (`the_implementation_agrees_with_the_mechanized_model`) and on `10,000,000`
    seeded `Unit`s across all 8 `FaultKind` variants in `scripts/task fuzz`
-   (`ten_million_programs_agree_with_the_model`).
+   (`ten_million_programs_agree_with_the_model`). `model_check` is Rust written
+   from `proof/calculus.py` by hand. Nothing checks that the two agree, so this
+   tests two Rust programs against each other, not the code against the proof.
 2. **Implementation burial monotonicity and residue well-typedness** (`0052`,
    `crates/nether-bury/tests/monotone.rs`): generative testing over `10,000,000`
    seeded programs checking that `nether_bury::bury` never raises an expression's
@@ -1956,8 +1963,11 @@ by deterministic and generative test suites run by `scripts/task test` and
    ([§7.5](07-ledger.md#75-the-store) and [§8](08-rites.md), `0205`–`0208`,
    `0213`–`0215`, `0220`, `0101` in `crates/nether-ledger/` and
    `crates/nether-cli/tests/rites.rs`): atomic rename, corrupt-object refusal,
-   16-thread and 16-process contention, independent trace verification,
-   packfile export/import, and byte-identical cross-architecture stores.
+   16-thread and 16-process contention, `nether strata` checking the depth a
+   trace claims, export and import of a store, and two stores that each answer
+   half of a trace's holes and seal byte-identically to one store that answers
+   all of them. Every one of these runs on one machine. No test compares stores
+   built on two architectures.
 7. **Refusal of `nether run` and bounded evaluation fuel**
    ([§6.4](06-evaluation.md#64-starvation-and-fuel) and
    [§8.0](08-rites.md#80-there-is-no-run), `crates/nether-cli/tests/rites.rs`
@@ -1983,7 +1993,9 @@ These claims are relied on as assumptions or tracked as open items in
    `--remap-path-prefix` and `--locked`) is in the tree, and the two-host tag
    attestation remains open until a release tag is built and compared across two
    independent machines.
-4. **Remaining open roadmap items**: `0075` (incremental re-burial), `0078`
-   (structured concurrency for holes), `0081` (`call_foreign`), `0082` (witness
-   chains), `0103`–`0106` (real-program assays), `0108` (self-buried kernel),
-   `0210` (release checklist), and `0235` (first public release).
+4. **Remaining open roadmap items**, among them `0075` (the trace graph
+   browser), `0078` (a stranger explains a hole), `0081` and `0082` (the second
+   and third projections), `0103` (a pilot), `0104` (an introduction), `0105`
+   (a conformance suite), `0106` (a public store), `0108` (a 24-hour decoder
+   soak), `0210` (a year of a real store), and `0235` (the face for other
+   users). `cairn list` is the full list.

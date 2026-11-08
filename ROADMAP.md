@@ -437,7 +437,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 
 ## assay — The Assay
 
-`##########` 100% · 6 of 6 done · due 2028-10-01
+`##########` 100% · 7 of 7 done · due 2028-10-01
 
 Mechanized claims about a stated calculus, plus measured correspondence with Rust. Tooling and assumptions remain outside the trusted language core.
 
@@ -449,6 +449,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0225`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0225-the-canonical-encoding-is-injective.md) The canonical encoding is injective <sup>chore · p1 · 0</sup>
 - [x] [`0226`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0226-the-implementation-agrees-with-the-model.md) The implementation agrees with the model <sup>chore · p1 · 0</sup>
 - [x] [`0227`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0227-say-what-the-proofs-are-worth.md) Say what the proofs are worth <sup>docs · p2 · 0</sup>
+- [x] [`0282`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0282-say-what-the-proofs-say-and-number-it-once.md) Say what the proofs say, and number it once <sup>spec · p1 · 0</sup>
 
 ## Unscheduled
 

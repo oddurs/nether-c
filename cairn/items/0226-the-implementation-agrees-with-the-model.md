@@ -14,7 +14,7 @@ priority: p1
 effort: xl
 area: crates/nether-core
 stratum: '0'
-proof: A generated program is checked by both the Rust checker and the mechanized model, and they agree, ten million times
+proof: A generated program is checked by both the Rust checker and model_check, a Rust transcription of the mechanized model, and they agree, ten million times
 ---
 
 A proof about a model is worth what the model has to do with the code.
@@ -51,4 +51,5 @@ The model needs comparable outputs before differential checking means anything. 
 - Ten-million-program soak (`cargo test --release --package nether-core --test calculus ten_million_programs_agree_with_the_model -- --ignored --nocapture`, also wired into `scripts/task fuzz`, seeds `0x0226_0000_0000_0001..=0x0226_0000_0000_0008`, `1,250,000` programs per seed) completed in `18.88s` with zero disagreements:
   - Total: `10,000,000` programs (`4,379,907` valid, `5,620,093` invalid)
   - Fault distribution: `Ungranted = 557,330`, `Orpheus = 555,605`, `Stated = 556,228`, `Asserted = 554,480`, `StatedLatent = 689,154`, `AssertedLatent = 600,051`, `Frozen = 555,106`, `Malformed = 1,814,010`.
+- Correction, 2026-11-07 (0282): `model_check` is a hand transcription of `proof/calculus.py` into Rust, not the mechanized model itself. Nothing checks the transcription against `proof/calculus.py`, so this compares two Rust programs. `spec/90-rationale.md` §90.7 says so.
 - Remaining scope limit: differential checking operates on `nether_core::Unit` terms and `FaultKind` sequences; surface lexing/parsing outside `nether_core` is covered by `crates/nether-syntax/tests/fuzz.rs` and `crates/nether-bury/tests/residue_is_source.rs`.
