@@ -103,3 +103,40 @@ fn assigning_a_deep_value_deepens_the_local_across_blocks_branches_and_loops() {
          }\n",
     );
 }
+
+/// A loop hands each turn the depths the last one left, so `x`'s depth reaches
+/// `y` on the second turn and `z` on the third. Lowering looked ahead one turn
+/// and called `z` pure, and the checker agreed with it. 0284.
+#[test]
+fn a_depth_a_loop_carries_reaches_every_link_of_a_chain() {
+    let chain = |name: &str| {
+        format!(
+            "U0 f(Bool c) @0 {{\n\
+               Bytes x = b\"\";\n\
+               Bytes y = b\"\";\n\
+               Bytes z = b\"\";\n\
+               while (c) {{ z = y; y = x; x = must(descend disk {{ read(\"f\") }}); }}\n\
+               Bytes@0 w = {name};\n\
+             }}\n"
+        )
+    };
+    for name in ["x", "y", "z"] {
+        let src = chain(name);
+        let faults = check(&ir(&src));
+        assert!(!faults.is_empty(), "{name} holds a disk read and was called pure:\n{src}");
+    }
+    checks(&chain("z").replace("Bytes@0 w", "Bytes@3 w"));
+}
+
+/// A loop that deepens nothing is lowered once. Lowering each body twice cost
+/// twice as much per level of nesting, and forty levels never finished. 0284.
+#[test]
+fn forty_nested_loops_lower_once_each() {
+    let depth = 40;
+    let src = format!(
+        "U0 f(Bool c) @0 {{\n  I64 x = 0;\n  {}x += 1;{}\n}}\n",
+        "while (c) { ".repeat(depth),
+        " }".repeat(depth)
+    );
+    checks(&src);
+}

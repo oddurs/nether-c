@@ -580,18 +580,32 @@ impl Lowering<'_> {
         body: &ast::Block,
         span: Span,
     ) -> ir::Expr {
+        // A turn starts where the last one ended, so the loop is lowered until
+        // a turn leaves every outer local as deep as it found it. Assignment
+        // only joins, so this stops, and a loop that deepens nothing is
+        // lowered once. Locals at `mark` and above are the body's own: they are
+        // declared again on the next try.
         let mark = (self.locals.len(), self.faults.len());
-        if let Some(c) = cond {
-            self.expr(c);
+        loop {
+            let was = self.depths[..mark.0].to_vec();
+            let turn = self.turn(cond, step, body, span);
+            if self.depths[..mark.0] == was[..] {
+                return turn;
+            }
+            self.locals.truncate(mark.0);
+            self.depths.truncate(mark.0);
+            self.faults.truncate(mark.1);
         }
-        self.block(body);
-        if let Some(s) = step {
-            self.expr(s);
-        }
-        self.locals.truncate(mark.0);
-        self.depths.truncate(mark.0);
-        self.faults.truncate(mark.1);
+    }
 
+    /// One turn of a loop, lowered from the depths its locals have now.
+    fn turn(
+        &mut self,
+        cond: Option<&ast::Expr>,
+        step: Option<&ast::Expr>,
+        body: &ast::Block,
+        span: Span,
+    ) -> ir::Expr {
         let guard = cond.map(|c| {
             let c = self.expr(c);
             let depth = c.depth;

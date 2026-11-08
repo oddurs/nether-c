@@ -301,6 +301,21 @@ struct Checker<'a> {
 }
 
 impl<'a> Checker<'a> {
+    /// What one turn of a loop hands the next. A local bound inside the body
+    /// is bound again before the next turn reads it, so its state is left out.
+    /// Comparing it would cost every loop a second walk, and a loop nested in
+    /// it twice that.
+    fn carried(&self, inner: &[LocalId]) -> (Vec<Option<Depth>>, Vec<Option<Span>>) {
+        let (mut locals, mut named) = (self.locals.clone(), self.named.clone());
+        for id in inner {
+            let i = id.0 as usize;
+            if let (Some(l), Some(n)) = (locals.get_mut(i), named.get_mut(i)) {
+                (*l, *n) = (None, None);
+            }
+        }
+        (locals, named)
+    }
+
     fn fault(&mut self, span: Span, kind: FaultKind) {
         self.faults.push(Fault { span, kind, blame: None });
     }
@@ -630,18 +645,23 @@ impl<'a> Checker<'a> {
             }
             // §5.4: a loop body runs again, so a naming anywhere in it precedes
             // an assignment anywhere in it — including one written above it.
-            // Walked once for what it names, with the complaints thrown away,
-            // and then walked for real.
+            // A turn starts where the last one ended, so the body is walked
+            // until a turn ends where it started, and only that walk's faults
+            // are kept. A write only joins and naming only adds, so the walks
+            // stop. Two walks were not enough: `z = y; y = x; x = deep;` takes
+            // a turn per link to carry `x`'s depth to `z`.
             ExprKind::Loop { body, step } => {
-                let mark = self.faults.len();
-                self.expr(body, ambient);
-                if let Some(s) = step.as_ref() {
-                    self.expr(s, ambient);
+                let inner = bound_inside(body);
+                loop {
+                    let mark = self.faults.len();
+                    let was = self.carried(&inner);
+                    let d = self.expr(body, ambient);
+                    let d = step.as_ref().map_or(d, |s| d.join(self.expr(s, ambient)));
+                    if self.carried(&inner) == was {
+                        break d;
+                    }
+                    self.faults.truncate(mark);
                 }
-                self.faults.truncate(mark);
-
-                let d = self.expr(body, ambient);
-                step.as_ref().map_or(d, |s| d.join(self.expr(s, ambient)))
             }
             ExprKind::Return(v) => {
                 let d = v.as_ref().map_or(Depth::PURE, |v| self.expr(v, ambient));
@@ -756,6 +776,21 @@ impl<'a> Checker<'a> {
             _ => self.malformed(x.span, "a prelude function is a function"),
         }
     }
+}
+
+/// Every local a `let` or a declaration binds anywhere inside `x`.
+fn bound_inside(x: &Expr) -> Vec<LocalId> {
+    let (mut out, mut todo) = (Vec::new(), vec![x]);
+    while let Some(x) = todo.pop() {
+        if let ExprKind::Block(b) = &x.kind {
+            out.extend(b.stmts.iter().filter_map(|s| match s {
+                Stmt::Let { local, .. } | Stmt::Declare { local } => Some(*local),
+                Stmt::Expr(_) => None,
+            }));
+        }
+        todo.extend(children(x));
+    }
+    out
 }
 
 /// What bound this local, if anything in this block did.
