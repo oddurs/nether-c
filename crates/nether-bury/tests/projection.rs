@@ -188,3 +188,78 @@ fn deposits(residue: &Residue) -> Vec<Value> {
         })
         .collect()
 }
+
+/// §6.5's staging law, for a program whose undecided branch or unreduced
+/// statements write a local the burial already knew: burying the residue with
+/// an answer deposits what burying the program with it does.
+fn stages_like_the_program(src: &str) {
+    let unit = lower(&parse(src.as_bytes()).expect("parses")).expect("lowers");
+    assert!(check(&unit).is_empty(), "{:?}", check(&unit));
+    let name = Cairn::of_encoded(src.as_bytes());
+    let pending = bury(&unit, name, 1_000_000).expect("buries");
+    let Node::Hole { call, .. } = pending.questions()[0] else { panic!("one read hole") };
+    let printed = print(&pending.as_unit(&unit));
+    let resumed_unit = lower(&parse(printed.as_bytes()).expect("parses")).expect("lowers");
+    assert!(check(&resumed_unit).is_empty(), "{:?}\n{printed}", check(&resumed_unit));
+    for said in [b"a".as_slice(), b"".as_slice()] {
+        let answers = Answers::none().and(
+            call.clone(),
+            Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(said.to_vec())))),
+        );
+        let resumed =
+            bury_with(&resumed_unit, Cairn::of_encoded(printed.as_bytes()), 1_000_000, &answers)
+                .expect("buries");
+        let direct = bury_with(&unit, name, 1_000_000, &answers).expect("buries");
+        assert_eq!(
+            deposits(&resumed),
+            deposits(&direct),
+            "answered {said:?}, the residue disagrees with the program:\n{printed}"
+        );
+    }
+}
+
+/// The arm of an undecided branch was folded to its value, which is
+/// `U0`, and the assignment in it went with it: `g` gave 5 where it gives 6. 0285.
+#[test]
+fn an_undecided_branch_keeps_the_assignment_in_its_arm() {
+    stages_like_the_program(
+        "I64 g() {\n  I64 x = 0;\n  Bytes@3 a = must(descend disk { read(\"f\") });\n  \
+         x = 5;\n  if (len(a) > 0) { x = x + 1; }\n  x\n}\n\
+         U0 show() { g(); }\ndemand show();\n",
+    );
+}
+
+/// A statement after the starved one that jumps is left as written,
+/// and the assignment reduced above it was not in the residue at all. 0285.
+#[test]
+fn a_statement_left_as_written_reads_what_was_assigned_above_it() {
+    stages_like_the_program(
+        "I64 g() {\n  I64 x = 0;\n  while (true) {\n    \
+         Bytes@3 a = must(descend disk { read(\"f\") });\n    x = 5;\n    \
+         if (len(a) > 0) { break; }\n    x = 7;\n    break;\n  }\n  x\n}\n\
+         U0 show() { g(); }\ndemand show();\n",
+    );
+}
+
+/// A local the branch only reads still has to hold, in the residue,
+/// what an assignment the burial reduced away put there. 0285.
+#[test]
+fn a_branch_reads_a_local_assigned_before_the_question() {
+    stages_like_the_program(
+        "I64 g() {\n  I64 x = 0;\n  I64 y = 1;\n  y = 3;\n  \
+         Bytes@3 a = must(descend disk { read(\"f\") });\n  \
+         if (len(a) > 0) { x = y; }\n  x\n}\n\
+         U0 show() { g(); }\ndemand show();\n",
+    );
+}
+
+/// An assignment inside a block that finished is in no block's residue. 0285.
+#[test]
+fn a_branch_reads_a_local_a_finished_block_assigned() {
+    stages_like_the_program(
+        "I64 g() {\n  I64 x = 0;\n  { x = 5; }\n  \
+         Bytes@3 a = must(descend disk { read(\"f\") });\n  \
+         if (len(a) > 0) { x = x + 1; }\n  x\n}\n\
+         U0 show() { g(); }\ndemand show();\n",
+    );
+}

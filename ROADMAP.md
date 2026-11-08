@@ -437,9 +437,14 @@ A stated trust model and tested defenses across current entrypoints, not just th
 
 ## assay — The Assay
 
-`##########` 100% · 9 of 9 done · due 2028-10-01
+`#########·` 83% · 10 of 12 done · due 2028-10-01
 
 Mechanized claims about a stated calculus, plus measured correspondence with Rust. Tooling and assumptions remain outside the trusted language core.
+
+### unmarked
+
+- [ ] [`0286`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0286-measure-naming-cost-without-a-wall-clock.md) Measure naming cost without a wall clock <sup>bug · p2 · 0</sup>
+- [ ] [`0287`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0287-a-residue-can-lower-a-shade-s-origin-out-of-what-look-holds.md) A residue can lower a shade's origin out of what look holds <sup>spec · p0 · 0</sup>
 
 ### buried
 
@@ -452,6 +457,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0282`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0282-say-what-the-proofs-say-and-number-it-once.md) Say what the proofs say, and number it once <sup>spec · p1 · 0</sup>
 - [x] [`0283`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0283-migrate-the-backlog-to-cairn-format-5.md) Migrate the backlog to cairn format 5 <sup>chore · p1 · 0</sup>
 - [x] [`0284`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0284-a-depth-a-loop-carries-is-found-however-many-turns-it-takes.md) A depth a loop carries is found however many turns it takes <sup>bug · p0 · 0</sup>
+- [x] [`0285`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0285-code-left-as-written-reads-what-the-burial-assigned.md) Code left as written reads what the burial assigned <sup>bug · p0 · 0</sup>
 
 ## Unscheduled
 

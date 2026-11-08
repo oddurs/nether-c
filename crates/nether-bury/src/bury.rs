@@ -26,13 +26,14 @@
 //! one down and a value that cannot be written down cannot be residualised.
 //! 0116.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 use std::sync::{Mutex, mpsc};
 
 use nether_core::{
     BinOp, Block, Capability, Demand, Depth, Diagnostic, Expr, ExprKind, FuncDef, FuncId, GlobalId,
-    Literal, Place, Prim, Refusal as RefusalCode, Rite, Span, Stmt, Type, UnOp, Unit, grouped,
+    Literal, LocalId, Place, Prim, Refusal as RefusalCode, Rite, Span, Stmt, Type, UnOp, Unit,
+    children, grouped,
 };
 use nether_ledger::{Cairn, Node, Stored, Value};
 
@@ -439,6 +440,7 @@ impl<'a> Burial<'a> {
             minted: HashMap::new(),
             starved: None,
             speculating: false,
+            settling: Vec::new(),
             ahead,
         }
     }
@@ -485,7 +487,7 @@ impl<'a> Burial<'a> {
     fn early(&self, i: usize) -> Option<Residue> {
         let mut b = Burial::new(self.unit, self.source, self.left, self.answers, true);
         let d = self.unit.demands.get(i)?;
-        let v = b.expr(&d.value, &mut vec![None; self.unit.locals.len()]).ok()?;
+        let v = b.expr(&d.value, &mut Env::new(self.unit.locals.len())).ok()?;
         b.ahead.then(|| b.finish(vec![Self::residual(v, &d.value)]))
     }
 
@@ -511,7 +513,7 @@ impl<'a> Burial<'a> {
                     self.deposits.extend(e.deposits);
                     demands.extend(e.demands);
                 }
-                _ => match self.expr(&d.value, &mut vec![None; self.unit.locals.len()]) {
+                _ => match self.expr(&d.value, &mut Env::new(self.unit.locals.len())) {
                     Ok(v) => demands.push(Self::residual(v, &d.value)),
                     Err(halt) => return Err(self.blame(halt)),
                 },
@@ -653,6 +655,9 @@ struct Burial<'a> {
     /// Whether this is an arm of a branch the world has not decided. §6.5:
     /// such a reduction may produce a value or stop, and nothing else.
     speculating: bool,
+    /// Assignments code left as written needs before it, waiting for the
+    /// block whose statement that code is in. See [`Burial::settle`].
+    settling: Vec<Stmt>,
     /// Whether this is a demand sent ahead of the serial order that has not
     /// yet reached anything another demand could change. §6.2.1.
     ahead: bool,
@@ -691,7 +696,41 @@ enum Open {
 }
 
 /// A frame: one slot per local of the function being evaluated.
-type Env = Vec<Option<Val>>;
+/// A frame's locals, and which of them a write the residue does not hold has
+/// changed since the residue last said what they are.
+///
+/// A statement that only assigns is not in the residue: its value is here and
+/// nowhere else. That is fine until code is left as written and reads the
+/// local in the residue, and then the residue has to be told. 0285.
+#[derive(Debug, Clone)]
+struct Env {
+    slots: Vec<Option<Val>>,
+    stale: Vec<bool>,
+}
+
+impl Env {
+    fn new(locals: usize) -> Self {
+        Env { slots: vec![None; locals], stale: vec![false; locals] }
+    }
+
+    fn get(&self, id: usize) -> Option<&Option<Val>> {
+        self.slots.get(id)
+    }
+
+    /// A binding the residue holds as it is here.
+    fn bind(&mut self, id: usize, v: Option<Val>) {
+        if let (Some(slot), Some(stale)) = (self.slots.get_mut(id), self.stale.get_mut(id)) {
+            (*slot, *stale) = (v, false);
+        }
+    }
+
+    /// A write the residue does not hold.
+    fn write(&mut self, id: usize, v: Val) {
+        if let (Some(slot), Some(stale)) = (self.slots.get_mut(id), self.stale.get_mut(id)) {
+            (*slot, *stale) = (Some(v), true);
+        }
+    }
+}
 
 impl Burial<'_> {
     /// Write a node down and hand back its name.
@@ -1050,9 +1089,27 @@ impl Burial<'_> {
             Some(false) => self.expr(otherwise, env)?,
             None => {
                 let cond = Box::new(Self::residual(c, cond));
-                let then = Box::new(self.speculate(then, env)?);
-                let otherwise = Box::new(self.speculate(otherwise, env)?);
-                let depth = cond.depth.join(then.depth).join(otherwise.depth);
+                // An arm that writes a local the branch outlives cannot be
+                // folded to its value: the write is the part that matters, and
+                // which arm makes it is what the world has not said. So both
+                // stay as written, and the local is not known after the branch.
+                let arms = if Self::writes(&[then, otherwise]).is_empty() {
+                    [self.speculate(then, env)?, self.speculate(otherwise, env)?]
+                } else {
+                    [then.clone(), otherwise.clone()]
+                };
+                // An arm left as written reads its locals in the residue, so
+                // they have to hold there what they hold here.
+                let unreduced: Vec<&Expr> = arms
+                    .iter()
+                    .zip([then, otherwise])
+                    .filter(|(arm, src)| arm == src)
+                    .map(|(arm, _)| arm)
+                    .collect();
+                let depth = arms.iter().fold(cond.depth, |d, arm| d.join(arm.depth));
+                let settled = Self::leave(&unreduced, depth, env);
+                self.settling.extend(settled);
+                let [then, otherwise] = arms.map(Box::new);
                 Self::rebuild(ExprKind::Select { cond, then, otherwise }, x, depth)
             }
         })
@@ -1068,8 +1125,16 @@ impl Burial<'_> {
     /// halt (§6.4).
     fn speculate(&mut self, arm: &Expr, env: &Env) -> Result<Expr, Halt> {
         let was = std::mem::replace(&mut self.speculating, true);
+        let settling = self.settling.len();
         let out = self.try_expr(arm, &mut env.clone());
         (self.speculating, self.flow) = (was, None);
+        // Assignments an arm's own code needs, with no block in the arm to put
+        // them in, would land in front of the whole branch. Then the arm stays
+        // as written, and the branch settles it from here.
+        if self.settling.len() > settling {
+            self.settling.truncate(settling);
+            return Ok(arm.clone());
+        }
         Ok(out?.map_or_else(|| arm.clone(), |v| Self::residual(v, arm)))
     }
 
@@ -1078,15 +1143,18 @@ impl Burial<'_> {
     fn try_expr(&mut self, x: &Expr, env: &mut Env) -> Result<Option<Val>, Halt> {
         let (grind, minted, outer, before) =
             (self.grind.len(), self.specialised.len(), self.starved.take(), env.clone());
+        let settling = self.settling.len();
         let out = self.expr(x, env);
         self.starved = outer;
         match out {
             Ok(v) if !matches!(self.flow, Some(Flow::Broke | Flow::Continued)) => Ok(Some(v)),
             Ok(_) => {
                 (*env, self.flow) = (before, None);
+                self.settling.truncate(settling);
                 Ok(None)
             }
             Err(Halt { kind: HaltKind::Collapsed(_), .. }) => {
+                self.settling.truncate(settling);
                 self.grind.truncate(grind);
                 self.specialised.truncate(minted);
                 self.minted.retain(|_, id| (id.0 as usize) < self.unit.funcs.len() + minted);
@@ -1125,7 +1193,7 @@ impl Burial<'_> {
             return Ok(Self::stuck(x));
         };
         // Unit-level code has a frame of its own, as a function does. 0280.
-        let v = self.expr(&g.value, &mut vec![None; self.unit.locals.len()])?;
+        let v = self.expr(&g.value, &mut Env::new(self.unit.locals.len()))?;
         // In a unit whose top level binds locals, a value that did not finish
         // is the binding's name and not a copy of its expression: the residue
         // keeps every binding, and a copy would carry those locals into a
@@ -1252,11 +1320,9 @@ impl Burial<'_> {
             return Ok(None);
         }
 
-        let mut frame: Env = vec![None; f.locals.len()];
+        let mut frame = Env::new(f.locals.len());
         for (slot, v) in f.params.iter().zip(args) {
-            if let Some(cell) = frame.get_mut(slot.0 as usize) {
-                *cell = Some(v.clone());
-            }
+            frame.bind(slot.0 as usize, Some(v.clone()));
         }
         let frames = self.grind.iter().filter(|g| matches!(g.what, Open::Call(_))).count();
         if u32::try_from(frames).is_ok_and(|n| n >= MAX_FRAMES) {
@@ -1416,6 +1482,102 @@ impl Burial<'_> {
         body.stmts = kept;
     }
 
+    /// Every local `code` assigns and does not bind itself.
+    fn writes(code: &[&Expr]) -> BTreeSet<u32> {
+        let (mut todo, mut written, mut bound) = (code.to_vec(), BTreeSet::new(), BTreeSet::new());
+        while let Some(x) = todo.pop() {
+            if let ExprKind::Assign { place, .. } = &x.kind {
+                written.insert(place.local.0);
+            }
+            Self::binds(x, &mut bound);
+            todo.extend(children(x));
+        }
+        &written - &bound
+    }
+
+    /// Every local a `let` or a declaration anywhere in `x` binds.
+    fn binds(x: &Expr, into: &mut BTreeSet<u32>) {
+        let mut todo = vec![x];
+        while let Some(x) = todo.pop() {
+            if let ExprKind::Block(b) = &x.kind {
+                into.extend(b.stmts.iter().filter_map(|s| match s {
+                    Stmt::Let { local, .. } | Stmt::Declare { local } => Some(local.0),
+                    Stmt::Expr(_) => None,
+                }));
+            }
+            todo.extend(children(x));
+        }
+    }
+
+    /// What code left as written needs before it in the residue.
+    ///
+    /// The burial reduced the statements above it, and a statement that only
+    /// assigned is not in the residue: its value is in `env` and nowhere else.
+    /// Code left as written reads its locals in the residue, so each one it
+    /// names that has a value here is assigned that value first. A local the
+    /// code reads but never wrote cannot be named yet by anything in the
+    /// residue, because a named local is read as itself, and one it writes was
+    /// not named before the write by §5.4. Either way the assignment is legal.
+    fn settle(code: &[&Expr], env: &mut Env) -> Vec<Stmt> {
+        let (mut read, mut bound) = (HashSet::new(), BTreeSet::new());
+        for x in code {
+            Self::reads(x, &mut read);
+            Self::binds(x, &mut bound);
+        }
+        let names: BTreeSet<u32> = read
+            .into_iter()
+            .filter(|&id| !bound.contains(&id) && env.stale.get(id as usize) == Some(&true))
+            .collect();
+        names
+            .into_iter()
+            .filter_map(|id| {
+                let v = env.get(id as usize).cloned().flatten()?;
+                if !matches!(
+                    v.kind,
+                    Kind::Known(_) | Kind::Func(_) | Kind::Prim(_) | Kind::Shade(_)
+                ) {
+                    return None;
+                }
+                env.bind(id as usize, Some(v.clone()));
+                let at = Expr {
+                    kind: ExprKind::Local(LocalId(id)),
+                    ty: v.ty.clone(),
+                    depth: v.depth,
+                    span: Span::default(),
+                };
+                let value = Self::residual(v, &at);
+                let depth = value.depth;
+                let place = Place { local: LocalId(id), path: Vec::new() };
+                let kind = ExprKind::Assign { place, value: Box::new(value) };
+                Some(Stmt::Expr(Expr { kind, ty: Type::Unit, depth, span: Span::default() }))
+            })
+            .collect()
+    }
+
+    /// What code left as written needs before it, as [`Burial::settle`] says.
+    /// After it, nothing here knows what the locals it writes hold, so a read
+    /// of one is the local itself.
+    fn leave(code: &[&Expr], depth: Depth, env: &mut Env) -> Vec<Stmt> {
+        let settled = Self::settle(code, env);
+        for id in Self::writes(code) {
+            if let Some(Some(v)) = env.get(id as usize) {
+                let (ty, depth) = (v.ty.clone(), v.depth.join(depth));
+                let at =
+                    Expr { kind: ExprKind::Local(LocalId(id)), ty, depth, span: Span::default() };
+                env.bind(id as usize, Some(Self::rebuild(at.kind.clone(), &at, depth)));
+            }
+        }
+        settled
+    }
+
+    /// `x` left as written: after the assignments it needs, and with what it
+    /// writes no longer known here.
+    fn unreduced(&mut self, x: &Expr, env: &mut Env) -> Val {
+        let settled = Self::leave(&[x], x.depth, env);
+        self.settling.extend(settled);
+        Self::stuck(x)
+    }
+
     /// Every local an expression names.
     fn reads(x: &Expr, into: &mut HashSet<u32>) {
         match &x.kind {
@@ -1525,13 +1687,13 @@ impl Burial<'_> {
     fn block(&mut self, b: &Block, env: &mut Env) -> Result<Val, Halt> {
         let mut kept: Vec<Stmt> = Vec::new();
         for (i, s) in b.stmts.iter().enumerate() {
+            let mark = self.settling.len();
             let v = match s {
                 Stmt::Let { local, value } => {
                     let v = self.expr(value, env)?;
+                    kept.extend(self.settling.drain(mark..));
                     let stuck = v.is_stuck();
-                    if let Some(slot) = env.get_mut(local.0 as usize) {
-                        *slot = Some(v.clone());
-                    }
+                    env.bind(local.0 as usize, Some(v.clone()));
                     if stuck {
                         v
                     } else {
@@ -1550,6 +1712,7 @@ impl Burial<'_> {
                 }
                 Stmt::Expr(x) => {
                     let v = self.expr(x, env)?;
+                    kept.extend(self.settling.drain(mark..));
                     // §4.7: a value here is deposited, not discarded. `U0` has
                     // nothing to deposit, and one that is still waiting on the
                     // world is not a value yet — it will be deposited by the
@@ -1599,7 +1762,9 @@ impl Burial<'_> {
         }
         match &b.tail {
             Some(t) => {
+                let mark = self.settling.len();
                 let v = self.expr(t, env)?;
+                kept.extend(self.settling.drain(mark..));
                 if v.is_stuck() && self.flow.is_none() {
                     let tail = Some(Box::new(Self::residual(v.clone(), t)));
                     return Ok(self.residue(kept, tail, b, &v));
@@ -1623,17 +1788,26 @@ impl Burial<'_> {
         for (i, s) in b.stmts.iter().enumerate().skip(from) {
             let x = match s {
                 Stmt::Declare { local } => {
-                    if let Some(slot) = env.get_mut(local.0 as usize) {
-                        *slot = None;
-                    }
+                    env.bind(local.0 as usize, None);
                     kept.push(Stmt::Declare { local: *local });
                     continue;
                 }
                 Stmt::Let { value, .. } | Stmt::Expr(value) => value,
             };
+            let mark = self.settling.len();
             let res = self.try_expr(x, env);
+            kept.extend(self.settling.drain(mark..));
             let Some(v) = res.inspect_err(|_| self.speculating = was)? else {
                 self.speculating = was;
+                let rest: Vec<&Expr> = b.stmts[i..]
+                    .iter()
+                    .filter_map(|s| match s {
+                        Stmt::Let { value, .. } | Stmt::Expr(value) => Some(value),
+                        Stmt::Declare { .. } => None,
+                    })
+                    .chain(b.tail.as_deref())
+                    .collect();
+                kept.extend(Self::leave(&rest, starved.depth, env));
                 kept.extend(b.stmts[i..].iter().cloned());
                 return Ok(self.residue(kept, b.tail.clone(), b, starved));
             };
@@ -1646,9 +1820,7 @@ impl Burial<'_> {
             }
             match s {
                 Stmt::Let { local, value } => {
-                    if let Some(slot) = env.get_mut(local.0 as usize) {
-                        *slot = Some(v.clone());
-                    }
+                    env.bind(local.0 as usize, Some(v.clone()));
                     kept.push(Stmt::Let { local: *local, value: Self::residual(v, value) });
                 }
                 Stmt::Expr(x)
@@ -1661,14 +1833,19 @@ impl Burial<'_> {
         }
         let tail = match &b.tail {
             Some(t) => {
+                let mark = self.settling.len();
                 let out = self.try_expr(t, env);
+                kept.extend(self.settling.drain(mark..));
                 self.speculating = was;
                 match out? {
                     Some(v) if self.flow.take().is_none() => {
                         let tail = Some(Box::new(Self::residual(v.clone(), t)));
                         return Ok(self.residue(kept, tail, b, &v));
                     }
-                    _ => b.tail.clone(),
+                    _ => {
+                        kept.extend(Self::leave(&[&**t], starved.depth, env));
+                        b.tail.clone()
+                    }
                 }
             }
             None => None,
@@ -1791,13 +1968,13 @@ impl Burial<'_> {
             }
             if v.is_stuck() {
                 *env = before;
-                return Ok(Self::stuck(x));
+                return Ok(self.unreduced(x, env));
             }
             if let Some(s) = step {
                 let sv = self.expr(s, env)?;
                 if sv.is_stuck() {
                     *env = before;
-                    return Ok(Self::stuck(x));
+                    return Ok(self.unreduced(x, env));
                 }
             }
             // Counted at the bottom, so that a turn the fuel cut short is not
@@ -1877,14 +2054,10 @@ impl Burial<'_> {
         // A path into an aggregate needs an aggregate, and nothing can build
         // one. Until that is settled the binding simply stops being known.
         if !place.path.is_empty() || v.is_stuck() {
-            if let Some(slot) = env.get_mut(place.local.0 as usize) {
-                *slot = None;
-            }
+            env.bind(place.local.0 as usize, None);
             return Ok(Self::stuck(x));
         }
-        if let Some(slot) = env.get_mut(place.local.0 as usize) {
-            *slot = Some(v);
-        }
+        env.write(place.local.0 as usize, v);
         Ok(Val { kind: Kind::Known(Literal::Unit), ty: Type::Unit, depth: Depth::PURE })
     }
 }
