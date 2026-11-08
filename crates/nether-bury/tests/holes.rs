@@ -6,7 +6,7 @@
 //! and one that listed the things waiting on it would get a new name every
 //! time something came to wait. §6.3.
 
-use nether_bury::{Residue, bury};
+use nether_bury::{Answers, Residue, bury, bury_on};
 use nether_core::{
     BinOp, Capability, Demand, Depth, Expr, ExprKind, Held, Literal, Prim, Rite, Span, Type, Unit,
     check,
@@ -325,25 +325,38 @@ fn everything_burial_names_is_named_by_its_content() {
 /// one hole in it, and a real one names more.
 ///
 /// Measured as a shape rather than a duration, because a wall clock says more
-/// about the machine than about the code: four times the questions is four
-/// times the work, and the scan made it sixteen.
+/// about the machine than about the code. Sixteen times the questions is
+/// sixteen times the naming, and the scan made it two hundred and fifty-six.
+/// On a machine at load forty, a debug build measured 25 to 41 times for the
+/// code as it is and 200 times with the scan put back; 90 is between them with
+/// room on both sides.
+///
+/// It runs on one thread, because this is about naming and not about handing
+/// demands to workers: on every core, the handoff's own cost grows with the
+/// number of demands (0291), and that is what made the old form of this test
+/// fail on a loaded machine. The gap is sixteen times rather than four, so the
+/// bound has room on both sides, and each size is timed five times, interleaved,
+/// keeping the fastest, because load makes a run slower and never faster. 0286.
 #[test]
 fn naming_is_constant_in_what_has_already_been_named() {
     let ask = |n: usize| {
         let asks: Vec<Expr> = (0..n).map(|i| descending(reading(&format!("{i}.nc")))).collect();
         let unit = demanding(asks);
         let start = std::time::Instant::now();
-        let r = bury(&unit, source(), 4_000_000).expect("this finishes");
+        let r = bury_on(&unit, source(), 4_000_000, &Answers::none(), 1).expect("this finishes");
         assert_eq!(r.holes.len(), n, "{n} different questions");
         start.elapsed()
     };
 
-    ask(3_000); // warm.
-    let small = ask(3_000);
-    let large = ask(12_000);
+    ask(500); // warm.
+    let (mut small, mut large) = (std::time::Duration::MAX, std::time::Duration::MAX);
+    for _ in 0..5 {
+        small = small.min(ask(500));
+        large = large.min(ask(8_000));
+    }
     assert!(
-        large < small * 8,
-        "four times the questions took {large:?} against {small:?}; that is the scan"
+        large < small * 90,
+        "sixteen times the questions took {large:?} against {small:?} at best; that is the scan"
     );
 }
 
