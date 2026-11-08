@@ -202,6 +202,18 @@ def trans(t1: Theorem, t2: Theorem) -> Theorem:
     )
 
 
+def cong(op: str, eq_thms: Sequence[Theorem]) -> Theorem:
+    assumptions: Set[Formula] = set()
+    lhs_args: List[Term] = []
+    rhs_args: List[Term] = []
+    for t in eq_thms:
+        _require(t.conclusion.kind == "=", f"cong expects =, got {t.conclusion}")
+        assumptions |= t.assumptions
+        lhs_args.append(t.conclusion.terms[0])
+        rhs_args.append(t.conclusion.terms[1])
+    return _thm(assumptions, eq(Term(op, tuple(lhs_args)), Term(op, tuple(rhs_args))))
+
+
 def mp(imp_thm: Theorem, ant_thm: Theorem) -> Theorem:
     _require(
         imp_thm.conclusion.kind == "→",
