@@ -39,3 +39,20 @@ int32_t forbidden(const uint8_t *args, size_t args_len,
     *out_len = 0;
     return 3;
 }
+
+/* Says whether it was entered while another call was still inside it. `0`
+ * is alone, `4` is not. §9.8.1 promises a callee nothing about threads, so
+ * the caller has to take turns, and this is how a test sees whether it did. */
+#include <unistd.h>
+static int inside = 0;
+
+int32_t alone(const uint8_t *args, size_t args_len,
+              uint8_t *out, size_t out_cap, size_t *out_len)
+{
+    (void)args; (void)args_len; (void)out; (void)out_cap;
+    *out_len = 0;
+    int was = __atomic_fetch_add(&inside, 1, __ATOMIC_SEQ_CST);
+    usleep(200);
+    __atomic_fetch_sub(&inside, 1, __ATOMIC_SEQ_CST);
+    return was == 0 ? 0 : 4;
+}

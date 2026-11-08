@@ -437,7 +437,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 
 ## assay — The Assay
 
-`#########·` 83% · 10 of 12 done · due 2028-10-01
+`#########·` 85% · 11 of 13 done · due 2028-10-01
 
 Mechanized claims about a stated calculus, plus measured correspondence with Rust. Tooling and assumptions remain outside the trusted language core.
 
@@ -458,6 +458,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0283`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0283-migrate-the-backlog-to-cairn-format-5.md) Migrate the backlog to cairn format 5 <sup>chore · p1 · 0</sup>
 - [x] [`0284`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0284-a-depth-a-loop-carries-is-found-however-many-turns-it-takes.md) A depth a loop carries is found however many turns it takes <sup>bug · p0 · 0</sup>
 - [x] [`0285`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0285-code-left-as-written-reads-what-the-burial-assigned.md) Code left as written reads what the burial assigned <sup>bug · p0 · 0</sup>
+- [x] [`0288`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0288-five-things-the-review-found-in-what-this-descent-built.md) Five things the review found in what this descent built <sup>chore · p1 · 8</sup>
 
 ## Unscheduled
 

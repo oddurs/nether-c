@@ -234,3 +234,22 @@ fn repeated_parallel_burials_produce_one_cairn() {
     assert_eq!(cairns.len(), 1);
     assert!(cairns.contains(&want));
 }
+
+/// A worker stops when the serial order is done with its demand. The first
+/// demand collapses after a hundred thousand turns, long enough for a worker to take
+/// the second, which is then a demand nobody will keep; it used to spin on with the whole fuel budget while the
+/// halt waited for it. The bound is ten seconds against minutes, so a slow
+/// machine does not make this flaky.
+#[test]
+fn a_worker_stops_when_the_serial_order_halts() {
+    let src = "I64 spin(I64 n) { I64 i = 0; while (i < n) { i += 1; } i }\n\
+               demand 1 / (spin(100000) - 100000);\n\
+               demand spin(1000000000);\n";
+    let unit = lower(&parse(src.as_bytes()).expect("parses")).expect("lowers");
+    assert!(check(&unit).is_empty());
+    let start = std::time::Instant::now();
+    let out = bury_on(&unit, Cairn::of_encoded(src.as_bytes()), 4_000_000_000, &Answers::none(), 2);
+    assert!(out.is_err(), "the first demand divides by zero");
+    let took = start.elapsed();
+    assert!(took < std::time::Duration::from_secs(10), "the halt waited {took:?} for a worker");
+}

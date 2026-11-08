@@ -15,6 +15,9 @@ pub enum MergeError {
     Mismatched(usize, Cairn, Cairn),
     /// Two deliveries `(slot, hole, first, second)` disagreed on the same question.
     Conflict(usize, Cairn, Cairn, Cairn),
+    /// A witness `(witness)` the trace already held was not a witness with a
+    /// value. It answers no slot, so it is not named by one.
+    BaseWitness(Cairn),
 }
 
 impl From<StoreError> for MergeError {
@@ -128,10 +131,10 @@ impl Replay {
     ) -> Result<(Vec<Cairn>, Self), MergeError> {
         for &w in base_witnesses {
             let Stored::Node(Node::Witness { answer, .. }) = store.get(w)? else {
-                return Err(MergeError::Mismatched(0, w, w));
+                return Err(MergeError::BaseWitness(w));
             };
             if !matches!(store.get(answer)?, Stored::Value(_)) {
-                return Err(MergeError::Mismatched(0, w, answer));
+                return Err(MergeError::BaseWitness(w));
             }
         }
         let mut open: Vec<(Call, u8, Span)> = Vec::with_capacity(holes.len());
@@ -142,6 +145,9 @@ impl Replay {
             open.push((call, stratum, span));
         }
         let mut chosen: Vec<Option<(Cairn, Cairn, Value)>> = vec![None; holes.len()];
+        // For each read-stratum call, the chosen slot lowest in the trace and
+        // its witness and answer: what a later delivery has to agree with.
+        let mut first: HashMap<&Call, (usize, Cairn, Cairn)> = HashMap::new();
         for &(slot, witness) in deliveries.iter().copied().flatten() {
             let Some((h_call, h_stratum, h_span)) = open.get(slot) else {
                 return Err(MergeError::OutOfRange(slot, holes.len()));
@@ -163,30 +169,35 @@ impl Replay {
                 }
                 return Err(MergeError::Conflict(slot, hole, first, witness));
             }
-            if matches!(h_stratum, 1 | 2 | 3 | 5)
-                && let Some((first, _, _)) = open
-                    .iter()
-                    .zip(&chosen)
-                    .find_map(|((c, _, _), got)| (c == h_call).then_some(got.as_ref())?)
-                    .filter(|(_, first_ans, _)| *first_ans != answer)
-            {
-                return Err(MergeError::Conflict(slot, hole, *first, witness));
+            if matches!(h_stratum, 1 | 2 | 3 | 5) {
+                match first.get(h_call) {
+                    Some(&(_, said, ans)) if ans != answer => {
+                        return Err(MergeError::Conflict(slot, hole, said, witness));
+                    }
+                    Some(&(lowest, ..)) if lowest < slot => {}
+                    _ => {
+                        first.insert(h_call, (slot, witness, answer));
+                    }
+                }
             }
             chosen[slot] = Some((witness, answer, val));
         }
         let (mut witnesses, mut said) =
             (base_witnesses.to_vec(), HashMap::<Call, Vec<Value>>::new());
-        for (slot, (witness, _, val)) in
-            chosen.into_iter().enumerate().filter_map(|(s, g)| Some((s, g?)))
-        {
+        // How many slots before this one asked the same thing. Every one of
+        // them has to be answered before this one can be.
+        let mut earlier: HashMap<&Call, usize> = HashMap::new();
+        for (slot, got) in chosen.into_iter().enumerate() {
             let call = &open[slot].0;
-            if said.get(call).map_or(0, Vec::len)
-                != open[..slot].iter().filter(|(c, _, _)| c == call).count()
-            {
-                return Err(MergeError::Mismatched(slot, holes[slot], witness));
+            let asked = earlier.entry(call).or_default();
+            if let Some((witness, _, val)) = got {
+                if said.get(call).map_or(0, Vec::len) != *asked {
+                    return Err(MergeError::Mismatched(slot, holes[slot], witness));
+                }
+                witnesses.push(witness);
+                said.entry(call.clone()).or_default().push(val);
             }
-            witnesses.push(witness);
-            said.entry(call.clone()).or_default().push(val);
+            *asked += 1;
         }
         Ok((witnesses, Self { said }))
     }

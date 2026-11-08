@@ -701,3 +701,93 @@ fn sixteen_processes_one_store_for_a_minute() {
         println!("        {line}");
     }
 }
+
+/// The cairns a bundle carries, in the order it carries them.
+fn bundle_order(bundle: &[u8]) -> Vec<Cairn> {
+    let (mut at, mut out) = (32, Vec::new());
+    while at + 32 < bundle.len() {
+        out.push(Cairn::from_bytes(bundle[at..at + 32].try_into().expect("32 bytes")));
+        let len = u64::from_be_bytes(bundle[at + 32..at + 40].try_into().expect("8 bytes"));
+        at += 40 + usize::try_from(len).expect("fits");
+    }
+    out
+}
+
+/// `n` traces, each one's residue the trace before it, and the first one's
+/// `source`.
+fn chain(store: &Store, n: u32, source: Cairn) -> Vec<Cairn> {
+    let mut prev = source;
+    (0..n)
+        .map(|i| {
+            prev = store
+                .put(&Stored::Node(Node::Trace {
+                    residue: prev,
+                    holes: Vec::new(),
+                    witnesses: Vec::new(),
+                    deposits: Vec::new(),
+                    source,
+                    depth: u8::try_from(i % 9).expect("small"),
+                    unrecorded: false,
+                }))
+                .expect("put");
+            prev
+        })
+        .collect()
+}
+
+/// Export's order is the one rounds of ready objects gave: every object whose
+/// references are all out, by cairn, and round again. It sorts by height now,
+/// and bundles are compared across machines, so the bytes may not move.
+#[test]
+fn export_order_is_the_order_rounds_of_ready_objects_gave() {
+    let root = std::env::temp_dir().join(format!("nether-rounds-{}", std::process::id()));
+    let store = Store::open(&root).expect("a store");
+    let a = store.put(&Stored::Value(Value::Bytes(b"a".to_vec()))).expect("put");
+    let b = store.put(&Stored::Value(Value::Str("b".into()))).expect("put");
+    let tip = chain(&store, 30, a)[29];
+    for (i, base) in [a, b, tip].into_iter().enumerate() {
+        chain(&store, 3 + u32::try_from(i).expect("small"), base);
+    }
+    let mut bundle = Vec::new();
+    store.export(&mut bundle).expect("exports");
+    let got = bundle_order(&bundle);
+
+    let mut pending: BTreeSet<Cairn> = got.iter().copied().collect();
+    let mut rounds = Vec::new();
+    while !pending.is_empty() {
+        let ready: Vec<Cairn> = pending
+            .iter()
+            .copied()
+            .filter(|c| match store.get(*c).expect("get") {
+                Stored::Node(n) => !n.references().iter().any(|r| pending.contains(r)),
+                Stored::Value(_) => true,
+            })
+            .collect();
+        assert!(!ready.is_empty(), "the store has a cycle");
+        for c in &ready {
+            pending.remove(c);
+        }
+        rounds.extend(ready);
+    }
+    assert_eq!(got, rounds);
+    fs::remove_dir_all(&root).expect("clean up");
+}
+
+/// Export orders a twenty-thousand-link chain with everything before what
+/// references it. Rounds of ready objects took one scan of the whole store per
+/// link, and did not finish in two minutes; most of what is left is writing the
+/// chain in the first place.
+#[test]
+#[ignore = "twenty thousand objects written to disk; run with scripts/task proofs"]
+fn a_long_chain_exports_with_everything_before_what_references_it() {
+    let root = std::env::temp_dir().join(format!("nether-chain-{}", std::process::id()));
+    let store = Store::open(&root).expect("a store");
+    let source = store.put(&Stored::Value(Value::Bytes(b"s".to_vec()))).expect("put");
+    let links = chain(&store, 20_000, source);
+    let mut bundle = Vec::new();
+    assert_eq!(store.export(&mut bundle).expect("exports"), 20_001);
+    let got = bundle_order(&bundle);
+    assert_eq!(got[0], source);
+    assert_eq!(&got[1..], &links[..]);
+    fs::remove_dir_all(&root).expect("clean up");
+}

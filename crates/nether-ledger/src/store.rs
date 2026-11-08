@@ -585,32 +585,53 @@ impl Store {
         if !malformed.is_empty() {
             return Err(StoreError::Bundle("malformed path in objects/"));
         }
-        let mut pending = BTreeMap::new();
+        // What each object references inside this store, and its bytes.
+        let mut found: BTreeMap<Cairn, (Vec<Cairn>, Vec<u8>)> = BTreeMap::new();
         for (cairn, path) in files {
             let bytes = fs::read(path)?;
-            let stored = verify_bytes(cairn, &bytes)?;
-            pending.insert(cairn, (stored, bytes));
-        }
-        let mut entries = Vec::with_capacity(pending.len());
-        while !pending.is_empty() {
-            let ready: Vec<Cairn> = pending
-                .iter()
-                .filter(|(_, (s, _))| {
-                    !matches!(s, Stored::Node(n) if n.references().iter().any(|r| pending.contains_key(r)))
-                })
-                .map(|(&c, _)| c)
-                .collect();
-            let take = if ready.is_empty() {
-                pending.keys().next().copied().into_iter().collect()
-            } else {
-                ready
+            let refs = match verify_bytes(cairn, &bytes)? {
+                Stored::Node(n) => n.references(),
+                Stored::Value(_) => Vec::new(),
             };
-            for c in take {
-                if let Some((_, bytes)) = pending.remove(&c) {
-                    entries.push((c, bytes));
+            found.insert(cairn, (refs, bytes));
+        }
+        // An object's height is 0 if it references nothing here, and one more
+        // than the highest thing it references otherwise. Sorting by height and
+        // then by cairn is §7.5.4's order: everything an object references
+        // comes before it. Walked with a stack, because a chain of traces is as
+        // deep as the store is long.
+        let mut height: BTreeMap<Cairn, usize> = BTreeMap::new();
+        let mut open = BTreeSet::new();
+        for &start in found.keys() {
+            let mut todo = vec![start];
+            while let Some(&c) = todo.last() {
+                if height.contains_key(&c) {
+                    todo.pop();
+                    continue;
                 }
+                let refs = found[&c].0.iter().filter(|r| found.contains_key(r));
+                if open.insert(c) {
+                    for &r in refs {
+                        // §7.3: a cairn names its references, so a cycle would
+                        // be a hash that contains itself.
+                        if open.contains(&r) {
+                            return Err(StoreError::Bundle("a cycle in objects/"));
+                        }
+                        if !height.contains_key(&r) {
+                            todo.push(r);
+                        }
+                    }
+                    continue;
+                }
+                let h = refs.map(|r| height[r] + 1).max().unwrap_or(0);
+                height.insert(c, h);
+                open.remove(&c);
+                todo.pop();
             }
         }
+        let mut entries: Vec<(Cairn, Vec<u8>)> =
+            found.into_iter().map(|(c, (_, bytes))| (c, bytes)).collect();
+        entries.sort_by_key(|(c, _)| (height[c], *c));
         let mut hasher = blake3::Hasher::new();
         let mut send = |slice: &[u8]| -> io::Result<()> {
             hasher.update(slice);
