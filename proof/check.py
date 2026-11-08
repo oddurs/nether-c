@@ -39,6 +39,11 @@ FORBIDDEN_IDENTIFIERS = frozenset(
     }
 )
 
+# The seal is a Python name, so any proof script could import it and mint a
+# theorem without an inference rule. Only the kernel may name it. A string
+# passed to `getattr` still gets past this scan, which a reviewer must catch.
+KERNEL_PRIVATE = frozenset({"_SEAL", "_thm", "_token"})
+
 
 def scan_source_for_admissions(path: Path, text: str) -> None:
     """Reject any proof script containing forbidden admission tokens or placeholders."""
@@ -47,6 +52,10 @@ def scan_source_for_admissions(path: Path, text: str) -> None:
         if tok.type == tokenize.NAME and tok.string.lower() in FORBIDDEN_IDENTIFIERS:
             raise ProofFault(
                 f"{path.name}:{tok.start[0]}:{tok.start[1]}: forbidden admission identifier `{tok.string}`"
+            )
+        if tok.type == tokenize.NAME and tok.string in KERNEL_PRIVATE and path.name != "kernel.py":
+            raise ProofFault(
+                f"{path.name}:{tok.start[0]}:{tok.start[1]}: `{tok.string}` belongs to the kernel"
             )
         if tok.type == tokenize.COMMENT:
             lower = tok.string.lower()
@@ -130,6 +139,14 @@ def verify_kernel_soundness_guards() -> None:
         pass
     else:
         raise AssertionError("scanner allowed `sorry` identifier")
+
+    # 6. A proof script outside the kernel must not name the seal
+    try:
+        scan_source_for_admissions(Path("synthetic.py"), "from kernel import _SEAL\n")
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("scanner allowed a proof script to import the kernel seal")
 
 
 def verify_closed_theorem(name: str, thm: Theorem) -> None:

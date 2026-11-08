@@ -6,6 +6,10 @@ The specification is a dozen cross-linked documents rendered into a dozen
 cross-linked pages, and a link that 404s is invisible until somebody clicks it.
 This resolves every internal href, src and fragment in the baked site.
 
+The spec is also cited by number, as "§90.3", and a number that heads two
+sections on one page is a reference with two targets. So a section number
+heads exactly one section of its page.
+
 `site/template.html` is skipped: it is the template, and its `{{UP}}` markers
 are placeholders rather than paths.
 """
@@ -22,6 +26,7 @@ SITE = ROOT / "site"
 
 REF = re.compile(r'(?:href|src)="([^"]+)"')
 ANCHOR = re.compile(r'\sid="([^"]+)"')
+NUMBERED = re.compile(r'<h[1-6] id="[^"]*"><a [^>]*>(\d+(?:\.\d+)+)\s')
 
 
 def pages() -> list[Path]:
@@ -51,6 +56,11 @@ def main() -> int:
             if fragment and target.suffix == ".html":
                 if fragment not in anchors.get(target, set()):
                     broken.append(f"{rel} -> {raw}  (no such anchor)")
+        seen: set[str] = set()
+        for number in NUMBERED.findall(page.read_text(encoding="utf-8")):
+            if number in seen:
+                broken.append(f"{rel}: §{number} heads two sections")
+            seen.add(number)
 
     for b in broken:
         print(f"links: {b}", file=sys.stderr)
