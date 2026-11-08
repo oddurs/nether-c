@@ -1840,3 +1840,150 @@ claims are actively rejected on every run. Second, proofs are written as explici
 combinator and induction scripts rather than interactive tactic blocks, which is
 noisier for large algebraic proofs and entirely manageable for an eleven-rule
 calculus and an eleven-tag wire format.
+
+## 90.3 What is proved, what is tested, and what is believed
+
+A project that mechanizes part of its metatheory and tests the rest owes a
+reader a boundary between the two. Differential testing (`0226`) and generative
+sampling (`0052`) are regression checks over finite samples, not proofs; a
+mechanized theorem in `proof/` is a proof about the mathematical model in
+`proof/`, not a proof about the Rust compiler or the host kernel.
+
+Every claim in this specification sits in **exactly one** of three mutually
+exclusive primary tiers below. A proved claim may also carry supporting tests
+in `crates/`, and a tested claim may be motivated by a proved model theorem,
+and no claim is counted in more than one tier.
+
+### Tier 1 — Proved (in the `proof/` LCF model)
+
+Reproduced by `scripts/task proofs` (and on every `scripts/task test` via
+`python3 proof/check.py`, which also token-scans `proof/*.py` to forbid
+`sorry`, `admit`, `admitted`, `axiom`, `unproved`, `postulate`, `todo`, and
+`fixme`). Each theorem below is a sealed `proof.kernel.Theorem` derived over the
+explicit inductive relations and finite-domain decision procedure in `proof/`:
+
+1. **Ambient soundness of the eleven typing rules**
+   ([§2.4](02-calculus.md#24-metatheory), theorem `ambient_soundness` in
+   `proof/calculus.py`): for every derivation `HasType(Γ, δ, e, τ, d)` built
+   from the 11 rules of [§2.2](02-calculus.md#22-the-rules), `d ≤ max(δ ∪ g(e))`.
+   *Model scope and assumption:* proved by rule induction over `TYPING_SPEC`
+   over the 9-element lattice `0..8` and capability subsets `P({0..8})`.
+2. **Substitution depth monotonicity** ([§2.4](02-calculus.md#24-metatheory),
+   theorem `substitution_monotonicity` in `proof/calculus.py`): for all 12
+   expression substitution forms `SubstDepth(e, d_e, d_v, d′)` representing
+   `e[x := v]` with `v : τ_v@d_v`, `d′ ≤ max(d_e, d_v)`, with equality to `d_e`
+   whenever `d_v = 0`.
+3. **Soundness of the depth bound under reduction**
+   ([§1.2](01-strata.md#12-the-monotonicity-law) and
+   [§2.4](02-calculus.md#24-metatheory), theorem `soundness_of_bound` in
+   `proof/calculus.py`): for all 17 small-step reduction rules of
+   [§6](06-evaluation.md) (`StepTyped(e, e′, d, d′)`), `d′ ≤ d`. Reduction can
+   discard an untaken arm (`if (true) a else b`, where `d = max(d_a, d_b)` and
+   `d′ = d_a`) or drop an unused deep argument, and never raises a depth.
+4. **Sufficiency, necessity, and non-interval separation of the Orpheus premise**
+   ([§1.6](01-strata.md#16-shade-and-the-orpheus-rule) and
+   [§90.2](#the-orpheus-rule-two-rejected-forms), theorems
+   `look_sufficiency_ambient`, `look_sufficiency_confinement`,
+   `look_necessity_confinement`, `look_necessity_numeric`,
+   `numeric_vs_membership_counterexample`, `binding_taint_violates_ambient`, and
+   `scope_restain_shifts_obligation_to_caller` in `proof/orpheus.py`): `d ∈ δ`
+   is sufficient for both §2.4 ambient soundness and `{d} ⊆ δ ∪ g(s)` capability
+   confinement; necessary for capability confinement on closed shades
+   (`{d} ⊆ δ` if and only if `d ∈ δ`); and strictly stronger than the numeric ceiling
+   `d ≤ max(δ)` when `δ` is not a downward-closed interval (`d = 3, δ = {0, 5}`).
+5. **Core residual round-trip and the staging law**
+   ([§6.5](06-evaluation.md#65-residue) and
+   [§6.8](06-evaluation.md#68-what-burial-prints), theorems
+   `roundtrip_identity`, `hole_set_union_law`, `staging_idempotence_set`,
+   `staging_law`, `dependent_hole_non_monotone_counterexample`, and
+   `cumulative_dependent_hole_law` in `proof/staging.py`): in the core calculus
+   model, `parse(print(r)) = r` over all 11 residual constructors,
+   stage composition for independent holes satisfies
+   `bury(bury(e, A), B) = bury(e, A ∪ B)` (with `A = B` giving idempotence), and
+   dependent holes whose inner capability is gated by an outer answer require
+   the cumulative hypothesis `A ⊆ B` (witnessed by the non-monotone counterexample
+   `A = {0, 3}, B = {0, 5}`).
+6. **Prefix-free stream round-trip and injectivity of the canonical wire model**
+   ([§7.1](07-ledger.md#71-canonical-encoding),
+   [§7.2](07-ledger.md#72-cairns), and [§7.3](07-ledger.md#73-nodes),
+   theorems `value_decode_encode`, `node_decode_encode`,
+   `injectivity_from_left_inverse`, and `cairn_preimage_injectivity` in
+   `proof/encoding.py`): for every well-formed `Value` (11 tags `0x00`..`0x08`,
+   `0x10`, `0x11`, including unprefixed recursive `Struct`, `Array`, and
+   `Answer::Given`) and every well-formed `Node` (`0x20` + 6 kinds `0x00`..`0x05`,
+   including unprefixed `Node::Literal`) paired with arbitrary trailing stream
+   bytes `rest`, `decode_stream(encode(x) ++ rest) = (x, rest)`. Setting
+   `rest = b""` yields `decode(encode(x)) = x`, which implies
+   `encode(x) = encode(y) → x = y` and injectivity of the domain-separated
+   preimage `b"netherc/cairn/v4\x00" ++ encode(x)`.
+
+### Tier 2 — Tested (in the Rust implementation)
+
+These claims are about the Rust workspace (`crates/`), the CLI (`nether`), and
+the generated site (`site/`). None of them is proved by `proof/`; each is held
+by deterministic and generative test suites run by `scripts/task test` and
+`scripts/task fuzz`:
+
+1. **Correspondence between `nether_core::check` and the mechanized 11-rule model**
+   (`0226`, `crates/nether-core/tests/calculus.rs`): a clean-room transcription
+   of the 11 rules and `nether_core::check` agree on `50,000` seeded valid and
+   invalid `Unit`s on every `cargo test`
+   (`the_implementation_agrees_with_the_mechanized_model`) and on `10,000,000`
+   seeded `Unit`s across all 8 `FaultKind` variants in `scripts/task fuzz`
+   (`ten_million_programs_agree_with_the_model`).
+2. **Implementation burial monotonicity and residue well-typedness** (`0052`,
+   `crates/nether-bury/tests/monotone.rs`): generative testing over `10,000,000`
+   seeded programs checking that `nether_bury::bury` never raises an expression's
+   depth and always emits a residue accepted by `nether_core::check`.
+3. **Surface syntax print/parse/lower round-trip and staged burial on `Unit` IR**
+   ([§4](04-grammar.md) and [§6.8](06-evaluation.md#68-what-burial-prints),
+   `crates/nether-bury/tests/residue_is_source.rs`,
+   `crates/nether-syntax/tests/lowering.rs`, and
+   `crates/nether-syntax/tests/fuzz.rs`): surface printing, lexing, parsing,
+   precedence parenthesisation, and two-stage burial through printed source.
+4. **Single-assignment aggregate construction and loop/branch freezing**
+   ([§5.4](05-types.md#54-mutation), `crates/nether-syntax/tests/frozen.rs`
+   and `crates/nether-syntax/tests/aggregates.rs`): checking that naming a local
+   (`seal`, `shade`, deposit, `return`, argument) freezes subsequent assignments
+   across blocks, exclusive branches, and loop back-edges while keeping
+   loop-local declarations fresh each turn.
+5. **Production codec round-trip, truncation/trailing-byte rejection, and well-formedness guards**
+   ([§7.1](07-ledger.md#71-canonical-encoding)–[§7.3](07-ledger.md#73-nodes),
+   `crates/nether-ledger/src/codec.rs` and `crates/nether-ledger/tests/fuzz.rs`):
+   cross-checking the 16 canonical fixtures against `proof/encoding.py` and
+   fuzzing `encode_value`/`decode_value` and `encode_node`/`decode_node`.
+6. **Crash-safe ledger storage, multi-thread/multi-process contention, audit, exchange, and packages**
+   ([§7.5](07-ledger.md#75-the-store) and [§8](08-rites.md), `0205`–`0208`,
+   `0213`–`0215`, `0220`, `0101` in `crates/nether-ledger/` and
+   `crates/nether-cli/tests/rites.rs`): atomic rename, corrupt-object refusal,
+   16-thread and 16-process contention, independent trace verification,
+   packfile export/import, and byte-identical cross-architecture stores.
+7. **Refusal of `nether run` and bounded evaluation fuel**
+   ([§6.4](06-evaluation.md#64-starvation-and-fuel) and
+   [§8.0](08-rites.md#80-there-is-no-run), `crates/nether-cli/tests/rites.rs`
+   and `crates/nether-bury/tests/collapse.rs`).
+
+### Tier 3 — Believed or open (neither proved nor closed)
+
+These claims are relied on as assumptions or tracked as open items in
+`cairn/items/`; none is claimed as proved or finished:
+
+1. **Cryptographic collision resistance of BLAKE3**
+   ([§7.2](07-ledger.md#72-cairns)): `proof/encoding.py` proves that the
+   domain-separated preimage `b"netherc/cairn/v4\x00" ++ encode(x)` is
+   injective; that distinct preimages produce distinct 32-byte cairns rests on
+   the standard cryptographic assumption on BLAKE3 and is not proved here.
+2. **Making invalid in-memory `Value` and `Node` states unrepresentable in Rust types**
+   (`0115`): until `0115` lands, well-formedness side conditions (such as
+   `origin ≤ 8` on `Value::Shade`, non-empty struct and callee names, and
+   `Span.start ≤ Span.end`) are enforced by `codec::encode_*` and `codec::decode_*`
+   checks rather than private constructors.
+3. **Two-machine independent verification of a tagged release binary** (`0221`):
+   the reproducible build recipe (`scripts/task release:build` with
+   `--remap-path-prefix` and `--locked`) is in the tree, and the two-host tag
+   attestation remains open until a release tag is built and compared across two
+   independent machines.
+4. **Remaining open roadmap items**: `0075` (incremental re-burial), `0078`
+   (structured concurrency for holes), `0081` (`call_foreign`), `0082` (witness
+   chains), `0103`–`0106` (real-program assays), `0108` (self-buried kernel),
+   `0210` (release checklist), and `0235` (first public release).
