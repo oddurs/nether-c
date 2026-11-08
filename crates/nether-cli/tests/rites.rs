@@ -2467,3 +2467,152 @@ fn two_disconnected_machines_resolve_and_bury_a_package_closure_to_the_same_cair
     assert_eq!(field(&bury_east, "cairn"), field(&bury_west, "cairn"));
     assert_eq!(stdout(&there(&east_dir, &["lamp", &field(&bury_east, "cairn")])), "21\n");
 }
+
+#[test]
+fn lamp_at_reports_depth_origin_provenance_and_refuses_stale_buffers() {
+    let dir = a_build("lamp-at");
+    let src = "// Βίος — Þórður\nStr poem = descend disk {\n  must(utf8(must(read(\"saga.txt\"))))\n};\nU0 keep() { \"upphaf\\n\"; }\ndemand keep();\ndemand poem;\n";
+    std::fs::write(dir.join("saga.nc"), src).unwrap();
+    std::fs::write(dir.join("saga.txt"), "kvæði\n").unwrap();
+
+    let buried = stdout(&there(&dir, &["bury", "saga.nc", "--json"]));
+    let trace = field(&buried, "cairn");
+    let poem_use = src.rfind("poem").unwrap().to_string();
+
+    let hover = there(&dir, &["lamp", &trace, "--at", &poem_use, "--source", "saga.nc"]);
+    assert_eq!(code(&hover), 0, "{}", stderr(&hover));
+    let text = stdout(&hover);
+    assert!(text.contains("depth 3   disk   Str"), "{text}");
+    assert!(text.contains("descend disk   at "), "{text}");
+    assert!(text.contains("call read   at "), "{text}");
+    assert!(text.contains("hole     read(\"saga.txt\")   stratum 3"), "{text}");
+    assert!(text.contains("└─ trace    depth 3"), "{text}");
+
+    let hover_json =
+        there(&dir, &["lamp", &trace, "--at", &poem_use, "--source", "saga.nc", "--json"]);
+    assert_eq!(code(&hover_json), 0, "{}", stderr(&hover_json));
+    assert!(stdout(&hover_json).contains("\"stratum\":\"disk\""), "{}", stdout(&hover_json));
+    assert!(stdout(&hover_json).contains("\"capability\":\"disk\""), "{}", stdout(&hover_json));
+
+    let comment_out = there(&dir, &["lamp", &trace, "--at", "2"]);
+    assert_eq!(code(&comment_out), 1);
+    assert!(stderr(&comment_out).contains("no expression at byte 2"), "{}", stderr(&comment_out));
+
+    let past_out = there(&dir, &["lamp", &trace, "--at", "9999"]);
+    assert_eq!(code(&past_out), 1);
+    assert!(stderr(&past_out).contains("is past the end of"), "{}", stderr(&past_out));
+
+    std::fs::write(dir.join("stale.nc"), format!("// edited\n{src}")).unwrap();
+    let stale_out = there(&dir, &["lamp", &trace, "--at", &poem_use, "--source", "stale.nc"]);
+    assert_eq!(code(&stale_out), 1);
+    assert!(stderr(&stale_out).contains("does not match trace source"), "{}", stderr(&stale_out));
+}
+
+#[test]
+fn real_vim_editor_shows_hover_depth_jumps_to_origin_and_walks_provenance() {
+    let dir = a_build("vim-editor");
+    let src = "// Βίος — Þórður\nStr poem = descend disk {\n  must(utf8(must(read(\"saga.txt\"))))\n};\nU0 keep() { \"upphaf\\n\"; }\ndemand keep();\ndemand poem;\n";
+    std::fs::write(dir.join("saga.nc"), src).unwrap();
+    std::fs::write(dir.join("saga.txt"), "kvæði\n").unwrap();
+
+    let trace = field(&stdout(&there(&dir, &["bury", "saga.nc", "--json"])), "cairn");
+    let sealed = field(
+        &stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
+
+    let edited_src = format!("// önnur útgáfa\n// fleiri línur\n{src}");
+    std::fs::write(dir.join("saga_v2.nc"), &edited_src).unwrap();
+    let trace_v2 = field(&stdout(&there(&dir, &["bury", "saga_v2.nc", "--json"])), "cairn");
+
+    let plugin = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("tools/vim/nether.vim");
+    let bin = env!("CARGO_BIN_EXE_nether");
+
+    let script = format!(
+        "let g:nether_bin = '{bin}'\n\
+         source {}\n\
+         edit saga.nc\n\
+         NetherTrace {sealed}\n\
+         call cursor(7, 8)\n\
+         NetherHover\n\
+         let g:hover1 = copy(g:nether_last_lamp)\n\
+         let g:scratch = getbufline('__nether_lamp__', 1, '$')\n\
+         NetherOrigin\n\
+         let g:desc_pos = [string([line('.'), col('.'), getline('.')[col('.') - 1 : col('.') + 11]])]\n\
+         NetherOrigin\n\
+         let g:call_pos = [string([line('.'), col('.'), getline('.')[col('.') - 1 : col('.') + 15]])]\n\
+         call cursor(5, 15)\n\
+         NetherHover\n\
+         let g:dep_hover = copy(g:nether_last_lamp)\n\
+         call append(0, '// unsaved edit')\n\
+         call cursor(8, 8)\n\
+         NetherHover\n\
+         let g:stale_err = [g:nether_last_error]\n\
+         edit! saga_v2.nc\n\
+         NetherTrace {trace_v2}\n\
+         call cursor(9, 8)\n\
+         NetherHover\n\
+         let g:hover2 = copy(g:nether_last_lamp)\n\
+         call writefile(g:hover1 + ['==='] + g:scratch + ['==='] + g:desc_pos + ['==='] + g:call_pos + ['==='] + g:dep_hover + ['==='] + g:stale_err + ['==='] + g:hover2, 'vim_report.txt')\n\
+         qa!\n",
+        plugin.display()
+    );
+    std::fs::write(dir.join("drive.vim"), script).unwrap();
+
+    let vim_out = std::process::Command::new("vim")
+        .args(["-Nu", "NONE", "-i", "NONE", "-n", "-Es", "-S", "drive.vim"])
+        .current_dir(&dir)
+        .env("NETHER_STORE", dir.join(".nether"))
+        .output()
+        .expect("vim must be installed");
+    assert!(vim_out.status.success(), "vim exited: {:?}", vim_out.status);
+
+    let report = std::fs::read_to_string(dir.join("vim_report.txt")).unwrap();
+    let parts: Vec<&str> = report.split("\n===\n").collect();
+    assert_eq!(parts.len(), 7, "{report}");
+    assert!(parts[0].contains("depth 3   disk   Str"), "hover1:\n{}", parts[0]);
+    assert!(parts[0].contains("witness  read(\"saga.txt\")   stratum 3"), "hover1:\n{}", parts[0]);
+    assert_eq!(parts[0], parts[1], "scratch window must match hover output");
+    assert!(parts[2].contains("descend disk"), "descend jump:\n{}", parts[2]);
+    assert!(parts[3].contains("read(\"saga.txt\""), "call jump:\n{}", parts[3]);
+    assert!(parts[4].contains("depth 0   pure   Str"), "deposit hover:\n{}", parts[4]);
+    assert!(parts[4].contains("deposit  upphaf"), "deposit hover:\n{}", parts[4]);
+    assert!(parts[5].contains("does not match trace source"), "stale buffer error:\n{}", parts[5]);
+    assert!(parts[6].contains("depth 3   disk   Str"), "hover after edit:\n{}", parts[6]);
+
+    // Remove the witness node from the store and confirm Vim surfaces the store error.
+    let store = Store::open(dir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { witnesses, .. }) = store.get(sealed.parse().unwrap()).unwrap()
+    else {
+        panic!("expected trace");
+    };
+    let w_hex = witnesses[0].to_string();
+    std::fs::remove_file(dir.join(".nether/objects").join(&w_hex[..2]).join(&w_hex[2..])).unwrap();
+
+    let script_absent = format!(
+        "let g:nether_bin = '{bin}'\n\
+         source {}\n\
+         edit saga.nc\n\
+         NetherTrace {sealed}\n\
+         call cursor(7, 8)\n\
+         NetherHover\n\
+         call writefile([g:nether_last_error], 'vim_absent.txt')\n\
+         qa!\n",
+        plugin.display()
+    );
+    std::fs::write(dir.join("absent.vim"), script_absent).unwrap();
+    let vim_abs = std::process::Command::new("vim")
+        .args(["-Nu", "NONE", "-i", "NONE", "-n", "-Es", "-S", "absent.vim"])
+        .current_dir(&dir)
+        .env("NETHER_STORE", dir.join(".nether"))
+        .output()
+        .unwrap();
+    assert!(vim_abs.status.success());
+    let absent_err = std::fs::read_to_string(dir.join("vim_absent.txt")).unwrap();
+    assert!(absent_err.contains("is in this store"), "{absent_err}");
+}

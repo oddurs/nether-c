@@ -334,7 +334,7 @@ Given a due date so the roadmap orders correctly against After the Burial. It is
 
 ## after — After the Burial
 
-`######····` 53% · 8 of 15 done · due 2027-10-01
+`######····` 60% · 9 of 15 done · due 2027-10-01
 
 Adoption work has several independent tracks. This is not one serial implementation ticket, and the year-long/public proofs do not fit a single coding session.
 
@@ -346,10 +346,6 @@ Adoption work has several independent tracks. This is not one serial implementat
 - [ ] [`0108`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0108-soak-the-decoder-for-twenty-four-hours.md) Soak the decoder for twenty-four hours <sup>chore · p2 · 0</sup>
 - [ ] [`0115`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0115-make-the-encoding-s-invalid-states-unconstructible.md) Make the encoding's invalid states unconstructible <sup>feature · p2 · 0</sup>
 
-### descending
-
-- [ ] [`0102`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0102-editor-support-spans-depth-and-provenance.md) Editor support: spans, depth and provenance <sup>feature · p1 · 3</sup>
-
 ### starved
 
 - [ ] [`0104`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0104-an-introduction-somebody-could-learn-from.md) An introduction somebody could learn from <sup>docs · p1</sup>
@@ -357,6 +353,7 @@ Adoption work has several independent tracks. This is not one serial implementat
 ### buried
 
 - [x] [`0101`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0101-a-package-format-addressed-by-cairn.md) A package format, addressed by cairn <sup>feature · p1 · 1</sup>
+- [x] [`0102`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0102-editor-support-spans-depth-and-provenance.md) Editor support: spans, depth and provenance <sup>feature · p1 · 3</sup>
 - [x] [`0107`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0107-say-what-stability-means.md) Say what stability means <sup>spec · p1</sup>
 - [x] [`0132`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0132-spec-section-09-writes-prelude-listings-in-a-fence-that-is-not-the-language.md) Spec: section 09 writes prelude listings in a fence that is not the language <sup>spec · p2</sup>
 - [x] [`0137`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0137-sample-tables-in-tests-are-keyed-by-line-number.md) Sample tables in tests are keyed by line number <sup>chore · p2</sup>

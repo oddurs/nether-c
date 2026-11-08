@@ -256,7 +256,7 @@ impl Reading {
 }
 
 /// The name §9.1 gives a stratum. Nothing grants 0, and nothing has to.
-fn stratum_name(stratum: u8) -> &'static str {
+pub(crate) fn stratum_name(stratum: u8) -> &'static str {
     Depth::new(stratum).and_then(Capability::at).map_or("pure", Capability::name)
 }
 

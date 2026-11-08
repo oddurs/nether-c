@@ -348,7 +348,7 @@ impl<'a> Lowering<'a> {
                 ir::ExprKind::Return(Some(v)) => acc.join(v.depth),
                 _ => acc,
             };
-            children(x).iter().fold(acc, |a, c| walk(c, a))
+            ir::children(x).iter().fold(acc, |a, c| walk(c, a))
         }
         block_children(block).iter().fold(Depth::PURE, |acc, x| walk(x, acc))
     }
@@ -376,7 +376,7 @@ impl<'a> Lowering<'a> {
                 ir::ExprKind::Descend { capability, .. } => ambient.with(capability.stratum()),
                 _ => ambient,
             };
-            children(x).iter().fold(acc, |a, c| walk(c, inside, a))
+            ir::children(x).iter().fold(acc, |a, c| walk(c, inside, a))
         }
         block_children(block).iter().fold(Held::NONE, |acc, x| walk(x, Held::NONE, acc))
     }
@@ -403,50 +403,6 @@ impl<'a> Lowering<'a> {
             .iter()
             .rev()
             .find_map(|s| s.iter().rev().find(|(n, _)| n == name).map(|(_, id)| *id))
-    }
-}
-
-/// The subexpressions of an expression.
-fn children(x: &ir::Expr) -> Vec<&ir::Expr> {
-    use ir::ExprKind as K;
-    match &x.kind {
-        K::Literal(_)
-        | K::Local(_)
-        | K::Global(_)
-        | K::Func(_)
-        | K::Prim(_)
-        | K::Break
-        | K::Continue => Vec::new(),
-        K::Call { callee, args } => {
-            let mut out = vec![&**callee];
-            out.extend(args);
-            out
-        }
-        K::Unary { operand, .. }
-        | K::Rite { operand, .. }
-        | K::Descend { body: operand, .. }
-        | K::Field { base: operand, .. } => vec![operand],
-        K::Binary { lhs, rhs, .. } | K::Index { base: lhs, index: rhs } => vec![lhs, rhs],
-        K::Select { cond, then, otherwise } => vec![cond, then, otherwise],
-        K::Loop { body, step } => {
-            let mut out = vec![&**body];
-            out.extend(step.as_deref());
-            out
-        }
-        K::Return(v) => v.as_deref().into_iter().collect(),
-        K::Block(b) => block_children(b),
-        K::Assign { place, value } => {
-            let mut out: Vec<&ir::Expr> = place
-                .path
-                .iter()
-                .filter_map(|p| match p {
-                    ir::Proj::Index(i) => Some(&**i),
-                    ir::Proj::Field(_) => None,
-                })
-                .collect();
-            out.push(value);
-            out
-        }
     }
 }
 
