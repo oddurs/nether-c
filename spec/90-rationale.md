@@ -1762,3 +1762,62 @@ listing title bars as tall as the code they label.
    `24px`) fall on halves (`1.5×` and `4.5×`). Integer CSS pixels keep `1×` and
    `2×` screens exact and keep `16px` body text exact at `150%`, and cannot make
    every zoom factor an integer multiple of eight.
+
+### Mechanizing the metatheory: an in-tree LCF proof kernel versus an external proof assistant
+
+[§2.4](02-calculus.md#24-metatheory) states two properties an implementation
+must preserve — **soundness of the bound** (reduction never raises depth) and
+**ambient soundness** (any derivable depth is bounded by `max(δ ∪ g(e))`) — and
+[§1.6](01-strata.md#16-shade-and-the-orpheus-rule),
+[§6.8](06-evaluation.md#68-what-burial-prints) and
+[§7.1](07-ledger.md#71-canonical-encoding) add three more: the necessity and
+sufficiency of the Orpheus premise `d ∈ δ`, the staging law
+`bury(bury(e, A), B) = bury(e, A ∪ B)`, and the injectivity of the canonical
+encoding. Generative testing (`0052`) checks ten million random derivations and
+reduction steps, which is a strong regression net and not a proof.
+
+Four families of proof environment were compared for `proof/`:
+
+- **External interactive proof assistants (Lean 4, Coq/Rocq, Agda, Isabelle/HOL).**
+  Foundational kernels with rich tactic languages and editor integration.
+  **Rejected:** each brings a multi-hundred-megabyte toolchain outside the
+  pinned CI image (`.github/workflows/ci.yml` pins Rust `1.98.1` and Python
+  `3.12`), version-locked standard libraries whose syntax and tactics churn
+  across point releases, and a build step that contributors without the
+  assistant installed would skip. A proof that only runs when an optional tool
+  is present rots the way an optional lint does.
+- **External SMT solvers (`z3`, `cvc5`).** Fast decision procedures for
+  quantifier-free theories. **Rejected:** an SMT script asserts universal axioms
+  for inductive relations (`HasType`, `StepTyped`, `encode`/`decode`) and asks
+  whether their negation is unsatisfiable; if an axiom set is accidentally
+  inconsistent, `unsat` is reported for every theorem without constructing an
+  inductive derivation.
+- **Generative sampling alone (`0052`).** Already in the tree and fast, and
+  still finite sampling over an infinite family of terms.
+- **An in-tree LCF-style proof kernel (`proof/kernel.py`) under pinned Python 3.12.**
+  Following the same rule as `site/bake`, `site/gfx.py` and `site/font.py` —
+  when a small self-contained tool can be written in the tree with zero
+  dependencies, write it in the tree — `proof/kernel.py` defines a sealed
+  `Theorem` type gated by a private kernel token (`_KERNEL_TOKEN`). No code
+  outside `proof/kernel.py` can construct a `Theorem` except through the
+  kernel's primitive inference rules (`assume`, `mp`, `imp_intro`, `conj_intro`,
+  `conj_elim_l`, `conj_elim_r`, `disj_intro_l`, `disj_intro_r`, `disj_elim`,
+  `iff_intro`, `inst`, `gen`, `refl`, `sym`, `trans`, `cong`, `rewrite`), its
+  inductive derivation principles (`apply_rule`, `rule_induction`,
+  `structural_induction`), and its complete finite-domain decision procedure
+  `lattice_decide` over `Depth = {0..8}` and `Held = P({0..8})`. `proof/check.py`
+  scans every module in `proof/` with Python's `tokenize` to reject admitted
+  obligations (`sorry`, `admit`, `admitted`, `axiom`, `unproved`, `postulate`,
+  `todo`, `fixme`), verifies negative kernel self-tests (forged theorems,
+  missing induction cases, undischarged assumptions, invalid lattice formulas),
+  and runs on every `scripts/task test`, `scripts/task proofs` and
+  `scripts/task check`.
+
+**What it cost.** Two things. First, the trusted computing base of the proofs is
+`proof/kernel.py` (~600 lines of Python) plus the pinned Python 3.12 interpreter
+rather than Lean's or Coq's kernel; `proof/check.py` mitigates this by testing
+that forged theorems, missing cases, undischarged hypotheses, and false lattice
+claims are actively rejected on every run. Second, proofs are written as explicit
+combinator and induction scripts rather than interactive tactic blocks, which is
+noisier for large algebraic proofs and entirely manageable for an eleven-rule
+calculus and an eleven-tag wire format.
