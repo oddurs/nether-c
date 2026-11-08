@@ -263,3 +263,25 @@ fn a_branch_reads_a_local_a_finished_block_assigned() {
          U0 show() { g(); }\ndemand show();\n",
     );
 }
+
+/// A residue keeps its depths (§6.5). Each of these left a residue the
+/// checker refused, `cannot look at a shade from stratum 3; 5 is held here`,
+/// from a program it accepted. 0290.
+#[test]
+fn a_residue_keeps_its_depths() {
+    // A local loses the arm that wrote it from 5.
+    stages_like_the_program(
+        "Bytes@5 g(Bool c) {\n  Bytes x;\n  \
+         if (c) { x = must(descend net { get(\"u\") }); }\n  \
+         else   { x = must(descend disk { read(\"f\") }); }\n  \
+         descend net { look shade x }\n}\n\
+         U0 show() { g(false); }\ndemand show();\n",
+    );
+    // A call specialised to a constant returns from 3 where its function returns from 5.
+    stages_like_the_program(
+        "Bytes@5 net_or_disk(Bool c) {\n  \
+         if (c) { return must(descend net { get(\"u\") }); }\n  \
+         must(descend disk { read(\"f\") })\n}\n\
+         U0 show() { descend net { look shade net_or_disk(false) }; }\ndemand show();\n",
+    );
+}
