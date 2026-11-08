@@ -30,3 +30,7 @@ proof: cairn new, set and close write to this project, and cairn migrate reports
 ## 2026-11-07
 
 The installed cairn 1.0.0-alpha.1 writes only format 5, and this project was format 3, so cairn new, set and close refused. 0282 had to be written by hand. Format 5 adds a uid tag to each item; numbers, filenames, references and bodies are unchanged. cairn migrate verified 270 items and 151 references.
+
+## 2026-11-07
+
+CI pinned cairn v0.2.0, which refuses format 5 ('understands up to 3'), checked locally. Both workflows now pin v1.0.0-alpha.1; the tag build passes cairn check and renders ROADMAP.md unchanged.
