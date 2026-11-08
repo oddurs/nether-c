@@ -1,5 +1,6 @@
 ---
 id: 274
+uid: 0283d7af-3a45-4b39-aa6a-545ce6a887c0
 title: A comment changes what lamp prints first
 type: spec
 status: buried

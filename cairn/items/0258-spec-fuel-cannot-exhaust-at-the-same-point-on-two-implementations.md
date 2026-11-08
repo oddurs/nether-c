@@ -1,5 +1,6 @@
 ---
 id: 258
+uid: 5cd9961d-28e6-4df0-b63c-fe5b1ce5b9a7
 title: 'Spec: fuel cannot exhaust at the same point on two implementations'
 type: spec
 status: buried

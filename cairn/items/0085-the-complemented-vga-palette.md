@@ -1,5 +1,6 @@
 ---
 id: 85
+uid: aced8cfd-b08e-41b8-b79c-d6b8e96e8eb6
 title: The complemented VGA palette
 type: feature
 status: buried

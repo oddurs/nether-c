@@ -1,5 +1,6 @@
 ---
 id: 127
+uid: 51f2cf5f-ee8f-4dec-8834-9181401f89c2
 title: 'Spec: section 5.3 says two different things about shade equality'
 type: spec
 status: buried

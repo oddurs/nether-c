@@ -1,5 +1,6 @@
 ---
 id: 170
+uid: 0f839416-d2f1-4cc3-9fc7-036d84a07103
 title: Where a frozen environment is declared
 type: spec
 status: buried

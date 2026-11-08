@@ -1,5 +1,6 @@
 ---
 id: 278
+uid: e1530fc8-31e6-4abe-b49f-3be4c9b69e76
 title: §7.3.1 states the hole list twice, two ways
 type: spec
 status: buried

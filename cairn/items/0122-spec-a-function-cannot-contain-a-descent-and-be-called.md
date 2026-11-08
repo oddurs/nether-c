@@ -1,5 +1,6 @@
 ---
 id: 122
+uid: 16ce8fd0-051b-487a-9ab2-a15a914c5fd0
 title: 'Spec: a function cannot contain a descent and be called'
 type: spec
 status: buried

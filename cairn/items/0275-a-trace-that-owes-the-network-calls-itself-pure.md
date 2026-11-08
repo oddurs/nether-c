@@ -1,5 +1,6 @@
 ---
 id: 275
+uid: 1bea9c7c-9cb4-4b85-8f07-e4017a51d60f
 title: A trace that owes the network calls itself pure
 type: spec
 status: buried

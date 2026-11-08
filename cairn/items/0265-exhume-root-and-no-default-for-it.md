@@ -1,5 +1,6 @@
 ---
 id: 265
+uid: 5a6538ee-833d-4865-a642-c35b15ee1c09
 title: 'exhume: --root, and no default for it'
 type: feature
 status: buried

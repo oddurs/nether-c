@@ -1,5 +1,6 @@
 ---
 id: 210
+uid: e5d9a1d8-459f-45c0-8a37-590e78cd02b0
 title: Measure a year of a real store
 type: chore
 status: unmarked

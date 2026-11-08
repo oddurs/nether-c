@@ -1,5 +1,6 @@
 ---
 id: 5
+uid: edffc03a-a262-4e4f-b72f-8627774c0680
 key: calculus
 title: The Core Calculus
 type: milestone

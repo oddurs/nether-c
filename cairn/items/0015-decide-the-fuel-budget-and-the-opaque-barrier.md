@@ -1,5 +1,6 @@
 ---
 id: 15
+uid: 5016f7d4-8088-49ac-be57-f5228583610b
 title: 'Decide: the fuel budget and the opaque barrier'
 type: spec
 status: buried

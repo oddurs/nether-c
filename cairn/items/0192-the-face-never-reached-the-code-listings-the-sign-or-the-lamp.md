@@ -1,5 +1,6 @@
 ---
 id: 192
+uid: caa58bf3-d811-47b5-813b-902da1734e22
 title: The face never reached the code listings, the sign, or the lamp
 type: bug
 status: buried

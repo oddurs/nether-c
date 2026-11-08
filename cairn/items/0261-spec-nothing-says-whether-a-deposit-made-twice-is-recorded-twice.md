@@ -1,5 +1,6 @@
 ---
 id: 261
+uid: 6d93474f-9758-448c-bf6c-d9b4079a8e24
 title: 'Spec: nothing says whether a deposit made twice is recorded twice'
 type: spec
 status: buried

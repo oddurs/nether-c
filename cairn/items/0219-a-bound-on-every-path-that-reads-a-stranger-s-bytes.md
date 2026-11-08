@@ -1,5 +1,6 @@
 ---
 id: 219
+uid: 02b76bdb-4b97-448d-8bbf-653d6ea7e730
 title: A bound on every path that reads a stranger's bytes
 type: chore
 status: buried

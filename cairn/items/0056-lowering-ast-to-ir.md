@@ -1,5 +1,6 @@
 ---
 id: 56
+uid: b088a3c6-3b76-4cff-946a-312aba5824cd
 title: 'Lowering: AST to IR'
 type: feature
 status: buried

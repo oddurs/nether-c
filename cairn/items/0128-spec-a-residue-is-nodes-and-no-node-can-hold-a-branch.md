@@ -1,5 +1,6 @@
 ---
 id: 128
+uid: 1dd3b78f-479d-4d18-8134-fefb7b8bc8e8
 title: 'Spec: a residue is nodes, and no node can hold a branch'
 type: spec
 status: buried

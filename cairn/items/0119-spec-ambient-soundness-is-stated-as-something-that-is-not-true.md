@@ -1,5 +1,6 @@
 ---
 id: 119
+uid: 16cd239c-2990-4a9c-b5f7-bf7686fc8782
 title: 'Spec: ambient soundness is stated as something that is not true'
 type: spec
 status: buried

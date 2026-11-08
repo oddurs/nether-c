@@ -1,5 +1,6 @@
 ---
 id: 13
+uid: 75f133e5-fded-4324-a0b6-b2b80a2f6e2c
 title: 'Spec: the typing rules for depth'
 type: spec
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 102
+uid: 454c5451-8f5c-4156-af8b-1fa86e3b43e5
 title: 'Editor support: spans, depth and provenance'
 type: feature
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 217
+uid: 2f73184c-ad94-47de-91da-c13af25f815c
 title: A hostile writer cannot change what a reader sees
 type: chore
 status: buried

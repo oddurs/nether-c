@@ -1,5 +1,6 @@
 ---
 id: 11
+uid: 2c95ae6a-e6b4-44b3-a0e4-1cc9e7524958
 title: 'Spec: the thesis and how to read this'
 type: spec
 status: buried

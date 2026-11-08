@@ -1,5 +1,6 @@
 ---
 id: 140
+uid: b6c01c72-ae27-4377-a058-f76356df2d8c
 title: CI skips cairn check when the install fails
 type: bug
 status: buried

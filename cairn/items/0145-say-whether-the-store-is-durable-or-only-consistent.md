@@ -1,5 +1,6 @@
 ---
 id: 145
+uid: 2c060ffe-62b3-4651-8ce2-9aa584a18edb
 title: Say whether the store is durable or only consistent
 type: spec
 status: buried

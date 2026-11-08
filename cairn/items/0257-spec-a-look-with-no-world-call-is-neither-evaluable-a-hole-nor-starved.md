@@ -1,5 +1,6 @@
 ---
 id: 257
+uid: b12e8802-c37b-4a9c-b444-d9b2a78c51c8
 title: 'Spec: a look with no world-call is neither evaluable, a hole, nor starved'
 type: spec
 status: buried

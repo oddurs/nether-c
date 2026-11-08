@@ -1,5 +1,6 @@
 ---
 id: 26
+uid: c7d669f1-e7e1-4289-b93d-af77d0ff129c
 title: Spec style guide and normative language
 type: chore
 status: buried

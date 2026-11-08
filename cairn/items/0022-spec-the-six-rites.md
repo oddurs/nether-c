@@ -1,5 +1,6 @@
 ---
 id: 22
+uid: fb1d2736-da81-471f-a193-db7f71ad1703
 title: 'Spec: the six rites'
 type: spec
 status: buried

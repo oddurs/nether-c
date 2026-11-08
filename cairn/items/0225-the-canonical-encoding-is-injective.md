@@ -1,5 +1,6 @@
 ---
 id: 225
+uid: ba12493a-246f-4054-9c26-75b3231064f5
 title: The canonical encoding is injective
 type: chore
 status: buried

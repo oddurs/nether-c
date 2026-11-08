@@ -1,5 +1,6 @@
 ---
 id: 156
+uid: d657e1c9-68a8-4fc4-b043-f3a8f5e89c25
 title: bury accepts --grant and ignores it
 type: bug
 status: buried

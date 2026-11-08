@@ -1,5 +1,6 @@
 ---
 id: 157
+uid: 22dc54af-8ce1-4d42-96f5-a86491d7de38
 title: Freezing a local depends on which arm you write first
 type: bug
 status: buried

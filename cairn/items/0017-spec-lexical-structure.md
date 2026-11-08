@@ -1,5 +1,6 @@
 ---
 id: 17
+uid: 3e3e3430-fd93-4d16-8658-b5fbfc8a46ec
 title: 'Spec: lexical structure'
 type: spec
 status: buried

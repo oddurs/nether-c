@@ -1,5 +1,6 @@
 ---
 id: 59
+uid: b70ac596-0b92-411a-ab84-c151bb70159f
 title: 'Proof: the three sample programs'
 type: chore
 status: buried

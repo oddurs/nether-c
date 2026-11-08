@@ -1,5 +1,6 @@
 ---
 id: 168
+uid: 5e07210b-44e7-42ce-a798-7cbef0f38e2b
 title: exhume does not say what it did
 type: bug
 status: buried

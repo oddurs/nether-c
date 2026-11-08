@@ -1,5 +1,6 @@
 ---
 id: 114
+uid: d6384464-1891-4496-b971-53ff56bcfc9c
 title: put writes objects that get can never read back
 type: bug
 status: buried

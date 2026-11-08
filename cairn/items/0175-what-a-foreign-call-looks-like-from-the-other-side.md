@@ -1,5 +1,6 @@
 ---
 id: 175
+uid: a18b7476-5b18-4eb0-8b18-24a0f26ec6ed
 title: What a foreign call looks like from the other side
 type: spec
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 9
+uid: 196d1dff-0158-4b97-81cd-f903be140f0d
 key: necropolis
 title: The Necropolis
 type: milestone

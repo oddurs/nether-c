@@ -1,5 +1,6 @@
 ---
 id: 42
+uid: 08c25f82-df44-4a57-adc5-7d43c212205f
 title: 'The store: layout, index, and garbage'
 type: feature
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 248
+uid: 791316c7-03e1-4065-8046-6c5d03849560
 title: Let the site and code explain Nether C on its own terms
 type: docs
 status: buried

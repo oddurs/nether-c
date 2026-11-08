@@ -1,5 +1,6 @@
 ---
 id: 272
+uid: e11587ac-4d89-4aa7-95b2-81b44125c17b
 title: Six rites, four ways to say the same three things
 type: chore
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 84
+uid: 51462ecb-71dc-4604-a136-1022318e01a4
 title: 'site/bake: render the specification to HTML'
 type: feature
 status: buried

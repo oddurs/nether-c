@@ -1,5 +1,6 @@
 ---
 id: 120
+uid: f3943053-0d4a-47a8-ab29-6838e8d173ba
 title: 'Spec: APP''s premise forbids the specification''s own examples'
 type: spec
 status: buried

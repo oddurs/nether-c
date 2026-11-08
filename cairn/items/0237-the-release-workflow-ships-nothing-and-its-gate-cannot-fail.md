@@ -1,5 +1,6 @@
 ---
 id: 237
+uid: cc3bfe77-e488-45dd-88eb-19386910ec25
 title: The release workflow ships nothing, and its gate cannot fail
 type: bug
 status: buried

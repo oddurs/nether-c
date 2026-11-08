@@ -1,5 +1,6 @@
 ---
 id: 110
+uid: a69459f9-9e8a-405e-8e4c-13aaf9e60459
 title: Struct and array counts are believed without checking the input
 type: bug
 status: buried

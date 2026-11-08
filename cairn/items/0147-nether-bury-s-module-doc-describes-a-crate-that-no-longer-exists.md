@@ -1,5 +1,6 @@
 ---
 id: 147
+uid: 4abc4431-10ce-49e3-8d6f-70b4a3484a04
 title: nether-bury's module doc describes a crate that no longer exists
 type: docs
 status: buried

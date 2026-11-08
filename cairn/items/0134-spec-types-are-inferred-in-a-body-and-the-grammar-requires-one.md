@@ -1,5 +1,6 @@
 ---
 id: 134
+uid: afc15ee7-c041-4508-b99c-2efc9c8b4239
 title: 'Spec: types are inferred in a body and the grammar requires one'
 type: spec
 status: buried

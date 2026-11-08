@@ -1,5 +1,6 @@
 ---
 id: 7
+uid: 1d9f2d07-300c-43c8-af99-79619387b4e2
 key: rites
 title: The Rites
 type: milestone

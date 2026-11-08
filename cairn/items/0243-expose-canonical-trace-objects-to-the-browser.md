@@ -1,5 +1,6 @@
 ---
 id: 243
+uid: 34841c29-650a-4e38-8379-93e9152db815
 title: Expose canonical trace objects to the browser
 type: feature
 status: buried

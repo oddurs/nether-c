@@ -1,5 +1,6 @@
 ---
 id: 116
+uid: c6d8233f-2831-46dd-ae7c-a4955eb1d7b0
 title: 'Spec: a struct cannot be constructed'
 type: spec
 status: buried

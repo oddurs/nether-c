@@ -1,5 +1,6 @@
 ---
 id: 48
+uid: 9f87a67c-9c48-4aac-9a21-92c432bf5845
 title: Normalization by evaluation
 type: feature
 status: buried

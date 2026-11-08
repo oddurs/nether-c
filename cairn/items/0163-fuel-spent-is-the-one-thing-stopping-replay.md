@@ -1,5 +1,6 @@
 ---
 id: 163
+uid: d554e077-78cd-439e-99e0-9df28ca11971
 title: fuel_spent is the one thing stopping replay
 type: spec
 status: buried

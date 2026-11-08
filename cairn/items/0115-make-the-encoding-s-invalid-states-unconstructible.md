@@ -1,5 +1,6 @@
 ---
 id: 115
+uid: 0c7673f4-087f-4f7f-8ebe-adddc538d75d
 title: Make the encoding's invalid states unconstructible
 type: feature
 status: unmarked

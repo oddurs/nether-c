@@ -1,5 +1,6 @@
 ---
 id: 264
+uid: bd296df8-b4e0-47bc-83cd-66ab57101dd4
 title: 'bury: an act repeated from one span is one hole'
 type: bug
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 254
+uid: 771be939-f12c-45ac-9c7f-a1c90d6bd2fd
 title: 'Spec: an ambient depth is a number, so descend net grants the disk'
 type: spec
 status: buried

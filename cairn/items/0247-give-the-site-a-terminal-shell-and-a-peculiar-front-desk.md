@@ -1,5 +1,6 @@
 ---
 id: 247
+uid: 7eb8b071-ff66-435f-87eb-9c574a32548a
 title: Give the site a terminal shell and a peculiar front desk
 type: feature
 status: buried

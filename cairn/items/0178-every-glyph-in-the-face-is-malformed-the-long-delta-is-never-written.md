@@ -1,5 +1,6 @@
 ---
 id: 178
+uid: 96309368-9bed-4275-b3a3-b8d758fe6fc2
 title: 'Every glyph in the face is malformed: the long delta is never written'
 type: bug
 status: buried

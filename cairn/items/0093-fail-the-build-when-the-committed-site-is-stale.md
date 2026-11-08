@@ -1,5 +1,6 @@
 ---
 id: 93
+uid: 74fba708-d20a-4fc2-8414-1f31b8166a89
 title: Fail the build when the committed site is stale
 type: chore
 status: buried

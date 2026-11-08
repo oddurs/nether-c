@@ -1,5 +1,6 @@
 ---
 id: 27
+uid: 30de927c-a0ce-48be-9fd9-c04c545128f0
 title: Extract every spec code sample into tests/transcripts
 type: chore
 status: buried

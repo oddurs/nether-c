@@ -1,5 +1,6 @@
 ---
 id: 155
+uid: e1fbff2a-6244-48d6-856c-7cf175a4c6e4
 title: A trace does not record what happened
 type: bug
 status: buried

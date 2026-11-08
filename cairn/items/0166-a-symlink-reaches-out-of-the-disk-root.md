@@ -1,5 +1,6 @@
 ---
 id: 166
+uid: e8a2853d-3d08-4089-b74b-e84886cc9c77
 title: A symlink reaches out of the disk root
 type: bug
 status: buried

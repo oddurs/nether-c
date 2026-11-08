@@ -1,5 +1,6 @@
 ---
 id: 267
+uid: 3134ad68-4af9-4fc1-867a-436ebebbacc6
 title: The wasm budget has 513 bytes left, and nobody said so
 type: chore
 status: buried

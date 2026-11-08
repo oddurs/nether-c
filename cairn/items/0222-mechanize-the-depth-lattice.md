@@ -1,5 +1,6 @@
 ---
 id: 222
+uid: 42ff1a32-4212-49aa-aa5a-c00f5b7cdf48
 title: Mechanize the depth lattice
 type: chore
 status: buried

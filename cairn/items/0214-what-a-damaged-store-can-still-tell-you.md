@@ -1,5 +1,6 @@
 ---
 id: 214
+uid: f7e9775b-c60b-462b-840e-ced21eeb7756
 title: What a damaged store can still tell you
 type: feature
 status: buried

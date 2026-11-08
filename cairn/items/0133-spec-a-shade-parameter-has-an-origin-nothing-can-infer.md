@@ -1,5 +1,6 @@
 ---
 id: 133
+uid: 4f52b270-c349-4f1f-bbc5-003bfd634ffb
 title: 'Spec: a shade parameter has an origin nothing can infer'
 type: spec
 status: buried

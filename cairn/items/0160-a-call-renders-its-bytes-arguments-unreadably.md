@@ -1,5 +1,6 @@
 ---
 id: 160
+uid: 3161ba96-1bd5-4277-9b1e-d088a7b9b742
 title: A call renders its bytes arguments unreadably
 type: bug
 status: buried

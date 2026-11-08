@@ -1,5 +1,6 @@
 ---
 id: 67
+uid: 565491b0-3630-4d07-99d1-698f6308af47
 title: The provider trait and the recording discipline
 type: feature
 status: buried

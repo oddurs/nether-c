@@ -1,5 +1,6 @@
 ---
 id: 251
+uid: 86dcab33-dca0-4e67-b6a6-c56dfc9ad72d
 title: Decide whether an untaken arm may be reduced
 type: spec
 status: buried

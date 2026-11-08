@@ -1,5 +1,6 @@
 ---
 id: 144
+uid: 59cd941d-3cf0-4098-b967-0480356b56b3
 title: lamp orders deposits by offset across two sources
 type: bug
 status: buried

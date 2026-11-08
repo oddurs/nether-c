@@ -1,5 +1,6 @@
 ---
 id: 154
+uid: 5e5aea8d-09b9-459e-b46e-d7d6142b848e
 title: Naming a local freezes it
 type: feature
 status: buried

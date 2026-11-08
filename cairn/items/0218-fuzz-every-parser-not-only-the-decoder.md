@@ -1,5 +1,6 @@
 ---
 id: 218
+uid: 1e9e5f71-1d58-4575-91a2-ac84f035c5d2
 title: Fuzz every parser, not only the decoder
 type: chore
 status: buried

@@ -1,5 +1,6 @@
 ---
 id: 260
+uid: 0a0c9d82-6ba0-4cf4-ae7d-e395b44ff75b
 title: 'Spec: §5.4 does not state the loop rule the checker enforces'
 type: spec
 status: buried

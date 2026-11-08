@@ -1,5 +1,6 @@
 ---
 id: 21
+uid: af831ba4-9ced-410a-be74-d479829fa429
 title: 'Spec: the ledger and the artifact format'
 type: spec
 status: buried

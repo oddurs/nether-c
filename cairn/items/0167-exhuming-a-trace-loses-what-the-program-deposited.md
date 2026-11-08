@@ -1,5 +1,6 @@
 ---
 id: 167
+uid: a7630399-e0f1-45cf-be61-1dc6f368217f
 title: Exhuming a trace loses what the program deposited
 type: bug
 status: buried

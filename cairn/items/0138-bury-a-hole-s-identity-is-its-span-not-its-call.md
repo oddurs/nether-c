@@ -1,5 +1,6 @@
 ---
 id: 138
+uid: 7ac7ae22-246c-401e-b183-e7d3fac5c1d0
 title: 'bury: a hole''s identity is its span, not its call'
 type: bug
 status: buried

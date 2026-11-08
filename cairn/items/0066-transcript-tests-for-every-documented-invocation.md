@@ -1,5 +1,6 @@
 ---
 id: 66
+uid: 46ab8d3b-49d0-441c-92e0-fe74a70ed3a9
 title: Transcript tests for every documented invocation
 type: chore
 status: buried

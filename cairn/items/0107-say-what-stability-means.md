@@ -1,5 +1,6 @@
 ---
 id: 107
+uid: ee89c0b7-be66-4d0b-b4cf-66ed880a75f1
 title: Say what stability means
 type: spec
 status: buried

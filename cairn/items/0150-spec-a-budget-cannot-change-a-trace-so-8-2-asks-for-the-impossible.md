@@ -1,5 +1,6 @@
 ---
 id: 150
+uid: 71f42364-f457-40d9-83e5-7eac2b2b6db0
 title: 'Spec: a budget cannot change a trace, so 8.2 asks for the impossible'
 type: spec
 status: buried
