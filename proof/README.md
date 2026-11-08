@@ -39,6 +39,13 @@ This directory holds the machine-checked metatheory of NetherC.
   (`dependent_hole_non_monotone_counterexample` on `A = {0, 3}, B = {0, 5}`),
   and the cumulative dependent-hole theorem (`cumulative_dependent_hole_law`
   under `A ⊆ B`).
+- **`encoding.py`** — Formalization of canonical encoding injectivity
+  (`spec/07-ledger.md` §7.1–§7.3), proving prefix-free stream round-trip over
+  all 11 `Value` tags (`value_decode_encode`) and all 6 `Node` kinds
+  (`node_decode_encode`), pure equational LCF proofs that left-invertible
+  encodings and `DOMAIN`-prefixed cairn preimages are injective
+  (`injectivity_from_left_inverse`, `cairn_preimage_injectivity`), and checking
+  16 byte-exact codec fixtures and §7.1.1 exclusion guards.
 - **`check.py`** — Entry point invoked by `scripts/task proofs` and
   `scripts/task test`. Scans all proof modules via `tokenize` to reject any
   admitted obligation (`sorry`, `admit`, `axiom`, `postulate`, `todo`, `fixme`),

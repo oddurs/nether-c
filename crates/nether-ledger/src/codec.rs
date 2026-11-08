@@ -1039,4 +1039,86 @@ mod node_tests {
         bytes.push(0);
         assert_eq!(decode_node(&bytes), Err(DecodeError::TrailingBytes(1)));
     }
+
+    #[test]
+    fn model_fixtures_match_the_rust_encoder_and_excluded_in_memory_states_are_rejected() {
+        use crate::{AnswerOf, Refusal};
+
+        let mut c0_raw = [0u8; 32];
+        for (i, slot) in c0_raw.iter_mut().enumerate() {
+            *slot = u8::try_from(i).unwrap();
+        }
+        let c0 = Cairn::from_bytes(c0_raw);
+
+        let fixtures: &[(Value, &[u8])] = &[
+            (Value::Unit, b"\x00"),
+            (Value::Bool(false), b"\x01\x00"),
+            (Value::Bool(true), b"\x01\x01"),
+            (Value::Int(0), b"\x02\x00\x00\x00\x00\x00\x00\x00\x00"),
+            (Value::Int(-1), b"\x02\xff\xff\xff\xff\xff\xff\xff\xff"),
+            (Value::Int(i64::MIN), b"\x02\x80\x00\x00\x00\x00\x00\x00\x00"),
+            (Value::Int(i64::MAX), b"\x02\x7f\xff\xff\xff\xff\xff\xff\xff"),
+            (Value::Bytes(b"ab".to_vec()), b"\x03\x00\x00\x00\x00\x00\x00\x00\x02ab"),
+            (Value::Str("hi".into()), b"\x04\x00\x00\x00\x00\x00\x00\x00\x02hi"),
+            (
+                Value::Answer(Box::new(AnswerOf::Given(Value::Int(7)))),
+                b"\x07\x00\x02\x00\x00\x00\x00\x00\x00\x00\x07",
+            ),
+            (
+                Value::Answer(Box::new(AnswerOf::Refused(Refusal::Conflict))),
+                b"\x07\x01\x05",
+            ),
+            (Value::Refusal(Refusal::Absent), b"\x08\x00"),
+            (
+                Value::Struct {
+                    name: "P".into(),
+                    fields: vec![Value::Unit, Value::Bool(true)],
+                },
+                b"\x10\x00\x00\x00\x00\x00\x00\x00\x01P\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x01",
+            ),
+            (
+                Value::Array(vec![Value::Unit, Value::Int(1)]),
+                b"\x11\x00\x00\x00\x00\x00\x00\x00\x02\x00\x02\x00\x00\x00\x00\x00\x00\x00\x01",
+            ),
+        ];
+        for (val, expected) in fixtures {
+            assert_eq!(val.encode(), *expected);
+            assert_eq!(&decode(expected).unwrap(), val);
+        }
+
+        let mut expected_cairn = vec![0x05];
+        expected_cairn.extend_from_slice(&c0_raw);
+        assert_eq!(Value::Cairn(c0).encode(), expected_cairn);
+
+        let mut expected_shade = vec![0x06, 0x03];
+        expected_shade.extend_from_slice(&c0_raw);
+        assert_eq!(Value::Shade { origin: 3, value: c0 }.encode(), expected_shade);
+
+        // Invalid in-memory states excluded by §7.1.1 / §7.3.1 (pending 0115):
+        assert_eq!(
+            decode(&Value::Shade { origin: 9, value: c0 }.encode()),
+            Err(DecodeError::NoSuchStratum(9))
+        );
+        assert_eq!(
+            decode(&Value::Struct { name: String::new(), fields: vec![] }.encode()),
+            Err(DecodeError::EmptyStructName)
+        );
+        assert_eq!(
+            decode_node(
+                &Node::Hole {
+                    call: Call { function: String::new(), args: vec![] },
+                    stratum: 3,
+                    span: span(),
+                }
+                .encode()
+            ),
+            Err(DecodeError::EmptyCallName)
+        );
+        assert_eq!(
+            decode_node(
+                &Node::Deposit { value: c0, span: Span { source: c0, start: 5, end: 4 } }.encode()
+            ),
+            Err(DecodeError::BackwardsSpan { start: 5, end: 4 })
+        );
+    }
 }
