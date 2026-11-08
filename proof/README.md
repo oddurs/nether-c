@@ -22,6 +22,14 @@ This directory holds the machine-checked metatheory of NetherC.
     across all 12 substitution forms.
   - `prove_soundness_of_bound()`: `StepTyped(e, e', d, d') → d' <= d` across
     all 17 reduction rules.
+- **`orpheus.py`** — Formalization of `[LOOK]` (`spec/01-strata.md` §1.6,
+  `spec/02-calculus.md` §2.2, `spec/90-rationale.md` §90.2), proving sufficiency
+  (`look_sufficiency_ambient`, `look_sufficiency_confinement`), exact necessity
+  for capability confinement (`look_necessity_confinement`) and numeric ceiling
+  (`look_necessity_numeric`), the non-interval counterexample separating
+  `d <= max_set(δ)` from `d ∈ δ` (`numeric_vs_membership_counterexample` on
+  `d = 3, δ = {0, 5}`), and the two rejected alternatives from §90.2
+  (`binding_taint_violates_ambient`, `scope_restain_shifts_obligation_to_caller`).
 - **`check.py`** — Entry point invoked by `scripts/task proofs` and
   `scripts/task test`. Scans all proof modules via `tokenize` to reject any
   admitted obligation (`sorry`, `admit`, `axiom`, `postulate`, `todo`, `fixme`),

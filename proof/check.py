@@ -22,6 +22,7 @@ from kernel import (
     var,
 )
 import calculus
+import orpheus
 
 PROOF_DIR = Path(__file__).resolve().parent
 
@@ -150,10 +151,30 @@ def main(argv: Sequence[str] = ()) -> int:
     t_mon = calculus.prove_soundness_of_bound()
     verify_closed_theorem("soundness_of_bound", t_mon)
 
+    orpheus_thms = [
+        ("look_sufficiency_ambient", orpheus.prove_look_sufficiency_ambient()),
+        ("look_sufficiency_confinement", orpheus.prove_look_sufficiency_confinement()),
+        ("look_necessity_confinement", orpheus.prove_look_necessity_confinement()),
+        ("look_necessity_numeric", orpheus.prove_look_necessity_numeric()),
+        (
+            "numeric_vs_membership_counterexample",
+            orpheus.prove_numeric_vs_membership_counterexample(),
+        ),
+        ("binding_taint_violates_ambient", orpheus.prove_binding_taint_violates_ambient()),
+        (
+            "scope_restain_shifts_obligation_to_caller",
+            orpheus.prove_scope_restain_shifts_obligation_to_caller(),
+        ),
+    ]
+    for name, thm in orpheus_thms:
+        verify_closed_theorem(name, thm)
+
     print(f"checked {scanned} proof modules (0 admitted obligations, kernel guards verified)")
     print(f"  [OK] ambient_soundness          ({len(calculus.HAS_TYPE.rules)} typing rules)   |- {t_amb.conclusion}")
     print(f"  [OK] substitution_monotonicity  ({len(calculus.SUBST_DEPTH.rules)} subst rules)    |- {t_sub.conclusion}")
     print(f"  [OK] soundness_of_bound         ({len(calculus.STEP_TYPED.rules)} step rules)     |- {t_mon.conclusion}")
+    for name, thm in orpheus_thms:
+        print(f"  [OK] {name:42s} |- {thm.conclusion}")
     return 0
 
 
