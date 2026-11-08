@@ -426,8 +426,12 @@ impl Lowering<'_> {
         ir::Expr { kind, ty, depth, span }
     }
 
+    fn lit(l: ir::Literal, ty: ir::Type, span: Span) -> ir::Expr {
+        Self::at(ir::ExprKind::Literal(l), ty, Depth::PURE, span)
+    }
+
     fn unit_at(span: Span) -> ir::Expr {
-        Self::at(ir::ExprKind::Literal(ir::Literal::Unit), ir::Type::Unit, Depth::PURE, span)
+        Self::lit(ir::Literal::Unit, ir::Type::Unit, span)
     }
 
     fn block(&mut self, b: &ast::Block) -> ir::Block {
@@ -496,12 +500,7 @@ impl Lowering<'_> {
                 } else {
                     inner.push(ir::Stmt::Expr(looping));
                     let block = ir::Block { stmts: inner, tail: None, span: *span };
-                    out.push(ir::Stmt::Expr(Self::at(
-                        ir::ExprKind::Block(block),
-                        ir::Type::Unit,
-                        Depth::PURE,
-                        *span,
-                    )));
+                    out.push(ir::Stmt::Expr(Self::as_expr(block, *span)));
                 }
             }
             ast::Stmt::Return { value, span } => {
@@ -536,7 +535,10 @@ impl Lowering<'_> {
             return Self::unit_at(Span::default());
         };
         let cond = self.expr(cond);
+        let before = self.depths.clone();
         let then_block = self.block(then);
+        let then_depths = self.depths[..before.len()].to_vec();
+        self.depths[..before.len()].copy_from_slice(&before);
         let then = Self::as_expr(then_block, then.span);
         let otherwise = match otherwise.as_deref() {
             Some(ast::Else::Block(b)) => {
@@ -546,6 +548,9 @@ impl Lowering<'_> {
             Some(ast::Else::If(inner)) => self.branch(inner),
             None => Self::unit_at(*span),
         };
+        for (slot, was) in self.depths.iter_mut().zip(then_depths) {
+            *slot = slot.join(was);
+        }
         let depth = cond.depth.join(then.depth).join(otherwise.depth);
         let ty = then.ty.clone();
         Self::at(
@@ -575,6 +580,18 @@ impl Lowering<'_> {
         body: &ast::Block,
         span: Span,
     ) -> ir::Expr {
+        let mark = (self.locals.len(), self.faults.len());
+        if let Some(c) = cond {
+            self.expr(c);
+        }
+        self.block(body);
+        if let Some(s) = step {
+            self.expr(s);
+        }
+        self.locals.truncate(mark.0);
+        self.depths.truncate(mark.0);
+        self.faults.truncate(mark.1);
+
         let guard = cond.map(|c| {
             let c = self.expr(c);
             let depth = c.depth;
@@ -631,36 +648,13 @@ impl Lowering<'_> {
         let span = e.span;
         let landing = self.landing.take();
         match &e.kind {
-            ast::ExprKind::Int(n) => Self::at(
-                ir::ExprKind::Literal(ir::Literal::Int(*n)),
-                ir::Type::Int,
-                Depth::PURE,
-                span,
-            ),
-            ast::ExprKind::Str(s) => Self::at(
-                ir::ExprKind::Literal(ir::Literal::Str(s.clone())),
-                ir::Type::Str,
-                Depth::PURE,
-                span,
-            ),
-            ast::ExprKind::Bytes(b) => Self::at(
-                ir::ExprKind::Literal(ir::Literal::Bytes(b.clone())),
-                ir::Type::Bytes,
-                Depth::PURE,
-                span,
-            ),
-            ast::ExprKind::Cairn(c) => Self::at(
-                ir::ExprKind::Literal(ir::Literal::Cairn(*c)),
-                ir::Type::Cairn,
-                Depth::PURE,
-                span,
-            ),
-            ast::ExprKind::Bool(b) => Self::at(
-                ir::ExprKind::Literal(ir::Literal::Bool(*b)),
-                ir::Type::Bool,
-                Depth::PURE,
-                span,
-            ),
+            ast::ExprKind::Int(n) => Self::lit(ir::Literal::Int(*n), ir::Type::Int, span),
+            ast::ExprKind::Str(s) => Self::lit(ir::Literal::Str(s.clone()), ir::Type::Str, span),
+            ast::ExprKind::Bytes(b) => {
+                Self::lit(ir::Literal::Bytes(b.clone()), ir::Type::Bytes, span)
+            }
+            ast::ExprKind::Cairn(c) => Self::lit(ir::Literal::Cairn(*c), ir::Type::Cairn, span),
+            ast::ExprKind::Bool(b) => Self::lit(ir::Literal::Bool(*b), ir::Type::Bool, span),
             ast::ExprKind::Name(name) => self.name(name, &[]),
             ast::ExprKind::Block(b) => {
                 let block = self.block(b);
@@ -744,12 +738,7 @@ impl Lowering<'_> {
             return Self::at(ir::ExprKind::Prim(p), prim_arrow(p, args), Depth::PURE, span);
         }
         if let Some(r) = Refusal::from_name(&name.text) {
-            return Self::at(
-                ir::ExprKind::Literal(ir::Literal::Refusal(r)),
-                ir::Type::Refusal,
-                Depth::PURE,
-                span,
-            );
+            return Self::lit(ir::Literal::Refusal(r), ir::Type::Refusal, span);
         }
         self.fault(span, FaultKind::Unknown("this name"));
         Self::unit_at(span)
@@ -850,6 +839,9 @@ impl Lowering<'_> {
             ir::Proj::Index(i) => acc.join(i.depth),
             ir::Proj::Field(_) => acc,
         });
+        if let Some(slot) = self.depths.get_mut(place.local.0 as usize) {
+            *slot = slot.join(value.depth);
+        }
         Self::at(
             ir::ExprKind::Assign { place, value: Box::new(value) },
             ir::Type::Unit,

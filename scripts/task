@@ -55,7 +55,7 @@ case "${1:-}" in
   fuzz)
     # The soak. The short pass runs in `test` on every commit; this is the one
     # you leave going. NETHER_FUZZ_ROUNDS sets the length.
-    cargo test --release --workspace --test fuzz --test monotone -- --ignored --nocapture
+    cargo test --release --workspace --test fuzz --test monotone --test calculus -- --ignored --nocapture
     ;;
   proofs)
     # Mechanized metatheory in `proof/` and the size demonstrations.
