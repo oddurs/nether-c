@@ -131,6 +131,26 @@ class Workflow(unittest.TestCase):
         self.assertEqual(len(merges), 2)
         self.assertTrue(all("--match-head-commit" in args and "--auto" in args for args in merges))
 
+    def test_a_push_by_hand_still_runs_the_checks(self):
+        # Only `scripts/agent pr` leaves a stamp, so the hook is still the gate
+        # for a push nobody checked first. 0292.
+        self.call(self.tree, "git", "push", "-u", "origin", "chore/test")
+        self.assertEqual((self.base / "checks").read_text().splitlines(), ["check"])
+
+    def test_a_stamp_for_another_commit_does_not_skip_the_checks(self):
+        git_dir = Path(self.call(self.tree, "git", "rev-parse", "--absolute-git-dir").strip())
+        (git_dir / "nether-checked").write_text("0" * 40 + "\n")
+        self.call(self.tree, "git", "push", "-u", "origin", "chore/test")
+        self.assertEqual((self.base / "checks").read_text().splitlines(), ["check"])
+
+    def test_a_failed_push_is_said_and_opens_nothing(self):
+        # A push that died used to end the script under `set -e` with no word
+        # of its own: GitHub closing an idle connection was exit 141. 0292.
+        self.call(self.tree, "git", "remote", "set-url", "origin", str(self.base / "absent.git"))
+        said = self.agent("pr", ok=False)
+        self.assertIn("agent: push of chore/test failed", said)
+        self.assertFalse(any(args[:2] == ["pr", "create"] for args in self.log()))
+
     def test_dirty_tree_cannot_publish_or_be_removed(self):
         (self.tree / "precious").write_text("keep")
         self.agent("pr", ok=False)
