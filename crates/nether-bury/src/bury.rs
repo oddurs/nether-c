@@ -28,7 +28,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 
 use nether_core::{
     BinOp, Block, Capability, Demand, Depth, Diagnostic, Expr, ExprKind, FuncDef, FuncId, GlobalId,
@@ -414,10 +414,19 @@ pub fn bury_on(
     })
 }
 
-/// A demand buried ahead, as [`Burial::early`] leaves it for the serial order;
-/// and, beside each demand, who took it.
-type Handoff =
-    (Vec<Mutex<Option<mpsc::Sender<Option<Residue>>>>>, Vec<mpsc::Receiver<Option<Residue>>>);
+/// One demand, between the serial order and the workers: nobody has it yet,
+/// somebody is burying it, or a worker finished and this is what it left.
+enum Slot {
+    Free,
+    Taken,
+    Done(Option<Residue>),
+}
+
+/// A slot per demand behind one lock, and the condition the serial order waits
+/// on when a worker has the demand it reached. One allocation for every
+/// demand, rather than a channel and a mutex each: most demands never meet a
+/// worker. One lock, because a `Condvar` waits with exactly one. 0291.
+type Handoff = (Mutex<Vec<Slot>>, Condvar);
 
 impl<'a> Burial<'a> {
     fn new(unit: &'a Unit, source: Cairn, fuel: u64, answers: &'a Answers, ahead: bool) -> Self {
@@ -455,22 +464,43 @@ impl<'a> Burial<'a> {
             return self.demands(None);
         }
         let seed = Burial::new(self.unit, self.source, self.left, self.answers, true);
-        let (sent, early): (Vec<_>, Vec<_>) =
-            self.unit.demands.iter().map(|_| mpsc::channel()).unzip();
-        let handoff: Handoff = (sent.into_iter().map(|s| Mutex::new(Some(s))).collect(), early);
+        let handoff: Handoff =
+            (Mutex::new(self.unit.demands.iter().map(|_| Slot::Free).collect()), Condvar::new());
         // The first demand is the serial order's at once, so a worker starts
         // at the second, and stops when this runs past the last.
         let next = AtomicUsize::new(1);
         let stop = Arc::new(AtomicBool::new(false));
+        // Demands buried ahead that came to nothing, in a row. Each one costs
+        // the serial order a wait for a worker's answer, and the answer is
+        // that it has to do the demand itself. Once every worker has come to
+        // nothing twice running, the demands left are probably the same kind,
+        // and the serial order does them faster alone. Nothing it produces
+        // depends on this: it decides every demand either way. 0291.
+        let (misses, enough) = (AtomicUsize::new(0), 2 * workers);
         std::thread::scope(|s| {
             for _ in 0..workers {
                 let work = || {
-                    loop {
+                    while misses.load(Relaxed) < enough {
                         let i = next.fetch_add(1, Relaxed);
-                        let Some(m) = handoff.0.get(i) else { break };
-                        if let Some(tx) = m.lock().ok().and_then(|mut t| t.take()) {
-                            let _ = tx.send(seed.early(i, &stop));
+                        {
+                            let mut slots =
+                                handoff.0.lock().unwrap_or_else(PoisonError::into_inner);
+                            match slots.get_mut(i) {
+                                None => break,
+                                Some(slot @ Slot::Free) => *slot = Slot::Taken,
+                                Some(_) => continue,
+                            }
                         }
+                        let got = seed.early(i, &stop);
+                        if got.is_some() {
+                            misses.store(0, Relaxed);
+                        } else {
+                            misses.fetch_add(1, Relaxed);
+                        }
+                        let mut slots = handoff.0.lock().unwrap_or_else(PoisonError::into_inner);
+                        slots[i] = Slot::Done(got);
+                        drop(slots);
+                        handoff.1.notify_all();
                     }
                 };
                 if std::thread::Builder::new().stack_size(STACK).spawn_scoped(s, work).is_err() {
@@ -505,9 +535,19 @@ impl<'a> Burial<'a> {
         for (i, d) in self.unit.demands.iter().enumerate() {
             // Whoever reaches a demand first takes it, so nothing waits on a
             // demand no worker started.
-            let got = handoff.and_then(|(sent, early)| {
-                let ours = sent.get(i).and_then(|m| m.lock().ok()?.take()).is_some();
-                if ours { None } else { early.get(i)?.recv().ok().flatten() }
+            let got = handoff.and_then(|(slots, done)| {
+                let mut slots = slots.lock().unwrap_or_else(PoisonError::into_inner);
+                if matches!(slots.get(i)?, Slot::Free) {
+                    slots[i] = Slot::Taken;
+                    return None;
+                }
+                while matches!(slots[i], Slot::Taken) {
+                    slots = done.wait(slots).unwrap_or_else(PoisonError::into_inner);
+                }
+                match std::mem::replace(&mut slots[i], Slot::Taken) {
+                    Slot::Done(got) => got,
+                    Slot::Free | Slot::Taken => None,
+                }
             });
             match got {
                 Some(e) if e.fuel_spent <= self.left => {
@@ -540,12 +580,19 @@ impl<'a> Burial<'a> {
     }
 
     /// The demand reached something demands share: a unit-level binding, the
-    /// world, or a minted function. Sent ahead, it is no use, so it stops.
-    fn shares(&mut self) {
-        if self.ahead {
-            self.ahead = false;
-            self.left = 0;
+    /// world, or a minted function. Sent ahead, it is no use, so it stops,
+    /// here and not at its next step: the step it is on is naming a question
+    /// or minting a function, which is the dearest thing a burial does, and
+    /// nobody will take it. [`Burial::early`] turns the halt into no early
+    /// result. The serial order is never ahead, so for it this does nothing.
+    /// 0291.
+    fn shares(&mut self) -> Result<(), Halt> {
+        if !self.ahead {
+            return Ok(());
         }
+        (self.ahead, self.left) = (false, 0);
+        let kind = HaltKind::OutOfFuel { spent: self.spent };
+        Err(Halt { span: Span::default(), kind, grinding: None })
     }
 }
 
@@ -1225,7 +1272,7 @@ impl Burial<'_> {
 
     /// A unit-level binding, evaluated once and only if something reaches it.
     fn global(&mut self, id: GlobalId, x: &Expr) -> Result<Val, Halt> {
-        self.shares();
+        self.shares()?;
         if let Some(v) = self.globals.get(id.0 as usize).and_then(Clone::clone) {
             return Ok(v);
         }
@@ -1274,7 +1321,7 @@ impl Burial<'_> {
             // §6.5: an undecided arm forms no hole, and does not take an answer
             // either, since taking one moves which answer the next act gets.
             if p.latent() > Depth::PURE && !self.speculating {
-                self.shares();
+                self.shares()?;
                 if let Some(args) = values.iter().map(as_value).collect::<Option<Vec<_>>>() {
                     // The arguments are named as values rather than wrapped
                     // in anything. A value has one name, and `seal` of the
@@ -1438,7 +1485,8 @@ impl Burial<'_> {
         }
         let depth = Self::ret_depth(&body);
 
-        self.shares();
+        // A worker stops before minting; what it returns is never used.
+        self.shares().ok()?;
         let key = Self::constants(args).map(|k| (id, k));
         let found = key.as_ref().and_then(|k| self.minted.get(k)).copied();
         let minted = if let Some(minted) = found {

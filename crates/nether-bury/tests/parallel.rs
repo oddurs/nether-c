@@ -168,8 +168,17 @@ fn every_budget_runs_out_where_the_serial_order_would() {
 /// cairn across worker counts and scheduling jitter. 0205.
 #[test]
 fn seeded_programs_match_serial_objects_spans_and_cairn() {
+    // Raised on the way out however the body leaves, so a failed assertion
+    // ends the test rather than waiting for the jitter threads forever.
+    struct Raise<'a>(&'a AtomicBool);
+    impl Drop for Raise<'_> {
+        fn drop(&mut self) {
+            self.0.store(true, Relaxed);
+        }
+    }
     let stop = AtomicBool::new(false);
     std::thread::scope(|s| {
+        let _raise = Raise(&stop);
         for jitter in 0..2usize {
             let stop = &stop;
             s.spawn(move || {
@@ -209,7 +218,6 @@ fn seeded_programs_match_serial_objects_spans_and_cairn() {
             let mid = serial.fuel_spent / 2;
             assert_eq!(on(&u, mid, 6), on(&u, mid, 1), "seed {seed} at mid-budget {mid}:\n{src}");
         }
-        stop.store(true, Relaxed);
     });
 }
 
