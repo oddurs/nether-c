@@ -1,5 +1,5 @@
 # Rust
-/target/
+/target
 **/*.rs.bk
 
 # worktrees live beside the repo, but never inside it
