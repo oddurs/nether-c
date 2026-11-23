@@ -44,7 +44,9 @@ pub fn run(args: &[String]) -> ExitCode {
         Err(e) => {
             eprintln!("nether: {e}");
             return match e {
-                StoreError::Corrupt { .. } => ExitCode::from(code::MALFORMED),
+                StoreError::Corrupt { .. } | StoreError::Ragged { .. } => {
+                    ExitCode::from(code::MALFORMED)
+                }
                 _ => crate::FAILED,
             };
         }
@@ -257,7 +259,10 @@ impl Reading {
 
 /// The name §9.1 gives a stratum. Nothing grants 0, and nothing has to.
 pub(crate) fn stratum_name(stratum: u8) -> &'static str {
-    Depth::new(stratum).and_then(Capability::at).map_or("pure", Capability::name)
+    match Depth::new(stratum) {
+        Some(d) => Capability::at(d).map_or("pure", Capability::name),
+        None => "invalid",
+    }
 }
 
 /// A position, named the way §8.1 requires: by the cairn of its source.

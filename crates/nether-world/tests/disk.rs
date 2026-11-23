@@ -253,3 +253,28 @@ fn a_path_that_does_not_exist_yet_still_resolves() {
     );
     assert_eq!(std::fs::read(a.root.join("deep/down/obj")).expect("written"), b"obj:nc");
 }
+
+#[test]
+#[cfg(unix)]
+fn a_dangling_symlink_cannot_escape_the_root_on_write() {
+    let a = Asked::new("dangling-write", true);
+    let outside = a.root.parent().expect("a parent").join("escaped.txt");
+    assert!(!outside.exists());
+    std::os::unix::fs::symlink(&outside, a.root.join("escape")).expect("dangling link");
+    let bytes = a.arg(Value::Bytes(b"pwned".to_vec()));
+    assert_eq!(
+        a.ask("write", vec![a.arg(Value::Str("escape".into())), bytes]),
+        AnswerOf::Refused(Refusal::Denied)
+    );
+    assert!(!outside.exists(), "write followed a dangling symlink outside root");
+}
+
+#[test]
+fn exists_on_escaped_path_is_false_and_empty_path_is_malformed() {
+    let a = Asked::new("exists-edge", false);
+    assert_eq!(
+        a.said("exists", vec![a.arg(Value::Str("../../etc/passwd".into()))]),
+        Value::Bool(false)
+    );
+    assert_eq!(a.reading(""), AnswerOf::Refused(Refusal::Malformed));
+}

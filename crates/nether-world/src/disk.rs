@@ -10,6 +10,7 @@
 //! stratum 4 the path and the cairn of what was written. Recording the call
 //! and the answer covers both, because the call holds the path.
 
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use nether_core::{Capability, Depth};
@@ -17,6 +18,10 @@ use nether_ledger::{Call, Refusal, Span, Store, Stored, Value};
 
 use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
+
+/// How much of a file is read. Matches `net::MOST`, so a huge file or FIFO
+/// cannot exhaust memory or block a burial forever (§6.4).
+const MOST: u64 = 64 * 1024 * 1024;
 
 /// The disk, under a root nothing may reach out of.
 ///
@@ -58,35 +63,82 @@ impl Disk {
     /// was already there — which is the one a program being buried can arrange
     /// for itself, by writing at stratum 4 and reading at stratum 3.
     fn resolve(&self, path: &str) -> Result<PathBuf, Refusal> {
-        let mut out = self.root.clone();
+        if path.is_empty() {
+            return Err(Refusal::Malformed);
+        }
+        let mut rel = Vec::new();
         for part in Path::new(path).components() {
             match part {
-                Component::Normal(name) => out.push(name),
+                Component::Normal(name) => rel.push(name),
                 Component::CurDir => {}
-                // Out of the root, or an absolute path, or a drive letter.
                 Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
                     return Err(Refusal::Denied);
                 }
             }
         }
-        if within(&self.root, &out) { Ok(out) } else { Err(Refusal::Denied) }
+        let Ok(root) = self.root.canonicalize() else { return Err(Refusal::Denied) };
+        let mut cur = root.clone();
+        for name in rel {
+            cur.push(name);
+            if !step_within(&root, &mut cur, 0) {
+                return Err(Refusal::Denied);
+            }
+        }
+        if within(&root, &cur) { Ok(cur) } else { Err(Refusal::Denied) }
     }
 }
 
-/// Whether that path is under the root once every link in it is followed.
-///
-/// A path that does not exist cannot be a link, so what has to be asked about
-/// is the deepest part of it that does: for `write` that is usually the root
-/// itself, and for `read` it is the file.
+/// Resolve one path component while refusing any symlink — including a dangling
+/// symlink — whose target escapes `root`.
+fn step_within(root: &Path, cur: &mut PathBuf, hops: u8) -> bool {
+    if hops > 40 {
+        return false;
+    }
+    let Ok(meta) = std::fs::symlink_metadata(&*cur) else {
+        // Not present yet (e.g. a new file or directory for `write`).
+        return true;
+    };
+    if !meta.file_type().is_symlink() {
+        return true;
+    }
+    let Ok(target) = std::fs::read_link(&*cur) else { return false };
+    let mut resolved = if target.is_absolute() {
+        PathBuf::new()
+    } else {
+        cur.parent().map_or_else(|| root.to_path_buf(), Path::to_path_buf)
+    };
+    for part in target.components() {
+        match part {
+            Component::RootDir => resolved.push(Component::RootDir.as_os_str()),
+            Component::Prefix(p) => resolved.push(p.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !resolved.pop() {
+                    return false;
+                }
+            }
+            Component::Normal(n) => {
+                resolved.push(n);
+                if !step_within(root, &mut resolved, hops + 1) {
+                    return false;
+                }
+            }
+        }
+    }
+    if !resolved.starts_with(root) {
+        return false;
+    }
+    *cur = resolved;
+    true
+}
+
+/// Whether that path is under the canonical `root` once every existing link is followed.
 fn within(root: &Path, at: &Path) -> bool {
-    let Ok(root) = root.canonicalize() else { return false };
     let mut probe = at;
     loop {
         if let Ok(real) = probe.canonicalize() {
-            return real.starts_with(&root);
+            return real.starts_with(root);
         }
-        // Nothing at this depth exists yet. Ask about its parent, and stop
-        // rather than walk off the end of the path we were handed.
         match probe.parent() {
             Some(parent) if parent != probe => probe = parent,
             _ => return false,
@@ -138,9 +190,13 @@ impl Provider for Disk {
         // refusal is wrapped even for `exists`, because there is no plain
         // `Bool` that is not also an answer to a question nobody asked.
         let Some(path) = path_of(into.store(), call) else {
+            if call.function == "exists" {
+                return Err(Refuse::Collapse("`exists` was not given a path".into()));
+            }
             return into.record(call, stratum, span, &refused(Refusal::Malformed));
         };
         let said = match self.resolve(&path) {
+            Err(_) if call.function == "exists" => given(&call.function, Value::Bool(false)),
             Err(no) => refused(no),
             Ok(at) => Self::act(&call.function, &at, call, into),
         };
@@ -152,17 +208,23 @@ impl Disk {
     /// Touch the world, once, and say what it said.
     fn act(function: &str, at: &Path, call: &Call, into: &Recorder) -> Value {
         match function {
-            "read" => std::fs::read(at)
-                .map_or_else(|e| refused(why(&e)), |b| given(function, Value::Bytes(b))),
-            "exists" => given(function, Value::Bool(at.exists())),
+            "read" => Self::read(at),
+            "exists" => given(function, Value::Bool(at.try_exists().unwrap_or(false))),
             "list" => match std::fs::read_dir(at) {
                 Err(e) => refused(why(&e)),
                 Ok(entries) => {
                     // Sorted, because a directory has no order and a trace
                     // that depended on the filesystem's would not replay.
-                    let mut names: Vec<String> = entries
-                        .filter_map(|e| Some(e.ok()?.file_name().to_str()?.to_owned()))
-                        .collect();
+                    let mut names = Vec::new();
+                    for entry in entries {
+                        let Ok(entry) = entry else {
+                            return refused(Refusal::Unreachable);
+                        };
+                        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                            return refused(Refusal::Malformed);
+                        };
+                        names.push(name);
+                    }
                     names.sort();
                     given(function, Value::Array(names.into_iter().map(Value::Str).collect()))
                 }
@@ -172,6 +234,31 @@ impl Disk {
             "write" => Self::write(at, call, into),
             _ => refused(Refusal::Malformed),
         }
+    }
+
+    fn read(at: &Path) -> Value {
+        let meta = match std::fs::metadata(at) {
+            Ok(m) => m,
+            Err(e) => return refused(why(&e)),
+        };
+        if !meta.is_file() {
+            return refused(Refusal::Denied);
+        }
+        if meta.len() > MOST {
+            return refused(Refusal::Exhausted);
+        }
+        let file = match std::fs::File::open(at) {
+            Ok(f) => f,
+            Err(e) => return refused(why(&e)),
+        };
+        let mut bytes = Vec::new();
+        if let Err(e) = file.take(MOST + 1).read_to_end(&mut bytes) {
+            return refused(why(&e));
+        }
+        if bytes.len() as u64 > MOST {
+            return refused(Refusal::Exhausted);
+        }
+        given("read", Value::Bytes(bytes))
     }
 
     /// §9.5: the only prelude function whose witness records something the

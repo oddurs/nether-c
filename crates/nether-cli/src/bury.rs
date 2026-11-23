@@ -11,9 +11,9 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use nether_bury::{HaltKind, bury};
-use nether_core::{Capability, Depth, Diagnostic, check, report};
+use nether_core::{Capability, Depth, report};
 use nether_ledger::{Cairn, Node, Store, Stored, Value};
-use nether_syntax::{lower, parse, print};
+use nether_syntax::print;
 
 use crate::memo::Remembered;
 use crate::{FAILED, code, json, usage_error};
@@ -61,6 +61,10 @@ pub fn run(args: &[String]) -> ExitCode {
                 eprintln!("nether: unknown option {other}");
                 return usage_error();
             }
+            _ if path.is_some() => {
+                eprintln!("nether: one file at a time");
+                return usage_error();
+            }
             other => path = Some(other),
         }
     }
@@ -106,36 +110,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
         return Err(ExitCode::from(code::MALFORMED));
     };
     let shown = path.display().to_string();
-    let complain = |d: &Diagnostic| eprint!("{}", report(d, &text, &shown));
-
-    let ast = match parse(&source) {
-        Ok(ast) => ast,
-        Err(faults) => {
-            for fault in &faults {
-                complain(&fault.diagnostic());
-            }
-            return Err(ExitCode::from(code::MALFORMED));
-        }
-    };
-    let unit = match lower(&ast) {
-        Ok(unit) => unit,
-        Err(faults) => {
-            for fault in &faults {
-                complain(&fault.diagnostic());
-            }
-            return Err(ExitCode::from(code::MALFORMED));
-        }
-    };
-    // The depth checker runs before burial, not after. A program that does not
-    // check is a program with no depths, and burying one would mean deciding
-    // what it meant.
-    let faults = check(&unit);
-    if !faults.is_empty() {
-        for fault in &faults {
-            complain(&fault.diagnostic());
-        }
-        return Err(ExitCode::from(code::MALFORMED));
-    }
+    let unit = crate::closing::checked_unit(&source, &shown)?;
 
     let store = crate::opened()?;
 
@@ -154,7 +129,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
         let residue = match bury(&unit, source_cairn, fuel) {
             Ok(residue) => residue,
             Err(halt) => {
-                complain(&halt.diagnostic());
+                eprint!("{}", report(&halt.diagnostic(), &text, &shown));
                 return Err(match halt.kind {
                     // §8.8 gives fuel its own code: it is the one failure a
                     // larger budget might fix.
@@ -177,11 +152,11 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
         // Burial holds no capability, so nothing was answered and there are no
         // witnesses. §6.6: exhumation is what records one.
         let witnesses: Vec<Cairn> = Vec::new();
-        let depth = crate::closing::depth(&store, residue.depth.get(), &residue.holes, &witnesses);
+        let depth = crate::closing::depth(&store, residue.depth.get(), &residue.holes, &witnesses)?;
         let trace = Node::Trace {
             residue: residue_cairn,
             holes: residue.holes.clone(),
-            unrecorded: crate::closing::unrecorded(&store, &witnesses),
+            unrecorded: crate::closing::unrecorded(&store, &witnesses)?,
             depth,
             witnesses,
             deposits: residue.deposits.clone(),
@@ -198,6 +173,7 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
     // Read back rather than carried, so a remembered burial and a fresh one
     // are reported by one path from one place: the trace.
     let Ok(Stored::Node(Node::Trace { residue, holes, depth, .. })) = store.get(done.trace) else {
+        eprintln!("nether: trace {} is not readable back", done.trace.short());
         return Err(FAILED);
     };
     let told = Buried {

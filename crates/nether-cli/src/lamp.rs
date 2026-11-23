@@ -11,15 +11,15 @@ use std::process::ExitCode;
 
 use nether_core::{
     Block, Capability, Depth, Expr, ExprKind, FuncDef, LocalId, Span, Stmt, Type, Unit, bound_to,
-    check, children,
+    children,
 };
 use nether_ledger::{AnswerOf, Cairn, Node, Refusal, Store, Stored, Value};
-use nether_syntax::{lower, parse};
 
-use crate::{FAILED, code, json, strata::stratum_name, usage_error};
+use crate::{FAILED, json, strata::stratum_name, usage_error};
 
-/// How far a provenance walk goes when nobody says.
+/// How far a provenance walk goes when nobody says, and the hard upper bound.
 const DEFAULT_DEPTH: usize = 8;
+const MAX_DEPTH: usize = 64;
 
 /// `nether lamp <cairn> [--provenance | --at <byte> [--source <path>]] [--depth <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
@@ -34,8 +34,8 @@ pub fn run(args: &[String]) -> ExitCode {
         match arg.as_str() {
             "--provenance" => backwards = true,
             "--json" => wants_json = true,
-            "--depth" => match rest.next().and_then(|n| n.parse().ok()) {
-                Some(n) => depth = n,
+            "--depth" => match rest.next().and_then(|n| n.parse::<usize>().ok()) {
+                Some(n) => depth = n.min(MAX_DEPTH),
                 None => return complain("`--depth` wants a number"),
             },
             "--at" => match rest.next().and_then(|n| n.parse().ok()) {
@@ -103,11 +103,13 @@ fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
         // A trace is read by what it left behind: every deposit under it, in
         // the order the program made them. §8.4.
         Stored::Node(Node::Trace { .. }) => {
-            let found = deposits(store, cairn);
-            // Concatenated, not joined. A deposit is what the program wrote,
-            // and a program that wants a newline between two of them writes
-            // one — `"a\n"` and `"b\n"` are two lines, not two lines with a
-            // blank between. §8.4: lamp renders the value.
+            let found = match deposits(store, cairn) {
+                Ok(found) => found,
+                Err(e) => {
+                    eprintln!("nether: {e}");
+                    return FAILED;
+                }
+            };
             if found.is_empty() { "nothing was deposited\n".to_string() } else { found.concat() }
         }
         Stored::Node(n) => node(store, n),
@@ -134,25 +136,25 @@ fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
 /// list is read and not the graph. §8.4: and it is read in its own order,
 /// which is the order they were made in. Sorting it by source put a
 /// hash in charge of which half of a program's output came first.
-fn deposits(store: &Store, root: Cairn) -> Vec<String> {
-    match store.get(root) {
-        Ok(Stored::Node(Node::Trace { deposits, .. })) => {
-            deposits.iter().filter_map(|at| deposited(store, *at)).collect()
+fn deposits(store: &Store, root: Cairn) -> Result<Vec<String>, nether_ledger::StoreError> {
+    match store.get(root)? {
+        Stored::Node(Node::Trace { deposits, .. }) => {
+            deposits.iter().map(|at| deposited(store, *at)).collect()
         }
-        // A `Deposit` lamped on its own, rather than through a trace that
-        // names it. There is no list to read, and it is one deposit.
-        Ok(Stored::Node(Node::Deposit { .. })) => deposited(store, root).into_iter().collect(),
-        _ => Vec::new(),
+        Stored::Node(Node::Deposit { .. }) => Ok(vec![deposited(store, root)?]),
+        _ => Ok(Vec::new()),
     }
 }
 
 /// One `Deposit`, rendered.
-fn deposited(store: &Store, at: Cairn) -> Option<String> {
-    let Ok(Stored::Node(Node::Deposit { value: held, .. })) = store.get(at) else {
-        return None;
+fn deposited(store: &Store, at: Cairn) -> Result<String, nether_ledger::StoreError> {
+    let Stored::Node(Node::Deposit { value: held, .. }) = store.get(at)? else {
+        return Err(nether_ledger::StoreError::Corrupt { asked: at, found: None, why: None });
     };
-    let Ok(Stored::Value(v)) = store.get(held) else { return None };
-    Some(value(&v))
+    let Stored::Value(v) = store.get(held)? else {
+        return Err(nether_ledger::StoreError::Corrupt { asked: held, found: None, why: None });
+    };
+    Ok(value(&v))
 }
 
 /// A value, as a person reads one.
@@ -299,6 +301,19 @@ fn provenance(store: &Store, cairn: Cairn, limit: usize, wants_json: bool) -> Ex
 }
 
 fn walk(store: &Store, cairn: Cairn, limit: usize, at: usize, out: &mut Vec<String>) {
+    let mut active = HashSet::new();
+    active.insert(cairn);
+    walk_acyclic(store, cairn, limit.min(MAX_DEPTH), at, &mut active, out);
+}
+
+fn walk_acyclic(
+    store: &Store,
+    cairn: Cairn,
+    limit: usize,
+    at: usize,
+    active: &mut HashSet<Cairn>,
+    out: &mut Vec<String>,
+) {
     if at >= limit {
         return;
     }
@@ -313,7 +328,10 @@ fn walk(store: &Store, cairn: Cairn, limit: usize, at: usize, out: &mut Vec<Stri
         let stem = "   ".repeat(at);
         let elbow = if i == last { "└─" } else { "├─" };
         out.push(format!("{stem}{elbow} {what}"));
-        walk(store, *one, limit, at + 1, out);
+        if active.insert(*one) {
+            walk_acyclic(store, *one, limit, at + 1, active, out);
+            active.remove(one);
+        }
     }
 }
 
@@ -384,43 +402,47 @@ fn inspect_at(
         );
         return FAILED;
     };
-    let Ok(unit) = parse(&src).and_then(|ast| lower(&ast)) else {
-        return ExitCode::from(code::MALFORMED);
+    let unit = match crate::closing::checked_unit(&src, &source.short()) {
+        Ok(u) => u,
+        Err(code) => return code,
     };
-    if !check(&unit).is_empty() {
-        return ExitCode::from(code::MALFORMED);
-    }
     let Some(hit) = find_at(&unit, at) else {
         eprintln!("nether: no expression at byte {byte} in {}", source.short());
         return FAILED;
     };
-    let descend = hit.descend.or_else(|| find_descend(&unit, hit.func, hit.expr, hit.depth));
-    let call = find_call(&unit, hit.func, hit.expr, hit.depth);
+    let descend = hit
+        .descend
+        .or_else(|| find_descend(&unit, hit.func, hit.expr, hit.depth, &mut HashSet::new()));
+    let call = find_call(&unit, hit.func, hit.expr, hit.depth, &mut HashSet::new());
     let nodes = match trace_hits(store, &trace, source, byte, call.as_ref().map(|(_, s)| *s), limit)
     {
         Ok(n) => n,
         Err(code) => return code,
     };
-    print_at(cairn, source, byte, &hit, descend, call, &nodes, wants_json);
+    print_at(
+        &AtReport { cairn, source, byte, hit: &hit, descend, call, nodes: &nodes },
+        wants_json,
+    );
     ExitCode::SUCCESS
 }
 
-#[expect(clippy::too_many_arguments, reason = "one report with all derived facts")]
-fn print_at(
+struct AtReport<'a> {
     cairn: Cairn,
     source: Cairn,
     byte: u64,
-    hit: &Target<'_>,
+    hit: &'a Target<'a>,
     descend: Option<(Capability, Span)>,
     call: Option<(String, Span)>,
-    nodes: &[Hit],
-    wants_json: bool,
-) {
+    nodes: &'a [Hit],
+}
+
+fn print_at(r: &AtReport<'_>, wants_json: bool) {
+    let AtReport { cairn, source, byte, hit, descend, call, nodes } = r;
     let d = hit.depth.get();
     let s = stratum_name(d);
     let ty = hit.ty.to_string();
     if wants_json {
-        let desc = descend.map_or_else(
+        let desc = descend.as_ref().map_or_else(
             || "null".to_string(),
             |(c, sp)| {
                 format!(
@@ -431,12 +453,12 @@ fn print_at(
                 )
             },
         );
-        let called = call.map_or_else(
+        let called = call.as_ref().map_or_else(
             || "null".to_string(),
             |(name, sp)| {
                 format!(
                     "{{\"name\":{},\"start\":{},\"end\":{}}}",
-                    json::string(&name),
+                    json::string(name),
                     sp.start,
                     sp.end
                 )
@@ -474,7 +496,7 @@ fn print_at(
     if let Some((name, sp)) = call {
         let _ = writeln!(out, "call {name}   at {}..{}", sp.start, sp.end);
     }
-    for h in nodes {
+    for h in *nodes {
         for line in &h.lines {
             let _ = writeln!(out, "{line}");
         }
@@ -658,6 +680,7 @@ fn find_descend(
     func: Option<&FuncDef>,
     x: &Expr,
     want: Depth,
+    seen: &mut HashSet<nether_core::GlobalId>,
 ) -> Option<(Capability, Span)> {
     if want == Depth::PURE {
         return None;
@@ -668,15 +691,24 @@ fn find_descend(
         return Some((*capability, x.span));
     }
     if let ExprKind::Local(id) = x.kind {
-        return bound_local(unit, func, id).and_then(|v| find_descend(unit, func, v, want));
+        return bound_local(unit, func, id).and_then(|v| find_descend(unit, func, v, want, seen));
     }
     if let ExprKind::Global(id) = x.kind {
-        return unit.global(id).and_then(|g| find_descend(unit, None, &g.value, want));
+        if !seen.insert(id) {
+            return None;
+        }
+        return unit.global(id).and_then(|g| find_descend(unit, None, &g.value, want, seen));
     }
-    children(x).into_iter().find_map(|c| find_descend(unit, func, c, want))
+    children(x).into_iter().find_map(|c| find_descend(unit, func, c, want, seen))
 }
 
-fn find_call(unit: &Unit, func: Option<&FuncDef>, x: &Expr, want: Depth) -> Option<(String, Span)> {
+fn find_call(
+    unit: &Unit,
+    func: Option<&FuncDef>,
+    x: &Expr,
+    want: Depth,
+    seen: &mut HashSet<nether_core::GlobalId>,
+) -> Option<(String, Span)> {
     if want == Depth::PURE {
         return None;
     }
@@ -694,12 +726,15 @@ fn find_call(unit: &Unit, func: Option<&FuncDef>, x: &Expr, want: Depth) -> Opti
         }
     }
     if let ExprKind::Local(id) = x.kind {
-        return bound_local(unit, func, id).and_then(|v| find_call(unit, func, v, want));
+        return bound_local(unit, func, id).and_then(|v| find_call(unit, func, v, want, seen));
     }
     if let ExprKind::Global(id) = x.kind {
-        return unit.global(id).and_then(|g| find_call(unit, None, &g.value, want));
+        if !seen.insert(id) {
+            return None;
+        }
+        return unit.global(id).and_then(|g| find_call(unit, None, &g.value, want, seen));
     }
-    children(x).into_iter().find_map(|c| find_call(unit, func, c, want))
+    children(x).into_iter().find_map(|c| find_call(unit, func, c, want, seen))
 }
 
 fn bound_local<'a>(unit: &'a Unit, func: Option<&'a FuncDef>, id: LocalId) -> Option<&'a Expr> {

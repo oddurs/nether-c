@@ -2616,3 +2616,106 @@ fn real_vim_editor_shows_hover_depth_jumps_to_origin_and_walks_provenance() {
     let absent_err = std::fs::read_to_string(dir.join("vim_absent.txt")).unwrap();
     assert!(absent_err.contains("is in this store"), "{absent_err}");
 }
+
+#[test]
+fn replay_json_emits_valid_json() {
+    let dir = a_build("replay-json");
+    let trace = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let sealed = field(
+        &stdout(&there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
+    let out = there(&dir, &["exhume", &sealed, "--replay", "--json"]);
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let text = stdout(&out);
+    assert_eq!(text.lines().count(), 1, "{text}");
+    assert!(text.starts_with('{') && text.trim_end().ends_with('}'), "{text}");
+    assert!(text.contains("\"identical\":true"), "{text}");
+    assert!(text.contains(&sealed), "{text}");
+}
+
+#[test]
+fn repeated_deposits_are_preserved_across_exhume() {
+    let dir = scratch("repeated-deposits");
+    std::fs::write(dir.join("f.txt"), "hi").unwrap();
+    let src = "U0 main() {\n  \"tick\\n\";\n  Bytes@3 b = must(descend disk { read(\"f.txt\") });\n  if (len(b) == 2) { \"tick\\n\"; }\n}\ndemand main();\n";
+    std::fs::write(dir.join("rep.nc"), src).unwrap();
+
+    let buried = there(&dir, &["bury", "rep.nc", "--json"]);
+    assert_eq!(code(&buried), 0, "{}", stderr(&buried));
+    let trace = field(&stdout(&buried), "cairn");
+    let exhumed = there(&dir, &["exhume", &trace, "--grant", "disk", "--root", ".", "--json"]);
+    assert_eq!(code(&exhumed), 0, "{}", stderr(&exhumed));
+    let sealed = field(&stdout(&exhumed), "sealed");
+    let shown = there(&dir, &["lamp", &sealed]);
+    assert_eq!(code(&shown), 0, "{}", stderr(&shown));
+    assert_eq!(stdout(&shown), "tick\ntick\n", "{:?}", stdout(&shown));
+}
+
+#[test]
+fn graft_does_not_wrap_non_refusable_primitives_in_answer() {
+    let dir = scratch("graft-clock");
+    let src = "I64@2 t = descend env { clock() };\nU0 main() { t; }\ndemand main();\n";
+    std::fs::write(dir.join("clock.nc"), src).unwrap();
+
+    let buried = there(&dir, &["bury", "clock.nc", "--json"]);
+    assert_eq!(code(&buried), 0, "{}", stderr(&buried));
+    let trace = field(&stdout(&buried), "cairn");
+
+    let store = Store::open(dir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { holes, .. }) = store.get(trace.parse().unwrap()).unwrap() else {
+        panic!("expected trace");
+    };
+    let replacement = store.put(&Stored::Value(Value::Int(42))).unwrap();
+    let out = there(
+        &dir,
+        &[
+            "graft",
+            &trace,
+            "--replace",
+            &holes[0].to_string(),
+            "--with",
+            &replacement.to_string(),
+            "--json",
+        ],
+    );
+    assert_eq!(code(&out), 0, "{}", stderr(&out));
+    let grafted = field(&stdout(&out), "grafted");
+    let shown = there(&dir, &["lamp", &grafted]);
+    assert_eq!(code(&shown), 0, "{}", stderr(&shown));
+    assert_eq!(stdout(&shown), "42\n");
+}
+
+#[test]
+fn cairn_verify_surfaces_ragged_reverse_index() {
+    let (dir, cairn) = with_object("verify-ragged", Value::Int(7));
+    let hex = cairn.to_string();
+    let rev_dir = dir.join("refs").join(&hex[..2]);
+    std::fs::create_dir_all(&rev_dir).unwrap();
+    std::fs::write(rev_dir.join(&hex[2..]), b"bad").unwrap();
+
+    let out = nether(Some(&dir), &["cairn", "--verify", &hex]);
+    assert_eq!(code(&out), 65, "expected malformed exit on ragged reverse index: {}", stdout(&out));
+    assert!(stderr(&out).contains("not whole records"), "{}", stderr(&out));
+}
+
+#[test]
+fn exhume_missing_foreign_library_fails_without_not_built_yet() {
+    let dir = scratch("exhume-missing-so");
+    let src = "Bytes@8 b = must(descend unrecorded { call_foreign(\"sym\", b\"\") });\ndemand b;\n";
+    std::fs::write(dir.join("u.nc"), src).unwrap();
+
+    let buried = there(&dir, &["bury", "u.nc", "--json"]);
+    assert_eq!(code(&buried), 0, "{}", stderr(&buried));
+    let trace = field(&stdout(&buried), "cairn");
+    let out = there(
+        &dir,
+        &["exhume", &trace, "--grant", "unrecorded", "--load", "/nonexistent/libnope.so"],
+    );
+    assert_eq!(code(&out), 69, "{}", stderr(&out));
+    assert!(
+        !stderr(&out).contains("is not built yet"),
+        "stale unimplemented message: {}",
+        stderr(&out)
+    );
+}

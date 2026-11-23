@@ -40,6 +40,9 @@ impl Provider for Ledger {
         // a hole, and §04 types this one as a `Cairn`, so getting here means a
         // program the checker should have rejected.
         let Some(name) = named(into, call) else {
+            if call.function == "has_node" {
+                return Err(Refuse::Collapse("`has_node` was not given a cairn".into()));
+            }
             return into.record(call, Depth::STORE, span, &refused(Refusal::Malformed));
         };
         let said = match call.function.as_str() {

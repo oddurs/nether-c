@@ -249,3 +249,45 @@ fn a_response_that_never_stops_is_exhausted_rather_than_endless() {
     let a = Asked::reaching("endless", vec![format!("127.0.0.1:{port}")], false);
     assert_eq!(a.get(&format!("http://127.0.0.1:{port}/")), AnswerOf::Refused(Refusal::Exhausted));
 }
+
+#[test]
+fn chunked_transfer_encoding_truncated_body_and_url_shapes_work() {
+    // 1. Chunked HTTP/1.1 body is decoded rather than sealed as raw wire framing.
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+    let port = listener.local_addr().expect("addr").port();
+    let handle = std::thread::spawn(move || {
+        let (mut s, _) = listener.accept().expect("accept");
+        let mut req = [0u8; 512];
+        let n = s.read(&mut req).expect("read");
+        let _ = s.write_all(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n",
+        );
+        String::from_utf8_lossy(&req[..n]).into_owned()
+    });
+    let a = Asked::reaching("chunked", vec![format!("127.0.0.1:{port}")], false);
+    assert_eq!(
+        a.get(&format!("http://127.0.0.1:{port}/p?q=1#frag")),
+        AnswerOf::Given(Value::Bytes(b"hello world".to_vec()))
+    );
+    let heard = handle.join().expect("join");
+    assert!(heard.starts_with("GET /p?q=1 HTTP/1.1\r\n"), "fragment leaked: {heard}");
+    assert!(
+        heard.contains(&format!("Host: 127.0.0.1:{port}\r\n")),
+        "missing port in Host: {heard}"
+    );
+
+    // 2. Truncated body (fewer bytes than Content-Length) is refused as Unreachable.
+    let l2 = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+    let p2 = l2.local_addr().expect("addr").port();
+    std::thread::spawn(move || {
+        let Ok((mut s, _)) = l2.accept() else { return };
+        let mut req = [0u8; 256];
+        let _ = s.read(&mut req);
+        let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nshort");
+    });
+    let b = Asked::reaching("trunc", vec![format!("127.0.0.1:{p2}")], false);
+    assert_eq!(b.get(&format!("http://127.0.0.1:{p2}/")), AnswerOf::Refused(Refusal::Unreachable));
+
+    // 3. Garbage without `://` is Malformed, not Denied.
+    assert_eq!(b.get("not-a-url"), AnswerOf::Refused(Refusal::Malformed));
+}

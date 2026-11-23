@@ -15,6 +15,7 @@
 //! trying to make the call safe.
 
 use std::ffi::{CString, c_char, c_int, c_void};
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 
@@ -29,7 +30,11 @@ unsafe extern "C" {
 
 /// `RTLD_NOW | RTLD_LOCAL`. Now, so a missing symbol is an error at load
 /// rather than a crash at the call; local, so one object's symbols cannot
-/// answer for another's by accident.
+/// answer for another's by accident. On macOS `RTLD_LOCAL` is `0x4` and
+/// omitting it defaults to `RTLD_GLOBAL`.
+#[cfg(target_os = "macos")]
+const NOW_AND_LOCAL: c_int = 0x2 | 0x4;
+#[cfg(not(target_os = "macos"))]
 const NOW_AND_LOCAL: c_int = 0x2;
 
 /// §9.8.1's signature, as Rust spells it.
@@ -87,7 +92,7 @@ impl Object {
     /// what happened that exists.
     pub fn open(path: &Path) -> Result<Self, Failed> {
         let shown = path.display().to_string();
-        let Ok(name) = CString::new(shown.as_bytes()) else {
+        let Ok(name) = CString::new(path.as_os_str().as_bytes()) else {
             return Err(Failed(format!("{shown} has a NUL in it")));
         };
         // SAFETY: `name` is a valid NUL-terminated string that outlives the

@@ -114,8 +114,10 @@ impl Provider for Env {
             // declared is a bug in the program, and §9.9 makes it a collapse
             // — not an empty string, which is the class of bug this language
             // exists to make impossible.
-            _ => {
-                let name = asked(into, call).unwrap_or_default();
+            "env" => {
+                let Some(name) = asked(into, call) else {
+                    return Err(Refuse::Collapse("`env` was not given a variable name".into()));
+                };
                 match self.declared.of(&name) {
                     Some("") => refused(Refusal::Absent),
                     Some(value) => given(&call.function, Value::Str(value.to_owned())),
@@ -126,6 +128,7 @@ impl Provider for Env {
                     }
                 }
             }
+            other => return Err(Refuse::Collapse(format!("`{other}` is not an env primitive"))),
         };
         into.record(call, Depth::ENV, span, &said)
     }

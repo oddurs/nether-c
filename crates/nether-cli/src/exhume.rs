@@ -4,14 +4,15 @@
 //! answering produces a new trace with a new cairn, and the old one still
 //! exists with its hole in it.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
 use nether_bury::{Answers, HaltKind, bury_with};
-use nether_core::{Capability, check};
+use nether_core::Capability;
 use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
-use nether_syntax::{lower, parse, print};
+use nether_syntax::print;
 use nether_world::{
     Declared, Disk, Entropy, Env, Ledger, Net, Recorder, Replay, Unrecorded, World,
 };
@@ -22,7 +23,6 @@ use crate::{FAILED, code, json, usage_error};
 const DEFAULT_FUEL: u64 = 1_000_000;
 
 /// What one invocation asked for. §8.3, and §8.3.1 for the declaration.
-#[derive(Default)]
 struct Asked<'a> {
     name: Option<&'a str>,
     granted: Vec<Capability>,
@@ -32,13 +32,33 @@ struct Asked<'a> {
     root: Option<&'a str>,
     clock: Option<i64>,
     target: Option<&'a str>,
+    fuel: u64,
     replaying: bool,
     wants_json: bool,
 }
 
+impl Default for Asked<'_> {
+    fn default() -> Self {
+        Self {
+            name: None,
+            granted: Vec::new(),
+            declared: Declared::default(),
+            reach: Vec::new(),
+            load: Vec::new(),
+            root: None,
+            clock: None,
+            target: None,
+            fuel: DEFAULT_FUEL,
+            replaying: false,
+            wants_json: false,
+        }
+    }
+}
+
 const USAGE: &str = "usage: nether exhume <cairn> [--grant <cap>]... \
                      [--declare <name>=<value>]...\n       [--clock <seconds>] \
-                     [--target <triple>] [--root <dir>] [--replay] [--json]";
+                     [--target <triple>] [--root <dir>] [--reach <host[:port]>]...\n       \
+                     [--load <path>]... [--fuel <n>] [--replay] [--json]";
 
 fn wrong(what: &str) -> ExitCode {
     eprintln!("nether: {what}");
@@ -55,15 +75,30 @@ impl<'a> Asked<'a> {
             match arg.as_str() {
                 "--json" => it.wants_json = true,
                 "--replay" => it.replaying = true,
-                "--grant" => it.granted.push(grant(rest.next())?),
+                "--grant" => {
+                    let cap = grant(rest.next())?;
+                    if !it.granted.contains(&cap) {
+                        it.granted.push(cap);
+                    }
+                }
                 "--declare" => it.declared = declare(it.declared, rest.next())?,
                 "--clock" => match rest.next().map(|n| n.parse()) {
+                    Some(Ok(_)) if it.clock.is_some() => {
+                        return Err(wrong("`--clock` is given once"));
+                    }
                     Some(Ok(n)) => it.clock = Some(n),
                     _ => return Err(wrong("`--clock` wants whole seconds since the epoch")),
                 },
                 "--target" => match rest.next() {
-                    Some(t) => it.target = Some(t),
-                    None => return Err(wrong("`--target` wants a triple")),
+                    Some(_) if it.target.is_some() => {
+                        return Err(wrong("`--target` is given once"));
+                    }
+                    Some(t) if !t.is_empty() => it.target = Some(t),
+                    _ => return Err(wrong("`--target` wants a triple")),
+                },
+                "--fuel" => match rest.next().map(|n| n.parse::<u64>()) {
+                    Some(Ok(n)) => it.fuel = n,
+                    _ => return Err(wrong("`--fuel` wants a number of steps")),
                 },
                 "--reach" => match rest.next() {
                     Some(h) if !h.is_empty() => it.reach.push(h.clone()),
@@ -194,12 +229,9 @@ pub fn run(args: &[String]) -> ExitCode {
         Ok(store) => store,
         Err(code) => return code,
     };
-    let cairn = match store.resolve(asked.name.unwrap_or_default()) {
+    let cairn = match crate::named(&store, asked.name.unwrap_or_default()) {
         Ok(cairn) => cairn,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return ExitCode::from(code::ABSENT);
-        }
+        Err(code) => return code,
     };
     match dig_up(&store, cairn, &asked) {
         Ok(()) => ExitCode::SUCCESS,
@@ -231,46 +263,34 @@ fn no_such_hole(hole: Cairn) -> ExitCode {
     ExitCode::from(code::ABSENT)
 }
 
-/// The world a grant asks for, or the reason there is not one yet.
-fn world_from(asked: &Asked) -> Result<World, Capability> {
-    // `settled` has refused a disk grant without a root, so an empty one here
-    // is a world nothing will ask the disk of.
+/// The world a grant asks for, or the exit code saying why it could not open.
+fn world_from(asked: &Asked) -> Result<World, ExitCode> {
     let root = Path::new(asked.root.unwrap_or_default());
     let mut world = World::sealed();
     for cap in &asked.granted {
         let provider: Box<dyn nether_world::Provider> = match cap {
             Capability::Store => Box::new(Ledger),
-            // §8.3.1 makes both required when `env` is granted, and `settled`
-            // has already refused the invocation that leaves either out.
             Capability::Env => Box::new(Env::pinned(
                 asked.declared.clone(),
                 asked.clock.unwrap_or_default(),
                 asked.target.unwrap_or_default(),
             )),
-            // §8.3.2 is the whole of where it may reach; granting `net` and
-            // reaching nothing is a network with nothing in it.
-            // §9.7: a machine with nothing to draw from cannot grant it at
-            // all, and finding that out here is better than finding it out
-            // halfway through a burial.
             Capability::Entropy => match Entropy::opening() {
                 Ok(source) => Box::new(source),
                 Err(e) => {
                     eprintln!("nether: this machine has no entropy to grant: {e}");
-                    return Err(*cap);
+                    return Err(ExitCode::from(code::UNIMPLEMENTED));
                 }
             },
             Capability::Net => Box::new(Net::fetching(asked.reach.clone())),
             Capability::NetWrite => Box::new(Net::sending(asked.reach.clone())),
             Capability::Disk => Box::new(Disk::reading(root)),
             Capability::DiskWrite => Box::new(Disk::writing(root)),
-            // §8.3.3: opened at the grant. A burial that finds out halfway
-            // through that an object is missing has already done half its
-            // work at stratum 8, and there is no undoing that half.
             Capability::Unrecorded => match Unrecorded::loading(&asked.load) {
                 Ok(foreign) => Box::new(foreign),
                 Err(why) => {
                     eprintln!("nether: that shared object would not load: {why}");
-                    return Err(*cap);
+                    return Err(ExitCode::from(code::UNIMPLEMENTED));
                 }
             },
         };
@@ -279,7 +299,76 @@ fn world_from(asked: &Asked) -> Result<World, Capability> {
     Ok(world)
 }
 
-#[expect(clippy::too_many_lines, reason = "one pass, in the order §6.6 puts it")]
+fn gather_replay(store: &Store, witnesses: &[Cairn], holes: &[Cairn]) -> Result<Answers, ExitCode> {
+    let have = Replay::of_trace(store, witnesses).map_err(|e| {
+        eprintln!("nether: {e}");
+        FAILED
+    })?;
+    let asked = questions(store, holes).map_err(no_such_hole)?;
+    let mut needed: HashMap<&Call, usize> = HashMap::new();
+    for (call, _) in &asked {
+        *needed.entry(call).or_default() += 1;
+    }
+    let mut available: HashMap<&Call, usize> = HashMap::new();
+    for (call, _) in have.all() {
+        *available.entry(call).or_default() += 1;
+    }
+    for (call, want) in needed {
+        if available.get(call).copied().unwrap_or(0) < want {
+            eprintln!("nether: nothing recorded answers `{}`", call.function);
+            eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
+            return Err(FAILED);
+        }
+    }
+    let mut answers = Answers::none();
+    for (call, value) in have.all() {
+        answers = answers.and(call.clone(), value.clone());
+    }
+    Ok(answers)
+}
+
+fn answer_holes(
+    store: &Store,
+    asked: &Asked,
+    holes: &[Cairn],
+    said: &mut Vec<(Call, Cairn)>,
+    recorded: &mut Vec<Cairn>,
+) -> Result<Answers, ExitCode> {
+    let world = world_from(asked)?;
+    let into = Recorder::new(store);
+    let asked_holes = questions(store, holes).map_err(no_such_hole)?;
+    let outcomes = world.ask_all(&asked_holes, &into);
+    let mut answers = Answers::none();
+    for ((call, _), res) in asked_holes.into_iter().zip(outcomes) {
+        match res {
+            Err(nether_world::Unanswered::Ungranted { .. }) => {}
+            Err(e @ nether_world::Unanswered::Collapsed(_)) => {
+                eprintln!("nether: {e}");
+                eprintln!("        §9.9: a collapse is a bug in the program, not an answer.");
+                return Err(FAILED);
+            }
+            Err(e @ nether_world::Unanswered::Unavailable(_)) => {
+                eprintln!("nether: {e}");
+                return Err(ExitCode::from(code::UNIMPLEMENTED));
+            }
+            Err(e) => {
+                eprintln!("nether: {e}");
+                return Err(FAILED);
+            }
+            Ok(answer) => {
+                let Ok(Stored::Value(value)) = store.get(answer.answer()) else {
+                    eprintln!("nether: the answer to `{}` is not readable back", call.function);
+                    return Err(FAILED);
+                };
+                said.push((call.clone(), answer.answer()));
+                recorded.push(answer.witness());
+                answers = answers.and(call, value);
+            }
+        }
+    }
+    Ok(answers)
+}
+
 fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     let (replaying, wants_json) = (asked.replaying, asked.wants_json);
     let Ok(Stored::Node(Node::Trace {
@@ -295,36 +384,10 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
         return Err(crate::not_a_trace(store, cairn));
     };
 
-    // The residue is source (§6.5). Burying it again means lexing, parsing and
-    // lowering it again, which is exactly what burying anything means.
-    let Ok(Stored::Value(Value::Bytes(text))) = store.get(residue) else {
-        eprintln!("nether: the residue of {} is not in this ledger", cairn.short());
-        return Err(ExitCode::from(code::ABSENT));
-    };
+    let (text, unit) = crate::closing::residue_unit(store, cairn, residue)?;
     let shown = format!("{}:residue", cairn.short());
-    let unit = match parse(&text)
-        .map_err(|f| f[0].diagnostic())
-        .and_then(|ast| lower(&ast).map_err(|f| f[0].diagnostic()))
-    {
-        Ok(ast) => ast,
-        Err(d) => {
-            eprint!("{}", nether_core::report(&d, &String::from_utf8_lossy(&text), &shown));
-            return Err(ExitCode::from(code::MALFORMED));
-        }
-    };
-    if let Some(fault) = check(&unit).first() {
-        eprint!(
-            "{}",
-            nether_core::report(&fault.diagnostic(), &String::from_utf8_lossy(&text), &shown)
-        );
-        return Err(ExitCode::from(code::MALFORMED));
-    }
 
-    // §1.7: an implementation MUST refuse to report a marked trace as
-    // replayable, in every rite that reports replayability — and `identical.`
-    // is this rite reporting it. §6.7's law is written with the exception in
-    // it for the same reason.
-    if replaying && (marked || crate::closing::unrecorded(store, &witnesses)) {
+    if replaying && (marked || crate::closing::unrecorded(store, &witnesses)?) {
         eprintln!("nether: {} reached stratum 8, so replaying it proves nothing.", cairn.short());
         eprintln!();
         eprintln!("  §1.7: nothing downstream of an unrecorded call is recorded, so a");
@@ -334,81 +397,15 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
         return Err(FAILED);
     }
 
-    // Answer what can be answered, and write every answer down first.
-    let mut answers = Answers::none();
     let mut said: Vec<(Call, Cairn)> = Vec::new();
     let mut recorded: Vec<Cairn> = witnesses.clone();
-
-    if replaying {
-        // §6.7: only the ledger. There is no `World` in this branch to reach
-        // the world with — which is the difference between preferring the
-        // ledger and being unable to leave it.
-        let have = Replay::of_trace(store, &witnesses);
-        let asked = match questions(store, &holes) {
-            Ok(asked) => asked,
-            Err(hole) => return Err(no_such_hole(hole)),
-        };
-        for (call, _) in &asked {
-            if have.answer(call).is_none() {
-                eprintln!("nether: nothing recorded answers `{}`", call.function);
-                eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
-                return Err(FAILED);
-            }
-        }
-        for (call, value) in have.all() {
-            answers = answers.and(call.clone(), value.clone());
-        }
+    let answers = if replaying {
+        gather_replay(store, &witnesses, &holes)?
     } else {
-        let world = match world_from(asked) {
-            Ok(world) => world,
-            Err(cap) => {
-                eprintln!("nether: `{cap}` is in §9.1 and is not built yet.");
-                eprintln!("        §9.1's first seven are built; stratum 8 is 0072.");
-                return Err(ExitCode::from(code::UNIMPLEMENTED));
-            }
-        };
-        let into = Recorder::new(store);
-        let asked = match questions(store, &holes) {
-            Ok(asked) => asked,
-            Err(hole) => return Err(no_such_hole(hole)),
-        };
-        let outcomes = world.ask_all(&asked, &into);
-        for ((call, _), res) in asked.into_iter().zip(outcomes) {
-            match res {
-                // A hole nothing granted answers stays a hole, which is what
-                // makes exhumation incremental rather than all or nothing.
-                Err(nether_world::Unanswered::Ungranted { .. }) => {}
-                // §9.9: not catchable, and not the world saying no. The rite
-                // reports where it happened and stops, as a burial does.
-                Err(e @ nether_world::Unanswered::Collapsed(_)) => {
-                    eprintln!("nether: {e}");
-                    eprintln!("        §9.9: a collapse is a bug in the program, not an answer.");
-                    return Err(FAILED);
-                }
-                // Not the program's mistake and not the world's answer. §8.8
-                // has a code for a machine that cannot do what was asked.
-                Err(e @ nether_world::Unanswered::Unavailable(_)) => {
-                    eprintln!("nether: {e}");
-                    return Err(ExitCode::from(code::UNIMPLEMENTED));
-                }
-                Err(e) => {
-                    eprintln!("nether: {e}");
-                    return Err(FAILED);
-                }
-                Ok(answer) => {
-                    let Ok(Stored::Value(value)) = store.get(answer.answer()) else {
-                        eprintln!("nether: the answer to `{}` is not readable back", call.function);
-                        return Err(FAILED);
-                    };
-                    said.push((call.clone(), answer.answer()));
-                    recorded.push(answer.witness());
-                    answers = answers.and(call, value);
-                }
-            }
-        }
-    }
+        answer_holes(store, asked, &holes, &mut said, &mut recorded)?
+    };
 
-    let residue = match bury_with(&unit, source, DEFAULT_FUEL, &answers) {
+    let residue = match bury_with(&unit, source, asked.fuel, &answers) {
         Ok(residue) => residue,
         Err(halt) => {
             eprint!(
@@ -427,11 +424,11 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     }
     let printed = print(&residue.as_unit(&unit));
     let next_residue = crate::kept(store, &Stored::Value(Value::Bytes(printed.into_bytes())))?;
-    let deepest = crate::closing::depth(store, residue.depth.get(), &residue.holes, &recorded);
+    let deepest = crate::closing::depth(store, residue.depth.get(), &residue.holes, &recorded)?;
     let deeper = Node::Trace {
         residue: next_residue,
         holes: residue.holes.clone(),
-        unrecorded: crate::closing::unrecorded(store, &recorded),
+        unrecorded: crate::closing::unrecorded(store, &recorded)?,
         deposits: crate::closing::deposits(&deposits, &residue.deposits),
         witnesses: recorded,
         source,
@@ -439,10 +436,13 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     };
     let next = crate::kept(store, &Stored::Node(deeper))?;
 
-    // §6.7's replay law: replaying a sealed trace produces the same cairn.
     if replaying {
         if next == cairn {
-            println!("identical.");
+            if wants_json {
+                println!("{{\"cairn\":\"{cairn}\",\"identical\":true}}");
+            } else {
+                println!("identical.");
+            }
             return Ok(());
         }
         eprintln!("nether: replay produced {} and not {}", next.short(), cairn.short());
@@ -457,6 +457,7 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
         depth: deepest,
         holes: residue.holes.clone(),
         spent: residue.fuel_spent,
+        any_granted: !asked.granted.is_empty(),
     };
     if wants_json {
         println!("{}", told.json());
@@ -476,6 +477,7 @@ struct Sealed {
     /// §8.2: a rite reports what it spent, because that is where it is a fact.
     /// Not in the trace — a trace holding it could not be replayed (§6.7).
     spent: u64,
+    any_granted: bool,
 }
 
 impl Sealed {
@@ -517,7 +519,14 @@ impl Sealed {
             writeln!(out, "{word:<8} {became}   depth {}   holes {}", self.depth, self.holes.len());
         if self.said.is_empty() && !self.holes.is_empty() {
             let hint = "§9.1 names the capability each hole's stratum asks for.";
-            let _ = writeln!(out, "\nnothing was granted, so nothing was answered. {hint}");
+            if self.any_granted {
+                let _ = writeln!(
+                    out,
+                    "\nnone of the granted capabilities matched the remaining holes. {hint}"
+                );
+            } else {
+                let _ = writeln!(out, "\nnothing was granted, so nothing was answered. {hint}");
+            }
         }
         out
     }
