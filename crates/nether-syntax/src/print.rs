@@ -224,7 +224,26 @@ fn as_block(x: &Expr, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
         ExprKind::Continue => {
             format!("{}{{\n{}continue;\n{}}}", indent(at), indent(at + 1), indent(at))
         }
+        ExprKind::Return(_) | ExprKind::Loop { .. } => {
+            format!(
+                "{}{{\n{}{}}}",
+                indent(at),
+                stmt(&Stmt::Expr(x.clone()), unit, f, at + 1),
+                indent(at)
+            )
+        }
+        ExprKind::Select { .. } if !short_circuit(x) => {
+            format!(
+                "{}{{\n{}{}}}",
+                indent(at),
+                stmt(&Stmt::Expr(x.clone()), unit, f, at + 1),
+                indent(at)
+            )
+        }
         ExprKind::Literal(Literal::Unit) => format!("{}{{\n{}}}", indent(at), indent(at)),
+        _ if starts_with_block(x) => {
+            format!("{}{{\n{}({})\n{}}}", indent(at), indent(at + 1), expr(x, unit, f), indent(at))
+        }
         _ => format!("{}{{\n{}{}\n{}}}", indent(at), indent(at + 1), expr(x, unit, f), indent(at)),
     }
 }

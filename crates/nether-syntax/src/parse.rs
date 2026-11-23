@@ -150,6 +150,9 @@ impl Parser<'_> {
     }
 
     fn since(&self, from: Span) -> Span {
+        if let Some(span) = self.pending_gt {
+            return Span { start: from.start, end: span.start };
+        }
         let end = self.tokens[..self.at].last().map_or(from.end, |t| t.span.end);
         Span { start: from.start, end }
     }
@@ -248,12 +251,12 @@ impl Parser<'_> {
                 TokenKind::Punct(Punct::RBrace) => {
                     braces -= 1;
                     if braces <= 0 {
-                        self.at += 1;
+                        self.bump();
                         return;
                     }
                 }
                 TokenKind::Punct(Punct::Semi) if braces == 0 => {
-                    self.at += 1;
+                    self.bump();
                     return;
                 }
                 TokenKind::Keyword(Keyword::Struct | Keyword::Typedef | Keyword::Demand)
@@ -263,7 +266,7 @@ impl Parser<'_> {
                 }
                 _ => {}
             }
-            self.at += 1;
+            self.bump();
         }
     }
 
@@ -281,12 +284,12 @@ impl Parser<'_> {
                     braces -= 1;
                 }
                 TokenKind::Punct(Punct::Semi) if braces == 0 => {
-                    self.at += 1;
+                    self.bump();
                     return;
                 }
                 _ => {}
             }
-            self.at += 1;
+            self.bump();
         }
     }
 
@@ -295,15 +298,15 @@ impl Parser<'_> {
     fn unit(&mut self) -> Unit {
         let mut items = Vec::new();
         while self.peek().is_some() {
-            let before = self.at;
+            let before = (self.at, self.pending_gt.is_some());
             match self.item() {
                 Ok(item) => items.push(item),
                 Err(Given) => self.resync_item(),
             }
             // Recovery that does not move is a loop, and a parser that hangs
             // on a malformed file is worse than one that says the wrong thing.
-            if self.at == before {
-                self.at += 1;
+            if (self.at, self.pending_gt.is_some()) == before {
+                self.bump();
             }
         }
         Unit { items }
@@ -515,7 +518,7 @@ impl Parser<'_> {
         let mut stmts = Vec::new();
         let mut tail = None;
         while !self.at_punct(Punct::RBrace) && self.peek().is_some() {
-            let before = self.at;
+            let before = (self.at, self.pending_gt.is_some());
             match self.stmt_or_tail() {
                 Ok(Line::Stmt(s)) => stmts.push(s),
                 Ok(Line::Tail(e)) => {
@@ -524,8 +527,8 @@ impl Parser<'_> {
                 }
                 Err(Given) => self.resync_stmt(),
             }
-            if self.at == before {
-                self.at += 1;
+            if (self.at, self.pending_gt.is_some()) == before {
+                self.bump();
             }
         }
         self.expect(Punct::RBrace, "`}` to close the block")?;
@@ -677,8 +680,9 @@ impl Parser<'_> {
     fn operator_at(&mut self, level: u8) -> Option<BinOp> {
         let TokenKind::Punct(p) = self.peek()? else { return None };
         let (_, _, op) = LEVELS.iter().find(|(q, l, _)| q == p && *l == level)?;
-        self.at += 1;
-        Some(*op)
+        let op = *op;
+        self.bump();
+        Some(op)
     }
 
     /// Level 2 of §4.6, and the one place every level of nesting passes

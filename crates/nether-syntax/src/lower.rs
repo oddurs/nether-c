@@ -287,6 +287,16 @@ impl<'a> Lowering<'a> {
             }
         }
 
+        // Validate every typedef declaration even if unreferenced.
+        for item in &unit.items {
+            if let ast::Item::Typedef { name, ty, .. } = item {
+                self.expanding.clear();
+                self.expanding.push(name.text.as_str());
+                let _ = self.ty(ty);
+                self.expanding.pop();
+            }
+        }
+
         // Signatures before bodies, so a function can call one declared later.
         let declarations: Vec<&ast::Func> = unit
             .items
@@ -299,10 +309,11 @@ impl<'a> Lowering<'a> {
         for (i, f) in declarations.iter().enumerate() {
             let params = f.params.iter().map(|p| self.ty(&p.ty)).collect();
             let ret = self.ty(&f.ret);
-            let latent = Self::written(f.latent.as_deref()).unwrap_or(Held::NONE);
+            // Start from lattice bottom (`Held::NONE`) so a recursive function's
+            // written `@d` annotation cannot self-fulfill its own latent depth.
             let arrow = ir::Type::Fn {
                 params,
-                latent,
+                latent: Held::NONE,
                 result: Box::new(ret),
                 // What a function hands back is its body's depth, and the body
                 // has not been lowered yet. Filled in below.
@@ -367,10 +378,11 @@ impl<'a> Lowering<'a> {
             self.scopes.pop();
             let ty = Self::binding_type(&binding.ty, ty, &value);
             let id = ir::GlobalId(u32::try_from(out.len()).unwrap_or(0));
-            if self
-                .globals
-                .insert(binding.name.text.as_str(), (id, ty.clone(), value.depth))
-                .is_some()
+            if self.funcs.contains_key(binding.name.text.as_str())
+                || self
+                    .globals
+                    .insert(binding.name.text.as_str(), (id, ty.clone(), value.depth))
+                    .is_some()
             {
                 self.fault(binding.name.span, FaultKind::Expected("a unique binding name"));
             }
@@ -627,8 +639,9 @@ impl Lowering<'_> {
                     None => (None, ExitPc::NONE),
                 };
                 let depth = value.as_ref().map_or(Depth::PURE, |v| v.depth);
-                self.ret_depth = self.ret_depth.join(depth).join(self.pc);
-                self.last_exit = ex.join(ExitPc { loop_exit: None, fn_exit: Some(self.pc) });
+                let ret_pc = ex.deepest().map_or(self.pc, |e| self.pc.join(e));
+                self.ret_depth = self.ret_depth.join(depth).join(ret_pc);
+                self.last_exit = ex.join(ExitPc { loop_exit: None, fn_exit: Some(ret_pc) });
                 out.push(ir::Stmt::Expr(Self::at(
                     ir::ExprKind::Return(value),
                     ir::Type::Unit,
@@ -708,7 +721,7 @@ impl Lowering<'_> {
         let cond = self.expr(cond);
         let e_cond = self.last_exit;
         let saved_pc = self.pc;
-        self.pc = saved_pc.join(cond.depth);
+        self.pc = e_cond.deepest().map_or(saved_pc, |e| saved_pc.join(e)).join(cond.depth);
         let before = self.depths.clone();
         let then_block = self.block(then);
         let e_then = self.last_exit;
@@ -927,7 +940,12 @@ impl Lowering<'_> {
             ast::ExprKind::Index { base, index } => {
                 let base = self.expr(base);
                 let e_base = self.last_exit;
+                let saved_pc = self.pc;
+                if let Some(ed) = e_base.deepest() {
+                    self.pc = saved_pc.join(ed);
+                }
                 let index = self.expr(index);
+                self.pc = saved_pc;
                 self.last_exit = e_base.join(self.last_exit);
                 let ty = if let ir::Type::Array { elem, .. } = &base.ty {
                     (**elem).clone()
@@ -1033,7 +1051,7 @@ impl Lowering<'_> {
             let lhs = self.expr(l);
             let e_lhs = self.last_exit;
             let saved_pc = self.pc;
-            self.pc = saved_pc.join(lhs.depth);
+            self.pc = e_lhs.deepest().map_or(saved_pc, |e| saved_pc.join(e)).join(lhs.depth);
             let rhs = self.expr(r);
             let e_rhs = self.last_exit;
             self.pc = saved_pc;
@@ -1056,7 +1074,12 @@ impl Lowering<'_> {
         }
         let lhs = self.expr(l);
         let e_lhs = self.last_exit;
+        let saved_pc = self.pc;
+        if let Some(ed) = e_lhs.deepest() {
+            self.pc = saved_pc.join(ed);
+        }
         let rhs = self.expr(r);
+        self.pc = saved_pc;
         self.last_exit = e_lhs.join(self.last_exit);
         let op = arithmetic(op);
         let ty = if comparison(op) { ir::Type::Bool } else { lhs.ty.clone() };
@@ -1076,18 +1099,85 @@ impl Lowering<'_> {
         value: &ast::Expr,
         span: Span,
     ) -> ir::Expr {
+        let saved_pc = self.pc;
         let Some((place, place_ty)) = self.place(target) else {
+            self.pc = saved_pc;
             self.fault(target.span, FaultKind::NotAPlace);
             return Self::unit_at(span);
         };
         let e_place = self.last_exit;
-        // `x op= e` is an assignment of `x op e`, which means reading the
-        // place as well as writing it.
-        let value = match op {
-            Some(op) => self.binary(op, target, value, span),
-            None => self.landed(value, Some(place_ty)),
-        };
-        self.last_exit = e_place.join(self.last_exit);
+        if let Some(ed) = e_place.deepest() {
+            self.pc = self.pc.join(ed);
+        }
+        // `x op= e` reads the place and writes back `place op value`.
+        // Hoist any index expressions in `place.path` into hidden locals so
+        // side-effecting index expressions are lowered and evaluated once.
+        if let Some(op) = op {
+            let mut stmts = Vec::new();
+            let mut read_path = Vec::with_capacity(place.path.len());
+            let mut write_path = Vec::with_capacity(place.path.len());
+            for proj in place.path {
+                match proj {
+                    ir::Proj::Field(idx) => {
+                        read_path.push(ir::Proj::Field(idx));
+                        write_path.push(ir::Proj::Field(idx));
+                    }
+                    ir::Proj::Index(idx) => {
+                        let idx_span = idx.span;
+                        let idx_ty = idx.ty.clone();
+                        let idx_depth = idx.depth;
+                        let tmp_name = ast::Name { text: String::new(), span: idx_span };
+                        let tmp = self.bind(&tmp_name, idx_ty.clone(), None, idx_depth, idx_span);
+                        stmts.push(ir::Stmt::Let { local: tmp, value: *idx });
+                        let load = Self::at(ir::ExprKind::Local(tmp), idx_ty, idx_depth, idx_span);
+                        read_path.push(ir::Proj::Index(Box::new(load.clone())));
+                        write_path.push(ir::Proj::Index(Box::new(load)));
+                    }
+                }
+            }
+            let lhs = self.read_place(place.local, &read_path, target.span);
+            let rhs = self.expr(value);
+            let e_rhs = self.last_exit;
+            if let Some(ed) = e_rhs.deepest() {
+                self.pc = self.pc.join(ed);
+            }
+            let bin_op = arithmetic(op);
+            let bin_ty = if comparison(bin_op) { ir::Type::Bool } else { lhs.ty.clone() };
+            let bin_depth = lhs.depth.join(rhs.depth);
+            let combined = Self::at(
+                ir::ExprKind::Binary { op: bin_op, lhs: Box::new(lhs), rhs: Box::new(rhs) },
+                bin_ty,
+                bin_depth,
+                span,
+            );
+            let assign_place = ir::Place { local: place.local, path: write_path };
+            let depth = assign_place.path.iter().fold(combined.depth, |acc, p| match p {
+                ir::Proj::Index(i) => acc.join(i.depth),
+                ir::Proj::Field(_) => acc,
+            });
+            if let Some(slot) = self.depths.get_mut(assign_place.local.0 as usize) {
+                *slot = slot.join(depth).join(self.pc);
+            }
+            let assign_expr = Self::at(
+                ir::ExprKind::Assign { place: assign_place, value: Box::new(combined) },
+                ir::Type::Unit,
+                depth,
+                span,
+            );
+            self.pc = saved_pc;
+            self.last_exit = e_place.join(e_rhs);
+            if stmts.is_empty() {
+                return assign_expr;
+            }
+            let blk = ir::Block { stmts, tail: Some(Box::new(assign_expr)), span };
+            return Self::as_expr(blk, span);
+        }
+
+        let value = self.landed(value, Some(place_ty));
+        let e_val = self.last_exit;
+        if let Some(ed) = e_val.deepest() {
+            self.pc = self.pc.join(ed);
+        }
         let depth = place.path.iter().fold(value.depth, |acc, p| match p {
             ir::Proj::Index(i) => acc.join(i.depth),
             ir::Proj::Field(_) => acc,
@@ -1095,12 +1185,59 @@ impl Lowering<'_> {
         if let Some(slot) = self.depths.get_mut(place.local.0 as usize) {
             *slot = slot.join(depth).join(self.pc);
         }
+        self.pc = saved_pc;
+        self.last_exit = e_place.join(e_val);
         Self::at(
             ir::ExprKind::Assign { place, value: Box::new(value) },
             ir::Type::Unit,
             depth,
             span,
         )
+    }
+
+    fn read_place(&mut self, local: ir::LocalId, path: &[ir::Proj], span: Span) -> ir::Expr {
+        let (mut cur_ty, mut cur_depth) =
+            self.locals.get(local.0 as usize).map_or((ir::Type::Unit, Depth::PURE), |l| {
+                (l.ty.clone(), self.depths[local.0 as usize])
+            });
+        let mut expr = Self::at(ir::ExprKind::Local(local), cur_ty.clone(), cur_depth, span);
+        for proj in path {
+            match proj {
+                ir::Proj::Field(idx) => {
+                    let field_ty = if let ir::Type::Struct(sname) = &cur_ty
+                        && let Some(fields) = self.structs.get(sname.as_str()).copied()
+                        && let Some(f) = fields.get(*idx as usize)
+                    {
+                        self.ty(&f.ty)
+                    } else {
+                        ir::Type::Unit
+                    };
+                    cur_ty = field_ty.clone();
+                    expr = Self::at(
+                        ir::ExprKind::Field { base: Box::new(expr), index: *idx },
+                        field_ty,
+                        cur_depth,
+                        span,
+                    );
+                }
+                ir::Proj::Index(idx) => {
+                    let elem_ty = if let ir::Type::Array { elem, .. } = cur_ty {
+                        *elem
+                    } else {
+                        ir::Type::Unit
+                    };
+                    cur_depth = cur_depth.join(idx.depth);
+                    cur_ty = elem_ty.clone();
+                    expr = Self::at(
+                        ir::ExprKind::Index { base: Box::new(expr), index: idx.clone() },
+                        elem_ty,
+                        cur_depth,
+                        span,
+                    );
+                }
+            }
+        }
+        expr
     }
 
     /// The left of an assignment: a local, and a path of fields and indices
@@ -1122,6 +1259,10 @@ impl Lowering<'_> {
             ast::ExprKind::Index { base, index } => {
                 let (mut place, base_ty) = self.place(base)?;
                 let e_base = self.last_exit;
+                let saved_pc = self.pc;
+                if let Some(ed) = e_base.deepest() {
+                    self.pc = saved_pc.join(ed);
+                }
                 let elem_ty = if let ir::Type::Array { elem, .. } = base_ty {
                     *elem
                 } else {
@@ -1129,6 +1270,7 @@ impl Lowering<'_> {
                     ir::Type::Unit
                 };
                 let index = self.expr(index);
+                self.pc = saved_pc;
                 self.last_exit = e_base.join(self.last_exit);
                 place.path.push(ir::Proj::Index(Box::new(index)));
                 Some((place, elem_ty))
@@ -1150,48 +1292,72 @@ impl Lowering<'_> {
         landing: Option<ir::Type>,
         span: Span,
     ) -> ir::Expr {
-        // Look up parameter types when the callee is a known function so
-        // `refused(...)` arguments can inherit `Answer<T>` from the parameter.
-        let param_types: Option<Vec<ir::Type>> = match &callee.kind {
+        let saved_pc = self.pc;
+        let mut ex = ExitPc::NONE;
+        // Evaluate non-name callees BEFORE arguments so evaluation order matches
+        // `nether-core::check` (callee left-to-right before args).
+        let (param_types, pre_callee) = match &callee.kind {
             ast::ExprKind::Name(name) if self.lookup(&name.text).is_none() => {
-                if let Some((_, ir::Type::Fn { params, .. })) = self.funcs.get(name.text.as_str()) {
-                    Some(params.clone())
-                } else {
-                    None
-                }
+                let ps = match self.funcs.get(name.text.as_str()) {
+                    Some((_, ir::Type::Fn { params, .. })) => Some(params.clone()),
+                    _ => None,
+                };
+                (ps, None)
             }
-            _ => None,
+            ast::ExprKind::Name(_) => (None, None),
+            _ => {
+                let c = self.expr(callee);
+                ex = ex.join(self.last_exit);
+                if let Some(ed) = self.last_exit.deepest() {
+                    self.pc = self.pc.join(ed);
+                }
+                let ps = match &c.ty {
+                    ir::Type::Fn { params, .. } => Some(params.clone()),
+                    _ => None,
+                };
+                (ps, Some(c))
+            }
         };
         let mut lowered_args = Vec::with_capacity(args.len());
-        let mut ex = ExitPc::NONE;
         for (i, a) in args.iter().enumerate() {
             let expected = param_types.as_ref().and_then(|ps| ps.get(i).cloned());
             let arg = self.landed(a, expected);
             ex = ex.join(self.last_exit);
+            if let Some(ed) = self.last_exit.deepest() {
+                self.pc = self.pc.join(ed);
+            }
             lowered_args.push(arg);
         }
+        self.pc = saved_pc;
         let types: Vec<ir::Type> = lowered_args.iter().map(|a| a.ty.clone()).collect();
-        let mut callee = if let ast::ExprKind::Name(name) = &callee.kind {
-            self.name(name, &types)
-        } else {
-            let c = self.expr(callee);
-            ex = ex.join(self.last_exit);
-            c
+        let mut callee = match pre_callee {
+            Some(c) => c,
+            None => match &callee.kind {
+                ast::ExprKind::Name(name) => self.name(name, &types),
+                _ => unreachable!("handled above"),
+            },
         };
         self.last_exit = ex;
-        // §9.2: validate polymorphic prelude argument shapes.
+        // §9.2: validate polymorphic prelude arity and argument shapes.
         match callee.kind {
-            ir::ExprKind::Prim(Prim::Refused) => match (landing, &mut callee.ty) {
-                (Some(t @ ir::Type::Answer(_)), ir::Type::Fn { result, .. }) => **result = t,
-                _ => self.fault(span, FaultKind::Expected("a declared `Answer<T>` for `refused`")),
-            },
+            ir::ExprKind::Prim(Prim::Refused) => {
+                if lowered_args.len() != 1 || types.first() != Some(&ir::Type::Refusal) {
+                    self.fault(span, FaultKind::Expected("one `Refusal` argument to `refused`"));
+                }
+                match (landing, &mut callee.ty) {
+                    (Some(t @ ir::Type::Answer(_)), ir::Type::Fn { result, .. }) => **result = t,
+                    _ => self
+                        .fault(span, FaultKind::Expected("a declared `Answer<T>` for `refused`")),
+                }
+            }
             ir::ExprKind::Prim(Prim::Answered) if lowered_args.len() != 1 => {
                 self.fault(span, FaultKind::Expected("one argument to `answered`"));
             }
             ir::ExprKind::Prim(Prim::Must | Prim::Given | Prim::Refusal)
-                if !matches!(types.first(), Some(ir::Type::Answer(_))) =>
+                if lowered_args.len() != 1
+                    || !matches!(types.first(), Some(ir::Type::Answer(_))) =>
             {
-                self.fault(span, FaultKind::Expected("an `Answer<T>` argument"));
+                self.fault(span, FaultKind::Expected("one `Answer<T>` argument"));
             }
             _ => {}
         }
