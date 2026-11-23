@@ -166,7 +166,8 @@ case "${1:-}" in
       echo "release: main is not what origin has" >&2; exit 1; }
     git rev-parse -q --verify "refs/tags/$version" >/dev/null && {
       echo "release: $version is already a tag, and a tag is a name" >&2; exit 1; }
-    [ -z "$(git ls-remote --tags origin "refs/tags/$version")" ] || {
+    remote_tag=$(git ls-remote --tags origin "refs/tags/$version")
+    [ -z "$remote_tag" ] || {
       echo "release: $version already exists on origin" >&2; exit 1; }
 
     # The notes have to exist before the tag does. Finding out afterwards
@@ -183,6 +184,7 @@ case "${1:-}" in
       rm -f "$stamp"
       exit 1
     fi
+    rm -f "$stamp"
     echo "tagged $version and pushed it; the Release workflow takes it from here"
     ;;
 

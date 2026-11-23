@@ -643,7 +643,10 @@ def _take_call(buf: bytes, pos: int) -> Tuple[Tuple[str, Tuple[bytes, ...]], int
         raise ValueError("EmptyCallName")
     if pos + name_ln > len(buf):
         raise ValueError("Truncated")
-    func = buf[pos : pos + name_ln].decode("utf-8")
+    try:
+        func = buf[pos : pos + name_ln].decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("NotUtf8") from exc
     pos += name_ln
     args, pos = _take_cairns(buf, pos)
     return (func, args), pos
@@ -806,6 +809,7 @@ def verify_codec_fixtures_and_exclusions() -> int:
     if len(seen_bytes) != len(fixtures) + len(node_fixtures):
         raise ProofFault("distinct fixtures produced colliding encodings")
 
+    too_deep = b"".join(b"\x11" + _u64_be(1) for _ in range(MAX_DEPTH + 1)) + b"\x00"
     for bad_bytes, expected_err in (
         (b"\x06\x09" + c0, "NoSuchStratum"),
         (b"\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", "EmptyStructName"),
@@ -814,6 +818,7 @@ def verify_codec_fixtures_and_exclusions() -> int:
         (b"\x07\x02\x00", "BadAnswer"),
         (b"\x20\x00\x00", "WrongShape"),
         (b"\x00\x00", "TrailingBytes"),
+        (too_deep, "TooDeep"),
     ):
         try:
             py_decode_value(bad_bytes)

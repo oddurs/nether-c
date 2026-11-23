@@ -9,7 +9,7 @@ This directory holds the machine-checked metatheory of NetherC.
   primitive inference rules (`assume`, `mp`, `discharge`, `conj_intro`,
   `conj_elim_l`, `conj_elim_r`, `iff_intro`, `inst`, `gen`, `refl`, `sym`,
   `trans`, `cong`, `rewrite`), inductive derivation principles (`apply_rule`,
-  `rule_induction`, `structural_induction`), and the finite depth-lattice /
+  `rule_induction`), and the finite depth-lattice /
   capability-set decision procedure (`lattice_decide` over `Depth = {0..8}` and
   `Held = P({0..8})`).
 - **`calculus.py`** — Formalization of `spec/02-calculus.md` (§2.2's eleven
@@ -19,7 +19,7 @@ This directory holds the machine-checked metatheory of NetherC.
   - `prove_ambient_soundness()`: `Γ ; δ ⊢ e : τ@d [g] → d <= max(δ ∪ g)` across
     all typing rules.
   - `prove_substitution_monotonicity()`: `SubstDepth(e, d, d_a, d_sub) → d_sub <= max(d, d_a)`
-    across all 12 substitution forms.
+    across all 13 substitution forms.
   - `prove_soundness_of_bound()`: `StepTyped(e, e', d, d') → d' <= d` across
     all 17 reduction rules.
 - **`orpheus.py`** — Formalization of `[LOOK]` (`spec/01-strata.md` §1.6,

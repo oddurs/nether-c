@@ -137,19 +137,31 @@ function bury() {
     if (data.error) { failed(data.error); return; }
     try {
       const next = new Graph(data);
+      const nextNav = new Navigation(next.root);
+      const summary = `depth ${data.depth} · ${data.holes.length} hole${data.holes.length === 1 ? "" : "s"} · ${next.encoded.size} objects · ${data.fuel_spent.toLocaleString()} steps`;
+      const root = next.get(next.root);
+      const prevGraph = graph;
+      const prevNav = navigation;
+      const prevShown = shown;
       graph = next;
-      navigation = new Navigation(graph.root);
+      navigation = nextNav;
       shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
-      $("trace-title").textContent = `Trace ${short(graph.root)}`;
-      $("summary").textContent = `depth ${data.depth} · ${data.holes.length} hole${data.holes.length === 1 ? "" : "s"} · ${graph.encoded.size} objects · ${data.fuel_spent.toLocaleString()} steps`;
-      const root = graph.get(graph.root);
-      $("roots").replaceChildren();
-      for (const [label, ids] of [["hole", root.holes], ["deposit", root.deposits]]) {
-        ids.slice(0, 6).forEach((id, i) => $("roots").append(button(`${label} ${i + 1}`, () => visit(id), `nc-root-${label}`)));
-        if (ids.length > 6) $("roots").append(button(`All ${ids.length} ${label}s`, () => visit(graph.root)));
+      try {
+        $("trace-title").textContent = `Trace ${short(graph.root)}`;
+        $("summary").textContent = summary;
+        $("roots").replaceChildren();
+        for (const [label, ids] of [["hole", root.holes], ["deposit", root.deposits]]) {
+          ids.slice(0, 6).forEach((id, i) => $("roots").append(button(`${label} ${i + 1}`, () => visit(id), `nc-root-${label}`)));
+          if (ids.length > 6) $("roots").append(button(`All ${ids.length} ${label}s`, () => visit(graph.root)));
+        }
+        $("explorer").hidden = false;
+        render();
+      } catch (inner) {
+        graph = prevGraph;
+        navigation = prevNav;
+        shown = prevShown;
+        throw inner;
       }
-      $("explorer").hidden = false;
-      render();
       stop();
       $("state").textContent = "Buried. Choose a hole, deposit, or reference to explore.";
     } catch (e) { failed(e.message); }

@@ -98,17 +98,14 @@ def scan_rust(text: str) -> list[tuple[str, str]]:
 
             if raw[i] == "'":
                 # Character literal vs Rust lifetime (`'a`, `'static`, `'_`).
-                if i + 1 < n and raw[i + 1] == "\\":
-                    j = i + 2
-                    while j < n:
-                        if raw[j] == "\\":
-                            j += 2
-                            continue
-                        if raw[j] == "'":
-                            j += 1
-                            break
+                # An escaped char literal starts with `'\` followed by at least
+                # one escaped character (e.g. `'\\'`, `'\''`, `'\n'`, `'\x7f'`,
+                # `'\u{...}'`), so scan for the closing `'` starting at `i + 3`.
+                if i + 2 < n and raw[i + 1] == "\\":
+                    j = i + 3
+                    while j < n and raw[j] != "'":
                         j += 1
-                    i = j
+                    i = j + 1 if j < n else n
                     continue
                 if i + 2 < n and raw[i + 2] == "'":
                     i += 3
@@ -130,6 +127,7 @@ def core_lines(path: Path) -> int:
     skip = False
     pending = False
     depth = 0
+    bracket_depth = 0
     count = 0
 
     for raw, bare in scan_rust(text):
@@ -137,9 +135,14 @@ def core_lines(path: Path) -> int:
             skip = True
             pending = True
             depth = 0
+            bracket_depth = 0
         if skip:
             for ch in bare:
-                if ch == "{":
+                if ch in "([":
+                    bracket_depth += 1
+                elif ch in ")]" and bracket_depth > 0:
+                    bracket_depth -= 1
+                elif ch == "{":
                     pending = False
                     depth += 1
                 elif ch == "}":
@@ -147,7 +150,7 @@ def core_lines(path: Path) -> int:
                     if depth <= 0 and not pending:
                         skip = False
                         break
-                elif ch == ";" and pending and depth == 0:
+                elif ch == ";" and pending and depth == 0 and bracket_depth == 0:
                     skip = False
                     break
             continue
@@ -158,8 +161,11 @@ def core_lines(path: Path) -> int:
 
 
 def main(argv: list[str]) -> int:
-    source_dir = Path(argv[1]) if len(argv) > 1 else ROOT / "crates"
-    ceiling_file = Path(argv[2]) if len(argv) > 2 else ROOT / ".decay-ceiling"
+    init = "--init" in argv[1:]
+    pos = [a for a in argv[1:] if a != "--init"]
+    source_dir = Path(pos[0]) if len(pos) > 0 else ROOT / "crates"
+    ceiling_file = Path(pos[1]) if len(pos) > 1 else ROOT / ".decay-ceiling"
+    custom_ceiling = len(pos) > 1
     if not source_dir.is_absolute():
         source_dir = ROOT / source_dir
     if not ceiling_file.is_absolute():
@@ -180,6 +186,10 @@ def main(argv: list[str]) -> int:
     count = sum(core_lines(p) for p in rs_files)
 
     if not ceiling_file.is_file():
+        if not custom_ceiling and not init:
+            print(f"decay: {ceiling_file} is missing; refusing to bypass the ceiling.", file=sys.stderr)
+            print(f"       The core is {count} lines. Restore .decay-ceiling or run with --init.", file=sys.stderr)
+            return 1
         ceiling_file.write_text(f"{count}\n", encoding="utf-8")
         print(f"decay: no ceiling found; sealed the current core at {count} lines")
         return 0
@@ -191,7 +201,7 @@ def main(argv: list[str]) -> int:
         return 1
 
     ceiling = int(raw_ceiling)
-    label = argv[2] if len(argv) > 2 else ".decay-ceiling"
+    label = pos[1] if custom_ceiling else ".decay-ceiling"
     if count > ceiling:
         print("decay: the trusted core grew.", file=sys.stderr)
         print(f"       ceiling  {ceiling} lines  ({label})", file=sys.stderr)

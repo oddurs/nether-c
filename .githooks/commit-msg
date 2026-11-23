@@ -45,11 +45,14 @@ fi
 # ban. `tests/attribution/run` applies the same rule to everything already
 # here, which is the half a hook cannot do.
 body=$(grep -v '^#' "$msg_file" || true)
-named='(^|[^[:alnum:]_])(claude([^.]|$)|claude\.ai|anthropic|copilot|chatgpt|openai|gemini)([^[:alnum:]_]|$)'
+# Strip `CLAUDE.md` filename references before checking banned vendor/model names
+# so prose like "claude wrote this" or "claude." is never bypassed.
+scrubbed=$(printf '%s\n' "$body" | sed -E 's/(^|[^[:alnum:]_])[Cc][Ll][Aa][Uu][Dd][Ee]\.[Mm][Dd]([^[:alnum:]_]|$)/\1\2/g')
+named='(^|[^[:alnum:]_])(claude|anthropic|copilot|chatgpt|openai|gemini)([^[:alnum:]_]|$)'
 trailer='^[[:space:]]*(co-authored-by|assisted-by|generated-by|authored-by)[[:space:]]*:'
 phrase='generated with|(^|[^[:alnum:]_])AI([^[:alnum:]_]|$)|🤖'
 
-if printf '%s\n' "$body" | grep -qiE "$named|$phrase" \
+if printf '%s\n' "$scrubbed" | grep -qiE "$named|$phrase" \
   || printf '%s\n' "$body" | grep -iE "$trailer" | grep -qivE 'dependabot|oddurs@users\.noreply\.github\.com'; then
   cat >&2 <<'MSG'
 commit-msg: attribution to a tool or model is not permitted in this repository.

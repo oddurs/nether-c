@@ -9,7 +9,6 @@ import tokenize
 from typing import Sequence
 
 from kernel import (
-    Datatype,
     Formula,
     InductiveRelation,
     ProofFault,
@@ -18,14 +17,19 @@ from kernel import (
     app,
     assume,
     conj,
+    elem,
     eq,
     forall,
+    gen,
+    imp,
     inst,
     lattice_decide,
     le,
     neg,
     not_subset,
     pred,
+    refl,
+    rewrite,
     rule_induction,
     subset,
     var,
@@ -44,6 +48,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "sorry",
         "axiom",
         "unproved",
+        "unproved_axiom",
         "postulate",
     }
 )
@@ -208,15 +213,74 @@ def verify_kernel_soundness_guards() -> None:
     else:
         raise AssertionError("InductiveRelation allowed negative recursion")
 
-    # 11. Datatype must reject empty constructors
+    # 11. Constants cannot be generalized or bound
     try:
-        Datatype("Empty", ())
+        gen("0", assume(eq(var("0"), var("x"))))
     except ProofFault:
         pass
     else:
-        raise AssertionError("Datatype allowed empty constructors")
+        raise AssertionError("kernel allowed generalizing constant `0`")
 
-    # 12. inst must avoid variable capture under quantifiers
+    # 12. lattice_decide must not assume `0 ∈ δ` implicitly from variable name
+    try:
+        lattice_decide(elem(var("0"), var("δ")))
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("lattice_decide assumed implicit `0 ∈ δ` axiom")
+
+    # 13. lattice_decide must distinguish opaque applications from variables
+    try:
+        lattice_decide(eq(app("f", var("x")), var("f(x)")))
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("lattice_decide conflated app `f(x)` with var `f(x)`")
+
+    # 14. Nested implications must not use 3-element chain shortcut
+    x0, x1, x2, x3 = var("x0"), var("x1"), var("x2"), var("x3")
+    pigeon = imp(
+        conj(conj(le(x0, x1), le(x1, x2)), le(x2, x3)),
+        imp(
+            imp(le(x1, x0), le(x3, x0)),
+            imp(imp(le(x2, x1), le(x3, x0)), imp(imp(le(x3, x2), le(x3, x0)), le(x3, x0))),
+        ),
+    )
+    try:
+        lattice_decide(pigeon)
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("lattice_decide accepted 3-chain false nested implication")
+
+    # 15. rule_induction must freshen rule variables colliding with prop free vars
+    any_rel = InductiveRelation("AnyRel", (Rule("R1", (), pred("AnyRel", var("x"))),))
+    try:
+        rule_induction(
+            any_rel,
+            ("_a",),
+            eq(var("_a"), var("x")),
+            {"R1": lambda _p, _ih: refl(var("x"))},
+        )
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("rule_induction unified rule variable with prop free var")
+
+    # 16. Conflicting InductiveRelation definitions for the same name must fail
+    try:
+        InductiveRelation("AnyRel", (Rule("R2", (), pred("AnyRel", var("1"))),))
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("kernel allowed conflicting InductiveRelation definitions")
+
+    # 17. rewrite must not replace predicate head symbols
+    rw = rewrite(assume(eq(app("P", var("x")), app("Q", var("x")))), assume(pred("P", var("x"))))
+    if rw.conclusion != pred("P", var("x")):
+        raise AssertionError(f"rewrite altered predicate head symbol: {rw.conclusion}")
+
+    # 18. inst must avoid variable capture under quantifiers
     f_all = forall("x", forall("y", pred("R", var("x"), var("y"))))
     t_inst = inst(assume(f_all), var("y"))
     if t_inst.conclusion.binder == "y":
