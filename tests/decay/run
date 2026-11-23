@@ -37,7 +37,13 @@ mod tests {
     #[test]
     fn b<'a>(_x: &'a str) { let _ = r#"}"#; /* /* } */ */ }
     #[test]
+    fn esc(c: char) { if c == '\\\\' || c == '\\'' { return; } }
+    #[test]
     fn c() {}
+}
+#[cfg(test)]
+fn helper() -> [u8; 4] {
+    [0; 4]
 }
 """
 

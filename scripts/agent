@@ -154,6 +154,7 @@ cmd_pr() {
     rm -f "$stamp"
     die "push of $branch failed (exit $rc); nothing was opened or armed"
   fi
+  rm -f "$stamp"
   # `--fill-first`, not `--fill`. With one commit they agree; with more than
   # one, `--fill` titles the pull request after the *branch* — and a squash
   # merge takes its subject from the title, so what lands on `main` is

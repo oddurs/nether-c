@@ -88,17 +88,24 @@ def main() -> int:
             bad.append((str(rel), hits))
 
     # And the commits on this branch, which is what a reviewer is being asked
-    # to take.
+    # to take. On `push` to `main` or a tag, merge-base equals HEAD, so fall
+    # back to inspecting the latest commits rather than scanning zero commits.
     base_proc = subprocess.run(
         ["git", "merge-base", "HEAD", "origin/main"],
         cwd=ROOT, capture_output=True, text=True,
     )
+    head_proc = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
     base = base_proc.stdout.strip() if base_proc.returncode == 0 else ""
-    if base:
-        log_cmd = ["git", "log", "--format=%H%n%an <%ae>%n%B%n--%-%-", f"{base}..HEAD"]
+    head = head_proc.stdout.strip() if head_proc.returncode == 0 else ""
+    fmt = "--format=%H%n%an <%ae>%n%cn <%ce>%n%B%n--%-%-"
+    if base and base != head:
+        log_cmd = ["git", "log", fmt, f"{base}..HEAD"]
         span = f"{base}..HEAD"
     else:
-        log_cmd = ["git", "log", "-n", "20", "--format=%H%n%an <%ae>%n%B%n--%-%-", "HEAD"]
+        log_cmd = ["git", "log", "-n", "20", fmt, "HEAD"]
         span = "HEAD (last 20)"
     log_proc = subprocess.run(log_cmd, cwd=ROOT, capture_output=True, text=True)
     if log_proc.returncode != 0:

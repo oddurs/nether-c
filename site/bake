@@ -77,13 +77,17 @@ def inline(text: str) -> str:
 
     def stash_link(m: re.Match[str]) -> str:
         raw_label, raw_href = m.group(1), rewrite_href(m.group(2))
-        scheme = raw_href.lstrip().lower()
+        scheme = re.sub(r"[\x00-\x20]+", "", raw_href).lower()
         if scheme.startswith(("javascript:", "data:", "vbscript:")):
             return esc(raw_label)
         label = esc(raw_label)
         label = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", label)
         label = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", label)
-        ext = ' target="_blank" rel="noreferrer noopener"' if raw_href.startswith("http") else ""
+        ext = (
+            ' target="_blank" rel="noreferrer noopener"'
+            if raw_href.startswith(("http://", "https://"))
+            else ""
+        )
         spans.append(f'<a href="{esc(raw_href)}"{ext}>{label}</a>')
         return f"\x00{len(spans) - 1}\x00"
 

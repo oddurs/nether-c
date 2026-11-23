@@ -292,6 +292,7 @@ d_sub = var("d_sub")
 d_x = var("d_x")
 d1_p = var("d1_p")
 d2_p = var("d2_p")
+d3_p = var("d3_p")
 d_f_p = var("d_f_p")
 d_a_p = var("d_a_p")
 d_r_p = var("d_r_p")
@@ -331,6 +332,21 @@ SUBST_DEPTH = InductiveRelation(
                 subst_depth(e2, d2, d_a, d2_p),
             ),
             subst_depth(app("Prim", op, e1, e2), d_max(d1, d2), d_a, d_max(d1_p, d2_p)),
+        ),
+        # Branch joins its condition and both arms
+        Rule(
+            "SubstSelect",
+            (
+                subst_depth(e1, d1, d_a, d1_p),
+                subst_depth(e2, d2, d_a, d2_p),
+                subst_depth(e3, d3, d_a, d3_p),
+            ),
+            subst_depth(
+                app("Select", e1, e2, e3),
+                d_max(d1, d2, d3),
+                d_a,
+                d_max(d1_p, d2_p, d3_p),
+            ),
         ),
         # Application inside body (arrow grant `df_set` is part of the static type,
         # so its ceiling contribution `d_r` is invariant under term substitution)

@@ -35,11 +35,13 @@ export class Necropolis {
   bury(source, fuel = 0) {
     const said = encoder.encode(source);
     const at = this.m.nether_alloc(said.length) >>> 0;
+    if (said.length > 0 && at === 0) throw Error("WASM allocator out of memory");
     let block;
     try {
-      this.bytes.set(said, at);
+      if (said.length > 0) this.bytes.set(said, at);
       block = this.m.nether_bury(at, said.length, BigInt(fuel)) >>> 0;
     } finally { this.m.nether_free(at, said.length); }
+    if (block === 0) throw Error("WASM burial failed to allocate response block");
     const len = new DataView(this.m.memory.buffer).getUint32(block, true);
     try {
       return JSON.parse(decoder.decode(this.bytes.subarray(block + 4, block + 4 + len)));
