@@ -1,6 +1,7 @@
-//! The lexer.
+//! Lexing, parsing, lowering, and printing for Nether C.
 //!
-//! UTF-8 in, tokens with byte spans out. `spec/03-lexical.md`.
+//! UTF-8 source in, typed IR out, and back again (`spec/03-lexical.md`,
+//! `spec/04-grammar.md`, `spec/06-evaluation.md` §6.5).
 //!
 //! Spans are load-bearing. Every diagnostic in the language points back at
 //! source and so does every hole, so a token that does not know where it came

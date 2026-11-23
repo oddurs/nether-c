@@ -218,7 +218,7 @@ impl Scanner<'_> {
                         return Err(self.fault(from, FaultKind::StrayCarriageReturn));
                     }
                 }
-                '/' if self.rest().starts_with("//") => self.line_comment(),
+                '/' if self.rest().starts_with("//") => self.line_comment()?,
                 '/' if self.rest().starts_with("/*") => self.block_comment(from)?,
                 '"' => self.string(from, false)?,
                 'b' if self.rest().starts_with("b\"") => {
@@ -236,19 +236,41 @@ impl Scanner<'_> {
     }
 
     /// `// to the end of the line`. Comments are whitespace.
-    fn line_comment(&mut self) {
-        self.at += self.rest().find('\n').unwrap_or(self.rest().len());
+    fn line_comment(&mut self) -> Result<(), Fault> {
+        while let Some(c) = self.peek() {
+            if c == '\n' {
+                break;
+            }
+            if c == '\r' {
+                if self.rest().starts_with("\r\n") {
+                    self.at += 1;
+                    break;
+                }
+                let here = self.at;
+                self.at += 1;
+                return Err(self.fault(here, FaultKind::StrayCarriageReturn));
+            }
+            self.at += c.len_utf8();
+        }
+        Ok(())
     }
 
     /// `/* to the closing delimiter; these do not nest */`.
     fn block_comment(&mut self, from: usize) -> Result<(), Fault> {
-        if let Some(i) = self.rest()[2..].find("*/") {
-            self.at += 2 + i + 2;
-            Ok(())
-        } else {
-            self.at = self.text.len();
-            Err(self.fault(from, FaultKind::UnterminatedComment))
+        self.at += 2;
+        while let Some(c) = self.peek() {
+            if self.rest().starts_with("*/") {
+                self.at += 2;
+                return Ok(());
+            }
+            if c == '\r' && !self.rest().starts_with("\r\n") {
+                let here = self.at;
+                self.at += 1;
+                return Err(self.fault(here, FaultKind::StrayCarriageReturn));
+            }
+            self.at += c.len_utf8();
         }
+        Err(self.fault(from, FaultKind::UnterminatedComment))
     }
 
     /// An identifier or a keyword.
@@ -280,8 +302,13 @@ impl Scanner<'_> {
             return self.punctuation(from);
         };
         self.at += 2;
+        let mut extra = false;
+        while self.peek().is_some_and(|c| c.is_ascii_digit()) {
+            self.at += 1;
+            extra = true;
+        }
         let Ok(d) = u8::try_from(d) else { unreachable!("a digit is below ten") };
-        if d > 8 {
+        if extra || d > 8 {
             return Err(self.fault(from, FaultKind::NotAStratum));
         }
         self.push(from, TokenKind::Depth(d));
@@ -322,14 +349,24 @@ impl Scanner<'_> {
     /// only way to write `−2⁶³` in a language whose `-` is an operator.
     fn number(&mut self, from: usize) -> Result<(), Fault> {
         let (radix, prefix) = match self.rest().get(..2) {
-            Some("0x" | "0X") => (16, 2),
-            Some("0b" | "0B") => (2, 2),
+            Some("0x") => (16, 2),
+            Some("0b") => (2, 2),
             _ => (10, 0),
         };
         self.at += prefix;
         let digits_from = self.at;
+        // §3.6: a hex or binary literal must begin with a digit, not `_`.
+        if prefix > 0 && !self.peek().is_some_and(|c| c.is_digit(radix)) {
+            return Err(self.fault(from, FaultKind::EmptyNumber));
+        }
         while self.peek().is_some_and(|c| c == '_' || c.is_digit(radix)) {
             self.at += 1;
+        }
+        if radix == 2 && self.peek().is_some_and(|c| c.is_ascii_digit()) {
+            while self.peek().is_some_and(|c| c == '_' || c.is_ascii_digit()) {
+                self.at += 1;
+            }
+            return Err(self.fault(from, FaultKind::Expected("binary digits (0 or 1)")));
         }
         let digits: String =
             self.text[digits_from..self.at].chars().filter(|c| *c != '_').collect();
@@ -365,6 +402,12 @@ impl Scanner<'_> {
                 // A string that runs off the end of its line is a missing
                 // quote, and saying so here beats saying it four lines later.
                 '\n' => return Err(self.fault(from, FaultKind::UnterminatedString)),
+                '\r' => {
+                    if self.rest().starts_with('\n') {
+                        return Err(self.fault(from, FaultKind::UnterminatedString));
+                    }
+                    return Err(self.fault(self.at - 1, FaultKind::StrayCarriageReturn));
+                }
                 '\\' => self.escape(from, raw, &mut out)?,
                 _ => out.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes()),
             }
@@ -387,7 +430,7 @@ impl Scanner<'_> {
     /// One escape, after the backslash, written into what the literal holds.
     /// §3.6.
     fn escape(&mut self, from: usize, raw: bool, out: &mut Vec<u8>) -> Result<(), Fault> {
-        let here = self.at;
+        let here = self.at - 1;
         let Some(c) = self.peek() else {
             return Err(self.fault(from, FaultKind::UnterminatedString));
         };
@@ -446,7 +489,7 @@ impl Scanner<'_> {
         }
         self.at += 1;
         if digits.is_empty() {
-            return Err(self.fault(from, FaultKind::EmptyNumber));
+            return Err(self.fault(from, FaultKind::NotAScalar));
         }
         u32::from_str_radix(digits, 16)
             .ok()

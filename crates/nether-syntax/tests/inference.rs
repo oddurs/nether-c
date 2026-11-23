@@ -23,24 +23,51 @@ use spec::Shape;
 
 /// Every `c` sample under `spec/` that §04 parses, with what it needs around
 /// it. What each sample is, is said once, in `tests/spec/mod.rs`.
-fn samples() -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for (key, body) in spec::of_shape(Shape::Unit) {
-        out.push((key, format!("{AROUND}\n{body}\n")));
-    }
-    for (key, body) in spec::of_shape(Shape::Statements) {
-        out.push((key, format!("{AROUND}\nU0 sample()\n{{\n{body}\n}}\n")));
+fn around_for(body: &str, is_unit: bool) -> String {
+    let declared: Vec<String> = if is_unit {
+        parse(body.as_bytes()).map_or_else(
+            |_| Vec::new(),
+            |u| {
+                u.items
+                    .into_iter()
+                    .filter_map(|i| match i {
+                        nether_syntax::ast::Item::Func(f) => Some(f.name.text),
+                        nether_syntax::ast::Item::Let(l) => Some(l.name.text),
+                        _ => None,
+                    })
+                    .collect()
+            },
+        )
+    } else {
+        Vec::new()
+    };
+    let mut out = String::new();
+    for (decl, name) in [
+        ("Bytes compile(Bytes s) { concat(b\"obj:\", s) }\n", "compile"),
+        ("Bytes other = b\"\";\n", "other"),
+        ("Bytes src = b\"\";\n", "src"),
+        ("Str p = \"\";\n", "p"),
+        ("Answer<Bytes> a = descend disk { read(\"main.nc\") };\n", "a"),
+    ] {
+        if !declared.iter().any(|d| d == name) {
+            out.push_str(decl);
+        }
     }
     out
 }
 
-const AROUND: &str = r#"
-Bytes compile(Bytes s) { concat(b"obj:", s) }
-Bytes other = b"";
-Bytes src = b"";
-Str p = "";
-Answer<Bytes> a = descend disk { read("main.nc") };
-"#;
+fn samples() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (key, body) in spec::of_shape(Shape::Unit) {
+        let prelude = around_for(&body, true);
+        out.push((key, format!("{prelude}\n{body}\n")));
+    }
+    for (key, body) in spec::of_shape(Shape::Statements) {
+        let prelude = around_for(&body, false);
+        out.push((key, format!("{prelude}\nU0 sample()\n{{\n{body}\n}}\n")));
+    }
+    out
+}
 
 /// Delete every depth annotation, in both the forms §3.5 allows.
 fn without_annotations(src: &str) -> String {

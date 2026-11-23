@@ -186,7 +186,7 @@ pub struct Block {
 
 /// A statement.
 ///
-/// There are two, because everything else in `spec/04-grammar.md` §4.4 is an
+/// There are three, because everything else in `spec/04-grammar.md` §4.4 is an
 /// expression once `if`, `while` and `for` have been folded into [`ExprKind`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {

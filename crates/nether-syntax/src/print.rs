@@ -69,8 +69,7 @@ pub fn print(unit: &Unit) -> String {
     out
 }
 
-/// A type, as §4.3 writes one. A shade never writes its origin: §4.3 is
-/// explicit that writing it would let a program claim one it does not have.
+/// A type, as §4.3 writes one. Received shades print their origin (`Shade<T@d>`).
 fn ty(t: &Type) -> String {
     match t {
         Type::Unit => "U0".into(),
@@ -80,13 +79,34 @@ fn ty(t: &Type) -> String {
         Type::Str => "Str".into(),
         Type::Cairn => "Cairn".into(),
         Type::Refusal => "Refusal".into(),
-        Type::Shade { inner, .. } => format!("Shade<{}>", ty(inner)),
-        Type::Answer(inner) => format!("Answer<{}>", ty(inner)),
+        Type::Shade { origin, inner } => format!("Shade<{}@{origin}>", ty(inner)),
+        Type::Answer(inner) => {
+            let inner = ty(inner);
+            if inner.ends_with('>') {
+                format!("Answer<{inner} >")
+            } else {
+                format!("Answer<{inner}>")
+            }
+        }
         Type::Struct(name) => name.clone(),
-        Type::Array { elem, len } => match len {
-            Some(n) => format!("{}[{n}]", ty(elem)),
-            None => format!("{}[]", ty(elem)),
-        },
+        Type::Array { .. } => {
+            let mut dims = Vec::new();
+            let mut cur = t;
+            while let Type::Array { elem, len } = cur {
+                dims.push(*len);
+                cur = elem;
+            }
+            let mut out = ty(cur);
+            for len in dims {
+                match len {
+                    Some(n) => {
+                        let _ = write!(out, "[{n}]");
+                    }
+                    None => out.push_str("[]"),
+                }
+            }
+            out
+        }
         // §04 has no syntax for one, so a unit that came from source has none
         // in a position this reaches. Printed so that the round trip says so
         // loudly rather than quietly producing something else.
@@ -124,7 +144,11 @@ fn block(b: &Block, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
         out.push_str(&stmt(s, unit, f, at + 1));
     }
     if let Some(tail) = &b.tail {
-        let _ = writeln!(out, "{}{}", indent(at + 1), expr(tail, unit, f));
+        if starts_with_block(tail) {
+            let _ = writeln!(out, "{}({})", indent(at + 1), expr(tail, unit, f));
+        } else {
+            let _ = writeln!(out, "{}{}", indent(at + 1), expr(tail, unit, f));
+        }
     }
     let _ = write!(out, "{}}}", indent(at));
     out
@@ -169,6 +193,7 @@ fn stmt(s: &Stmt, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
                 None => format!("{}return;\n", indent(at)),
             },
             ExprKind::Block(b) => format!("{}\n", block(b, unit, f, at)),
+            _ if starts_with_block(x) => format!("{}({});\n", indent(at), expr(x, unit, f)),
             _ => format!("{}{};\n", indent(at), expr(x, unit, f)),
         },
     }
@@ -227,10 +252,23 @@ fn level(spelled: &str) -> u8 {
     LEVELS.iter().find(|(p, _, _)| p.spelling() == spelled).map_or(ASSIGNMENT, |(_, l, _)| *l)
 }
 
+fn starts_with_block(mut x: &Expr) -> bool {
+    loop {
+        match &x.kind {
+            ExprKind::Block(_) | ExprKind::Literal(Literal::Unit) => return true,
+            ExprKind::Binary { lhs, .. }
+            | ExprKind::Select { cond: lhs, .. }
+            | ExprKind::Call { callee: lhs, .. }
+            | ExprKind::Index { base: lhs, .. }
+            | ExprKind::Field { base: lhs, .. } => x = lhs,
+            _ => return false,
+        }
+    }
+}
+
 /// The level of what this expression prints as.
 fn level_of(x: &Expr) -> u8 {
     match &x.kind {
-        ExprKind::Literal(Literal::Int(n)) if *n < 0 => PREFIX,
         ExprKind::Call { .. } | ExprKind::Index { .. } | ExprKind::Field { .. } => POSTFIX,
         ExprKind::Unary { .. } | ExprKind::Rite { .. } => PREFIX,
         ExprKind::Binary { op, .. } => level(binary(*op)),
@@ -354,6 +392,7 @@ fn literal(l: &Literal) -> String {
         // would have named.
         Literal::Unit => "{ }".into(),
         Literal::Bool(b) => b.to_string(),
+        Literal::Int(n) if *n < 0 => format!("0x{:016x}", u64::from_ne_bytes(n.to_ne_bytes())),
         Literal::Int(n) => n.to_string(),
         Literal::Str(s) => spelled(s),
         Literal::Bytes(b) => quoted(b),

@@ -128,7 +128,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`##########` 100% · 19 of 19 done · due 2027-01-15
+`##########` 100% · 20 of 20 done · due 2027-01-15
 
 Buried. The IR, the bidirectional depth checker, normalization by evaluation, holes and residualization, fuel and starvation diagnostics, seal/shade/look, the generative monotonicity test, and the stage one proof.
 
@@ -153,6 +153,7 @@ Buried. The IR, the bidirectional depth checker, normalization by evaluation, ho
 - [x] [`0129`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0129-spec-monotonicity-is-stated-the-wrong-way-round.md) Spec: monotonicity is stated the wrong way round <sup>spec · p0</sup>
 - [x] [`0139`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0139-the-decay-rule-can-be-nullified-by-one-line.md) The Decay Rule can be nullified by one line <sup>bug · p0 · 0</sup>
 - [x] [`0140`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0140-ci-skips-cairn-check-when-the-install-fails.md) CI skips cairn check when the install fails <sup>bug · p0 · 0</sup>
+- [x] [`0297`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0297-enforce-depth-soundness-parser-bounds-and-ir-round-trip.md) Enforce depth soundness, parser bounds, and IR round-trip <sup>feature · p2 · 0</sup>
 
 ## surface — The Surface
 

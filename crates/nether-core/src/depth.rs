@@ -114,10 +114,10 @@ impl Held {
         Self(self.0 | other.0)
     }
 
-    /// Everything in this and not in `other`. What an application is missing.
+    /// Everything in this and not in `other`, keeping stratum 0. What an application is missing.
     #[must_use]
     pub const fn without(self, other: Self) -> Self {
-        Self(self.0 & !other.0)
+        Self((self.0 & !other.0) | 1)
     }
 
     /// Whether `d` is held. [LOOK]'s premise, `d ∈ δ`.
@@ -294,5 +294,17 @@ mod tests {
     fn capabilities_are_listed_shallowest_first() {
         let strata: Vec<u8> = Capability::ALL.iter().map(|c| c.stratum().get()).collect();
         assert_eq!(strata, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    #[test]
+    fn held_without_preserves_stratum_zero_invariant() {
+        let both = Held::of(Depth::DISK).with(Depth::NET);
+        assert_eq!(both.without(both), Held::NONE);
+        assert!(both.without(both).is_none());
+        assert_eq!(both.without(both).deepest(), Depth::PURE);
+        assert_eq!(both.without(Held::of(Depth::DISK)), Held::of(Depth::NET));
+        assert_eq!(both.without(Held::of(Depth::DISK)).deepest(), Depth::NET);
+        assert_eq!(Held::NONE.without(Held::NONE), Held::NONE);
+        assert_eq!(both.to_string(), "{3,5}");
     }
 }

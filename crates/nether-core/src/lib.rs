@@ -4,10 +4,9 @@
 //! file becomes once names are resolved and spelling is folded away, and it is
 //! what burial reduces.
 //!
-//! The IR is the **checked** form. Nothing here checks anything — the rules
-//! are in `spec/02-calculus.md` and the checker that applies them is its own
-//! crate — but the shape assumes they have been applied: every [`Expr`] states
-//! a type and a depth, and something had to work them out.
+//! The IR is the **checked** form. The rules are in `spec/02-calculus.md` and
+//! [`check`] enforces them against a [`Unit`]: every [`Expr`] states a type
+//! and a depth, and the checker verifies that the calculus derives them.
 //!
 //! Three things are true of this crate on purpose:
 //!
