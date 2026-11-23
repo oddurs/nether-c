@@ -138,7 +138,7 @@ fn split(url: &str) -> Result<Asked, Refusal> {
         Some((h, p)) => (h, p.parse().map_err(|_| Refusal::Malformed)?),
         None => (authority, 80u16),
     };
-    if !hostlike(host) {
+    if port == 0 || !hostlike(host) {
         return Err(Refusal::Malformed);
     }
     Ok(Asked { host: host.to_owned(), port, path })
@@ -233,6 +233,23 @@ fn connect_with_deadline(host: &str, port: u16, deadline: Instant) -> Result<Tcp
     Err(last)
 }
 
+fn write_all_with_deadline(
+    socket: &mut TcpStream,
+    mut buf: &[u8],
+    deadline: Instant,
+) -> Result<(), Refusal> {
+    while !buf.is_empty() {
+        socket.set_write_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
+        match socket.write(buf) {
+            Ok(0) => return Err(Refusal::Unreachable),
+            Ok(n) => buf = &buf[n..],
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(why(&e)),
+        }
+    }
+    socket.flush().map_err(|e| why(&e))
+}
+
 /// HTTP/1.1, by hand, over one connection that is closed when it is done.
 fn fetch(function: &str, at: &Asked, body: &[u8]) -> Result<Vec<u8>, Refusal> {
     let verb = if function == "post" { "POST" } else { "GET" };
@@ -251,15 +268,12 @@ fn fetch(function: &str, at: &Asked, body: &[u8]) -> Result<Vec<u8>, Refusal> {
 
     let deadline = Instant::now() + PATIENCE;
     let mut socket = connect_with_deadline(&at.host, at.port, deadline)?;
-    let left = remaining(deadline)?;
-    socket.set_read_timeout(Some(left)).map_err(|e| why(&e))?;
-    socket.set_write_timeout(Some(left)).map_err(|e| why(&e))?;
-    socket.write_all(&sending).map_err(|e| why(&e))?;
-    socket.flush().map_err(|e| why(&e))?;
+    write_all_with_deadline(&mut socket, &sending, deadline)?;
 
     let mut reading = BufReader::new(socket);
     let head = head_of(&mut reading, deadline)?;
     match head.status {
+        204 => return Ok(Vec::new()),
         200..=299 => {}
         404 | 410 => return Err(Refusal::Absent),
         401 | 403 => return Err(Refusal::Denied),
@@ -285,17 +299,33 @@ fn read_line_bytes(
     budget: &mut u64,
     deadline: Instant,
 ) -> Result<Vec<u8>, Refusal> {
-    reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
     let mut line = Vec::new();
-    let n = reading.by_ref().take(*budget).read_until(b'\n', &mut line).map_err(|e| why(&e))?;
-    *budget = budget.saturating_sub(n as u64);
-    if n == 0 {
-        return Err(if *budget == 0 { Refusal::Exhausted } else { Refusal::Unreachable });
+    loop {
+        if *budget == 0 {
+            return Err(Refusal::Exhausted);
+        }
+        reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
+        let avail = match reading.fill_buf() {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(why(&e)),
+        };
+        if avail.is_empty() {
+            return if line.is_empty() { Err(Refusal::Unreachable) } else { Ok(line) };
+        }
+        let max_take = usize::try_from(*budget).unwrap_or(usize::MAX).min(avail.len());
+        let slice = &avail[..max_take];
+        if let Some(pos) = slice.iter().position(|&b| b == b'\n') {
+            let take = pos + 1;
+            line.extend_from_slice(&slice[..take]);
+            reading.consume(take);
+            *budget -= take as u64;
+            return Ok(line);
+        }
+        line.extend_from_slice(slice);
+        reading.consume(max_take);
+        *budget -= max_take as u64;
     }
-    if !line.ends_with(b"\n") && *budget == 0 {
-        return Err(Refusal::Exhausted);
-    }
-    Ok(line)
 }
 
 /// Parse HTTP/1.x status line and framing headers on raw bytes, skipping `1xx`.
@@ -317,16 +347,29 @@ fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Resp
             if hdr == b"\r\n" || hdr == b"\n" {
                 break;
             }
-            if let Ok(text) = core::str::from_utf8(&hdr)
-                && let Some((name, value)) = text.split_once(':')
-            {
-                let value = value.trim();
-                if name.eq_ignore_ascii_case("content-length") {
-                    content_length = Some(value.parse().map_err(|_| Refusal::Unreachable)?);
-                } else if name.eq_ignore_ascii_case("transfer-encoding")
-                    && value.to_ascii_lowercase().contains("chunked")
+            let Some(colon) = hdr.iter().position(|&b| b == b':') else {
+                continue;
+            };
+            let name = &hdr[..colon];
+            if name.eq_ignore_ascii_case(b"content-length") {
+                let value = core::str::from_utf8(&hdr[colon + 1..])
+                    .map_err(|_| Refusal::Unreachable)?
+                    .trim();
+                let parsed: u64 = value.parse().map_err(|_| Refusal::Unreachable)?;
+                if let Some(prev) = content_length
+                    && prev != parsed
                 {
+                    return Err(Refusal::Unreachable);
+                }
+                content_length = Some(parsed);
+            } else if name.eq_ignore_ascii_case(b"transfer-encoding") {
+                let value =
+                    core::str::from_utf8(&hdr[colon + 1..]).map_err(|_| Refusal::Unreachable)?;
+                let final_coding = value.split(',').map(str::trim).rfind(|tok| !tok.is_empty());
+                if final_coding.is_some_and(|tok| tok.eq_ignore_ascii_case("chunked")) {
                     chunked = true;
+                } else {
+                    return Err(Refusal::Unreachable);
                 }
             }
         }
@@ -348,8 +391,23 @@ fn read_plain(
     let mut said = Vec::new();
     let mut buf = [0u8; 8192];
     loop {
+        if let Some(len) = expected
+            && said.len() as u64 == len
+        {
+            break;
+        }
         reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
-        let n = reading.read(&mut buf).map_err(|e| why(&e))?;
+        let want = match expected {
+            Some(len) => {
+                usize::try_from(len - said.len() as u64).unwrap_or(buf.len()).min(buf.len())
+            }
+            None => buf.len(),
+        };
+        let n = match reading.read(&mut buf[..want]) {
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(why(&e)),
+        };
         if n == 0 {
             break;
         }
@@ -359,7 +417,7 @@ fn read_plain(
         said.extend_from_slice(&buf[..n]);
     }
     if let Some(len) = expected
-        && (said.len() as u64) < len
+        && (said.len() as u64) != len
     {
         return Err(Refusal::Unreachable);
     }
@@ -368,15 +426,19 @@ fn read_plain(
 
 fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Vec<u8>, Refusal> {
     let mut said = Vec::new();
-    let mut meta_budget = MOST_HEAD;
     loop {
-        let size_line = read_line_bytes(reading, &mut meta_budget, deadline)?;
+        let mut line_budget = MOST_HEAD;
+        let size_line = read_line_bytes(reading, &mut line_budget, deadline)?;
         let text = core::str::from_utf8(&size_line).map_err(|_| Refusal::Unreachable)?;
         let hex = text.split(';').next().unwrap_or("").trim();
+        if hex.is_empty() || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(Refusal::Unreachable);
+        }
         let size = u64::from_str_radix(hex, 16).map_err(|_| Refusal::Unreachable)?;
         if size == 0 {
+            let mut trailer_budget = MOST_HEAD;
             loop {
-                let trailer = read_line_bytes(reading, &mut meta_budget, deadline)?;
+                let trailer = read_line_bytes(reading, &mut trailer_budget, deadline)?;
                 if trailer == b"\r\n" || trailer == b"\n" {
                     return Ok(said);
                 }
@@ -390,14 +452,19 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
         while left > 0 {
             reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
             let want = left.min(buf.len());
-            let n = reading.read(&mut buf[..want]).map_err(|e| why(&e))?;
+            let n = match reading.read(&mut buf[..want]) {
+                Ok(n) => n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(why(&e)),
+            };
             if n == 0 {
                 return Err(Refusal::Unreachable);
             }
             said.extend_from_slice(&buf[..n]);
             left -= n;
         }
-        let crlf = read_line_bytes(reading, &mut meta_budget, deadline)?;
+        let mut crlf_budget = 8;
+        let crlf = read_line_bytes(reading, &mut crlf_budget, deadline)?;
         if crlf != b"\r\n" && crlf != b"\n" {
             return Err(Refusal::Unreachable);
         }

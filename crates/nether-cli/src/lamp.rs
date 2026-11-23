@@ -286,11 +286,14 @@ fn provenance(store: &Store, cairn: Cairn, limit: usize, wants_json: bool) -> Ex
         Ok(Stored::Node(n)) => format!("{}  {}", cairn.short(), node(store, &n)),
         Err(e) => {
             eprintln!("nether: {e}");
-            return FAILED;
+            return store_exit(&e);
         }
     };
     let mut lines = vec![head];
-    walk(store, cairn, limit, 0, &mut lines);
+    if let Err(e) = walk(store, cairn, limit, 0, &mut lines) {
+        eprintln!("nether: {e}");
+        return store_exit(&e);
+    }
     if wants_json {
         let each: Vec<String> = lines.iter().map(|l| json::string(l)).collect();
         println!("{{\"cairn\":\"{cairn}\",\"provenance\":[{}]}}", each.join(","));
@@ -300,10 +303,27 @@ fn provenance(store: &Store, cairn: Cairn, limit: usize, wants_json: bool) -> Ex
     ExitCode::SUCCESS
 }
 
-fn walk(store: &Store, cairn: Cairn, limit: usize, at: usize, out: &mut Vec<String>) {
+const MAX_PROVENANCE_LINES: usize = 10_000;
+
+fn store_exit(e: &nether_ledger::StoreError) -> ExitCode {
+    match e {
+        nether_ledger::StoreError::Corrupt { .. } | nether_ledger::StoreError::Ragged { .. } => {
+            ExitCode::from(crate::code::MALFORMED)
+        }
+        _ => FAILED,
+    }
+}
+
+fn walk(
+    store: &Store,
+    cairn: Cairn,
+    limit: usize,
+    at: usize,
+    out: &mut Vec<String>,
+) -> Result<(), nether_ledger::StoreError> {
     let mut active = HashSet::new();
     active.insert(cairn);
-    walk_acyclic(store, cairn, limit.min(MAX_DEPTH), at, &mut active, out);
+    walk_acyclic(store, cairn, limit.min(MAX_DEPTH), at, &mut active, out)
 }
 
 fn walk_acyclic(
@@ -313,14 +333,17 @@ fn walk_acyclic(
     at: usize,
     active: &mut HashSet<Cairn>,
     out: &mut Vec<String>,
-) {
-    if at >= limit {
-        return;
+) -> Result<(), nether_ledger::StoreError> {
+    if at >= limit || out.len() >= MAX_PROVENANCE_LINES {
+        return Ok(());
     }
-    let Ok(above) = store.referrers(cairn) else { return };
+    let above = store.referrers(cairn)?;
     let last = above.len().saturating_sub(1);
     for (i, one) in above.iter().enumerate() {
-        let Ok(stored) = store.get(*one) else { continue };
+        if out.len() >= MAX_PROVENANCE_LINES {
+            break;
+        }
+        let stored = store.get(*one)?;
         let what = match &stored {
             Stored::Value(v) => value(v),
             Stored::Node(n) => node(store, n),
@@ -329,10 +352,11 @@ fn walk_acyclic(
         let elbow = if i == last { "└─" } else { "├─" };
         out.push(format!("{stem}{elbow} {what}"));
         if active.insert(*one) {
-            walk_acyclic(store, *one, limit, at + 1, active, out);
+            walk_acyclic(store, *one, limit, at + 1, active, out)?;
             active.remove(one);
         }
     }
+    Ok(())
 }
 
 // ── at a byte offset: §8.4.1 ────────────────────────────────────────────────
@@ -555,7 +579,10 @@ fn trace_hits(
             })?;
         }
         let mut lines = vec![format!("{}  {}", at.short(), node(store, &n))];
-        walk(store, at, limit, 0, &mut lines);
+        if let Err(e) = walk(store, at, limit, 0, &mut lines) {
+            eprintln!("nether: {e}");
+            return Err(store_exit(&e));
+        }
         hits.push(Hit { cairn: at, span, lines });
     }
     Ok(hits)

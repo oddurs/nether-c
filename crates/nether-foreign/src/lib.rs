@@ -142,6 +142,7 @@ impl Object {
     /// [`Failed`] if this object does not have that symbol, or if it asked
     /// twice for more room.
     pub fn call(&self, symbol: &str, args: &[u8]) -> Result<(i32, Vec<u8>), Failed> {
+        const MAX_OUTPUT: usize = 64 * 1024 * 1024;
         // Held to the end of the call, both tries: that is the turn.
         let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
         let Some(function) = Self::find(&handle, symbol) else {
@@ -158,11 +159,25 @@ impl Object {
             function(args.as_ptr(), args.len(), out.as_mut_ptr(), out.len(), &raw mut wrote)
         };
         if code != 1 {
+            if code == 0 && wrote > out.len() {
+                return Err(Failed(format!(
+                    "`{symbol}` claimed to write {wrote} bytes into a {}-byte buffer",
+                    out.len()
+                )));
+            }
             out.truncate(wrote.min(out.len()));
             return Ok((code, out));
         }
 
-        let mut out = vec![0u8; wrote];
+        if wrote > MAX_OUTPUT {
+            return Err(Failed(format!(
+                "`{symbol}` asked for {wrote} bytes, past the 64 MiB bound"
+            )));
+        }
+        let mut out = Vec::new();
+        out.try_reserve_exact(wrote)
+            .map_err(|_| Failed(format!("`{symbol}` could not reserve {wrote} bytes")))?;
+        out.resize(wrote, 0);
         let mut wrote = 0usize;
         // SAFETY: as above, with a buffer of the size the callee asked for.
         let code = unsafe {
@@ -170,6 +185,12 @@ impl Object {
         };
         if code == 1 {
             return Err(Failed(format!("`{symbol}` asked for more room twice")));
+        }
+        if code == 0 && wrote > out.len() {
+            return Err(Failed(format!(
+                "`{symbol}` claimed to write {wrote} bytes into a {}-byte buffer",
+                out.len()
+            )));
         }
         out.truncate(wrote.min(out.len()));
         Ok((code, out))

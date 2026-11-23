@@ -62,7 +62,7 @@ impl Disk {
     /// a link created between the two still wins. What it stops is a link that
     /// was already there — which is the one a program being buried can arrange
     /// for itself, by writing at stratum 4 and reading at stratum 3.
-    fn resolve(&self, path: &str) -> Result<PathBuf, Refusal> {
+    fn resolve(&self, path: &str, follow_final: bool) -> Result<PathBuf, Refusal> {
         if path.is_empty() {
             return Err(Refusal::Malformed);
         }
@@ -76,24 +76,37 @@ impl Disk {
                 }
             }
         }
+        if !follow_final && rel.is_empty() {
+            return Err(Refusal::Denied);
+        }
         let Ok(root) = self.root.canonicalize() else { return Err(Refusal::Denied) };
         let mut cur = root.clone();
-        for name in rel {
+        let mut hops = 0u8;
+        let resolve_count = if follow_final { rel.len() } else { rel.len() - 1 };
+        for name in &rel[..resolve_count] {
             cur.push(name);
-            if !step_within(&root, &mut cur, 0) {
+            if !step_within(&root, &mut cur, &mut hops) {
                 return Err(Refusal::Denied);
             }
         }
-        if within(&root, &cur) { Ok(cur) } else { Err(Refusal::Denied) }
+        if !within(&root, &cur) {
+            return Err(Refusal::Denied);
+        }
+        if !follow_final {
+            // Do not dereference the final component on `remove`, so removing a
+            // symlink (including a dangling one) removes the link itself rather
+            // than deleting its target.
+            cur.push(rel[rel.len() - 1]);
+            return Ok(cur);
+        }
+        Ok(cur)
     }
 }
 
 /// Resolve one path component while refusing any symlink — including a dangling
-/// symlink — whose target escapes `root`.
-fn step_within(root: &Path, cur: &mut PathBuf, hops: u8) -> bool {
-    if hops > 40 {
-        return false;
-    }
+/// symlink — whose target escapes `root`, bounding total expansions across the
+/// whole `resolve` call so cyclic or DAG symlinks cannot cause exponential work.
+fn step_within(root: &Path, cur: &mut PathBuf, hops: &mut u8) -> bool {
     let Ok(meta) = std::fs::symlink_metadata(&*cur) else {
         // Not present yet (e.g. a new file or directory for `write`).
         return true;
@@ -101,6 +114,10 @@ fn step_within(root: &Path, cur: &mut PathBuf, hops: u8) -> bool {
     if !meta.file_type().is_symlink() {
         return true;
     }
+    if *hops >= 40 {
+        return false;
+    }
+    *hops += 1;
     let Ok(target) = std::fs::read_link(&*cur) else { return false };
     let mut resolved = if target.is_absolute() {
         PathBuf::new()
@@ -119,7 +136,7 @@ fn step_within(root: &Path, cur: &mut PathBuf, hops: u8) -> bool {
             }
             Component::Normal(n) => {
                 resolved.push(n);
-                if !step_within(root, &mut resolved, hops + 1) {
+                if !step_within(root, &mut resolved, hops) {
                     return false;
                 }
             }
@@ -195,7 +212,8 @@ impl Provider for Disk {
             }
             return into.record(call, stratum, span, &refused(Refusal::Malformed));
         };
-        let said = match self.resolve(&path) {
+        let follow_final = call.function != "remove";
+        let said = match self.resolve(&path, follow_final) {
             Err(_) if call.function == "exists" => given(&call.function, Value::Bool(false)),
             Err(no) => refused(no),
             Ok(at) => Self::act(&call.function, &at, call, into),
@@ -269,6 +287,11 @@ impl Disk {
         else {
             return refused(Refusal::Malformed);
         };
+        if let Ok(meta) = std::fs::symlink_metadata(at)
+            && !meta.is_file()
+        {
+            return refused(Refusal::Denied);
+        }
         if let Some(parent) = at.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 return refused(why(&e));
