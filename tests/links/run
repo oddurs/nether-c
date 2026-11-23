@@ -24,7 +24,7 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[2]
 SITE = ROOT / "site"
 
-REF = re.compile(r'(?:href|src)="([^"]+)"')
+REF = re.compile(r'(?:href|src|data-lit-src|data-dark-src)="([^"]+)"')
 ANCHOR = re.compile(r'\sid="([^"]+)"')
 NUMBERED = re.compile(r'<h[1-6] id="[^"]*"><a [^>]*>(\d+(?:\.\d+)+)\s')
 
@@ -34,22 +34,27 @@ def pages() -> list[Path]:
 
 
 def main() -> int:
+    site_root = SITE.resolve()
     anchors: dict[Path, set[str]] = {}
     for page in pages():
-        anchors[page] = set(ANCHOR.findall(page.read_text(encoding="utf-8")))
+        anchors[page.resolve()] = set(ANCHOR.findall(page.read_text(encoding="utf-8")))
 
     broken: list[str] = []
     internal = external = 0
 
     for page in pages():
         rel = page.relative_to(SITE)
-        for raw in REF.findall(page.read_text(encoding="utf-8")):
+        text = page.read_text(encoding="utf-8")
+        for raw in REF.findall(text):
             if raw.startswith(("http://", "https://", "mailto:", "data:")):
                 external += 1
                 continue
             internal += 1
             path, _, fragment = raw.partition("#")
-            target = page if not path else (page.parent / unquote(path)).resolve()
+            target = page.resolve() if not path else (page.parent / unquote(path)).resolve()
+            if not target.is_relative_to(site_root):
+                broken.append(f"{rel} -> {raw}  (escapes site/)")
+                continue
             if not target.exists():
                 broken.append(f"{rel} -> {raw}  (no such file)")
                 continue
@@ -57,7 +62,7 @@ def main() -> int:
                 if fragment not in anchors.get(target, set()):
                     broken.append(f"{rel} -> {raw}  (no such anchor)")
         seen: set[str] = set()
-        for number in NUMBERED.findall(page.read_text(encoding="utf-8")):
+        for number in NUMBERED.findall(text):
             if number in seen:
                 broken.append(f"{rel}: §{number} heads two sections")
             seen.add(number)

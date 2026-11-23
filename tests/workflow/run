@@ -7,9 +7,11 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
 loader = importlib.machinery.SourceFileLoader("policy", str(ROOT / "scripts/pr-policy"))
 spec = importlib.util.spec_from_loader("policy", loader)
@@ -56,7 +58,7 @@ class Workflow(unittest.TestCase):
         (self.primary / ".githooks").mkdir()
         for name in ["agent", "pr-policy"]:
             shutil.copy2(ROOT / "scripts" / name, self.primary / "scripts" / name)
-        for name in ["pre-commit", "pre-push"]:
+        for name in ["commit-msg", "pre-commit", "pre-push"]:
             shutil.copy2(ROOT / ".githooks" / name, self.primary / ".githooks" / name)
         task = self.primary / "scripts/task"
         task.write_text('#!/bin/sh\nset -eu\nif [ "$1" = check ]; then\n'
@@ -101,6 +103,32 @@ class Workflow(unittest.TestCase):
             self.assertTrue(policy.violations(REPO, changed), key)
         self.assertTrue(policy.violations(REPO, {**PROTECTION, "required_status_checks": {
             "strict": True, "checks": [{"context": "required", "app_id": 1}]}}))
+        # GitHub returns null for omitted protection rules; policy must report violations, not crash.
+        for key in (
+            "enforce_admins",
+            "required_linear_history",
+            "allow_force_pushes",
+            "allow_deletions",
+            "required_conversation_resolution",
+        ):
+            self.assertTrue(policy.violations(REPO, {**PROTECTION, key: None}), key)
+
+    def test_commit_msg_enforces_attribution_ban_on_linux(self):
+        # Assemble banned words dynamically so this test file itself stays clean.
+        bad_msgs = [
+            "chore: add feature\n\n" + "Gen" + "erated with a tool\n",
+            "chore: add feature\n\n" + "Co-authored-" + "by: Bot <bot@example.invalid>\n",
+            "chore: mention " + "A" + "I helper\n",
+            "Merge branch 'x' with " + "A" + "I notes\n",
+        ]
+        for msg in bad_msgs:
+            msg_file = self.base / "COMMIT_EDITMSG"
+            msg_file.write_text(msg, encoding="utf-8")
+            self.call(self.tree, ".githooks/commit-msg", str(msg_file), ok=False)
+        # Comment lines and plain commits pass.
+        good = self.base / "COMMIT_EDITMSG"
+        good.write_text("chore(test): plain subject\n\n# " + "A" + "I comment\n", encoding="utf-8")
+        self.call(self.tree, ".githooks/commit-msg", str(good), ok=True)
 
     def test_main_and_primary_commits_are_refused(self):
         self.call(self.primary, "git", "commit", "--allow-empty", "-m", "chore: denied", ok=False)

@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -18,7 +18,10 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Install the pinned toolchain
         run: |
@@ -28,13 +31,13 @@ jobs:
           # check` builds for it. `scripts/setup` installs the same target.
           rustup target add wasm32-unknown-unknown
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
 
-      # From the repository it is actually published from, pinned to a tag, and
+      # From the repository it is actually published from, pinned to a commit, and
       # with no `||`.
       #
       # This used to be `cargo install cairn --locked || echo ...`, which was
@@ -43,7 +46,7 @@ jobs:
       # install did, `scripts/task check` skipped `cairn check` and the run
       # stayed green. A gate that cannot fail is not one.
       - name: Install cairn
-        run: cargo install --locked --git https://github.com/oddurs/cairn --tag v1.0.0-alpha.1 cairn-md
+        run: cargo install --locked --git https://github.com/oddurs/cairn --rev 68ac1549383870aa57548da65ed25119895bb201 cairn-md
 
       # CI and the local hooks run the same command, so they cannot drift.
       - name: scripts/task check

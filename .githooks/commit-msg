@@ -4,14 +4,17 @@ set -eu
 msg_file=$1
 subject=$(sed -n '1p' "$msg_file")
 
-# Allow merges and fixups through untouched.
+# Allow merges and fixups to skip the Conventional Commit subject check,
+# while still checking every commit message against the attribution ban.
+skip_subject=0
 case "$subject" in
-  "Merge "*|"Revert "*|"fixup!"*|"squash!"*) exit 0 ;;
+  "Merge "*|"Revert "*|"fixup!"*|"squash!"*) skip_subject=1 ;;
 esac
 
-pattern='^(feat|fix|chore|docs|spec|perf|refactor|test|build|ci|style|revert)(\([a-z0-9._/-]+\))?!?: .+'
-if ! printf '%s' "$subject" | grep -qE "$pattern"; then
-  cat >&2 <<'MSG'
+if [ "$skip_subject" -eq 0 ]; then
+  pattern='^(feat|fix|chore|docs|spec|perf|refactor|test|build|ci|style|revert)(\([a-z0-9._/-]+\))?!?: .+'
+  if ! printf '%s' "$subject" | grep -qE "$pattern"; then
+    cat >&2 <<'MSG'
 commit-msg: subject must be a Conventional Commit.
 
   type(scope): subject
@@ -21,17 +24,18 @@ commit-msg: subject must be a Conventional Commit.
   spec(strata): state the witness obligation for stratum 5
   fix(ledger): sort map keys before encoding
 MSG
-  exit 1
-fi
+    exit 1
+  fi
 
-if [ "${#subject}" -gt 72 ]; then
-  echo "commit-msg: subject is ${#subject} characters; keep it to 72" >&2
-  exit 1
-fi
+  if [ "${#subject}" -gt 72 ]; then
+    echo "commit-msg: subject is ${#subject} characters; keep it to 72" >&2
+    exit 1
+  fi
 
-case "$subject" in
-  *.) echo "commit-msg: no trailing period on the subject" >&2; exit 1 ;;
-esac
+  case "$subject" in
+    *.) echo "commit-msg: no trailing period on the subject" >&2; exit 1 ;;
+  esac
+fi
 
 # The work is published under the owner's name.
 #
@@ -40,12 +44,13 @@ esac
 # a filename, because it is what this repository calls the file that states the
 # ban. `tests/attribution/run` applies the same rule to everything already
 # here, which is the half a hook cannot do.
-named='claude([^.]|$)|claude\.ai|anthropic|copilot|chatgpt|openai'
+body=$(grep -v '^#' "$msg_file" || true)
+named='(^|[^[:alnum:]_])(claude([^.]|$)|claude\.ai|anthropic|copilot|chatgpt|openai|gemini)([^[:alnum:]_]|$)'
 trailer='^[[:space:]]*(co-authored-by|assisted-by|generated-by|authored-by)[[:space:]]*:'
-phrase='generated with|[[:<:]]AI[[:>:]]|🤖'
+phrase='generated with|(^|[^[:alnum:]_])AI([^[:alnum:]_]|$)|🤖'
 
-if grep -qiE "$named|$phrase" "$msg_file" \
-  || grep -iE "$trailer" "$msg_file" | grep -qivE 'dependabot|oddurs@users\.noreply\.github\.com'; then
+if printf '%s\n' "$body" | grep -qiE "$named|$phrase" \
+  || printf '%s\n' "$body" | grep -iE "$trailer" | grep -qivE 'dependabot|oddurs@users\.noreply\.github\.com'; then
   cat >&2 <<'MSG'
 commit-msg: attribution to a tool or model is not permitted in this repository.
 

@@ -17,18 +17,18 @@ def violations(repo, protection):
         "rebase merging disabled": repo.get("allow_rebase_merge") is False,
         "merged branches deleted": repo.get("delete_branch_on_merge"),
         "pull requests required": isinstance(reviews, dict),
-        "administrator rules enforced": protection.get("enforce_admins", {}).get("enabled"),
+        "administrator rules enforced": (protection.get("enforce_admins") or {}).get("enabled"),
         "up-to-date branches required": checks.get("strict"),
         "required check bound to GitHub Actions": any(
             c.get("context") == "required" and c.get("app_id") == 15368
             for c in checks.get("checks", [])
         ),
-        "linear history required": protection.get("required_linear_history", {}).get("enabled"),
-        "force pushes disabled": protection.get("allow_force_pushes", {}).get("enabled") is False,
-        "branch deletion disabled": protection.get("allow_deletions", {}).get("enabled") is False,
-        "conversations resolved": protection.get("required_conversation_resolution", {}).get("enabled"),
+        "linear history required": (protection.get("required_linear_history") or {}).get("enabled"),
+        "force pushes disabled": (protection.get("allow_force_pushes") or {}).get("enabled") is False,
+        "branch deletion disabled": (protection.get("allow_deletions") or {}).get("enabled") is False,
+        "conversations resolved": (protection.get("required_conversation_resolution") or {}).get("enabled"),
         "no PR bypass allowances": not any(
-            (reviews or {}).get("bypass_pull_request_allowances", {}).values()
+            ((reviews or {}).get("bypass_pull_request_allowances") or {}).values()
         ),
     }
     return [rule for rule, holds in expected.items() if not holds]
@@ -44,7 +44,7 @@ def main():
         branch = quote(repo["default_branch"], safe="")
         protection = api(f"repos/{{owner}}/{{repo}}/branches/{branch}/protection")
         errors = violations(repo, protection)
-    except (subprocess.CalledProcessError, ValueError, KeyError) as error:
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError) as error:
         print(f"policy: cannot verify server protection: {error}", file=sys.stderr)
         return 1
     if errors:

@@ -26,6 +26,7 @@ import os
 import hashlib
 import html
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -148,12 +149,10 @@ PROGRAMS = [p for p in FIXTURES if p.suffix == ".nc"]
 
 
 def binary() -> Path:
-    exe = ROOT / "target" / "debug" / "nether"
-    if not exe.exists():
-        subprocess.run(
-            ["cargo", "build", "--quiet", "--bin", "nether"], cwd=ROOT, check=True
-        )
-    return exe
+    subprocess.run(
+        ["cargo", "build", "--quiet", "--bin", "nether"], cwd=ROOT, check=True
+    )
+    return ROOT / "target" / "debug" / "nether"
 
 
 def parse_transcript(body: str) -> list[tuple[str, str]]:
@@ -182,13 +181,16 @@ def matches(expected: str, actual: str) -> bool:
     if not actual.startswith(first):
         return False
     pos = len(first)
-    for seg in rest:
+    for seg in rest[:-1]:
         if not seg:
             continue
         found = actual.find(seg, pos)
         if found < 0:
             return False
         pos = found + len(seg)
+    last = rest[-1]
+    if last:
+        return actual.endswith(last) and len(actual) - len(last) >= pos
     return True
 
 
@@ -221,7 +223,7 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
             for cmd, _ in parse_transcript(earlier.body):
                 if RUNNABLE.match(cmd):
                     subprocess.run(
-                        [str(exe)] + cmd.split()[1:],
+                        [str(exe)] + shlex.split(cmd)[1:],
                         capture_output=True, text=True, cwd=work, env=env,
                     )
 
@@ -229,10 +231,16 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
             if not RUNNABLE.match(cmd):
                 skipped += 1
                 continue
-            argv = [str(exe)] + cmd.split()[1:]
+            args = shlex.split(cmd)[1:]
+            argv = [str(exe)] + args
             proc = subprocess.run(
                 argv, capture_output=True, text=True, cwd=work, env=env
             )
+            if args[:1] == ["run"] and proc.returncode != 64:
+                return False, (
+                    f"  $ {cmd}\n"
+                    f"  expected exit code 64 for `nether run`, got {proc.returncode}"
+                ), skipped
             actual = (proc.stdout + proc.stderr).rstrip("\n")
             if not matches(expected, actual):
                 return False, (

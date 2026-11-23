@@ -48,14 +48,18 @@ def opted_in(css: str) -> set[str]:
     out: set[str] = set()
     for selectors, body in ((sel, b) for _, sel, b in blocks(css)):
         if re.search(r"font-family\s*:\s*inherit", body):
-            out |= set(re.findall(r"[a-z]+", selectors))
+            for part in selectors.split(","):
+                stripped = part.strip()
+                if re.fullmatch(r"[a-z]+", stripped):
+                    out.add(stripped)
     return out
 
 
 def check_the_face_reaches(css: str) -> list[str]:
     """Anything on a built page with a user-agent face has to opt back in."""
     on_page: set[str] = set()
-    for page in sorted(ROOT.glob("site/**/*.html")):
+    html_pages = sorted(ROOT.glob("site/**/*.html")) + sorted(ROOT.glob("web/**/*.html"))
+    for page in html_pages:
         on_page |= set(re.findall(r"<([a-z]+)[\s>]", page.read_text(encoding="utf-8")))
     return sorted((on_page & UA_FONT) - opted_in(css))
 
@@ -115,7 +119,9 @@ def main() -> int:
             said = f"overflow-{axes.pop()}"
             wrong.append((line, " ".join(selector.split()), said))
 
+    failed = False
     if wrong:
+        failed = True
         print("css: one axis of overflow declared without the other:", file=sys.stderr)
         for line, selector, said in wrong:
             print(f"  site/nether.css:{line}  {selector}  sets {said} alone", file=sys.stderr)
@@ -124,10 +130,10 @@ def main() -> int:
             "\n  direction nobody asked for. Say both, even to say `hidden`.",
             file=sys.stderr,
         )
-        return 1
 
     missed = check_the_face_reaches(css)
     if missed:
+        failed = True
         print("css: these are on a page and never get the face:", file=sys.stderr)
         for tag in missed:
             print(f"  <{tag}>  has a user-agent font-family of its own", file=sys.stderr)
@@ -136,10 +142,10 @@ def main() -> int:
             "\n  to the `font-family: inherit` rule in site/nether.css.",
             file=sys.stderr,
         )
-        return 1
 
     off_grid = check_the_type_scale(css)
     if off_grid:
+        failed = True
         print("css: type declaration off the eight-pixel grid:", file=sys.stderr)
         for line, selector, decl in off_grid:
             print(f"  site/nether.css:{line}  {selector}  sets {decl}", file=sys.stderr)
@@ -148,6 +154,8 @@ def main() -> int:
             "\n  and line-height / letter-spacing must be multiples of 1/8.",
             file=sys.stderr,
         )
+
+    if failed:
         return 1
 
     print("css: every overflow names both axes")

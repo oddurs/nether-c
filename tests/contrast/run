@@ -89,15 +89,21 @@ def check_palette(name: str, palette: dict[str, str]) -> list[str]:
 
 
 def check_css_declares(palette_name: str, tokens: list[str]) -> list[str]:
-    """Every token the test knows about must be declared where the page reads it.
+    """Every token the test knows about must be declared in both room blocks.
 
     The generator producing a colour is not the same as the page getting it, so
     this reads the two stylesheets the template actually links rather than the
     Python that wrote one of them.
     """
-    css = TOKENS.read_text(encoding="utf-8") + CSS.read_text(encoding="utf-8")
-    missing = [t for t in tokens if not re.search(rf"--{t}\s*:", css)]
-    return [f"{palette_name}: --{t} reaches no stylesheet" for t in missing]
+    tok = TOKENS.read_text(encoding="utf-8")
+    dark = re.search(r":root\s*\{([^}]*)\}", tok, re.S)
+    lit = re.search(r':root\[data-lamp="lit"\]\s*\{([^}]*)\}', tok, re.S)
+    missing: list[str] = []
+    for label, block in (("nether", dark.group(1) if dark else ""), ("lit", lit.group(1) if lit else "")):
+        for t in tokens:
+            if not re.search(rf"--{t}\s*:", block):
+                missing.append(f"{palette_name} ({label}): --{t} missing from site/tokens.css")
+    return missing
 
 
 def main() -> int:

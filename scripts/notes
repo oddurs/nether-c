@@ -21,8 +21,8 @@ CHANGELOG = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
 
 
 def notes(text: str, version: str) -> str | None:
-    """Everything under `## [version]`, up to the next `## `."""
-    want = version.lstrip("v")
+    """Everything under `## [version]`, up to the next `## ` outside code fences."""
+    want = version.removeprefix("v")
     # `## [1.2.3] - 2027-01-01` and `## [1.2.3]` both count, and nothing else
     # does: `## [Unreleased]` is not a release and must not be published as one.
     # The match runs to the end of the heading *line*, so the date in it does
@@ -32,8 +32,16 @@ def notes(text: str, version: str) -> str | None:
     if not found:
         return None
     rest = text[found.end():]
-    nxt = re.search(r"^##\s", rest, re.M)
-    return (rest[: nxt.start()] if nxt else rest).strip()
+    out: list[str] = []
+    in_fence = False
+    for line in rest.splitlines(keepends=True):
+        stripped = line.lstrip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+        elif not in_fence and re.match(r"^##\s", line):
+            break
+        out.append(line)
+    return "".join(out).strip()
 
 
 def main(argv: list[str]) -> int:
@@ -41,14 +49,21 @@ def main(argv: list[str]) -> int:
         print("usage: scripts/notes <version>", file=sys.stderr)
         return 2
     version = argv[1]
-    if version.lstrip("v").lower() == "unreleased":
+    bare = version.removeprefix("v")
+    if bare.lower() == "unreleased":
         print("notes: `Unreleased` is not a version", file=sys.stderr)
         return 1
 
-    body = notes(CHANGELOG.read_text(encoding="utf-8"), version)
+    try:
+        changelog = CHANGELOG.read_text(encoding="utf-8")
+    except OSError as error:
+        print(f"notes: cannot read {CHANGELOG}: {error}", file=sys.stderr)
+        return 1
+
+    body = notes(changelog, version)
     if body is None:
         print(f"notes: CHANGELOG.md has no section for {version}", file=sys.stderr)
-        print(f"\n  add `## [{version.lstrip('v')}] - YYYY-MM-DD` and say what changed",
+        print(f"\n  add `## [{bare}] - YYYY-MM-DD` and say what changed",
               file=sys.stderr)
         return 1
     if not body:

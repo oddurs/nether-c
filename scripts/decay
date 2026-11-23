@@ -1,124 +1,213 @@
-#!/bin/sh
-# The Decay Rule.
-#
-# The trusted core may only ever get SMALLER. Below, things only decay.
-#
-# The trusted core is the Rust that every guarantee rests on. Lowering the
-# ceiling in .decay-ceiling is an ordinary commit. Raising it is a deliberate
-# act that must be argued for in the pull request.
-#
-#   scripts/decay [SOURCE_DIR] [CEILING_FILE]
-#
-# The arguments exist so the rule can be tested against a tree that is not the
-# repository's own. They default to what you would expect.
-set -eu
+#!/usr/bin/env python3
+"""The Decay Rule.
 
-root=$(cd "$(dirname "$0")/.." && pwd)
-cd "$root"
+The trusted core may only ever get SMALLER. Below, things only decay.
 
-source_dir=${1:-crates}
-ceiling_file=${2:-.decay-ceiling}
+The trusted core is the Rust that every guarantee rests on. Lowering the
+ceiling in .decay-ceiling is an ordinary commit. Raising it is a deliberate
+act that must be argued for in the pull request.
 
-# What counts is the trusted core: the code every guarantee rests on. Tests are
-# not that. They are what makes it trustworthy, and a rule that makes you
-# delete tests in order to add a feature is pointing the wrong way.
-#
-# A `#[cfg(test)]` item is excluded wherever it is, by matching its braces,
-# rather than by deleting from the first marker to the end of the file. That
-# shorter rule assumed the trailing-module convention and nothing enforced it,
-# so one attribute at the top of a file removed the file from the count.
-#
-# Integration tests and benches live beside the code they exercise and are no
-# more the trusted core than a `#[cfg(test)]` module is.
-core_lines() {
-  awk '
-    # Strip what a brace could hide in: block comments, line comments, string
-    # and character literals. Nothing here needs the text, only the braces.
-    function clean(s,   out, i, c, n) {
-      out = ""; n = length(s)
-      for (i = 1; i <= n; i++) {
-        c = substr(s, i, 1)
-        if (block) { if (c == "*" && substr(s, i + 1, 1) == "/") { block = 0; i++ } ; continue }
-        if (c == "/" && substr(s, i + 1, 1) == "*") { block = 1; i++; continue }
-        if (c == "/" && substr(s, i + 1, 1) == "/") { break }
-        if (c == "\"") { i = skip_quote(s, i, "\""); continue }
-        if (c == "'"'"'") { i = skip_quote(s, i, "'"'"'"); continue }
-        out = out c
-      }
-      return out
-    }
-    function skip_quote(s, i, q,   n, c) {
-      n = length(s); i++
-      while (i <= n) {
-        c = substr(s, i, 1)
-        if (c == "\\") { i += 2; continue }
-        if (c == q) { return i }
-        i++
-      }
-      return n
-    }
-    BEGIN { block = 0 }
-    {
-      bare = clean($0)
-      if (!skip && bare ~ /#\[cfg\(test\)\]/) { skip = 1; pending = 1; depth = 0 }
-      if (skip) {
-        for (i = 1; i <= length(bare); i++) {
-          c = substr(bare, i, 1)
-          if (c == "{") { pending = 0; depth++ }
-          else if (c == "}") { depth--; if (depth <= 0 && !pending) { skip = 0; break } }
-          # An attribute on something with no block at all: `#[cfg(test)] use x;`
-          else if (c == ";" && pending && depth == 0) { skip = 0; break }
-        }
-        next
-      }
-      # A line is core if it holds anything but whitespace and a line comment.
-      # The cleaned text is for finding braces, not for deciding this: a line
-      # that is nothing but the middle of a string literal is still a line.
-      if ($0 ~ /^[[:space:]]*(\/\/.*)?$/) next
-      n++
-    }
-    END { print n + 0 }
-  ' "$1"
-}
+  scripts/decay [SOURCE_DIR] [CEILING_FILE]
 
-count=$(find "$source_dir" -name '*.rs' \
-    -not -path '*/target/*' \
-    -not -path '*/tests/*' \
-    -not -path '*/benches/*' 2>/dev/null \
-  | while IFS= read -r file; do core_lines "$file"; done \
-  | awk '{ n += $1 } END { print n + 0 }')
+The arguments exist so the rule can be tested against a tree that is not the
+repository's own. They default to what you would expect.
+"""
 
-if [ ! -f "$ceiling_file" ]; then
-  echo "$count" > "$ceiling_file"
-  echo "decay: no ceiling found; sealed the current core at $count lines"
-  exit 0
-fi
+from __future__ import annotations
 
-ceiling=$(tr -dc '0-9' < "$ceiling_file")
+import re
+import sys
+from pathlib import Path
 
-# A ceiling that is not a number is not a ceiling. Without this the comparisons
-# below fail with "integer expression expected" and the script goes on to
-# report success, so an empty file turns the rule off and says nothing — which
-# is how one reached `main`.
-if [ -z "$ceiling" ]; then
-  echo "decay: $ceiling_file holds no number, so there is no ceiling." >&2
-  echo "       The core is $count lines. Write that, or write the number you meant." >&2
-  exit 1
-fi
+ROOT = Path(__file__).resolve().parents[1]
+CFG_TEST = re.compile(r"#\[\s*cfg\s*\(\s*test\s*\)\s*\]")
+BLANK_OR_COMMENT = re.compile(r"^[ \t\r]*(?://.*)?$")
 
-if [ "$count" -gt "$ceiling" ]; then
-  echo "decay: the trusted core grew." >&2
-  echo "       ceiling  $ceiling lines  ($ceiling_file)" >&2
-  echo "       now      $count lines" >&2
-  echo "" >&2
-  echo "  Below, things only decay. Either take $((count - ceiling)) lines back" >&2
-  echo "  out, or raise the ceiling deliberately and say why in the PR body." >&2
-  exit 1
-fi
 
-if [ "$count" -lt "$ceiling" ]; then
-  echo "decay: core is $((ceiling - count)) lines below the ceiling ($count/$ceiling)"
-  echo "       lower it:  echo $count > $ceiling_file"
-else
-  echo "decay: core at the ceiling ($count lines)"
-fi
+def scan_rust(text: str) -> list[tuple[str, str]]:
+    """Return `(raw_line, code_tokens_only)` for each line of Rust source.
+
+    Strips line comments, nested block comments, normal/byte/c strings,
+    raw strings, and char literals without misclassifying Rust lifetimes (`'a`).
+    """
+    lines = text.splitlines()
+    out: list[tuple[str, str]] = []
+    block_depth = 0
+    in_string = False
+    raw_hashes: int | None = None
+
+    for raw in lines:
+        buf: list[str] = []
+        i, n = 0, len(raw)
+        while i < n:
+            if block_depth > 0:
+                if raw[i : i + 2] == "/*":
+                    block_depth += 1
+                    i += 2
+                elif raw[i : i + 2] == "*/":
+                    block_depth -= 1
+                    i += 2
+                else:
+                    i += 1
+                continue
+
+            if raw_hashes is not None:
+                if raw[i] == '"' and raw[i + 1 : i + 1 + raw_hashes] == "#" * raw_hashes:
+                    i += 1 + raw_hashes
+                    raw_hashes = None
+                else:
+                    i += 1
+                continue
+
+            if in_string:
+                if raw[i] == "\\":
+                    i += 2
+                elif raw[i] == '"':
+                    in_string = False
+                    i += 1
+                else:
+                    i += 1
+                continue
+
+            two = raw[i : i + 2]
+            if two == "//":
+                break
+            if two == "/*":
+                block_depth = 1
+                i += 2
+                continue
+
+            # Raw strings: r"...", r#"..."#, br#"..."#, cr#"..."#
+            if raw[i] == "r" or (raw[i] in ("b", "c") and i + 1 < n and raw[i + 1] == "r"):
+                prev_ok = i == 0 or not (raw[i - 1].isalnum() or raw[i - 1] == "_")
+                if prev_ok:
+                    j = i + (2 if raw[i] in ("b", "c") else 1)
+                    hashes = 0
+                    while j < n and raw[j] == "#":
+                        hashes += 1
+                        j += 1
+                    if j < n and raw[j] == '"':
+                        raw_hashes = hashes
+                        i = j + 1
+                        continue
+
+            if raw[i] == '"':
+                in_string = True
+                i += 1
+                continue
+
+            if raw[i] == "'":
+                # Character literal vs Rust lifetime (`'a`, `'static`, `'_`).
+                if i + 1 < n and raw[i + 1] == "\\":
+                    j = i + 2
+                    while j < n:
+                        if raw[j] == "\\":
+                            j += 2
+                            continue
+                        if raw[j] == "'":
+                            j += 1
+                            break
+                        j += 1
+                    i = j
+                    continue
+                if i + 2 < n and raw[i + 2] == "'":
+                    i += 3
+                    continue
+                buf.append("'")
+                i += 1
+                continue
+
+            buf.append(raw[i])
+            i += 1
+
+        out.append((raw, "".join(buf)))
+    return out
+
+
+def core_lines(path: Path) -> int:
+    """Count core lines in one Rust file, excluding `#[cfg(test)]` items."""
+    text = path.read_text(encoding="utf-8")
+    skip = False
+    pending = False
+    depth = 0
+    count = 0
+
+    for raw, bare in scan_rust(text):
+        if not skip and CFG_TEST.search(bare):
+            skip = True
+            pending = True
+            depth = 0
+        if skip:
+            for ch in bare:
+                if ch == "{":
+                    pending = False
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth <= 0 and not pending:
+                        skip = False
+                        break
+                elif ch == ";" and pending and depth == 0:
+                    skip = False
+                    break
+            continue
+        if BLANK_OR_COMMENT.match(raw):
+            continue
+        count += 1
+    return count
+
+
+def main(argv: list[str]) -> int:
+    source_dir = Path(argv[1]) if len(argv) > 1 else ROOT / "crates"
+    ceiling_file = Path(argv[2]) if len(argv) > 2 else ROOT / ".decay-ceiling"
+    if not source_dir.is_absolute():
+        source_dir = ROOT / source_dir
+    if not ceiling_file.is_absolute():
+        ceiling_file = ROOT / ceiling_file
+
+    if not source_dir.is_dir():
+        print(f"decay: source directory does not exist: {source_dir}", file=sys.stderr)
+        return 1
+
+    rs_files = sorted(
+        p for p in source_dir.rglob("*.rs")
+        if not any(part in ("target", "tests", "benches") for part in p.relative_to(source_dir).parts)
+    )
+    if not rs_files:
+        print(f"decay: no Rust source files found under {source_dir}", file=sys.stderr)
+        return 1
+
+    count = sum(core_lines(p) for p in rs_files)
+
+    if not ceiling_file.is_file():
+        ceiling_file.write_text(f"{count}\n", encoding="utf-8")
+        print(f"decay: no ceiling found; sealed the current core at {count} lines")
+        return 0
+
+    raw_ceiling = ceiling_file.read_text(encoding="utf-8").strip()
+    if not re.fullmatch(r"[0-9]+", raw_ceiling):
+        print(f"decay: {ceiling_file} holds no valid number, so there is no ceiling.", file=sys.stderr)
+        print(f"       The core is {count} lines. Write that, or write the number you meant.", file=sys.stderr)
+        return 1
+
+    ceiling = int(raw_ceiling)
+    label = argv[2] if len(argv) > 2 else ".decay-ceiling"
+    if count > ceiling:
+        print("decay: the trusted core grew.", file=sys.stderr)
+        print(f"       ceiling  {ceiling} lines  ({label})", file=sys.stderr)
+        print(f"       now      {count} lines", file=sys.stderr)
+        print("", file=sys.stderr)
+        print(f"  Below, things only decay. Either take {count - ceiling} lines back", file=sys.stderr)
+        print("  out, or raise the ceiling deliberately and say why in the PR body.", file=sys.stderr)
+        return 1
+
+    if count < ceiling:
+        print(f"decay: core is {ceiling - count} lines below the ceiling ({count}/{ceiling})")
+        print(f"       lower it:  echo {count} > {label}")
+    else:
+        print(f"decay: core at the ceiling ({count} lines)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

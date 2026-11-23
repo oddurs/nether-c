@@ -4,7 +4,10 @@ set -eu
 
 remote_ref_default=$(./scripts/agent default-branch)
 head=$(git rev-parse HEAD)
-branch=$(git symbolic-ref --quiet --short HEAD)
+branch=$(git symbolic-ref --quiet --short HEAD) || {
+  echo "pre-push: detached HEAD; check out a feature branch before pushing" >&2
+  exit 1
+}
 
 while read -r _local_ref local_sha remote_ref _remote_sha; do
   case "$remote_ref" in
