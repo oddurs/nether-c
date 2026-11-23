@@ -310,8 +310,14 @@ def sfnt(tables: dict[bytes, bytes]) -> bytes:
     font = directory + body
     # head.checkSumAdjustment, which is the whole file's checksum subtracted
     # from a magic number. It is written last because it covers itself.
-    at = font.index(b"head")
-    head_at = struct.unpack(">I", font[at + 8:at + 12])[0]
+    head_at = None
+    for i in range(count):
+        at = 12 + 16 * i
+        if font[at : at + 4] == b"head":
+            head_at = struct.unpack(">I", font[at + 8 : at + 12])[0]
+            break
+    if head_at is None:
+        raise ValueError("sfnt: missing `head` table")
     adjust = (0xB1B0AFBA - checksum(font)) & 0xFFFFFFFF
     return font[:head_at + 8] + struct.pack(">I", adjust) + font[head_at + 12:]
 
@@ -1062,6 +1068,9 @@ def weigh() -> list[str]:
             faults.append(f"bold {ch!r} is no heavier and is not in SAME")
         elif fat > ink and ch in SAME:
             faults.append(f"bold {ch!r} is in SAME and is not the same drawing")
+    for ch in sorted(set(B) & SAME, key=ord):
+        if B[ch] != G[ch]:
+            faults.append(f"bold {ch!r} is in SAME and also has a distinct bold drawing")
     for ch in sorted(set(B) - set(G), key=ord):
         faults.append(f"bold {ch!r} is a glyph the regular does not have")
     for ch in sorted(SAME - set(G), key=ord):
@@ -1073,6 +1082,10 @@ def weigh() -> list[str]:
 
 
 def main() -> int:
+    unknown = [a for a in sys.argv[1:] if a not in ("--check", "--sheet", "700")]
+    if unknown:
+        print(f"font: unknown argument(s): {' '.join(unknown)}", file=sys.stderr)
+        return 2
     if "--sheet" in sys.argv:
         print(sheet(bold() if "700" in sys.argv else G))
         return 0
@@ -1085,6 +1098,7 @@ def main() -> int:
         return 1
 
     check = "--check" in sys.argv
+    sys.dont_write_bytecode = True
     loader = importlib.machinery.SourceFileLoader("bake", str(OUT / "bake"))
     spec = importlib.util.spec_from_loader("bake", loader)
     assert spec is not None and spec.loader is not None
@@ -1095,7 +1109,7 @@ def main() -> int:
         (OUT / "nether-bold.woff", woff(build(bold(), 700)), f"{len(G)} glyphs, bold"),
         (OUT / "gfx" / "specimen.gif", specimen(G), "the specimen"),
         (OUT / "gfx" / "specimen-lit.gif", specimen(G, "lit"), "the lit specimen"),
-        (OUT / "specimen.html", bake.specimen_page().encode("utf-8"), "the specimen page"),
+        (OUT / "specimen.html", bake.specimen_page(sys.modules[__name__]).encode("utf-8"), "the specimen page"),
     ]
 
     stale = []

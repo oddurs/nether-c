@@ -106,3 +106,13 @@ test("oversized compound previews remain explicitly unavailable", () => {
   assert.match(g.get(id(3)).data, /4096/);
   assert.equal(g.encoded.get(id(3)), encoded);
 });
+
+test("multi-byte UTF-8 previews do not break on arbitrary byte limits", () => {
+  // 54 copies of 3-byte '雪' = 162 bytes; byte 160 splits the last character.
+  const bytes = new TextEncoder().encode("雪".repeat(54));
+  const shown = preview({ kind: "Bytes", data: bytes }, 160);
+  assert.ok(shown.startsWith('b"雪'), `expected UTF-8 preview, got ${shown}`);
+  assert.ok(!shown.startsWith("hex "), `must not fall back to hex: ${shown}`);
+  assert.throws(() => new Graph(null));
+  assert.throws(() => new Graph({ cairn: id(9), objects: [123] }));
+});

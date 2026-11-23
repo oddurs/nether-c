@@ -4,11 +4,20 @@
 // many bytes of UTF-8, and the caller frees it. There is no bindings generator
 // here because there are four functions.
 
-const PAGE = 65536;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 export async function open(url = "nether.wasm") {
-  const { instance } = await WebAssembly.instantiateStreaming(fetch(url), {});
-  return new Necropolis(instance.exports);
+  const response = await fetch(url);
+  if (!response.ok) throw Error(`HTTP ${response.status} fetching ${url}`);
+  let instantiated;
+  try {
+    instantiated = await WebAssembly.instantiateStreaming(response.clone(), {});
+  } catch {
+    const bytes = await response.arrayBuffer();
+    instantiated = await WebAssembly.instantiate(bytes, {});
+  }
+  return new Necropolis(instantiated.instance.exports);
 }
 
 export class Necropolis {
@@ -24,18 +33,16 @@ export class Necropolis {
   }
 
   bury(source, fuel = 0) {
-    const said = new TextEncoder().encode(source);
-    const at = this.m.nether_alloc(said.length);
+    const said = encoder.encode(source);
+    const at = this.m.nether_alloc(said.length) >>> 0;
     let block;
     try {
       this.bytes.set(said, at);
-      block = this.m.nether_bury(at, said.length, BigInt(fuel));
+      block = this.m.nether_bury(at, said.length, BigInt(fuel)) >>> 0;
     } finally { this.m.nether_free(at, said.length); }
     const len = new DataView(this.m.memory.buffer).getUint32(block, true);
     try {
-      return JSON.parse(new TextDecoder().decode(this.bytes.subarray(block + 4, block + 4 + len)));
+      return JSON.parse(decoder.decode(this.bytes.subarray(block + 4, block + 4 + len)));
     } finally { this.m.nether_free(block, len + 4); }
   }
 }
-
-export { PAGE };

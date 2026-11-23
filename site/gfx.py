@@ -522,9 +522,9 @@ def lamp() -> tuple[list[Frame], list[int]]:
     frames = []
     shapes = [
         ("..##..", ".####.", "######", ".####.", "..##.."),
-        "...#.. ..###. .####. ..###. ...#..".split(),
-        "..#... .###.. #####. .###.. ..#...".split(),
-        ".. #.. ..##.. .####. ..##.. ...#..".replace(" ", "").split(),
+        ("...#..", "..###.", ".####.", "..###.", "...#.."),
+        ("..#...", ".###..", "#####.", ".###..", "..#..."),
+        ("..#...", "..##..", ".####.", "..##..", "...#.."),
     ]
     palette = [SULPHUR, BILE, ROT, SALMON]
     for i in range(8):
@@ -570,7 +570,10 @@ def owed() -> int:
         raw = path.read_text(encoding="utf-8")
         if not raw.startswith("---\n"):
             continue
-        front = raw[4:raw.index("\n---\n", 3)]
+        end = raw.find("\n---\n", 3)
+        if end < 0:
+            continue
+        front = raw[4:end]
         meta = dict(
             (k.strip(), v.strip().strip("\"'"))
             for k, _, v in (line.partition(":") for line in front.split("\n"))

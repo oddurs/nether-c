@@ -5,6 +5,21 @@ export const PAGE_SIZE = 12;
 export const short = (id) => id.slice(0, 8);
 export const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
+// Slice at most `limit` bytes without cutting inside a multi-byte UTF-8 sequence.
+export function utf8Prefix(bytes, limit) {
+  let end = Math.min(bytes.length, limit);
+  if (end === bytes.length) return bytes;
+  // Walk back past continuation bytes (10xxxxxx) to the leading byte.
+  let start = end;
+  while (start > 0 && (bytes[start] & 0xC0) === 0x80) start--;
+  if (start < end) {
+    const lead = bytes[start];
+    const width = lead < 0x80 ? 1 : (lead & 0xE0) === 0xC0 ? 2 : (lead & 0xF0) === 0xE0 ? 3 : (lead & 0xF8) === 0xF0 ? 4 : 1;
+    if (start + width > end) end = start;
+  }
+  return bytes.subarray(0, end);
+}
+
 export function decode(encoded) {
   if (encoded.length % 2 || !HEX.test(encoded)) throw Error("Invalid object encoding");
   const bytes = new Uint8Array(encoded.length / 2);
@@ -111,10 +126,10 @@ export function preview(o, limit = 160) {
   let s;
   if (o.call) return `${o.call.function}(${o.call.args.length} argument${o.call.args.length === 1 ? "" : "s"})`;
   if (o.kind === "Bytes") {
-    const sample = o.data.subarray(0, limit);
+    const sample = utf8Prefix(o.data, limit);
     try { s = `b${JSON.stringify(utf8.decode(sample))}`; }
-    catch { s = `hex ${hex(sample)}`; }
-    if (o.data.length > limit) s += `… (${o.data.length} bytes)`;
+    catch { s = `hex ${hex(o.data.subarray(0, limit))}`; }
+    if (o.data.length > sample.length) s += `… (${o.data.length} bytes)`;
   } else if (o.kind === "Str") s = JSON.stringify(o.data.slice(0, limit));
   else if (o.kind === "Shade") s = `opaque · origin ${o.origin} · ${short(o.data)}`;
   else if (o.kind === "Answer") s = `${o.data.kind === "Refusal" ? "refused" : "given"}: ${preview(o.data, limit)}`;
@@ -127,13 +142,15 @@ export function preview(o, limit = 160) {
 
 export class Graph {
   constructor(burial) {
-    if (!Array.isArray(burial.objects) || burial.objects.length > 20000) throw Error("Graph limit: 20,000 objects");
+    if (!burial || !Array.isArray(burial.objects) || burial.objects.length > 20000) throw Error("Graph limit: 20,000 objects");
     this.root = burial.cairn;
     this.encoded = new Map();
     this.cache = new Map();
     this.incoming = new Map();
     let size = 0;
-    for (const [id, encoded] of burial.objects) {
+    for (const pair of burial.objects) {
+      if (!Array.isArray(pair) || pair.length !== 2) throw Error("Invalid object table");
+      const [id, encoded] = pair;
       if (!/^[0-9a-f]{64}$/.test(id) || typeof encoded !== "string" || this.encoded.has(id)) throw Error("Invalid object table");
       size += encoded.length;
       if (size > 32 * 1024 * 1024) throw Error("Graph limit: 16 MiB of canonical objects");
@@ -178,10 +195,22 @@ export function sourceExcerpt(graph, span) {
   if (span.end > BigInt(o.data.length) || span.start > span.end) return null;
   const start = Number(span.start), end = Number(span.end);
   // Slice bytes before decoding: JS string indices are not source offsets.
-  const from = Math.max(0, start - 160), to = Math.min(o.data.length, end + 160);
+  let from = Math.max(0, start - 160);
+  while (from < start && (o.data[from] & 0xC0) === 0x80) from++;
+  let to = Math.min(o.data.length, end + 160);
+  if (to < o.data.length) {
+    let lead = to;
+    while (lead > end && (o.data[lead] & 0xC0) === 0x80) lead--;
+    if (lead > end) {
+      const b = o.data[lead];
+      const w = b < 0x80 ? 1 : (b & 0xE0) === 0xC0 ? 2 : (b & 0xF0) === 0xE0 ? 3 : (b & 0xF8) === 0xF0 ? 4 : 1;
+      if (lead + w > to) to = lead;
+    }
+  }
+  const selectedBytes = utf8Prefix(o.data.subarray(start, end), 2048);
   const display = new TextDecoder();
   return { before: display.decode(o.data.subarray(from, start)),
-    selected: display.decode(o.data.subarray(start, Math.min(end, start + 2048))),
-    after: end - start > 2048 ? "… (selection truncated)" : display.decode(o.data.subarray(end, to)),
+    selected: display.decode(selectedBytes),
+    after: end - start > selectedBytes.length ? "… (selection truncated)" : display.decode(o.data.subarray(end, to)),
     line: o.data.subarray(0, start).reduce((n, b) => n + (b === 10), 1) };
 }

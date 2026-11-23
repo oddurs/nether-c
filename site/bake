@@ -68,24 +68,32 @@ def rewrite_href(href: str) -> str:
 
 
 def inline(text: str) -> str:
-    """Inline markdown. Code spans are extracted first so nothing rewrites them."""
+    """Inline markdown. Code spans and links are extracted before emphasis."""
     spans: list[str] = []
 
-    def stash(m: re.Match[str]) -> str:
+    def stash_code(m: re.Match[str]) -> str:
         spans.append(f"<code>{esc(m.group(1))}</code>")
         return f"\x00{len(spans) - 1}\x00"
 
-    text = re.sub(r"`([^`]+)`", stash, text)
+    def stash_link(m: re.Match[str]) -> str:
+        raw_label, raw_href = m.group(1), rewrite_href(m.group(2))
+        scheme = raw_href.lstrip().lower()
+        if scheme.startswith(("javascript:", "data:", "vbscript:")):
+            return esc(raw_label)
+        label = esc(raw_label)
+        label = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", label)
+        label = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", label)
+        ext = ' target="_blank" rel="noreferrer noopener"' if raw_href.startswith("http") else ""
+        spans.append(f'<a href="{esc(raw_href)}"{ext}>{label}</a>')
+        return f"\x00{len(spans) - 1}\x00"
+
+    text = re.sub(r"`([^`]+)`", stash_code, text)
+    text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", stash_link, text)
     text = esc(text)
-
-    def link(m: re.Match[str]) -> str:
-        label, href = m.group(1), rewrite_href(m.group(2))
-        ext = ' target="_blank" rel="noreferrer noopener"' if href.startswith("http") else ""
-        return f'<a href="{esc(href)}"{ext}>{label}</a>'
-
-    text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", link, text)
     text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", text)
+    text = re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], text)
+    # Links stashed earlier may hold code-span placeholders in their label.
     text = re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], text)
     return text
 
@@ -225,9 +233,12 @@ def render(md: str) -> str:
                 return [c.strip() for c in row.strip().strip("|").split("|")]
 
             head = cells(line)
-            aligns = ["right" if c.strip().endswith(":") and c.strip().startswith("-") is False
-                      else "right" if c.strip().startswith("-") and c.strip().endswith(":")
-                      else "left" for c in cells(lines[i + 1])]
+            aligns = [
+                "center" if c.strip().startswith(":") and c.strip().endswith(":")
+                else "right" if c.strip().endswith(":")
+                else "left"
+                for c in cells(lines[i + 1])
+            ]
             i += 2
             rows = []
             while i < len(lines) and lines[i].lstrip().startswith("|"):
@@ -268,21 +279,27 @@ def render(md: str) -> str:
             flush_para(para)
             ordered = not m.group(2) in ("-", "*")
             tag = "ol" if ordered else "ul"
-            items: list[str] = []
+            items: list[tuple[str, str]] = []
             while i < len(lines):
                 mm = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", lines[i])
                 if not mm:
                     if lines[i].startswith("  ") and lines[i].strip() and items:
-                        items[-1] += " " + lines[i].strip()
+                        prefix, prev = items[-1]
+                        items[-1] = (prefix, prev + " " + lines[i].strip())
                         i += 1
                         continue
                     break
                 text = mm.group(3)
-                text = re.sub(r"^\[ \]\s*", '<span class="c">[ ]</span> ', text)
-                text = re.sub(r"^\[x\]\s*", '<span class="s">[x]</span> ', text)
-                items.append(text)
+                prefix = ""
+                if re.match(r"^\[ \]\s*", text):
+                    prefix = '<span class="c">[ ]</span> '
+                    text = re.sub(r"^\[ \]\s*", "", text)
+                elif re.match(r"^\[x\]\s*", text):
+                    prefix = '<span class="s">[x]</span> '
+                    text = re.sub(r"^\[x\]\s*", "", text)
+                items.append((prefix, text))
                 i += 1
-            body = "".join(f"<li>{inline(it)}</li>" for it in items)
+            body = "".join(f"<li>{prefix}{inline(it)}</li>" for prefix, it in items)
             out.append(f"<{tag}>{body}</{tag}>")
             continue
 
@@ -303,13 +320,21 @@ def render(md: str) -> str:
 def split_front_matter(raw: str) -> tuple[dict[str, str], str]:
     if not raw.startswith("---\n"):
         return {}, raw
-    end = raw.index("\n---\n", 3)
+    end = raw.find("\n---\n", 3)
+    if end < 0:
+        if raw.endswith("\n---"):
+            end = len(raw) - 4
+            body = ""
+        else:
+            return {}, raw
+    else:
+        body = raw[end + 5:]
     meta = {}
     for line in raw[4:end].split("\n"):
         if ":" in line:
             k, v = line.split(":", 1)
             meta[k.strip()] = v.strip().strip('"')
-    return meta, raw[end + 5:]
+    return meta, body
 
 
 # ── the board, which is where the state of the project actually lives ───────
@@ -390,7 +415,7 @@ def descent_block(milestones: list[dict[str, str]], owed: list[dict[str, str]]) 
         cls = "d0" if m.get("status") == "buried" else "d5"
         rows.append(
             f'  <span class="{cls}">{numeral(n)}</span>  '
-            f'{titled(m, 22)}{state:<12}{note}'
+            f'{titled(m, 22)}{esc(f"{state:<12}")}{esc(note)}'
         )
     body = "\n".join(rows)
     return (
@@ -407,6 +432,8 @@ def holes_block(owed: list[dict[str, str]]) -> str:
     rows = []
     for n, i in enumerate(shown, 1):
         stratum = i.get("stratum", "").strip("'\"") or "0"
+        if not re.fullmatch(r"[0-8]", stratum):
+            stratum = "0"
         rows.append(
             f'  hole <span class="d{stratum}">{numeral(n)}</span>  '
             f'{titled(i, 42)}  '
@@ -508,11 +535,11 @@ def contents(sections: list[dict[str, object]], current: str) -> str:
     """The whole specification beside every section, not a next-page maze."""
     items = []
     for section in sections:
-        label = f'§{section["section"]} {esc(str(section["title"]))}'
+        label = f'§{esc(str(section["section"]))} {esc(str(section["title"]))}'
         if section["slug"] == current:
             items.append(f'<li aria-current="page">{label}</li>')
         else:
-            items.append(f'<li><a href="{section["slug"]}.html">{label}</a></li>')
+            items.append(f'<li><a href="{esc(str(section["slug"]))}.html">{label}</a></li>')
     return (
         '<nav class="contents" aria-label="Specification contents">'
         '<p>spec/</p><ol role="list">' + "".join(items) + "</ol></nav>"
@@ -523,11 +550,11 @@ def chapters_of(chapters: list[dict[str, object]], current: str) -> str:
     """The whole manual beside every chapter, the way the spec carries its own."""
     items = []
     for c in chapters:
-        label = f'{c["section"]} {esc(str(c["title"]))}'
+        label = f'{esc(str(c["section"]))} {esc(str(c["title"]))}'
         if c["slug"] == current:
             items.append(f'<li aria-current="page">{label}</li>')
         else:
-            items.append(f'<li><a href="{c["slug"]}.html">{label}</a></li>')
+            items.append(f'<li><a href="{esc(str(c["slug"]))}.html">{label}</a></li>')
     return (
         '<nav class="contents" aria-label="Manual contents">'
         '<p>manual/</p><ol role="list">' + "".join(items) + "</ol></nav>"
@@ -542,7 +569,8 @@ def page(title: str, body: str, *, current: str, depth: int, directory: str = ""
     up = "../" if depth else ""
     # The front page is already called Nether C; appending the site name to it
     # gave every tab "Nether C — Nether C".
-    full = title if title == SITE_NAME else f"{title} &mdash; {SITE_NAME}"
+    safe_title = esc(title)
+    full = safe_title if title == SITE_NAME else f"{safe_title} &mdash; {SITE_NAME}"
     if not directory:
         entries = [
             ("start", "Start here"), ("first-program", "First burial"),
@@ -554,13 +582,18 @@ def page(title: str, body: str, *, current: str, depth: int, directory: str = ""
             f'<a href="{up}index.html#{anchor}"><span aria-hidden="true">{n:02}</span> {label}</a>'
             for n, (anchor, label) in enumerate(entries)
         ) + "</nav>"
-    output = (
-        tpl.replace("{{TITLE}}", esc(title))
-        .replace("{{FULLTITLE}}", full)
-        .replace("{{UP}}", up)
-        .replace("{{NAV}}", navbar(current, depth))
-        .replace("{{DIRECTORY}}", directory)
-        .replace("{{BODY}}", body)
+    subs = {
+        "{{TITLE}}": safe_title,
+        "{{FULLTITLE}}": full,
+        "{{UP}}": up,
+        "{{NAV}}": navbar(current, depth),
+        "{{DIRECTORY}}": directory,
+        "{{BODY}}": body,
+    }
+    output = re.sub(
+        r"\{\{(?:TITLE|FULLTITLE|UP|NAV|DIRECTORY|BODY)\}\}",
+        lambda m: subs[m.group(0)],
+        tpl,
     )
     def themed_image(match: re.Match[str]) -> str:
         before, src, after = match.groups()
@@ -570,10 +603,12 @@ def page(title: str, body: str, *, current: str, depth: int, directory: str = ""
     return re.sub(r'<img\b([^>]*?)src="([^"]+\.gif)"([^>]*)>', themed_image, output)
 
 
-def specimen_page() -> str:
+def specimen_page(font=None) -> str:
     """Every glyph in both weights, read out of site/font.py."""
-    sys.path.insert(0, str(SITE))
-    import font  # noqa: E402 — a sibling, not a dependency
+    if font is None:
+        sys.path.insert(0, str(SITE))
+        import font as _font  # noqa: E402 — a sibling, not a dependency
+        font = _font
 
     reg = font.G
     bol = font.bold()
