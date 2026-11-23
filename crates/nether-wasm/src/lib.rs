@@ -47,10 +47,14 @@ const DEFAULT_FUEL: u64 = 1_000_000;
 /// [`nether_free`] with the same length.
 #[unsafe(no_mangle)]
 pub extern "C" fn nether_alloc(len: usize) -> *mut u8 {
-    let mut bytes = Vec::<u8>::with_capacity(len);
-    let at = bytes.as_mut_ptr();
-    core::mem::forget(bytes);
-    at
+    if len == 0 {
+        return core::ptr::NonNull::<u8>::dangling().as_ptr();
+    }
+    let Ok(layout) = std::alloc::Layout::from_size_align(len, 1) else {
+        return core::ptr::null_mut();
+    };
+    // SAFETY: `len > 0` and alignment is 1.
+    unsafe { std::alloc::alloc(layout) }
 }
 
 /// Give back what [`nether_alloc`] handed out, or what a burial returned.
@@ -60,11 +64,13 @@ pub extern "C" fn nether_alloc(len: usize) -> *mut u8 {
 /// `at` came from this module and `len` is the length it was made with.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nether_free(at: *mut u8, len: usize) {
-    if at.is_null() {
+    if at.is_null() || len == 0 {
         return;
     }
-    // SAFETY: the caller's half of the bargain in the module documentation.
-    drop(unsafe { Vec::from_raw_parts(at, 0, len) });
+    if let Ok(layout) = std::alloc::Layout::from_size_align(len, 1) {
+        // SAFETY: the caller's half of the bargain in the module documentation.
+        unsafe { std::alloc::dealloc(at, layout) };
+    }
 }
 
 /// Bury `len` bytes of source, and hand back a length-prefixed JSON block.
@@ -88,16 +94,23 @@ pub unsafe extern "C" fn nether_bury(source: *const u8, len: usize, fuel: u64) -
 /// many bytes.
 fn block(text: &str) -> *mut u8 {
     let said = text.as_bytes();
-    let mut out = Vec::with_capacity(said.len() + 4);
     let Ok(len) = u32::try_from(said.len()) else {
         // Four gigabytes of JSON is not a thing this can hand back, and
         // truncating it silently would be worse than saying so.
         return block("{\"error\":\"the answer is too large to return\"}");
     };
-    out.extend_from_slice(&len.to_le_bytes());
-    out.extend_from_slice(said);
-    let at = out.as_mut_ptr();
-    core::mem::forget(out);
+    let Some(total) = said.len().checked_add(4) else {
+        return block("{\"error\":\"the answer is too large to return\"}");
+    };
+    let at = nether_alloc(total);
+    if at.is_null() {
+        return at;
+    }
+    // SAFETY: `nether_alloc(total)` allocated `said.len() + 4` contiguous bytes.
+    unsafe {
+        core::ptr::copy_nonoverlapping(len.to_le_bytes().as_ptr(), at, 4);
+        core::ptr::copy_nonoverlapping(said.as_ptr(), at.add(4), said.len());
+    }
     at
 }
 
@@ -111,17 +124,29 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     // Zero means §8.2's default rather than a burial that cannot take a step,
     // because a budget of nothing is never what anyone meant.
     let fuel = if fuel == 0 { DEFAULT_FUEL } else { fuel };
-    let text = String::from_utf8_lossy(source).into_owned();
+    let text = match core::str::from_utf8(source) {
+        Ok(s) => s,
+        Err(e) => {
+            let valid = &source[..e.valid_up_to()];
+            let prefix = core::str::from_utf8(valid).unwrap_or("");
+            let at = u32::try_from(e.valid_up_to()).unwrap_or(u32::MAX);
+            let fault = nether_syntax::Fault {
+                span: nether_core::Span { start: at, end: at },
+                kind: nether_syntax::FaultKind::NotUtf8,
+            };
+            return trouble(&report(&fault.diagnostic(), prefix, "source"), "");
+        }
+    };
     let ast = match parse(source) {
         Ok(ast) => ast,
-        Err(faults) => return trouble(&report(&faults[0].diagnostic(), &text, "source"), ""),
+        Err(faults) => return trouble(&report(&faults[0].diagnostic(), text, "source"), ""),
     };
     let unit = match lower(&ast) {
         Ok(unit) => unit,
-        Err(faults) => return trouble(&report(&faults[0].diagnostic(), &text, "source"), ""),
+        Err(faults) => return trouble(&report(&faults[0].diagnostic(), text, "source"), ""),
     };
     if let Some(fault) = check(&unit).first() {
-        return trouble(&report(&fault.diagnostic(), &text, "source"), "");
+        return trouble(&report(&fault.diagnostic(), text, "source"), "");
     }
 
     // §7.3.1: a span names its source by cairn, so the name exists first.
@@ -130,14 +155,20 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
 
     let residue = match nether_bury::bury(&unit, source_cairn, fuel) {
         Ok(residue) => residue,
-        Err(halt) => return trouble(&report(&halt.diagnostic(), &text, "source"), ""),
+        Err(halt) => return trouble(&report(&halt.diagnostic(), text, "source"), ""),
     };
 
     let printed = print(&residue.as_unit(&unit));
     let printed_value = Stored::Value(Value::Bytes(printed.clone().into_bytes()));
     let residue_cairn = printed_value.cairn();
-    // Burial holds no capability, so there are no witnesses and §7.3.2's join
-    // is the residue's depth alone.
+    // §7.3.2: a trace's depth is the deepest of its residue and every hole it
+    // owes, matching `nether bury` (e.g. a pure `seal` of a deep call).
+    let mut deepest = residue.depth.get();
+    for h in &residue.holes {
+        if let Some(Stored::Node(Node::Hole { stratum, .. })) = residue.get(*h) {
+            deepest = deepest.max(*stratum);
+        }
+    }
     let trace = Stored::Node(Node::Trace {
         residue: residue_cairn,
         holes: residue.holes.clone(),
@@ -145,7 +176,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         deposits: residue.deposits.clone(),
         unrecorded: false,
         source: source_cairn,
-        depth: residue.depth.get(),
+        depth: deepest,
     });
 
     let holes: Vec<_> = residue
@@ -185,7 +216,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         trace.cairn(),
         residue_cairn,
         source_cairn,
-        residue.depth.get(),
+        deepest,
         residue.named.len() + 2,
         residue.fuel_spent,
         holes.join(","),

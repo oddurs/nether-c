@@ -16,7 +16,7 @@
 //! The generator is seeded and deterministic, so a failure here is reproducible
 //! from the seed printed with it. `scripts/task fuzz` runs it for longer.
 
-use nether_ledger::{Cairn, Call, Node, Span, Value, decode_stored};
+use nether_ledger::{AnswerOf, Cairn, Call, Node, Refusal, Span, Value, decode_stored};
 
 /// xorshift64*. Five lines, deterministic, and nothing to install.
 struct Rng(u64);
@@ -74,6 +74,9 @@ fn corpus() -> Vec<Vec<u8>> {
         Value::Str("café".to_owned()),
         Value::Cairn(c),
         Value::Shade { origin: 4, value: c },
+        Value::Answer(Box::new(AnswerOf::Given(Value::Int(7)))),
+        Value::Answer(Box::new(AnswerOf::Refused(Refusal::Denied))),
+        Value::Refusal(Refusal::Conflict),
         Value::Struct { name: "Header".to_owned(), fields: vec![Value::Int(1), Value::Unit] },
         Value::Array(vec![Value::Int(1), Value::Array(vec![Value::Unit])]),
     ];

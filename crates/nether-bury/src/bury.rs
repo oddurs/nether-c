@@ -296,12 +296,14 @@ impl Halt {
     }
 }
 
-/// Bury a unit with a budget of evaluation steps.
-///
-/// # Errors
-///
-/// Starvation and exhausted fuel, which are different things: the first is a
-/// mistake in the program and the second is a bound that was too small.
+/// Maximum total expression recursion depth across nested evaluation frames.
+/// Scaled above `MAX_FRAMES` so recursive function calls always hit `MAX_FRAMES`
+/// first, while pathological non-call AST nesting stops before stack overflow.
+const MAX_EXPR_DEPTH: u32 = MAX_FRAMES * 8;
+
+/// Maximum default worker count when `bury_with` uses host parallelism.
+const MAX_DEFAULT_THREADS: usize = 16;
+
 /// What the world has already said, for a burial that is not the first.
 ///
 /// Burial never asks. An answer is in here because a rite that held a grant
@@ -378,7 +380,8 @@ pub fn bury_with(
     fuel: u64,
     answers: &Answers,
 ) -> Result<Residue, Halt> {
-    let cores = std::thread::available_parallelism().map_or(1, usize::from);
+    let cores =
+        std::thread::available_parallelism().map_or(1, usize::from).min(MAX_DEFAULT_THREADS);
     bury_on(unit, source, fuel, answers, cores)
 }
 
@@ -428,6 +431,50 @@ enum Slot {
 /// worker. One lock, because a `Condvar` waits with exactly one. 0291.
 type Handoff = (Mutex<Vec<Slot>>, Condvar);
 
+/// Guarantees a claimed demand slot is released with `Slot::Done(None)` if a
+/// worker panics, preventing `demands()` from waiting forever.
+struct SlotGuard<'a> {
+    handoff: &'a Handoff,
+    index: usize,
+    armed: bool,
+}
+
+impl<'a> SlotGuard<'a> {
+    fn new(handoff: &'a Handoff, index: usize) -> Self {
+        Self { handoff, index, armed: true }
+    }
+
+    fn finish(mut self, got: Option<Residue>) {
+        self.armed = false;
+        let mut slots = self.handoff.0.lock().unwrap_or_else(PoisonError::into_inner);
+        slots[self.index] = Slot::Done(got);
+        drop(slots);
+        self.handoff.1.notify_all();
+    }
+}
+
+impl Drop for SlotGuard<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            let mut slots = self.handoff.0.lock().unwrap_or_else(PoisonError::into_inner);
+            slots[self.index] = Slot::Done(None);
+            drop(slots);
+            self.handoff.1.notify_all();
+        }
+    }
+}
+
+/// Snapshot of mutable burial side effects that speculative or abandoned
+/// reductions (loops, branches, calls, speculation) must roll back together.
+struct Checkpoint {
+    deposits: usize,
+    specialised: usize,
+    settling: usize,
+    served: HashMap<nether_ledger::Call, usize>,
+    starved: Option<Block>,
+    flow: Option<Flow>,
+}
+
 impl<'a> Burial<'a> {
     fn new(unit: &'a Unit, source: Cairn, fuel: u64, answers: &'a Answers, ahead: bool) -> Self {
         Burial {
@@ -436,6 +483,8 @@ impl<'a> Burial<'a> {
             left: fuel,
             spent: 0,
             globals: vec![None; unit.globals.len()],
+            eval_globals: Vec::new(),
+            expr_depth: 0,
             flow: None,
             grind: Vec::new(),
             answers,
@@ -453,6 +502,28 @@ impl<'a> Burial<'a> {
             ahead,
             stop: None,
         }
+    }
+
+    fn checkpoint(&mut self) -> Checkpoint {
+        Checkpoint {
+            deposits: self.deposits.len(),
+            specialised: self.specialised.len(),
+            settling: self.settling.len(),
+            served: self.served.clone(),
+            starved: self.starved.take(),
+            flow: self.flow.clone(),
+        }
+    }
+
+    fn rollback(&mut self, cp: Checkpoint) {
+        self.deposits.truncate(cp.deposits);
+        self.specialised.truncate(cp.specialised);
+        let base = self.unit.funcs.len() + cp.specialised;
+        self.minted.retain(|_, id| (id.0 as usize) < base);
+        self.settling.truncate(cp.settling);
+        self.served = cp.served;
+        self.starved = cp.starved;
+        self.flow = cp.flow;
     }
 
     /// Bury every demand, on this thread and up to `threads - 1` others.
@@ -491,16 +562,14 @@ impl<'a> Burial<'a> {
                                 Some(_) => continue,
                             }
                         }
+                        let guard = SlotGuard::new(&handoff, i);
                         let got = seed.early(i, &stop);
                         if got.is_some() {
                             misses.store(0, Relaxed);
                         } else {
                             misses.fetch_add(1, Relaxed);
                         }
-                        let mut slots = handoff.0.lock().unwrap_or_else(PoisonError::into_inner);
-                        slots[i] = Slot::Done(got);
-                        drop(slots);
-                        handoff.1.notify_all();
+                        guard.finish(got);
                     }
                 };
                 if std::thread::Builder::new().stack_size(STACK).spawn_scoped(s, work).is_err() {
@@ -677,6 +746,10 @@ struct Burial<'a> {
     spent: u64,
     /// Unit-level bindings, evaluated the first time something reaches one.
     globals: Vec<Option<Val>>,
+    /// Unit-level bindings currently being evaluated, to detect cycles.
+    eval_globals: Vec<GlobalId>,
+    /// Current expression recursion depth, guarded by [`MAX_EXPR_DEPTH`].
+    expr_depth: u32,
     /// A `break`, `continue` or `return` that has happened and not yet landed.
     flow: Option<Flow>,
     /// The loops and calls currently open, innermost last. Nothing pops it on
@@ -929,13 +1002,16 @@ impl Burial<'_> {
                 })),
                 x,
             )),
-            (Prim::Must, Kind::Answered(v)) => Some((**v).clone()),
+            (Prim::Must, Kind::Answered(v)) => Some(Val { ty: x.ty.clone(), ..(**v).clone() }),
             (Prim::Must, Kind::Refused(_)) => return collapse("this answer was refused"),
             (Prim::Given, Kind::Answered(_)) => Some(Self::known(Literal::Bool(true), x)),
             (Prim::Given, Kind::Refused(_)) => Some(Self::known(Literal::Bool(false), x)),
             (Prim::Refusal, Kind::Refused(r)) => Some(Self::known(Literal::Refusal(*r), x)),
             (Prim::Refusal, Kind::Answered(_)) => return collapse("this answer was given"),
-            (Prim::Answered, Kind::Known(_)) => {
+            (
+                Prim::Answered,
+                Kind::Known(_) | Kind::Shade(_) | Kind::Answered(_) | Kind::Refused(_),
+            ) => {
                 let kind = Kind::Answered(Box::new(answer.clone()));
                 Some(Val { kind, ty: x.ty.clone(), depth: x.depth })
             }
@@ -965,12 +1041,16 @@ impl Burial<'_> {
                 |l| Val { kind: Kind::Known(l), ty: x.ty.clone(), depth: x.depth },
             );
         };
+        let inner_ty = match &x.ty {
+            Type::Answer(inner) => (**inner).clone(),
+            other => other.clone(),
+        };
         let kind = match a.as_ref() {
             nether_ledger::AnswerOf::Refused(r) => Kind::Refused(code(*r)),
             nether_ledger::AnswerOf::Given(v) => match literal(v) {
                 Some(l) => Kind::Answered(Box::new(Val {
                     kind: Kind::Known(l),
-                    ty: x.ty.clone(),
+                    ty: inner_ty,
                     depth: x.depth,
                 })),
                 // An answer with no literal form — an array of names from
@@ -1034,6 +1114,17 @@ impl Burial<'_> {
     }
 
     fn expr(&mut self, x: &Expr, env: &mut Env) -> Result<Val, Halt> {
+        if self.expr_depth >= MAX_EXPR_DEPTH {
+            let kind = HaltKind::TooDeep { limit: MAX_EXPR_DEPTH };
+            return Err(Halt { span: x.span, kind, grinding: None });
+        }
+        self.expr_depth += 1;
+        let res = self.expr_inner(x, env);
+        self.expr_depth -= 1;
+        res
+    }
+
+    fn expr_inner(&mut self, x: &Expr, env: &mut Env) -> Result<Val, Halt> {
         self.burn(x.span)?;
         Ok(match &x.kind {
             ExprKind::Literal(l) => Self::known(l.clone(), x),
@@ -1079,7 +1170,13 @@ impl Burial<'_> {
             }
             ExprKind::Return(v) => {
                 let out = match v {
-                    Some(v) => self.expr(v, env)?,
+                    Some(v) => {
+                        let out = self.expr(v, env)?;
+                        if self.flow.is_some() {
+                            return Ok(out);
+                        }
+                        out
+                    }
                     None => Self::unit(),
                 };
                 self.flow = Some(Flow::Returned(out.clone()));
@@ -1087,13 +1184,17 @@ impl Burial<'_> {
             }
 
             // Neither has a value form to fold into: indexing and projection
-            // need an aggregate, and nothing can build one. 0116.
-            ExprKind::Field { .. } | ExprKind::Index { .. } => Self::stuck(x),
+            // need an aggregate, and nothing can build one. Settle stale local
+            // writes so the unreduced expression reads the latest values.
+            ExprKind::Field { .. } | ExprKind::Index { .. } => self.unreduced(x, env),
         })
     }
 
     fn unary(&mut self, x: &Expr, op: UnOp, operand: &Expr, env: &mut Env) -> Result<Val, Halt> {
         let v = self.expr(operand, env)?;
+        if self.flow.is_some() {
+            return Ok(v);
+        }
         Ok(if let Some(l) = unary(op, &v) {
             Self::known(l, x)
         } else {
@@ -1112,7 +1213,13 @@ impl Burial<'_> {
         env: &mut Env,
     ) -> Result<Val, Halt> {
         let a = self.expr(lhs, env)?;
+        if self.flow.is_some() {
+            return Ok(a);
+        }
         let b = self.expr(rhs, env)?;
+        if self.flow.is_some() {
+            return Ok(b);
+        }
         let folded = binary(op, &a, &b).map_err(|why| Halt {
             span: x.span,
             kind: HaltKind::Collapsed(why),
@@ -1141,27 +1248,24 @@ impl Burial<'_> {
         env: &mut Env,
     ) -> Result<Val, Halt> {
         let c = self.expr(cond, env)?;
+        if self.flow.is_some() {
+            return Ok(c);
+        }
         let Some(taken) = c.bool() else {
             let cond = Box::new(Self::residual(c, cond));
             // An arm that writes a local the branch outlives cannot be
             // folded to its value: the write is the part that matters, and
             // which arm makes it is what the world has not said. So both
             // stay as written, and the local is not known after the branch.
-            let arms = if Self::writes(&[then, otherwise]).is_empty() {
+            let arms = if Self::write_depths(&[then, otherwise]).iter().all(Option::is_none) {
                 [self.speculate(then, env)?, self.speculate(otherwise, env)?]
             } else {
                 [then.clone(), otherwise.clone()]
             };
-            // An arm left as written reads its locals in the residue, so
-            // they have to hold there what they hold here.
-            let unreduced: Vec<&Expr> = arms
-                .iter()
-                .zip([then, otherwise])
-                .filter(|(arm, src)| arm == src)
-                .map(|(arm, _)| arm)
-                .collect();
+            // Any residual arm can still read stale locals, so settle against
+            // both residual arms before clearing locals they write.
             let depth = arms.iter().fold(cond.depth, |d, arm| d.join(arm.depth));
-            let settled = Self::leave(&unreduced, depth, env);
+            let settled = Self::leave(&[&arms[0], &arms[1]], depth, env);
             self.settling.extend(settled);
             let [then, otherwise] = arms.map(Box::new);
             return Ok(Self::rebuild(ExprKind::Select { cond, then, otherwise }, x, depth));
@@ -1177,20 +1281,15 @@ impl Burial<'_> {
         // the branch stays as written: what the arm deposited is the
         // branch's to deposit again, and the questions it asked, the
         // residue asks too.
-        let marks = (self.deposits.len(), self.specialised.len(), self.settling.len());
-        let (outer, mut ran) = (self.starved.take(), env.clone());
+        let cp = self.checkpoint();
+        let mut ran = env.clone();
         let v = self.expr(arm, &mut ran)?;
         if !v.is_stuck() {
-            self.starved = outer;
+            self.starved = cp.starved;
             *env = ran;
             return Ok(v);
         }
-        self.starved = outer;
-        self.flow = None;
-        self.deposits.truncate(marks.0);
-        self.specialised.truncate(marks.1);
-        self.minted.retain(|_, id| (id.0 as usize) < self.unit.funcs.len() + marks.1);
-        self.settling.truncate(marks.2);
+        self.rollback(cp);
         let whole = Expr {
             kind: ExprKind::Select {
                 cond: Box::new(Self::residual(c, cond)),
@@ -1212,43 +1311,54 @@ impl Burial<'_> {
     /// halt (§6.4).
     fn speculate(&mut self, arm: &Expr, env: &Env) -> Result<Expr, Halt> {
         let was = std::mem::replace(&mut self.speculating, true);
-        let settling = self.settling.len();
+        let cp = self.checkpoint();
         let out = self.try_expr(arm, &mut env.clone());
-        (self.speculating, self.flow) = (was, None);
+        self.speculating = was;
+        let out = match out {
+            Ok(v) => v,
+            Err(halt) => {
+                self.rollback(cp);
+                return Err(halt);
+            }
+        };
         // Assignments an arm's own code needs, with no block in the arm to put
         // them in, would land in front of the whole branch. Then the arm stays
         // as written, and the branch settles it from here.
-        if self.settling.len() > settling {
-            self.settling.truncate(settling);
+        if self.settling.len() > cp.settling {
+            self.rollback(cp);
             return Ok(arm.clone());
         }
-        Ok(out?.map_or_else(|| arm.clone(), |v| Self::residual(v, arm)))
+        self.starved = cp.starved;
+        self.flow = cp.flow;
+        Ok(out.map_or_else(|| arm.clone(), |v| Self::residual(v, arm)))
     }
 
     /// Evaluate `x` speculatively, rolling back what it changed if it collapses
     /// or jumps out of a loop.
     fn try_expr(&mut self, x: &Expr, env: &mut Env) -> Result<Option<Val>, Halt> {
-        let (grind, minted, outer, before) =
-            (self.grind.len(), self.specialised.len(), self.starved.take(), env.clone());
-        let settling = self.settling.len();
+        let (grind, before) = (self.grind.len(), env.clone());
+        let cp = self.checkpoint();
         let out = self.expr(x, env);
-        self.starved = outer;
         match out {
-            Ok(v) if !matches!(self.flow, Some(Flow::Broke | Flow::Continued)) => Ok(Some(v)),
+            Ok(v) if !matches!(self.flow, Some(Flow::Broke | Flow::Continued)) => {
+                self.starved = cp.starved;
+                Ok(Some(v))
+            }
             Ok(_) => {
-                (*env, self.flow) = (before, None);
-                self.settling.truncate(settling);
+                *env = before;
+                self.rollback(cp);
                 Ok(None)
             }
             Err(Halt { kind: HaltKind::Collapsed(_), .. }) => {
-                self.settling.truncate(settling);
                 self.grind.truncate(grind);
-                self.specialised.truncate(minted);
-                self.minted.retain(|_, id| (id.0 as usize) < self.unit.funcs.len() + minted);
-                (*env, self.flow) = (before, None);
+                *env = before;
+                self.rollback(cp);
                 Ok(None)
             }
-            Err(halt) => Err(halt),
+            Err(halt) => {
+                self.starved = cp.starved;
+                Err(halt)
+            }
         }
     }
 
@@ -1262,7 +1372,7 @@ impl Burial<'_> {
         env: &mut Env,
     ) -> Result<Val, Halt> {
         let v = self.expr(body, env)?;
-        if !v.is_stuck() {
+        if self.flow.is_some() || !v.is_stuck() {
             return Ok(v);
         }
         let body = Box::new(Self::residual(v, body));
@@ -1279,8 +1389,22 @@ impl Burial<'_> {
         let Some(g) = self.unit.global(id) else {
             return Ok(Self::stuck(x));
         };
+        if self.eval_globals.contains(&id) {
+            return Err(Halt {
+                span: x.span,
+                kind: HaltKind::Collapsed("unit-level binding refers to itself"),
+                grinding: None,
+            });
+        }
+        self.eval_globals.push(id);
+        let outer_starved = self.starved.take();
+        let outer_settling = std::mem::take(&mut self.settling);
         // Unit-level code has a frame of its own, as a function does. 0280.
-        let v = self.expr(&g.value, &mut Env::new(self.unit.locals.len()))?;
+        let res = self.expr(&g.value, &mut Env::new(self.unit.locals.len()));
+        self.eval_globals.pop();
+        self.starved = outer_starved;
+        self.settling = outer_settling;
+        let v = res?;
         // In a unit whose top level binds locals, a value that did not finish
         // is the binding's name and not a copy of its expression: the residue
         // keeps every binding, and a copy would carry those locals into a
@@ -1305,9 +1429,16 @@ impl Burial<'_> {
     /// the same hole in it.
     fn call(&mut self, x: &Expr, callee: &Expr, args: &[Expr], env: &mut Env) -> Result<Val, Halt> {
         let f = self.expr(callee, env)?;
+        if self.flow.is_some() {
+            return Ok(f);
+        }
         let mut values = Vec::with_capacity(args.len());
         for a in args {
-            values.push(self.expr(a, env)?);
+            let v = self.expr(a, env)?;
+            if self.flow.is_some() {
+                return Ok(v);
+            }
+            values.push(v);
         }
 
         // A question the world can answer immediately: a prelude function
@@ -1419,39 +1550,42 @@ impl Burial<'_> {
         self.grind.push(Grind { span: f.span, what: Open::Call(id) });
         // Whatever block the caller was in is not this one. It goes back
         // afterwards: the caller's own statement is still being evaluated.
-        let outer = self.starved.take();
-        let (deposited, minted) = (self.deposits.len(), self.specialised.len());
+        let cp = self.checkpoint();
         let fell = self.block(&f.body, &mut frame)?;
         self.grind.pop();
         let out = match self.flow.take() {
             // A `break` outside a loop is not a program this can run.
             Some(Flow::Broke | Flow::Continued) => {
-                self.starved = outer;
+                self.rollback(cp);
                 return Ok(None);
             }
             Some(Flow::Returned(v)) => v,
             None => fell,
         };
         let body = self.starved.take();
-        self.starved = outer;
         if !out.is_stuck() {
+            self.starved = cp.starved;
+            self.flow = cp.flow;
             return Ok(Some(out));
         }
         // Nothing reduced to show for it: the body starved somewhere no block
         // could be built for, so the residue would be the body as written and
         // the call is the shorter way to say that.
-        let Some(body) = body else { return Ok(None) };
+        let Some(body) = body else {
+            self.rollback(cp);
+            return Ok(None);
+        };
         // §6.5, a residue keeps its depths: a body that returns less deeply
         // than its function would leave a residue shallower than the call. The
         // call stays as written, so what the body deposited is the call's to
         // deposit again; the questions it asked, the residue asks too.
         if Self::ret_depth(&body) < f.ret_depth {
-            self.deposits.truncate(deposited);
-            self.specialised.truncate(minted);
-            self.minted.retain(|_, id| (id.0 as usize) < self.unit.funcs.len() + minted);
+            self.rollback(cp);
             return Ok(None);
         }
-        Ok(self.specialise(id, args, exprs, site, body))
+        self.starved = cp.starved;
+        self.flow = cp.flow;
+        Ok(self.specialise(id, f, args, exprs, site, body))
     }
 
     /// §6.5: what a starved call residualises as.
@@ -1463,12 +1597,12 @@ impl Burial<'_> {
     fn specialise(
         &mut self,
         id: FuncId,
+        f: &FuncDef,
         args: &[Val],
         exprs: &[Expr],
         site: &Expr,
         body: Block,
     ) -> Option<Val> {
-        let f = self.unit.func(id).expect("apply found it");
         let mut stmts: Vec<Stmt> = Vec::with_capacity(f.params.len() + body.stmts.len());
         for ((slot, v), e) in f.params.iter().zip(args).zip(exprs) {
             stmts.push(Stmt::Let { local: *slot, value: Self::residual(v.clone(), e) });
@@ -1487,16 +1621,19 @@ impl Burial<'_> {
 
         // A worker stops before minting; what it returns is never used.
         self.shares().ok()?;
-        let key = Self::constants(args).map(|k| (id, k));
-        let found = key.as_ref().and_then(|k| self.minted.get(k)).copied();
+        let key = (!self.speculating).then(|| Self::constants(args).map(|k| (id, k))).flatten();
+        let base = self.unit.funcs.len();
+        let found = key.as_ref().and_then(|k| self.minted.get(k)).copied().filter(|m| {
+            self.specialised
+                .get((m.0 as usize).saturating_sub(base))
+                .is_some_and(|s| s.body == body)
+        });
         let minted = if let Some(minted) = found {
             minted
         } else {
-            let minted = FuncId(
-                u32::try_from(self.unit.funcs.len() + self.specialised.len()).unwrap_or(u32::MAX),
-            );
+            let minted = FuncId(u32::try_from(base + self.specialised.len()).unwrap_or(u32::MAX));
             if let Some(k) = key {
-                self.minted.insert(k, minted);
+                self.minted.entry(k).or_insert(minted);
             }
             let name = self.apart(&f.name, minted);
             self.specialised.push(FuncDef {
@@ -1584,47 +1721,125 @@ impl Burial<'_> {
     /// Whether dropping `other` for `arm` lowers a depth: `other` is deeper, or
     /// writes a local the branch outlives more deeply than `arm` does. §6.5.
     fn lowers(arm: &Expr, other: &Expr) -> bool {
-        // The deepest write to each local, by its id, less the locals the arm
-        // binds itself, which the branch does not outlive.
-        let deepest = |x: &Expr| {
-            let (mut todo, mut most, mut bound) = (vec![x], Vec::new(), BTreeSet::new());
-            while let Some(x) = todo.pop() {
-                if let ExprKind::Assign { place, value } = &x.kind {
-                    let id = place.local.0 as usize;
-                    if most.len() <= id {
-                        most.resize(id + 1, Depth::PURE);
-                    }
-                    most[id] = most[id].join(value.depth);
-                }
-                Self::binds(x, &mut bound);
-                todo.extend(children(x));
-            }
-            for id in bound {
-                if let Some(d) = most.get_mut(id as usize) {
-                    *d = Depth::PURE;
-                }
-            }
-            most
-        };
-        let (taken, dropped) = (deepest(arm), deepest(other));
+        let (taken, dropped) = (Self::write_depths(&[arm]), Self::write_depths(&[other]));
         other.depth > arm.depth
-            || dropped
-                .iter()
-                .enumerate()
-                .any(|(id, &d)| d > taken.get(id).copied().unwrap_or(Depth::PURE))
+            || dropped.iter().enumerate().any(|(id, d)| {
+                d.is_some_and(|dd| dd > taken.get(id).copied().flatten().unwrap_or(Depth::PURE))
+            })
     }
 
-    /// Every local `code` assigns and does not bind itself.
-    fn writes(code: &[&Expr]) -> BTreeSet<u32> {
-        let (mut todo, mut written, mut bound) = (code.to_vec(), BTreeSet::new(), BTreeSet::new());
-        while let Some(x) = todo.pop() {
-            if let ExprKind::Assign { place, .. } = &x.kind {
-                written.insert(place.local.0);
-            }
-            Self::binds(x, &mut bound);
-            todo.extend(children(x));
+    /// Deepest write depth (including control-dependence `pc`) for every local
+    /// `code` assigns and does not bind itself, indexed by `LocalId`.
+    fn write_depths(code: &[&Expr]) -> Vec<Option<Depth>> {
+        let (mut written, mut bound) = (Vec::new(), BTreeSet::new());
+        for expr in code {
+            let _ = Self::walk_writes(expr, Depth::PURE, &mut written, &mut bound);
         }
-        &written - &bound
+        for id in bound {
+            if let Some(slot) = written.get_mut(id as usize) {
+                *slot = None;
+            }
+        }
+        written
+    }
+
+    fn walk_writes(
+        expr: &Expr,
+        pc: Depth,
+        written: &mut Vec<Option<Depth>>,
+        bound: &mut BTreeSet<u32>,
+    ) -> (Option<Depth>, Option<Depth>) {
+        fn join_opt(a: Option<Depth>, b: Option<Depth>) -> Option<Depth> {
+            match (a, b) {
+                (Some(x), Some(y)) => Some(x.join(y)),
+                (x, y) => x.or(y),
+            }
+        }
+        let walk_children = |expr: &Expr,
+                             pc: Depth,
+                             written: &mut Vec<Option<Depth>>,
+                             bound: &mut BTreeSet<u32>| {
+            children(expr).into_iter().fold((None, None), |(la, fa), child| {
+                let (lp, fp) = Self::walk_writes(child, pc, written, bound);
+                (join_opt(la, lp), join_opt(fa, fp))
+            })
+        };
+        match &expr.kind {
+            ExprKind::Select { cond, then, otherwise } => {
+                let (l0, f0) = Self::walk_writes(cond, pc, written, bound);
+                let bpc = pc.join(cond.depth);
+                let (l1, f1) = Self::walk_writes(then, bpc, written, bound);
+                let (l2, f2) = Self::walk_writes(otherwise, bpc, written, bound);
+                (join_opt(join_opt(l0, l1), l2), join_opt(join_opt(f0, f1), f2))
+            }
+            ExprKind::Block(blk) => {
+                let (mut cur, mut la, mut fa) = (pc, None, None);
+                for stmt in &blk.stmts {
+                    match stmt {
+                        Stmt::Declare { local } => {
+                            bound.insert(local.0);
+                        }
+                        Stmt::Let { local, value } => {
+                            bound.insert(local.0);
+                            let (lp, fp) = Self::walk_writes(value, cur, written, bound);
+                            la = join_opt(la, lp);
+                            fa = join_opt(fa, fp);
+                            if let Some(dep) = join_opt(lp, fp) {
+                                cur = cur.join(dep);
+                            }
+                        }
+                        Stmt::Expr(inner) => {
+                            let (lp, fp) = Self::walk_writes(inner, cur, written, bound);
+                            la = join_opt(la, lp);
+                            fa = join_opt(fa, fp);
+                            if let Some(dep) = join_opt(lp, fp) {
+                                cur = cur.join(dep);
+                            }
+                        }
+                    }
+                }
+                if let Some(tail) = &blk.tail {
+                    let (lp, fp) = Self::walk_writes(tail, cur, written, bound);
+                    la = join_opt(la, lp);
+                    fa = join_opt(fa, fp);
+                }
+                (la, fa)
+            }
+            ExprKind::Loop { body, step } => {
+                let mut lpc = pc;
+                loop {
+                    let (l1, f1) = Self::walk_writes(body, lpc, written, bound);
+                    let spc = join_opt(l1, f1).map_or(lpc, |dep| lpc.join(dep));
+                    let (l2, f2) = step
+                        .as_deref()
+                        .map_or((None, None), |s| Self::walk_writes(s, spc, written, bound));
+                    let fn_ex = join_opt(f1, f2);
+                    let next = join_opt(join_opt(l1, l2), fn_ex).map_or(lpc, |dep| lpc.join(dep));
+                    if next == lpc {
+                        return (None, fn_ex);
+                    }
+                    lpc = next;
+                }
+            }
+            ExprKind::Break | ExprKind::Continue => (Some(pc), None),
+            ExprKind::Return(val) => {
+                let (lp, fp) = val
+                    .as_deref()
+                    .map_or((None, None), |inner| Self::walk_writes(inner, pc, written, bound));
+                (lp, Some(fp.map_or(pc, |dep| pc.join(dep))))
+            }
+            ExprKind::Assign { place, .. } => {
+                let exits = walk_children(expr, pc, written, bound);
+                let id = place.local.0 as usize;
+                if written.len() <= id {
+                    written.resize(id + 1, None);
+                }
+                let depth = expr.depth.join(pc);
+                written[id] = Some(written[id].map_or(depth, |was| was.join(depth)));
+                exits
+            }
+            _ => walk_children(expr, pc, written, bound),
+        }
     }
 
     /// Every local a `let` or a declaration anywhere in `x` binds.
@@ -1691,12 +1906,18 @@ impl Burial<'_> {
     /// of one is the local itself.
     fn leave(code: &[&Expr], depth: Depth, env: &mut Env) -> Vec<Stmt> {
         let settled = Self::settle(code, env);
-        for id in Self::writes(code) {
-            if let Some(Some(v)) = env.get(id as usize) {
-                let (ty, depth) = (v.ty.clone(), v.depth.join(depth));
-                let at =
-                    Expr { kind: ExprKind::Local(LocalId(id)), ty, depth, span: Span::default() };
-                env.bind(id as usize, Some(Self::rebuild(at.kind.clone(), &at, depth)));
+        for (id, written) in Self::write_depths(code).into_iter().enumerate() {
+            let Some(written) = written else { continue };
+            if let Some(Some(v)) = env.get(id) {
+                let (ty, depth) = (v.ty.clone(), v.depth.join(depth).join(written));
+                let local = u32::try_from(id).unwrap_or(u32::MAX);
+                let at = Expr {
+                    kind: ExprKind::Local(LocalId(local)),
+                    ty,
+                    depth,
+                    span: Span::default(),
+                };
+                env.bind(id, Some(Self::rebuild(at.kind.clone(), &at, depth)));
             }
         }
         settled
@@ -1710,68 +1931,20 @@ impl Burial<'_> {
         Self::stuck(x)
     }
 
-    /// Every local an expression names.
+    /// Every local an expression names, including inside `Assign` index paths.
     fn reads(x: &Expr, into: &mut HashSet<u32>) {
-        match &x.kind {
-            ExprKind::Local(id) => {
-                into.insert(id.0);
-            }
-            ExprKind::Literal(_)
-            | ExprKind::Global(_)
-            | ExprKind::Func(_)
-            | ExprKind::Prim(_)
-            | ExprKind::Break
-            | ExprKind::Continue => {}
-            ExprKind::Call { callee, args } => {
-                Self::reads(callee, into);
-                for a in args {
-                    Self::reads(a, into);
+        let mut todo = vec![x];
+        while let Some(cur) = todo.pop() {
+            match &cur.kind {
+                ExprKind::Local(id) => {
+                    into.insert(id.0);
                 }
-            }
-            ExprKind::Unary { operand, .. } | ExprKind::Rite { operand, .. } => {
-                Self::reads(operand, into);
-            }
-            ExprKind::Binary { lhs, rhs, .. } => {
-                Self::reads(lhs, into);
-                Self::reads(rhs, into);
-            }
-            ExprKind::Select { cond, then, otherwise } => {
-                Self::reads(cond, into);
-                Self::reads(then, into);
-                Self::reads(otherwise, into);
-            }
-            ExprKind::Block(b) => {
-                for s in &b.stmts {
-                    match s {
-                        Stmt::Let { value, .. } | Stmt::Expr(value) => Self::reads(value, into),
-                        Stmt::Declare { .. } => {}
-                    }
+                ExprKind::Assign { place, .. } => {
+                    into.insert(place.local.0);
                 }
-                if let Some(t) = &b.tail {
-                    Self::reads(t, into);
-                }
+                _ => {}
             }
-            ExprKind::Loop { body, step } => {
-                Self::reads(body, into);
-                if let Some(s) = step {
-                    Self::reads(s, into);
-                }
-            }
-            ExprKind::Descend { body, .. } => Self::reads(body, into),
-            ExprKind::Assign { place, value } => {
-                into.insert(place.local.0);
-                Self::reads(value, into);
-            }
-            ExprKind::Return(v) => {
-                if let Some(v) = v {
-                    Self::reads(v, into);
-                }
-            }
-            ExprKind::Field { base, .. } => Self::reads(base, into),
-            ExprKind::Index { base, index } => {
-                Self::reads(base, into);
-                Self::reads(index, into);
-            }
+            todo.extend(children(cur));
         }
     }
 
@@ -1790,23 +1963,15 @@ impl Burial<'_> {
     }
 
     fn returns(x: &Expr) -> Depth {
-        match &x.kind {
-            ExprKind::Return(v) => {
-                v.as_deref().map_or(Depth::PURE, |r| r.depth.join(Self::returns(r)))
+        let mut todo = vec![x];
+        let mut acc = Depth::PURE;
+        while let Some(cur) = todo.pop() {
+            if let ExprKind::Return(Some(v)) = &cur.kind {
+                acc = acc.join(v.depth);
             }
-            ExprKind::Block(b) => Self::returns_in(b),
-            ExprKind::Select { cond, then, otherwise } => {
-                Self::returns(cond).join(Self::returns(then)).join(Self::returns(otherwise))
-            }
-            ExprKind::Loop { body, step } => {
-                Self::returns(body).join(step.as_deref().map_or(Depth::PURE, Self::returns))
-            }
-            ExprKind::Descend { body, .. }
-            | ExprKind::Unary { operand: body, .. }
-            | ExprKind::Rite { operand: body, .. } => Self::returns(body),
-            ExprKind::Binary { lhs, rhs, .. } => Self::returns(lhs).join(Self::returns(rhs)),
-            _ => Depth::PURE,
+            todo.extend(children(cur));
         }
+        acc
     }
 
     /// §6.5: a block reduces its statements in order. Once a statement starves,
@@ -1897,6 +2062,14 @@ impl Burial<'_> {
                 let mark = self.settling.len();
                 let v = self.expr(t, env)?;
                 kept.extend(self.settling.drain(mark..));
+                let returned = matches!(
+                    &self.flow,
+                    Some(Flow::Returned(r)) if r.is_stuck() || self.speculating
+                );
+                if returned {
+                    kept.push(Self::returning(v.clone(), &Stmt::Expr((**t).clone())));
+                    return Ok(self.residue(kept, None, b, &v));
+                }
                 if v.is_stuck() && self.flow.is_none() {
                     let tail = Some(Box::new(Self::residual(v.clone(), t)));
                     return Ok(self.residue(kept, tail, b, &v));
@@ -1969,16 +2142,18 @@ impl Burial<'_> {
                 let out = self.try_expr(t, env);
                 kept.extend(self.settling.drain(mark..));
                 self.speculating = was;
-                match out? {
-                    Some(v) if self.flow.take().is_none() => {
-                        let tail = Some(Box::new(Self::residual(v.clone(), t)));
-                        return Ok(self.residue(kept, tail, b, &v));
+                if let Some(v) = out? {
+                    if let Some(Flow::Returned(r)) = self.flow.take() {
+                        kept.push(Self::returning(v, &Stmt::Expr((**t).clone())));
+                        let out = self.residue(kept, None, b, &r);
+                        self.flow = Some(Flow::Returned(out.clone()));
+                        return Ok(out);
                     }
-                    _ => {
-                        kept.extend(Self::leave(&[&**t], starved.depth, env));
-                        b.tail.clone()
-                    }
+                    let tail = Some(Box::new(Self::residual(v.clone(), t)));
+                    return Ok(self.residue(kept, tail, b, &v));
                 }
+                kept.extend(Self::leave(&[&**t], starved.depth, env));
+                b.tail.clone()
             }
             None => None,
         };
@@ -2079,17 +2254,21 @@ impl Burial<'_> {
             return Ok(Self::stuck(x));
         };
         let before = env.clone();
-        // Questions asked during an unrolling that is then abandoned are kept.
-        // The loop residualises whole, so burying the residue runs it again
-        // from the same state and asks the same things — they are questions
-        // the residue asks, and dropping them would hide from `nether bury`
-        // exactly the capability somebody needs to grant.
+        let cp = self.checkpoint();
+        // Questions asked during an unrolling that is then abandoned are kept
+        // (`holes`, `asked`, `named`). Side effects that the residual loop will
+        // replay (`deposits`, `served`, `specialised`, `settling`, `flow`) are
+        // rolled back via `cp`.
         loop {
             let v = self.expr(body, env)?;
             match self.flow.take() {
-                Some(Flow::Broke) => return Ok(Self::unit()),
+                Some(Flow::Broke) => {
+                    self.starved = cp.starved;
+                    return Ok(Self::unit());
+                }
                 // A `return` out of a loop keeps going up.
                 Some(f @ Flow::Returned(_)) => {
+                    self.starved = cp.starved;
                     self.flow = Some(f);
                     return Ok(v);
                 }
@@ -2100,12 +2279,26 @@ impl Burial<'_> {
             }
             if v.is_stuck() {
                 *env = before;
+                self.rollback(cp);
                 return Ok(self.unreduced(x, env));
             }
             if let Some(s) = step {
                 let sv = self.expr(s, env)?;
+                match self.flow.take() {
+                    Some(Flow::Broke) => {
+                        self.starved = cp.starved;
+                        return Ok(Self::unit());
+                    }
+                    Some(f @ Flow::Returned(_)) => {
+                        self.starved = cp.starved;
+                        self.flow = Some(f);
+                        return Ok(sv);
+                    }
+                    Some(Flow::Continued) | None => {}
+                }
                 if sv.is_stuck() {
                     *env = before;
+                    self.rollback(cp);
                     return Ok(self.unreduced(x, env));
                 }
             }
@@ -2119,27 +2312,28 @@ impl Burial<'_> {
 
     fn rite(&mut self, x: &Expr, rite: Rite, operand: &Expr, env: &mut Env) -> Result<Val, Halt> {
         // `opaque` is never burned through, so its operand is not evaluated at
-        // all. That is the whole of what it is for. §6.4.
+        // all, but stale local writes must be settled before it. §6.4.
         if rite == Rite::Opaque {
-            return Ok(Self::stuck(x));
+            return Ok(self.unreduced(x, env));
         }
         let v = self.expr(operand, env)?;
+        if self.flow.is_some() {
+            return Ok(v);
+        }
         Ok(match rite {
             // A name is pure, whatever it names, and a value that is here can
-            // be named. One that is not stays the expression it was: sealing
-            // something the world has not answered yet is a question about a
-            // value that does not exist.
+            // be named. One that is not stays a `seal` over the reduced operand.
             Rite::Seal => {
                 // §1.5: `seal` on a shade names the shade. §7.1 puts the
                 // stratum it came out of in its encoding, so `seal shade e` is
                 // not `seal e` — reaching through an opaque thing for a name
                 // would be a hole in it.
-                match as_value(&v) {
-                    Some(value) => {
-                        let cairn = self.remember(Stored::Value(value));
-                        Self::known(Literal::Cairn(*cairn.as_bytes()), x)
-                    }
-                    None => Self::stuck(x),
+                if let Some(value) = as_value(&v) {
+                    let cairn = self.remember(Stored::Value(value));
+                    Self::known(Literal::Cairn(*cairn.as_bytes()), x)
+                } else {
+                    let operand = Box::new(Self::residual(v, operand));
+                    Self::rebuild(ExprKind::Rite { rite, operand }, x, Depth::PURE)
                 }
             }
             Rite::Opaque => unreachable!("handled above"),
@@ -2183,11 +2377,45 @@ impl Burial<'_> {
         env: &mut Env,
     ) -> Result<Val, Halt> {
         let v = self.expr(value, env)?;
+        if self.flow.is_some() {
+            return Ok(v);
+        }
         // A path into an aggregate needs an aggregate, and nothing can build
-        // one. Until that is settled the binding simply stops being known.
+        // one. Reduce any index subexpressions and settle stale locals before
+        // leaving the rebuilt assignment in the residue.
         if !place.path.is_empty() || v.is_stuck() {
+            let mut path = Vec::with_capacity(place.path.len());
+            let mut depth = v.depth;
+            for proj in &place.path {
+                match proj {
+                    nether_core::Proj::Field(i) => path.push(nether_core::Proj::Field(*i)),
+                    nether_core::Proj::Index(idx) => {
+                        let iv = self.expr(idx, env)?;
+                        if self.flow.is_some() {
+                            return Ok(iv);
+                        }
+                        let idx_res = Self::residual(iv, idx);
+                        depth = depth.join(idx_res.depth);
+                        path.push(nether_core::Proj::Index(Box::new(idx_res)));
+                    }
+                }
+            }
+            let val_res = Self::residual(v, value);
+            depth = depth.join(val_res.depth);
+            let rebuilt = Expr {
+                kind: ExprKind::Assign {
+                    place: Place { local: place.local, path },
+                    value: Box::new(val_res),
+                },
+                ty: x.ty.clone(),
+                depth,
+                span: x.span,
+            };
+            if !place.path.is_empty() {
+                return Ok(self.unreduced(&rebuilt, env));
+            }
             env.bind(place.local.0 as usize, None);
-            return Ok(Self::stuck(x));
+            return Ok(Self::stuck(&rebuilt));
         }
         env.write(place.local.0 as usize, v);
         Ok(Val { kind: Kind::Known(Literal::Unit), ty: Type::Unit, depth: Depth::PURE })
@@ -2228,34 +2456,17 @@ fn binary(op: BinOp, a: &Val, b: &Val) -> Result<Option<Literal>, &'static str> 
             BinOp::Ge => Literal::Bool(x >= y),
         }));
     }
-    // Everything else compares, and compares structurally: two values of the
-    // same type are equal exactly when their encodings are.
+    // Everything else compares structurally by canonical encoding / cairn.
     // `spec/05-types.md` §5.3.
-    Ok(match (&a.kind, &b.kind, op) {
-        (Kind::Known(x), Kind::Known(y), BinOp::Eq) => Some(Literal::Bool(x == y)),
-        (Kind::Known(x), Kind::Known(y), BinOp::Ne) => Some(Literal::Bool(x != y)),
-        // §5.3 compares canonical encodings, and §7.1 puts a shade's origin
-        // stratum in its own. So two shades are equal when they came out of
-        // the same stratum holding the same value. Comparing them still does
-        // not count as looking at them: it reveals only what `seal` on each
-        // would reveal anyway.
-        (Kind::Shade(x), Kind::Shade(y), BinOp::Eq | BinOp::Ne) => {
-            let (Type::Shade { origin: dx, .. }, Type::Shade { origin: dy, .. }) = (&a.ty, &b.ty)
-            else {
-                return Ok(None);
-            };
-            Some(Literal::Bool(matches!(op, BinOp::Eq) == (dx == dy && x.kind == y.kind)))
-        }
-        _ => None,
-    })
+    if matches!(op, BinOp::Eq | BinOp::Ne)
+        && let (Some(va), Some(vb)) = (as_value(a), as_value(b))
+    {
+        return Ok(Some(Literal::Bool(matches!(op, BinOp::Eq) == (va.cairn() == vb.cairn()))));
+    }
+    Ok(None)
 }
 
 /// The ledger value a burial value is, when it is one.
-///
-/// `Refusal` is not one, and that is not a decision made here: §5.1 gives it a
-/// canonical encoding and §7.1's frozen tag table has no tag for it. Until
-/// that is settled a refusal cannot be named, so `seal` of one residualises
-/// and a hole cannot take one as an argument.
 fn as_value(v: &Val) -> Option<Value> {
     match &v.kind {
         Kind::Known(Literal::Unit) => Some(Value::Unit),
@@ -2327,9 +2538,9 @@ fn literal(v: &Value) -> Option<Literal> {
     })
 }
 
-/// A shift by something no shift can mean.
+/// A shift by something no shift can mean (`< 0` or `>= 64`).
 fn shift(n: i64) -> Result<u32, &'static str> {
-    u32::try_from(n).map_err(|_| "this shifts by a width that is not one")
+    u32::try_from(n).ok().filter(|&s| s < 64).ok_or("this shifts by a width that is not one")
 }
 
 /// The prelude functions burial can finish.
@@ -2369,6 +2580,15 @@ fn prim(p: Prim, args: &[Val]) -> Result<Option<Literal>, &'static str> {
         },
         Prim::StartsWith => bytes(0).zip(bytes(1)).map(|(b, p)| Literal::Bool(b.starts_with(p))),
         Prim::Raw => bytes(0).map(|b| Literal::Bytes(b.to_vec())),
+        Prim::CairnOf => {
+            bytes(0).map(|b| Literal::Cairn(*Value::Bytes(b.to_vec()).cairn().as_bytes()))
+        }
+        Prim::Hex => match args.first().map(|v| &v.kind) {
+            Some(Kind::Known(Literal::Cairn(c))) => {
+                Some(Literal::Str(Cairn::from_bytes(*c).to_string()))
+            }
+            _ => None,
+        },
         _ => None,
     })
 }

@@ -71,3 +71,32 @@ fn diagnostics_do_not_export_a_partial_graph() {
     assert!(json.starts_with("{\"error\":"));
     assert!(!json.contains("\"objects\":"));
 }
+
+#[test]
+fn trace_depth_joins_owed_hole_strata_even_through_seal() {
+    let source = b"Cairn c = seal descend env { env(\"HOME\") };\ndemand c;\n";
+    let json = nether_wasm::burying(source, 0);
+    assert!(json.contains("\"depth\":2"), "{json}");
+    let objects = exported(source);
+    let trace_id: Cairn =
+        json.split_once("\"cairn\":\"").unwrap().1.split_once('"').unwrap().0.parse().unwrap();
+    let Some(Stored::Node(Node::Trace { depth, holes, .. })) = objects.get(&trace_id) else {
+        panic!("expected trace object");
+    };
+    assert_eq!(*depth, 2);
+    assert_eq!(holes.len(), 1);
+}
+
+#[test]
+fn invalid_utf8_source_returns_clean_error_and_alloc_free_round_trip() {
+    let json = nether_wasm::burying(&[0x66, 0xff, 0x6f], 0);
+    assert!(json.contains("not well-formed UTF-8"), "{json}");
+    // SAFETY: paired alloc/free with identical length.
+    unsafe {
+        let p = nether_wasm::nether_alloc(0);
+        nether_wasm::nether_free(p, 0);
+        let q = nether_wasm::nether_alloc(32);
+        assert!(!q.is_null());
+        nether_wasm::nether_free(q, 32);
+    }
+}
