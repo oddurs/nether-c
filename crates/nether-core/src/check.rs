@@ -265,7 +265,7 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
     c.unit_frame();
     for g in &unit.globals {
         let (derived, _) = c.expr(&g.value, Held::NONE, Depth::PURE);
-        if !shades_agree(&g.value.ty, &g.ty) {
+        if !c.depth_types_agree(&g.value.ty, &g.ty) {
             c.malformed(g.span, "shade origin does not match binding type");
         }
         c.globals.push(derived);
@@ -637,10 +637,19 @@ impl<'a> Checker<'a> {
         }
 
         let (body_depth, _) = self.block(&f.body, Held::NONE, Depth::PURE);
-        if let Some(tail) = &f.body.tail
-            && !shades_agree(&tail.ty, &f.ret)
-        {
-            self.malformed(tail.span, "shade origin does not match return type");
+        match &f.body.tail {
+            Some(tail) if !self.depth_types_agree(&tail.ty, &f.ret) => {
+                self.malformed(tail.span, "shade origin does not match return type");
+            }
+            None if !block_always_returns(&f.body)
+                && !self.depth_types_agree(&Type::Unit, &f.ret) =>
+            {
+                self.malformed(
+                    f.span,
+                    "function body falls off end without returning declared type",
+                );
+            }
+            _ => {}
         }
         let ret_depth = body_depth.join(self.returns);
         let latent = self.needs.take().unwrap_or(Held::NONE);
@@ -663,7 +672,7 @@ impl<'a> Checker<'a> {
                 Stmt::Let { local, value } => {
                     let (d, ex) = self.expr(value, ambient, block_pc);
                     if let Some(lty) = self.local_ty(*local)
-                        && !shades_agree(&value.ty, lty)
+                        && !self.depth_types_agree(&value.ty, lty)
                     {
                         self.malformed(value.span, "shade origin does not match binding type");
                     }
@@ -698,7 +707,12 @@ impl<'a> Checker<'a> {
     fn expr(&mut self, x: &Expr, ambient: Held, pc: Depth) -> (Depth, ExitPc) {
         let (derived, exit) = match &x.kind {
             // [LIT]. This is why pure code disappears at burial.
-            ExprKind::Literal(_) => (Depth::PURE, ExitPc::NONE),
+            ExprKind::Literal(_) => {
+                if self.carries_depth_type(&x.ty) {
+                    self.malformed(x.span, "literal cannot fabricate a shaded or function type");
+                }
+                (Depth::PURE, ExitPc::NONE)
+            }
             ExprKind::Break | ExprKind::Continue => {
                 (Depth::PURE, ExitPc { loop_exit: Some(pc), fn_exit: None })
             }
@@ -706,7 +720,7 @@ impl<'a> Checker<'a> {
             // [VAR].
             ExprKind::Local(id) => {
                 if let Some(lty) = self.local_ty(*id)
-                    && !shades_agree(&x.ty, lty)
+                    && !self.depth_types_agree(&x.ty, lty)
                 {
                     self.malformed(x.span, "local type does not match its binding");
                 }
@@ -720,7 +734,7 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Global(id) => {
                 if let Some(g) = self.unit.global(*id)
-                    && !shades_agree(&x.ty, &g.ty)
+                    && !self.depth_types_agree(&x.ty, &g.ty)
                 {
                     self.malformed(x.span, "global type does not match its binding");
                 }
@@ -780,28 +794,30 @@ impl<'a> Checker<'a> {
                 let mut d_a = Depth::PURE;
                 for a in args {
                     let (d, a_ex) = self.expr(a, ambient, cur_pc);
+                    // Passing a local hands its value somewhere this function
+                    // cannot see, which is naming it immediately before later
+                    // arguments evaluate. §5.4.
+                    self.name_local(a);
                     d_a = d_a.join(d);
                     ex = ex.join(a_ex);
                     if let Some(ed) = a_ex.deepest() {
                         cur_pc = cur_pc.join(ed);
                     }
                 }
-                // Passing a local hands its value somewhere this function
-                // cannot see, which is naming it. §5.4.
-                for a in args {
-                    self.name_local(a);
-                }
                 let (latent, result_depth) =
                     if let Type::Fn { params, latent, result, result_depth } = &callee.ty {
+                        if args.len() != params.len() {
+                            self.malformed(x.span, "wrong number of arguments");
+                        }
                         for (arg, param) in args.iter().zip(params) {
-                            if !shades_agree(&arg.ty, param) {
+                            if !self.depth_types_agree(&arg.ty, param) {
                                 self.malformed(
                                     arg.span,
                                     "shade origin does not match parameter type",
                                 );
                             }
                         }
-                        if !shades_agree(&x.ty, result) {
+                        if !self.depth_types_agree(&x.ty, result) {
                             self.malformed(x.span, "shade origin does not match call result type");
                         }
                         (*latent, *result_depth)
@@ -829,7 +845,7 @@ impl<'a> Checker<'a> {
             // [DESCEND]. The only rule that raises δ, and only inside its own
             // premise. Nothing lowers δ; nothing lowers d.
             ExprKind::Descend { capability, body } => {
-                if !shades_agree(&x.ty, &body.ty) {
+                if !self.depth_types_agree(&x.ty, &body.ty) {
                     self.malformed(x.span, "shade origin does not match descend body");
                 }
                 self.expr(body, ambient.with(capability.stratum()), pc)
@@ -838,17 +854,33 @@ impl<'a> Checker<'a> {
             ExprKind::Rite { rite, operand } => self.rite(x, *rite, operand, ambient, pc),
 
             // [PRIM], and everything the specification gives no other rule for.
-            ExprKind::Unary { operand, .. } => self.expr(operand, ambient, pc),
+            ExprKind::Unary { operand, .. } => {
+                if self.carries_depth_type(&x.ty) {
+                    self.malformed(
+                        x.span,
+                        "unary operation cannot fabricate a shaded or function type",
+                    );
+                }
+                self.expr(operand, ambient, pc)
+            }
             ExprKind::Field { base, index } => {
                 let res = self.expr(base, ambient, pc);
-                if let Some(fty) = self.field_ty(&base.ty, *index)
-                    && !shades_agree(&x.ty, fty)
-                {
-                    self.malformed(x.span, "shade origin does not match field type");
+                if let Some(fty) = self.field_ty(&base.ty, *index) {
+                    if !self.depth_types_agree(&x.ty, fty) {
+                        self.malformed(x.span, "shade origin does not match field type");
+                    }
+                } else if self.carries_depth_type(&x.ty) {
+                    self.malformed(x.span, "unknown struct or field");
                 }
                 res
             }
             ExprKind::Binary { lhs, rhs, .. } => {
+                if self.carries_depth_type(&x.ty) {
+                    self.malformed(
+                        x.span,
+                        "binary operation cannot fabricate a shaded or function type",
+                    );
+                }
                 let (dl, el) = self.expr(lhs, ambient, pc);
                 let rhs_pc = el.deepest().map_or(pc, |e| pc.join(e));
                 let (dr, er) = self.expr(rhs, ambient, rhs_pc);
@@ -858,10 +890,12 @@ impl<'a> Checker<'a> {
                 let (dl, el) = self.expr(base, ambient, pc);
                 let idx_pc = el.deepest().map_or(pc, |e| pc.join(e));
                 let (dr, er) = self.expr(index, ambient, idx_pc);
-                if let Type::Array { elem, .. } = &base.ty
-                    && !shades_agree(&x.ty, elem)
-                {
-                    self.malformed(x.span, "shade origin does not match element type");
+                if let Type::Array { elem, .. } = &base.ty {
+                    if !self.depth_types_agree(&x.ty, elem) {
+                        self.malformed(x.span, "shade origin does not match element type");
+                    }
+                } else if self.carries_depth_type(&x.ty) {
+                    self.malformed(x.span, "indexed base is not an array");
                 }
                 (dl.join(dr), el.join(er))
             }
@@ -883,7 +917,9 @@ impl<'a> Checker<'a> {
                 for (s, w) in self.locals.iter_mut().zip(&locals_then) {
                     *s = s.zip(*w).map(|(a, b)| a.join(b)).or(*s).or(*w);
                 }
-                if !shades_agree(&then.ty, &x.ty) || !shades_agree(&otherwise.ty, &x.ty) {
+                if !self.depth_types_agree(&then.ty, &x.ty)
+                    || !self.depth_types_agree(&otherwise.ty, &x.ty)
+                {
                     self.malformed(x.span, "shade origin does not match branch arms");
                 }
                 (d_cond.join(d_then).join(d_else), e_cond.join(e_then).join(e_else))
@@ -904,6 +940,14 @@ impl<'a> Checker<'a> {
                 loop {
                     let mark = self.faults.len();
                     let was = (self.carried(&inner), loop_pc);
+                    for id in &inner {
+                        if let Some(slot) = self.locals.get_mut(id.0 as usize) {
+                            *slot = None;
+                        }
+                        if let Some(slot) = self.named.get_mut(id.0 as usize) {
+                            *slot = None;
+                        }
+                    }
                     let (d_body, e_body) = self.expr(body, ambient, loop_pc);
                     let step_pc = e_body.deepest().map_or(loop_pc, |e| loop_pc.join(e));
                     let (d, e_step) = match step.as_ref() {
@@ -936,10 +980,14 @@ impl<'a> Checker<'a> {
                 if let Some(v) = v.as_ref() {
                     self.name_local(v);
                     if let Some(f) = self.func
-                        && !shades_agree(&v.ty, &f.ret)
+                        && !self.depth_types_agree(&v.ty, &f.ret)
                     {
                         self.malformed(v.span, "shade origin does not match return type");
                     }
+                } else if let Some(f) = self.func
+                    && !self.depth_types_agree(&Type::Unit, &f.ret)
+                {
+                    self.malformed(x.span, "empty return does not match function return type");
                 }
                 let ret_pc = ex.deepest().map_or(pc, |e| pc.join(e));
                 self.returns = self.returns.join(d).join(ret_pc);
@@ -947,10 +995,14 @@ impl<'a> Checker<'a> {
             }
             ExprKind::Block(b) => {
                 let res = self.block(b, ambient, pc);
-                if let Some(tail) = &b.tail
-                    && !shades_agree(&x.ty, &tail.ty)
-                {
-                    self.malformed(x.span, "shade origin does not match block tail");
+                match &b.tail {
+                    Some(tail) if !self.depth_types_agree(&x.ty, &tail.ty) => {
+                        self.malformed(x.span, "shade origin does not match block tail");
+                    }
+                    None if !self.depth_types_agree(&x.ty, &Type::Unit) => {
+                        self.malformed(x.span, "block without tail produces U0");
+                    }
+                    _ => {}
                 }
                 res
             }
@@ -978,10 +1030,15 @@ impl<'a> Checker<'a> {
                 if let Some(ed) = e_val.deepest() {
                     cur_pc = cur_pc.join(ed);
                 }
-                if let Some(pty) = self.place_ty(place)
-                    && !shades_agree(&value.ty, pty)
-                {
-                    self.malformed(value.span, "shade origin does not match assigned place");
+                if let Some(pty) = self.place_ty(place) {
+                    if !self.depth_types_agree(&value.ty, pty) {
+                        self.malformed(value.span, "shade origin does not match assigned place");
+                    }
+                } else if self.carries_depth_type(&value.ty) {
+                    self.malformed(x.span, "assigned place has no valid type");
+                }
+                if !self.depth_types_agree(&x.ty, &Type::Unit) {
+                    self.malformed(x.span, "assignment produces U0");
                 }
                 if let Some(Some(named)) = self.named.get(place.local.0 as usize).copied() {
                     self.fault(x.span, FaultKind::Frozen { named });
@@ -1062,7 +1119,12 @@ impl<'a> Checker<'a> {
         }
         let derived = match rite {
             // A cairn is a name, and a name is pure whatever it names.
-            Rite::Seal => Depth::PURE,
+            Rite::Seal => {
+                if self.carries_depth_type(&x.ty) {
+                    self.malformed(x.span, "`seal` produces a cairn");
+                }
+                Depth::PURE
+            }
             // The origin is carried in the type, which is what makes [LOOK]
             // checkable at all.
             Rite::Shade => {
@@ -1093,7 +1155,7 @@ impl<'a> Checker<'a> {
             }
             // Opaque is a fact about evaluation and none about the calculus.
             Rite::Opaque => {
-                if !shades_agree(&x.ty, &operand.ty) {
+                if !self.depth_types_agree(&x.ty, &operand.ty) {
                     self.malformed(x.span, "shade origin does not match opaque operand");
                 }
                 d
@@ -1115,16 +1177,16 @@ impl<'a> Checker<'a> {
             {
                 match p {
                     Prim::Answered => {
-                        if let (Some(arg), Type::Answer(inner)) = (params.first(), result.as_ref())
-                            && !shades_agree(arg, inner)
-                        {
+                        let ok = params.len() == 1
+                            && matches!(result.as_ref(), Type::Answer(inner) if self.depth_types_agree(&params[0], inner));
+                        if !ok {
                             self.malformed(x.span, "shade origin does not match `answered` result");
                         }
                     }
                     Prim::Must => {
-                        if let Some(Type::Answer(inner)) = params.first()
-                            && !shades_agree(inner, result)
-                        {
+                        let ok = params.len() == 1
+                            && matches!(&params[0], Type::Answer(inner) if self.depth_types_agree(inner, result));
+                        if !ok {
                             self.malformed(x.span, "shade origin does not match `must` result");
                         }
                     }
@@ -1135,23 +1197,80 @@ impl<'a> Checker<'a> {
             _ => self.malformed(x.span, "a prelude function is a function"),
         }
     }
+
+    fn carries_depth_type(&self, ty: &Type) -> bool {
+        let mut seen = Vec::new();
+        self.carries_depth_inner(ty, &mut seen)
+    }
+
+    fn carries_depth_inner<'b>(&'a self, ty: &'b Type, seen: &mut Vec<&'b str>) -> bool
+    where
+        'a: 'b,
+    {
+        match ty {
+            Type::Shade { .. } | Type::Fn { .. } => true,
+            Type::Answer(inner) | Type::Array { elem: inner, .. } => {
+                self.carries_depth_inner(inner, seen)
+            }
+            Type::Struct(name) => {
+                if seen.contains(&name.as_str()) {
+                    return false;
+                }
+                seen.push(name.as_str());
+                let found = self.unit.structs.iter().find(|s| s.name == *name).is_some_and(|s| {
+                    s.fields.iter().any(|f| self.carries_depth_inner(&f.ty, seen))
+                });
+                seen.pop();
+                found
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `got` agrees with `want` on every depth-bearing type (`Shade`
+    /// origin, `Fn` latent/result depth, and any container or nominal `Struct`
+    /// carrying them).
+    fn depth_types_agree(&self, got: &Type, want: &Type) -> bool {
+        match (got, want) {
+            (Type::Shade { origin: a, inner: ia }, Type::Shade { origin: b, inner: ib }) => {
+                a == b && self.depth_types_agree(ia, ib)
+            }
+            (Type::Answer(a), Type::Answer(b))
+            | (Type::Array { elem: a, .. }, Type::Array { elem: b, .. }) => {
+                self.depth_types_agree(a, b)
+            }
+            (Type::Struct(a), Type::Struct(b)) => a == b,
+            (
+                Type::Fn { params: pa, latent: la, result: ra, result_depth: da },
+                Type::Fn { params: pb, latent: lb, result: rb, result_depth: db },
+            ) => {
+                la == lb
+                    && da == db
+                    && pa.len() == pb.len()
+                    && pa.iter().zip(pb).all(|(a, b)| self.depth_types_agree(a, b))
+                    && self.depth_types_agree(ra, rb)
+            }
+            _ => !self.carries_depth_type(got) && !self.carries_depth_type(want),
+        }
+    }
 }
 
-/// Whether `got` preserves every `Shade<T@d>` origin expected by `want`.
-fn shades_agree(got: &Type, want: &Type) -> bool {
-    match (got, want) {
-        (Type::Shade { origin: a, inner: ia }, Type::Shade { origin: b, inner: ib }) => {
-            a == b && shades_agree(ia, ib)
+fn block_always_returns(b: &Block) -> bool {
+    b.stmts.iter().any(|s| matches!(s, Stmt::Expr(e) if always_returns(e)))
+        || b.tail.as_deref().is_some_and(always_returns)
+}
+
+fn always_returns(x: &Expr) -> bool {
+    match &x.kind {
+        ExprKind::Return(_) => true,
+        ExprKind::Descend { body, .. } | ExprKind::Rite { rite: Rite::Opaque, operand: body } => {
+            always_returns(body)
         }
-        (Type::Answer(a), Type::Answer(b))
-        | (Type::Array { elem: a, .. }, Type::Array { elem: b, .. }) => shades_agree(a, b),
-        (Type::Fn { params: pa, result: ra, .. }, Type::Fn { params: pb, result: rb, .. }) => {
-            pa.len() == pb.len()
-                && pa.iter().zip(pb).all(|(a, b)| shades_agree(a, b))
-                && shades_agree(ra, rb)
+        ExprKind::Select { cond, then, otherwise } => {
+            always_returns(cond) || (always_returns(then) && always_returns(otherwise))
         }
-        (Type::Shade { .. }, _) | (_, Type::Shade { .. }) => false,
-        _ => true,
+        ExprKind::Block(b) => block_always_returns(b),
+        _ => false,
     }
 }
 
