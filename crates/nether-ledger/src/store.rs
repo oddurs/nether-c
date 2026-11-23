@@ -8,12 +8,13 @@
 //! There is no garbage collection and there is not going to be one. See
 //! `spec/07-ledger.md` §7.6, which also admits that this is a real cost.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
-use std::io::{self, Write as _};
+use std::io::{self, Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::cairn::Cairn;
 use crate::codec::{DecodeError, Stored, decode_stored};
@@ -208,7 +209,18 @@ impl Store {
         decode_stored(&bytes).map_err(StoreError::Invalid)?;
 
         let cairn = Cairn::of_encoded(&bytes);
-        if self.has(cairn) {
+        self.put_verified(cairn, stored, &bytes)
+    }
+
+    fn put_verified(
+        &self,
+        cairn: Cairn,
+        stored: &Stored,
+        bytes: &[u8],
+    ) -> Result<Cairn, StoreError> {
+        if let Ok(existing) = fs::read(self.fanned("objects", cairn))
+            && verify_bytes(cairn, &existing).is_ok()
+        {
             return Ok(cairn);
         }
 
@@ -226,20 +238,20 @@ impl Store {
         }
 
         let path = self.fanned("objects", cairn);
-        self.write_atomically(&path, &bytes, &cairn.to_string())?;
+        self.write_atomically(&path, bytes, &cairn.to_string())?;
         Ok(cairn)
     }
 
     /// A path nothing else will choose.
     ///
-    /// The process id alone is not enough: two threads in one process writing
-    /// the same object picked the same path, both wrote it, the first renamed
-    /// it away, and the second's rename failed with ENOENT. The counter makes
-    /// it per write rather than per process.
+    /// PID, nanosecond timestamp, and an atomic per-process counter, paired
+    /// with `create_new(true)` (`O_EXCL`) so neither threads nor recycled PIDs
+    /// can collide on a temporary file.
     fn temp_path(&self, hint: &str) -> PathBuf {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        self.root.join("tmp").join(format!("{hint}.{}.{n}", std::process::id()))
+        let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+        self.root.join("tmp").join(format!("{hint}.{}.{ts}.{n}", std::process::id()))
     }
 
     fn write_atomically(&self, path: &Path, bytes: &[u8], hint: &str) -> io::Result<()> {
@@ -252,11 +264,20 @@ impl Store {
         let tmp_dir = self.root.join("tmp");
         fs::create_dir_all(&tmp_dir)?;
 
-        let temp = self.temp_path(hint);
-        if let Err(e) = fs::write(&temp, bytes) {
+        let (temp, mut file) = loop {
+            let candidate = self.temp_path(hint);
+            match fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+                Ok(f) => break (candidate, f),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        };
+        if let Err(e) = file.write_all(bytes) {
+            drop(file);
             let _ = fs::remove_file(&temp);
             return Err(e);
         }
+        drop(file);
         if let Err(e) = fs::rename(&temp, path) {
             // Do not leave a partial behind for a reaper to puzzle over.
             let _ = fs::remove_file(&temp);
@@ -318,12 +339,15 @@ impl Store {
             Err(e) => return Err(StoreError::Io(e)),
         };
         let stored = verify_bytes(cairn, &bytes)?;
-        let mut seen = self.seen();
-        if seen.bytes + bytes.len() > SEEN_BYTES {
-            *seen = Seen { reads: seen.reads, ..Seen::default() };
+        if bytes.len() <= SEEN_BYTES {
+            let mut seen = self.seen();
+            if seen.bytes.saturating_add(bytes.len()) > SEEN_BYTES {
+                *seen = Seen { reads: seen.reads, ..Seen::default() };
+            }
+            if seen.held.insert(cairn, stored.clone()).is_none() {
+                seen.bytes = seen.bytes.saturating_add(bytes.len());
+            }
         }
-        seen.bytes += bytes.len();
-        seen.held.insert(cairn, stored.clone());
         Ok(stored)
     }
 
@@ -395,26 +419,51 @@ impl Store {
             return Err(StoreError::BadPrefix(prefix.to_owned()));
         }
 
+        if prefix.len() == 64 {
+            let cairn =
+                prefix.parse::<Cairn>().map_err(|_| StoreError::BadPrefix(prefix.to_owned()))?;
+            let path = self.fanned("objects", cairn);
+            return match fs::metadata(&path) {
+                Ok(meta) if meta.is_file() => Ok(cairn),
+                Ok(_) => Err(StoreError::NoMatch(prefix.to_owned())),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                    Err(StoreError::NoMatch(prefix.to_owned()))
+                }
+                Err(e) => Err(StoreError::Io(e)),
+            };
+        }
+
         let objects = self.root.join("objects");
         let mut found = Vec::new();
         let buckets: Vec<PathBuf> = if prefix.len() >= 2 {
             vec![objects.join(&prefix[..2])]
         } else {
-            fs::read_dir(&objects)?
-                .filter_map(Result::ok)
-                .map(|e| e.path())
-                .filter(|p| {
-                    p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(prefix))
-                })
-                .collect()
+            let mut list = Vec::new();
+            for entry in fs::read_dir(&objects)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(prefix))
+                {
+                    list.push(path);
+                }
+            }
+            list
         };
 
         for bucket in buckets {
             let Some(head) = bucket.file_name().and_then(|n| n.to_str()).map(str::to_owned) else {
                 continue;
             };
-            let Ok(entries) = fs::read_dir(&bucket) else { continue };
-            for entry in entries.filter_map(Result::ok) {
+            let entries = match fs::read_dir(&bucket) {
+                Ok(entries) => entries,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(StoreError::Io(e)),
+            };
+            for entry in entries {
+                let entry = entry?;
+                if !entry.file_type()?.is_file() {
+                    continue;
+                }
                 let Some(tail) = entry.file_name().to_str().map(str::to_owned) else { continue };
                 let whole = format!("{head}{tail}");
                 if whole.starts_with(prefix) {
@@ -657,20 +706,12 @@ impl Store {
     /// [`StoreError::Corrupt`] if an entry or existing destination object fails
     /// verification, or [`StoreError::Io`] on I/O failure.
     pub fn import(&self, src: &mut impl io::Read) -> Result<usize, StoreError> {
+        const MAX_BUNDLE_OBJECTS: usize = 1_000_000;
+        const MAX_BUNDLE_BYTES: usize = 512 * 1024 * 1024;
+
         let mut hasher = blake3::Hasher::new();
-        let mut take = |buf: &mut [u8]| -> Result<(), StoreError> {
-            src.read_exact(buf).map_err(|e| {
-                if e.kind() == io::ErrorKind::UnexpectedEof {
-                    StoreError::Bundle("truncated bundle")
-                } else {
-                    StoreError::Io(e)
-                }
-            })?;
-            hasher.update(buf);
-            Ok(())
-        };
         let mut hdr = [0u8; 24];
-        take(&mut hdr)?;
+        read_hashed(src, &mut hasher, &mut hdr)?;
         if hdr != BUNDLE_MAGIC {
             return Err(StoreError::Bundle(
                 if hdr.starts_with(b"netherc/cairn/") && hdr.ends_with(b"\x00bundle\x00") {
@@ -681,37 +722,25 @@ impl Store {
             ));
         }
         let mut u8s = [0u8; 8];
-        take(&mut u8s)?;
+        read_hashed(src, &mut hasher, &mut u8s)?;
         let count = usize::try_from(u64::from_be_bytes(u8s))
-            .map_err(|_| StoreError::Bundle("bundle count overflows usize"))?;
+            .ok()
+            .filter(|&n| n <= MAX_BUNDLE_OBJECTS)
+            .ok_or(StoreError::Bundle("bundle count exceeds bound"))?;
         let mut seen = BTreeSet::new();
+        let mut expected_before = BTreeSet::new();
+        let mut ref_cache: HashMap<Cairn, HashSet<Cairn>> = HashMap::new();
+        let mut total_bytes: usize = 0;
         for _ in 0..count {
-            let mut raw = [0u8; 32];
-            take(&mut raw)?;
-            let cairn = Cairn::from_bytes(raw);
-            if !seen.insert(cairn) {
-                return Err(StoreError::Bundle("duplicate cairn in bundle"));
-            }
-            take(&mut u8s)?;
-            let len = usize::try_from(u64::from_be_bytes(u8s))
-                .ok()
-                .filter(|&n| n <= MAX_BUNDLE_OBJECT)
-                .ok_or(StoreError::Bundle("bundle object exceeds size bound"))?;
-            let mut bytes = vec![0u8; len];
-            take(&mut bytes)?;
-            let stored = verify_bytes(cairn, &bytes)?;
-            if self.has(cairn) {
-                self.get(cairn)?;
-                if let Stored::Node(node) = &stored {
-                    for target in node.references() {
-                        if !self.referrers(target)?.contains(&cairn) {
-                            self.add_ref(target, cairn)?;
-                        }
-                    }
-                }
-            } else {
-                self.put(&stored)?;
-            }
+            self.import_entry(
+                src,
+                &mut hasher,
+                MAX_BUNDLE_BYTES,
+                &mut total_bytes,
+                &mut seen,
+                &mut expected_before,
+                &mut ref_cache,
+            )?;
         }
         let mut trailer = [0u8; 32];
         src.read_exact(&mut trailer).map_err(|e| {
@@ -729,6 +758,89 @@ impl Store {
         }
         Ok(count)
     }
+
+    #[allow(clippy::too_many_arguments)]
+    fn import_entry(
+        &self,
+        src: &mut impl io::Read,
+        hasher: &mut blake3::Hasher,
+        max_bundle_bytes: usize,
+        total_bytes: &mut usize,
+        seen: &mut BTreeSet<Cairn>,
+        expected_before: &mut BTreeSet<Cairn>,
+        ref_cache: &mut HashMap<Cairn, HashSet<Cairn>>,
+    ) -> Result<(), StoreError> {
+        let mut raw = [0u8; 32];
+        read_hashed(src, hasher, &mut raw)?;
+        let cairn = Cairn::from_bytes(raw);
+        if !seen.insert(cairn) {
+            return Err(StoreError::Bundle("duplicate cairn in bundle"));
+        }
+        if expected_before.contains(&cairn) {
+            return Err(StoreError::Bundle("bundle is not in topological order"));
+        }
+        let mut u8s = [0u8; 8];
+        read_hashed(src, hasher, &mut u8s)?;
+        let len = usize::try_from(u64::from_be_bytes(u8s))
+            .ok()
+            .filter(|&n| n <= MAX_BUNDLE_OBJECT)
+            .ok_or(StoreError::Bundle("bundle object exceeds size bound"))?;
+        *total_bytes = total_bytes
+            .checked_add(len)
+            .filter(|&t| t <= max_bundle_bytes)
+            .ok_or(StoreError::Bundle("bundle exceeds total size bound"))?;
+        // Read incrementally so a truncated stream cannot force a 16 MiB
+        // pre-allocation before hitting EOF.
+        let mut bytes = Vec::with_capacity(len.min(64 * 1024));
+        src.by_ref().take(len as u64).read_to_end(&mut bytes)?;
+        if bytes.len() != len {
+            return Err(StoreError::Bundle("truncated bundle"));
+        }
+        hasher.update(&bytes);
+        let stored = verify_bytes(cairn, &bytes)?;
+        if let Stored::Node(node) = &stored {
+            for target in node.references() {
+                if !seen.contains(&target) {
+                    expected_before.insert(target);
+                }
+            }
+        }
+        if self.has(cairn) {
+            self.get(cairn)?;
+            if let Stored::Node(node) = &stored {
+                for target in node.references() {
+                    let known = match ref_cache.entry(target) {
+                        std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                        std::collections::hash_map::Entry::Vacant(e) => {
+                            e.insert(self.referrers(target)?.into_iter().collect())
+                        }
+                    };
+                    if known.insert(cairn) {
+                        self.add_ref(target, cairn)?;
+                    }
+                }
+            }
+        } else {
+            self.put_verified(cairn, &stored, &bytes)?;
+        }
+        Ok(())
+    }
+}
+
+fn read_hashed(
+    src: &mut impl io::Read,
+    hasher: &mut blake3::Hasher,
+    buf: &mut [u8],
+) -> Result<(), StoreError> {
+    src.read_exact(buf).map_err(|e| {
+        if e.kind() == io::ErrorKind::UnexpectedEof {
+            StoreError::Bundle("truncated bundle")
+        } else {
+            StoreError::Io(e)
+        }
+    })?;
+    hasher.update(buf);
+    Ok(())
 }
 
 /// What is wrong with a reverse-index file in `refs/`. `spec/07-ledger.md` §7.5.2.
@@ -792,6 +904,7 @@ impl Audit {
             && self.missing.is_empty()
             && self.malformed.is_empty()
             && self.index.is_empty()
+            && self.affected_traces.is_empty()
     }
 }
 
@@ -807,6 +920,27 @@ pub enum PackageError {
     Incompatible(Cairn, String),
     /// A package or entrypoint `(cairn, why)` violated §7.5.5's structural rules.
     Malformed(Cairn, &'static str),
+}
+
+impl core::fmt::Display for PackageError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Store(e) => write!(f, "{e}"),
+            Self::Incompatible(c, domain) => {
+                write!(f, "package {} uses incompatible domain `{domain}`", c.short())
+            }
+            Self::Malformed(c, why) => write!(f, "malformed package {}: {why}", c.short()),
+        }
+    }
+}
+
+impl core::error::Error for PackageError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Store(e) => Some(e),
+            Self::Incompatible(..) | Self::Malformed(..) => None,
+        }
+    }
 }
 
 impl From<StoreError> for PackageError {
@@ -842,6 +976,10 @@ impl ResolvedPackage {
 
 /// Cairn-addressed package storage and offline dependency resolution (`spec/07-ledger.md` §7.5.5).
 pub struct Package;
+
+/// The decoded entrypoint cairn, sorted dependency list, and source bytes of a
+/// single `Package` record.
+type LoadedPkg = (Cairn, Vec<(String, Cairn)>, Vec<u8>);
 
 impl Package {
     /// Writes `entrypoint_source` and a canonical `"Package"` struct with
@@ -909,17 +1047,7 @@ impl Package {
         })
     }
 
-    fn walk(
-        store: &Store,
-        pkg: Cairn,
-        visiting: &mut BTreeSet<Cairn>,
-        visited: &mut BTreeSet<Cairn>,
-        closure: &mut Vec<Cairn>,
-        unit_source: &mut Vec<u8>,
-    ) -> Result<(Cairn, Vec<(String, Cairn)>), PackageError> {
-        if !visiting.insert(pkg) {
-            return Err(PackageError::Malformed(pkg, "dependency cycle"));
-        }
+    fn load_pkg(store: &Store, pkg: Cairn) -> Result<LoadedPkg, PackageError> {
         let Stored::Value(Value::Struct { name, fields }) = store.get(pkg)? else {
             return Err(PackageError::Malformed(pkg, "not a Package struct"));
         };
@@ -953,17 +1081,52 @@ impl Package {
         if core::str::from_utf8(&bytes).is_err() {
             return Err(PackageError::Malformed(*ep, "entrypoint is not UTF-8"));
         }
-        for (_, dep) in &deps {
-            if !visited.contains(dep) {
-                Self::walk(store, *dep, visiting, visited, closure, unit_source)?;
+        Ok((*ep, deps, bytes))
+    }
+
+    fn walk(
+        store: &Store,
+        root: Cairn,
+        visiting: &mut BTreeSet<Cairn>,
+        visited: &mut BTreeSet<Cairn>,
+        closure: &mut Vec<Cairn>,
+        unit_source: &mut Vec<u8>,
+    ) -> Result<(Cairn, Vec<(String, Cairn)>), PackageError> {
+        struct Frame {
+            pkg: Cairn,
+            deps: Vec<(String, Cairn)>,
+            next_dep: usize,
+            bytes: Vec<u8>,
+        }
+        let (root_ep, root_deps, root_bytes) = Self::load_pkg(store, root)?;
+        visiting.insert(root);
+        let mut stack =
+            vec![Frame { pkg: root, deps: root_deps.clone(), next_dep: 0, bytes: root_bytes }];
+        while let Some(top) = stack.last_mut() {
+            if top.next_dep < top.deps.len() {
+                let dep = top.deps[top.next_dep].1;
+                top.next_dep += 1;
+                if visited.contains(&dep) {
+                    continue;
+                }
+                if !visiting.insert(dep) {
+                    return Err(PackageError::Malformed(dep, "dependency cycle"));
+                }
+                let (_, deps, bytes) = Self::load_pkg(store, dep)?;
+                stack.push(Frame { pkg: dep, deps, next_dep: 0, bytes });
+            } else {
+                let Some(done) = stack.pop() else { break };
+                visiting.remove(&done.pkg);
+                if visited.insert(done.pkg) {
+                    closure.push(done.pkg);
+                    if !unit_source.is_empty() && !unit_source.ends_with(b"\n") {
+                        unit_source.push(b'\n');
+                    }
+                    unit_source.extend_from_slice(&done.bytes);
+                }
             }
         }
-        visiting.remove(&pkg);
-        if visited.insert(pkg) {
-            closure.push(pkg);
-            unit_source.extend_from_slice(&bytes);
-        }
-        Ok((*ep, deps))
+        Ok((root_ep, root_deps))
     }
 }
 
@@ -1803,5 +1966,79 @@ mod tests {
             Package::resolve(&store, top),
             Err(PackageError::Store(StoreError::Corrupt { asked, .. })) if asked == base
         ));
+    }
+
+    #[test]
+    fn import_enforces_topological_order_and_put_repairs_corrupt_object_and_deep_packages_resolve()
+    {
+        let src_dir = Scratch::new();
+        let src = src_dir.store();
+        let val = src.put(&Stored::Value(Value::Int(42))).unwrap();
+        let dep = src
+            .put(&Stored::Node(Node::Deposit {
+                value: val,
+                span: Span { source: val, start: 0, end: 1 },
+            }))
+            .unwrap();
+
+        // Build a bundle with the referrer (`dep`) before its leaf (`val`).
+        let mut reversed = Vec::new();
+        let mut hasher = blake3::Hasher::new();
+        let mut push = |slice: &[u8]| {
+            hasher.update(slice);
+            reversed.extend_from_slice(slice);
+        };
+        push(super::BUNDLE_MAGIC);
+        push(&2u64.to_be_bytes());
+        for c in [dep, val] {
+            let bytes = src.get(c).unwrap().encode();
+            push(c.as_bytes());
+            push(&(bytes.len() as u64).to_be_bytes());
+            push(&bytes);
+        }
+        reversed.extend_from_slice(hasher.finalize().as_bytes());
+
+        let dst_dir = Scratch::new();
+        let dst = dst_dir.store();
+        assert!(matches!(
+            dst.import(&mut &reversed[..]),
+            Err(StoreError::Bundle("bundle is not in topological order"))
+        ));
+
+        // Putting a valid value overwrites a corrupt on-disk file under that cairn.
+        std::fs::write(src.fanned("objects", val), b"corrupt").unwrap();
+        let fresh = src_dir.store();
+        assert!(matches!(fresh.get(val), Err(StoreError::Corrupt { .. })));
+        assert_eq!(fresh.put(&Stored::Value(Value::Int(42))).unwrap(), val);
+        assert_eq!(fresh.get(val).unwrap(), Stored::Value(Value::Int(42)));
+
+        // Package::resolve inserts a newline separator when an entrypoint lacks one
+        // and handles deep chains iteratively without stack overflow.
+        let pkg_dir = Scratch::new();
+        let pkg_store = pkg_dir.store();
+        let mut cur = Package::put(&pkg_store, b"I64 p0() { 0 }", &[]).unwrap();
+        for i in 1..256 {
+            cur = Package::put(
+                &pkg_store,
+                format!("I64 p{i}() {{ p{}() }}", i - 1).as_bytes(),
+                &[("prev", cur)],
+            )
+            .unwrap();
+        }
+        let resolved = Package::resolve(&pkg_store, cur).unwrap();
+        assert_eq!(resolved.closure.len(), 256);
+        let text = std::str::from_utf8(&resolved.unit_source).unwrap();
+        assert!(text.contains("I64 p0() { 0 }\nI64 p1()"), "{text}");
+
+        // Audit::is_clean is false when affected_traces is non-empty.
+        let mut audit = super::Audit::default();
+        assert!(audit.is_clean());
+        audit.affected_traces.push(super::AffectedTrace {
+            trace: val,
+            corrupt: vec![val],
+            missing: vec![],
+            unknowable: false,
+        });
+        assert!(!audit.is_clean());
     }
 }

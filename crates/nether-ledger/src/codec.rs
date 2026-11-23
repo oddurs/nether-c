@@ -32,49 +32,52 @@ impl Value {
     }
 
     fn encode_into(&self, out: &mut impl Sink) {
-        out.push(self.tag());
-        match self {
-            Self::Unit => {}
-            Self::Bool(b) => out.push(u8::from(*b)),
-            Self::Int(n) => out.extend_from_slice(&n.to_be_bytes()),
-            Self::Bytes(b) => {
-                put_len(out, b.len());
-                out.extend_from_slice(b);
-            }
-            Self::Str(s) => {
-                put_len(out, s.len());
-                out.extend_from_slice(s.as_bytes());
-            }
-            Self::Cairn(c) => out.extend_from_slice(c.as_bytes()),
-            Self::Shade { origin, value } => {
-                out.push(*origin);
-                out.extend_from_slice(value.as_bytes());
-            }
-            Self::Struct { name, fields } => {
-                put_len(out, name.len());
-                out.extend_from_slice(name.as_bytes());
-                put_len(out, fields.len());
-                for field in fields {
-                    field.encode_into(out);
+        let mut stack = vec![self];
+        while let Some(cur) = stack.pop() {
+            out.push(cur.tag());
+            match cur {
+                Self::Unit => {}
+                Self::Bool(b) => out.push(u8::from(*b)),
+                Self::Int(n) => out.extend_from_slice(&n.to_be_bytes()),
+                Self::Bytes(b) => {
+                    put_len(out, b.len());
+                    out.extend_from_slice(b);
                 }
+                Self::Str(s) => {
+                    put_len(out, s.len());
+                    out.extend_from_slice(s.as_bytes());
+                }
+                Self::Cairn(c) => out.extend_from_slice(c.as_bytes()),
+                Self::Shade { origin, value } => {
+                    out.push(*origin);
+                    out.extend_from_slice(value.as_bytes());
+                }
+                Self::Struct { name, fields } => {
+                    put_len(out, name.len());
+                    out.extend_from_slice(name.as_bytes());
+                    put_len(out, fields.len());
+                    for field in fields.iter().rev() {
+                        stack.push(field);
+                    }
+                }
+                Self::Array(items) => {
+                    put_len(out, items.len());
+                    for item in items.iter().rev() {
+                        stack.push(item);
+                    }
+                }
+                Self::Answer(answer) => match answer.as_ref() {
+                    AnswerOf::Given(value) => {
+                        out.push(0x00);
+                        stack.push(value);
+                    }
+                    AnswerOf::Refused(refusal) => {
+                        out.push(0x01);
+                        out.push(*refusal as u8);
+                    }
+                },
+                Self::Refusal(refusal) => out.push(*refusal as u8),
             }
-            Self::Array(items) => {
-                put_len(out, items.len());
-                for item in items {
-                    item.encode_into(out);
-                }
-            }
-            Self::Answer(answer) => match answer.as_ref() {
-                AnswerOf::Given(value) => {
-                    out.push(0x00);
-                    value.encode_into(out);
-                }
-                AnswerOf::Refused(refusal) => {
-                    out.push(0x01);
-                    out.push(*refusal as u8);
-                }
-            },
-            Self::Refusal(refusal) => out.push(*refusal as u8),
         }
     }
 }
@@ -103,10 +106,10 @@ struct Count(usize);
 
 impl Sink for Count {
     fn push(&mut self, _: u8) {
-        self.0 += 1;
+        self.0 = self.0.saturating_add(1);
     }
     fn extend_from_slice(&mut self, bytes: &[u8]) {
-        self.0 += bytes.len();
+        self.0 = self.0.saturating_add(bytes.len());
     }
 }
 
@@ -368,18 +371,24 @@ impl Reader<'_> {
         Ok(slice)
     }
 
+    fn take_array<const N: usize>(&mut self) -> Result<[u8; N], DecodeError> {
+        let slice = self.take(N)?;
+        let mut out = [0u8; N];
+        out.copy_from_slice(slice);
+        Ok(out)
+    }
+
     fn byte(&mut self) -> Result<u8, DecodeError> {
         Ok(self.take(1)?[0])
     }
 
     fn len(&mut self) -> Result<usize, DecodeError> {
-        let raw = u64::from_be_bytes(self.take(8)?.try_into().expect("took exactly eight"));
+        let raw = u64::from_be_bytes(self.take_array::<8>()?);
         usize::try_from(raw).map_err(|_| DecodeError::LengthOverflow(raw))
     }
 
     fn cairn(&mut self) -> Result<Cairn, DecodeError> {
-        let bytes: [u8; 32] = self.take(32)?.try_into().expect("took exactly thirty-two");
-        Ok(Cairn::from_bytes(bytes))
+        Ok(Cairn::from_bytes(self.take_array::<32>()?))
     }
 
     fn text(&mut self) -> Result<String, DecodeError> {
@@ -413,8 +422,8 @@ impl Reader<'_> {
 
     fn span(&mut self) -> Result<Span, DecodeError> {
         let source = self.cairn()?;
-        let start = u64::from_be_bytes(self.take(8)?.try_into().expect("took exactly eight"));
-        let end = u64::from_be_bytes(self.take(8)?.try_into().expect("took exactly eight"));
+        let start = u64::from_be_bytes(self.take_array::<8>()?);
+        let end = u64::from_be_bytes(self.take_array::<8>()?);
         if end < start {
             return Err(DecodeError::BackwardsSpan { start, end });
         }
@@ -489,10 +498,7 @@ impl Reader<'_> {
                 0x01 => Ok(Value::Bool(true)),
                 other => Err(DecodeError::BadBool(other)),
             },
-            tag::INT => {
-                let raw: [u8; 8] = self.take(8)?.try_into().expect("took exactly eight");
-                Ok(Value::Int(i64::from_be_bytes(raw)))
-            }
+            tag::INT => Ok(Value::Int(i64::from_be_bytes(self.take_array::<8>()?))),
             tag::BYTES => {
                 let n = self.len()?;
                 Ok(Value::Bytes(self.take(n)?.to_vec()))
@@ -1003,6 +1009,7 @@ mod node_tests {
     #[test]
     fn rejects_counts_the_input_cannot_carry() {
         let mut bytes = vec![tag::NODE, kind::TRACE];
+        bytes.extend_from_slice(c(b"residue").as_bytes());
         bytes.extend_from_slice(&u64::from(u32::MAX).to_be_bytes());
         assert!(matches!(decode_node(&bytes), Err(DecodeError::Truncated { .. })));
     }
@@ -1015,9 +1022,7 @@ mod node_tests {
     fn a_huge_cairn_count_does_not_overflow_its_own_error() {
         for kind_byte in [kind::APPLY, kind::TRACE] {
             let mut bytes = vec![tag::NODE, kind_byte];
-            if kind_byte == kind::APPLY {
-                bytes.extend_from_slice(c(b"f").as_bytes());
-            }
+            bytes.extend_from_slice(c(b"first").as_bytes());
             bytes.extend_from_slice(&u64::MAX.to_be_bytes());
             assert!(matches!(decode_node(&bytes), Err(DecodeError::Truncated { .. })));
         }

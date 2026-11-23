@@ -533,20 +533,19 @@ fn a_budget_that_binds_cuts_where_the_order_says() {
         "demand concat(must(descend disk { read(\"a\") }),\n\
          \x20             must(descend disk { read(\"b\") }));\n",
     );
-    let whole = bury(&unit, source(), 100_000).expect("buries").fuel_spent;
-    let mut found = Vec::new();
+    let full = bury(&unit, source(), 100_000).expect("buries");
+    let whole = full.fuel_spent;
+    assert!(whole > 1);
     for budget in 1..whole {
-        let Ok(r) = bury(&unit, source(), budget) else { continue };
-        found.push(r.holes.len());
+        let halt = bury(&unit, source(), budget).expect_err("budget below whole must halt");
+        assert_eq!(halt.kind, nether_bury::HaltKind::OutOfFuel { spent: budget });
     }
-    // Never `b` before `a`: the count only ever goes up, and it goes up in
-    // the order the reads are written.
-    assert!(found.windows(2).all(|w| w[0] <= w[1]), "{found:?}");
-    let first = bury(&unit, source(), whole - 1);
-    if let Ok(r) = first {
-        let Node::Hole { call, .. } = r.questions()[0] else { panic!("not a hole") };
-        assert_eq!(r.value(call.args[0]), Some(&Value::Str("a".into())));
-    }
+    let exact = bury(&unit, source(), whole).expect("exact budget succeeds");
+    assert_eq!(exact.holes.len(), 2);
+    let Node::Hole { call: first_call, .. } = exact.questions()[0] else { panic!("not a hole") };
+    let Node::Hole { call: second_call, .. } = exact.questions()[1] else { panic!("not a hole") };
+    assert_eq!(exact.value(first_call.args[0]), Some(&Value::Str("a".into())));
+    assert_eq!(exact.value(second_call.args[0]), Some(&Value::Str("b".into())));
 }
 
 /// §7.3.1: one entry per question left open, which is not one entry per node.

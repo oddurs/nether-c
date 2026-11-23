@@ -488,3 +488,161 @@ fn source_cairn() -> Cairn {
 fn bury(unit: &Unit, fuel: u64) -> Result<Residue, Halt> {
     nether_bury::bury(unit, source_cairn(), fuel)
 }
+
+fn parse_and_check(src: &str) -> Unit {
+    let parsed = nether_syntax::parse(src.as_bytes()).expect("parse succeeds");
+    let unit = nether_syntax::lower(&parsed).expect("lower succeeds");
+    let faults = check(&unit);
+    assert!(faults.is_empty(), "check faults: {faults:?}");
+    unit
+}
+
+fn bury_source(src: &str, fuel: u64) -> Result<Residue, Halt> {
+    let unit = parse_and_check(src);
+    bury(&unit, fuel)
+}
+
+#[test]
+fn unroll_rolls_back_deposits_when_loop_starves() {
+    // Iteration 0 deposits `42;` then starves on `read("a")`, so `unroll` must
+    // roll back the speculative deposit instead of leaking it into `res.deposits`.
+    let src = r#"
+demand {
+    I64 i = 0;
+    while (i < 1000) {
+        42;
+        descend disk {
+            if (len(must(read("a"))) > 0) {
+                i = i + 1;
+            }
+        }
+    }
+    i
+};
+"#;
+    let unit = parse_and_check(src);
+    let res = bury(&unit, 10_000).expect("buries");
+    assert_eq!(res.deposits.len(), 0, "abandoned unroll must not leak deposits");
+    assert!(
+        matches!(res.demands[0].kind, ExprKind::Block(_) | ExprKind::Loop { .. }),
+        "expected residual loop/block, got {:?}",
+        res.demands[0].kind
+    );
+    let faults = check(&res.as_unit(&unit));
+    assert!(
+        faults.is_empty(),
+        "residue faults: {faults:?}\n{}",
+        nether_syntax::print(&res.as_unit(&unit))
+    );
+}
+
+#[test]
+fn early_return_short_circuits_enclosing_binary_call_and_assign() {
+    let src = r"
+I64 id(I64 x) { x }
+I64 bin_case() {
+    ({ return 7; 0 }) + (1 / 0)
+}
+I64 call_case() {
+    id(({ return 11; 0 })) + (1 / 0)
+}
+I64 assign_case() {
+    I64 x = 0;
+    x = ({ return 13; 1 });
+    1 / 0
+}
+demand bin_case() + call_case() + assign_case();
+";
+    let res = bury_source(src, 10_000).expect("early returns prevent division by zero");
+    assert_eq!(res.demands[0].kind, ExprKind::Literal(Literal::Int(31)));
+}
+
+#[test]
+fn opaque_and_seal_preserve_local_mutations_and_reduced_operands() {
+    let src = r"
+demand {
+    I64 x = 1;
+    x = 2;
+    opaque x
+};
+";
+    let unit = parse_and_check(src);
+    let res = bury(&unit, 10_000).expect("buries");
+    let residue_unit = res.as_unit(&unit);
+    assert!(check(&residue_unit).is_empty());
+    let printed = nether_syntax::print(&residue_unit);
+    assert!(
+        printed.contains('2'),
+        "opaque must settle mutated local binding before leaving it residual: {printed}"
+    );
+    assert!(
+        !printed.contains("I64 x = 1;\n    opaque x"),
+        "opaque must not lose the update x = 2: {printed}"
+    );
+
+    // Seal on an expression with a pure subexpression must rebuild with the
+    // reduced subexpression instead of cloning the unreduced operand.
+    let seal_src = r#"
+demand descend disk {
+    seal concat(b"a", concat(b"b", must(read("p"))))
+};
+"#;
+    let seal_unit = parse_and_check(seal_src);
+    let seal_res = bury(&seal_unit, 10_000).expect("buries");
+    assert!(check(&seal_res.as_unit(&seal_unit)).is_empty());
+}
+
+#[test]
+fn shifts_at_or_above_64_collapse_cleanly() {
+    let left = bury_source("demand 1 << 64;", 1_000).expect_err("<< 64 collapses");
+    assert!(matches!(left.kind, HaltKind::Collapsed(_)));
+    let right = bury_source("demand 1 >> 64;", 1_000).expect_err(">> 64 collapses");
+    assert!(matches!(right.kind, HaltKind::Collapsed(_)));
+    let neg = bury_source("demand 1 << -1;", 1_000).expect_err("<< -1 collapses");
+    assert!(matches!(neg.kind, HaltKind::Collapsed(_)));
+}
+
+#[test]
+fn cairn_of_hex_and_answer_equality_fold_at_burial() {
+    let src = r#"
+Answer<I64> r1 = refused(absent);
+Answer<I64> r2 = refused(absent);
+Bool same_given = answered(42) == answered(42);
+Bool diff_given = answered(42) != answered(43);
+Bool same_refusal = r1 == r2;
+Str h = hex(cairn_of(b"hello"));
+demand same_given && diff_given && same_refusal && len(raw(h)) == 64;
+"#;
+    let res = bury_source(src, 10_000).expect("buries");
+    assert_eq!(res.demands[0].kind, ExprKind::Literal(Literal::Bool(true)));
+}
+
+#[test]
+fn cyclic_globals_collapse_cleanly_and_global_starve_does_not_poison_caller() {
+    // Two globals referencing each other must collapse instead of recursing forever.
+    let cyclic = Unit {
+        globals: vec![
+            GlobalDef {
+                name: "a".into(),
+                ty: Type::Int,
+                asserted: None,
+                value: pure(ExprKind::Global(nether_core::GlobalId(1)), Type::Int),
+                span: Span::default(),
+            },
+            GlobalDef {
+                name: "b".into(),
+                ty: Type::Int,
+                asserted: None,
+                value: pure(ExprKind::Global(nether_core::GlobalId(0)), Type::Int),
+                span: Span::default(),
+            },
+        ],
+        demands: vec![Demand {
+            value: pure(ExprKind::Global(nether_core::GlobalId(0)), Type::Int),
+            span: Span::default(),
+        }],
+        ..Unit::default()
+    };
+    let err = bury(&cyclic, 1_000).expect_err("cyclic globals must collapse");
+    assert!(matches!(err.kind, HaltKind::Collapsed(_)));
+}
