@@ -507,3 +507,71 @@ fn lower_and_check_agree_on_assign_call_order_compound_assign_and_subexpr_pc() {
         assert!(lower(&ast).is_err(), "expected lowering error for: {bad}");
     }
 }
+
+#[test]
+fn pass3_orpheus_container_and_struct_bypasses_and_syntax_hardening() {
+    // 1. Nominal struct, container, and empty-body Shade bypasses must fail check().
+    for bypass in [
+        r#"
+struct S8 { Shade<Bytes@8> s; };
+struct S0 { Shade<Bytes@0> s; };
+Bytes@0 steal() {
+    S8 a;
+    a.s = descend unrecorded { shade must(call_foreign("x", b"")) };
+    S0 b = a;
+    look b.s
+}
+"#,
+        r#"
+Bytes@0 steal() {
+    Answer<Shade<Bytes@8>> a = answered(descend unrecorded { shade must(call_foreign("x", b"")) });
+    Shade<Bytes@0>[] arr = a;
+    look arr[0]
+}
+"#,
+        "Shade<Bytes@0> f() {}\nBytes@0 steal() { look f() }\n",
+        "typedef Shade<Bytes@5> NetShade;\nBytes@0 f() { NetShade s = shade b\"pure\"; look s }\n",
+        "typedef I64@3 DeepInt;\nU0 f() { DeepInt x = 1; }\n",
+    ] {
+        let unit = ir(bypass);
+        assert!(!check(&unit).is_empty(), "bypass unexpectedly checked clean:\n{bypass}");
+    }
+
+    // 2. Indexed compound assignment prints valid re-parseable source (§6.5).
+    let comp = ir("U0 f() { I64[2] arr; I64 i = 0; arr[{ i = i + 1; 0 }] += 1; }\n");
+    clean(&comp);
+    let printed = nether_syntax::print(&comp);
+    let reparsed = parse(printed.as_bytes()).expect("printed compound assignment must re-parse");
+    let relowered = lower(&reparsed).expect("printed compound assignment must re-lower");
+    clean(&relowered);
+
+    // 3. Wrapped local Shade with omitted origin infers origin cleanly, and prelude type shadowing works (§3.4).
+    for ok in [
+        "U0 f() { Answer<Shade<Bytes>> a = answered(descend disk { shade must(read(\"f\")) }); }\n",
+        "struct I64 { Bytes b; };\nBytes f(I64 x) { x.b }\n",
+    ] {
+        clean(&ir(ok));
+    }
+
+    // 4. Call freezes earlier local argument before later argument mutates it (§5.4).
+    let arg_freeze = ir("U0 f(I64 a, U0 b) {}\nU0 g() { I64 n = 1; f(n, { n = 2; }); }\n");
+    assert!(
+        check(&arg_freeze).iter().any(|f| matches!(f.kind, nether_core::FaultKind::Frozen { .. })),
+        "later call argument must not mutate earlier passed local"
+    );
+
+    // 5. Received shades without `@d` (§4.3), bare polymorphic prelude names, and wrong arity fail lowering.
+    for bad_lower in [
+        "struct H { Shade<Bytes> s; };\n",
+        "Cairn keep(Shade<Bytes> s) { seal s }\n",
+        "Shade<Bytes> make() { shade b\"a\" }\n",
+        "U0 f() { ({ refused })(1, 2, 3); }\n",
+        "U0 f() { ({ must })(123); }\n",
+        "U0 f() { descend disk { read(); } }\n",
+        "I64 f() { min(1) }\n",
+    ] {
+        let ast =
+            parse(bad_lower.as_bytes()).unwrap_or_else(|e| panic!("parse: {bad_lower}\n{e:?}"));
+        assert!(lower(&ast).is_err(), "expected lowering error for: {bad_lower}");
+    }
+}

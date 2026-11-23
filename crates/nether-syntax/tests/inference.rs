@@ -69,7 +69,8 @@ fn samples() -> Vec<(String, String)> {
     out
 }
 
-/// Delete every depth annotation, in both the forms §3.5 allows.
+/// Delete every optional depth annotation, in both the forms §3.5 allows,
+/// while preserving required `@d` origin parameters inside `Shade<T@d>` (§4.3).
 fn without_annotations(src: &str) -> String {
     let mut out = String::with_capacity(src.len());
     let mut rest = src;
@@ -79,7 +80,13 @@ fn without_annotations(src: &str) -> String {
         let digits = after.trim_start();
         let eaten = after.len() - digits.len();
         match digits.chars().next() {
-            Some(d) if d.is_ascii_digit() => rest = &after[eaten + 1..],
+            Some(d) if d.is_ascii_digit() => {
+                let tail = &after[eaten + 1..];
+                if tail.trim_start().starts_with('>') {
+                    out.push_str(&rest[at..=(at + 1 + eaten)]);
+                }
+                rest = tail;
+            }
             _ => {
                 out.push('@');
                 rest = after;
