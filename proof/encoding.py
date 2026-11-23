@@ -210,7 +210,12 @@ def prove_value_decode_encode() -> Theorem:
             trans(conj_elim_r(ih[0]), conj_elim_r(ih[1])),
         ),
     }
-    return rule_induction(VAL_ROUNDTRIP, _val_rt_prop, cases)
+    return rule_induction(
+        VAL_ROUNDTRIP,
+        ("_val", "_rem", "_res_val", "_res_rem"),
+        conj(eq(var("_res_val"), var("_val")), eq(var("_res_rem"), var("_rem"))),
+        cases,
+    )
 
 
 # ── 2. Prefix-free stream round-trip over all 6 Node kinds ───────────────────
@@ -305,7 +310,12 @@ def prove_node_decode_encode() -> Theorem:
                     )
                 )
             )
-    return rule_induction(NODE_ROUNDTRIP, _node_rt_prop, cases)
+    return rule_induction(
+        NODE_ROUNDTRIP,
+        ("_nd", "_rem", "_res"),
+        eq(var("_res"), pair(var("_nd"), var("_rem"))),
+        cases,
+    )
 
 
 # ── 3. Pure LCF equational proof: left-invertible encodings are injective ────
@@ -414,11 +424,13 @@ def py_encode_value(val: Tuple[Any, ...]) -> bytes:
         raw = val[1].encode("utf-8")
         return b"\x04" + _u64_be(len(raw)) + raw
     if kind == "Cairn":
-        assert len(val[1]) == 32
+        if len(val[1]) != 32:
+            raise ProofFault("Cairn must be 32 bytes")
         return b"\x05" + val[1]
     if kind == "Shade":
         origin, cairn_bytes = val[1], val[2]
-        assert len(cairn_bytes) == 32
+        if len(cairn_bytes) != 32:
+            raise ProofFault("Shade cairn must be 32 bytes")
         return b"\x06" + bytes([origin]) + cairn_bytes
     if kind == "AnswerGiven":
         return b"\x07\x00" + py_encode_value(val[1])
@@ -562,12 +574,163 @@ def py_decode_value(buf: bytes) -> Tuple[Any, ...]:
     return val
 
 
+def py_encode_call(func: str, args: Sequence[bytes]) -> bytes:
+    name_bytes = func.encode("utf-8")
+    return _u64_be(len(name_bytes)) + name_bytes + _u64_be(len(args)) + b"".join(args)
+
+
+def py_encode_span(source: bytes, start: int, end: int) -> bytes:
+    return source + _u64_be(start) + _u64_be(end)
+
+
+def py_encode_node(node: Tuple[Any, ...]) -> bytes:
+    kind = node[0]
+    if kind == "Literal":
+        return b"\x20\x00" + py_encode_value(node[1])
+    if kind == "Apply":
+        fn_c, args, res = node[1], node[2], node[3]
+        return b"\x20\x01" + fn_c + _u64_be(len(args)) + b"".join(args) + res
+    if kind == "Hole":
+        call_val, stratum, span_val = node[1], node[2], node[3]
+        return b"\x20\x02" + py_encode_call(*call_val) + bytes([stratum]) + py_encode_span(*span_val)
+    if kind == "Deposit":
+        val_c, span_val = node[1], node[2]
+        return b"\x20\x03" + val_c + py_encode_span(*span_val)
+    if kind == "Witness":
+        stratum, call_val, ans_c, span_val = node[1], node[2], node[3], node[4]
+        return b"\x20\x04" + bytes([stratum]) + py_encode_call(*call_val) + ans_c + py_encode_span(*span_val)
+    if kind == "Trace":
+        res_c, holes, wits, deps, src_c, depth, unrec = node[1:]
+        return (
+            b"\x20\x05"
+            + res_c
+            + _u64_be(len(holes)) + b"".join(holes)
+            + _u64_be(len(wits)) + b"".join(wits)
+            + _u64_be(len(deps)) + b"".join(deps)
+            + src_c
+            + bytes([depth])
+            + (b"\x01" if unrec else b"\x00")
+        )
+    raise ValueError(f"unknown node kind {kind}")
+
+
+def _take_cairn(buf: bytes, pos: int) -> Tuple[bytes, int]:
+    if pos + 32 > len(buf):
+        raise ValueError("Truncated")
+    return buf[pos : pos + 32], pos + 32
+
+
+def _take_cairns(buf: bytes, pos: int) -> Tuple[Tuple[bytes, ...], int]:
+    if pos + 8 > len(buf):
+        raise ValueError("Truncated")
+    (n_items,) = struct.unpack(">Q", buf[pos : pos + 8])
+    pos += 8
+    if pos + n_items * 32 > len(buf):
+        raise ValueError("Truncated")
+    out = []
+    for _ in range(n_items):
+        c_bytes, pos = _take_cairn(buf, pos)
+        out.append(c_bytes)
+    return tuple(out), pos
+
+
+def _take_call(buf: bytes, pos: int) -> Tuple[Tuple[str, Tuple[bytes, ...]], int]:
+    if pos + 8 > len(buf):
+        raise ValueError("Truncated")
+    (name_ln,) = struct.unpack(">Q", buf[pos : pos + 8])
+    pos += 8
+    if name_ln == 0:
+        raise ValueError("EmptyCallName")
+    if pos + name_ln > len(buf):
+        raise ValueError("Truncated")
+    func = buf[pos : pos + name_ln].decode("utf-8")
+    pos += name_ln
+    args, pos = _take_cairns(buf, pos)
+    return (func, args), pos
+
+
+def _take_span(buf: bytes, pos: int) -> Tuple[Tuple[bytes, int, int], int]:
+    src, pos = _take_cairn(buf, pos)
+    if pos + 16 > len(buf):
+        raise ValueError("Truncated")
+    start, end = struct.unpack(">QQ", buf[pos : pos + 16])
+    if start > end:
+        raise ValueError("BadSpan")
+    return (src, start, end), pos + 16
+
+
+def py_decode_node_stream(buf: bytes, pos: int = 0) -> Tuple[Tuple[Any, ...], int]:
+    if pos + 2 > len(buf):
+        raise ValueError("Truncated")
+    if buf[pos] != NODE_TAG:
+        raise ValueError("WrongShape")
+    kind = buf[pos + 1]
+    pos += 2
+    if kind == 0x00:
+        val, pos = py_decode_value_stream(buf, pos, 0)
+        return (("Literal", val), pos)
+    if kind == 0x01:
+        fn_c, pos = _take_cairn(buf, pos)
+        args, pos = _take_cairns(buf, pos)
+        res, pos = _take_cairn(buf, pos)
+        return (("Apply", fn_c, args, res), pos)
+    if kind == 0x02:
+        call_val, pos = _take_call(buf, pos)
+        if pos >= len(buf):
+            raise ValueError("Truncated")
+        stratum = buf[pos]
+        if stratum > MAX_STRATUM:
+            raise ValueError("NoSuchStratum")
+        span_val, pos = _take_span(buf, pos + 1)
+        return (("Hole", call_val, stratum, span_val), pos)
+    if kind == 0x03:
+        val_c, pos = _take_cairn(buf, pos)
+        span_val, pos = _take_span(buf, pos)
+        return (("Deposit", val_c, span_val), pos)
+    if kind == 0x04:
+        if pos >= len(buf):
+            raise ValueError("Truncated")
+        stratum = buf[pos]
+        if stratum > MAX_STRATUM:
+            raise ValueError("NoSuchStratum")
+        call_val, pos = _take_call(buf, pos + 1)
+        ans_c, pos = _take_cairn(buf, pos)
+        span_val, pos = _take_span(buf, pos)
+        return (("Witness", stratum, call_val, ans_c, span_val), pos)
+    if kind == 0x05:
+        res_c, pos = _take_cairn(buf, pos)
+        holes, pos = _take_cairns(buf, pos)
+        wits, pos = _take_cairns(buf, pos)
+        deps, pos = _take_cairns(buf, pos)
+        src_c, pos = _take_cairn(buf, pos)
+        if pos + 2 > len(buf):
+            raise ValueError("Truncated")
+        depth = buf[pos]
+        if depth > MAX_STRATUM:
+            raise ValueError("NoSuchStratum")
+        mark_b = buf[pos + 1]
+        if mark_b not in (0, 1):
+            raise ValueError("BadBool")
+        return (("Trace", res_c, holes, wits, deps, src_c, depth, bool(mark_b)), pos + 2)
+    raise ValueError("UnknownNodeKind")
+
+
+def py_decode_node(buf: bytes) -> Tuple[Any, ...]:
+    node, pos = py_decode_node_stream(buf, 0)
+    if pos != len(buf):
+        raise ValueError("TrailingBytes")
+    return node
+
+
 def verify_codec_fixtures_and_exclusions() -> int:
-    """Verify byte-exact fixtures for all 11 Value tags, Node framing, domain
-    separation, and rejection of the §7.1.1 / §7.3.1 invalid states."""
-    assert VALUE_TAGS.isdisjoint({NODE_TAG}), "Value and Node tag sets must be disjoint"
+    """Verify byte-exact fixtures for all 11 Value tags, all 6 Node kinds,
+    domain separation, and rejection of the §7.1.1 / §7.3.1 invalid states."""
+    if not VALUE_TAGS.isdisjoint({NODE_TAG}):
+        raise ProofFault("Value and Node tag sets must be disjoint")
 
     c0 = bytes(range(32))
+    c1 = bytes(range(32, 64))
+    c2 = bytes(range(64, 96))
     fixtures: Sequence[Tuple[Tuple[Any, ...], bytes]] = (
         (("Unit",), b"\x00"),
         (("Bool", False), b"\x01\x00"),
@@ -599,22 +762,50 @@ def verify_codec_fixtures_and_exclusions() -> int:
             raise ProofFault(f"fixture mismatch for {val}: {actual!r} != {expected!r}")
         if py_decode_value(actual) != val:
             raise ProofFault(f"round-trip mismatch for {val}")
-        # Also verify stream framing with arbitrary trailing bytes
         with_tail = actual + b"\xfe\xed"
         dec_val, pos = py_decode_value_stream(with_tail, 0, 0)
         if dec_val != val or with_tail[pos:] != b"\xfe\xed":
             raise ProofFault(f"prefix-free stream framing failed for {val}")
         seen_bytes.add(actual)
-    if len(seen_bytes) != len(fixtures):
+
+    node_fixtures: Sequence[Tuple[Tuple[Any, ...], bytes]] = (
+        (("Literal", ("Int", 7)), b"\x20\x00\x02\x00\x00\x00\x00\x00\x00\x00\x07"),
+        (
+            ("Apply", c0, (c1,), c2),
+            b"\x20\x01" + c0 + _u64_be(1) + c1 + c2,
+        ),
+        (
+            ("Hole", ("read", (c1,)), 3, (c0, 1, 5)),
+            b"\x20\x02" + _u64_be(4) + b"read" + _u64_be(1) + c1 + b"\x03" + c0 + _u64_be(1) + _u64_be(5),
+        ),
+        (
+            ("Deposit", c1, (c0, 0, 4)),
+            b"\x20\x03" + c1 + c0 + _u64_be(0) + _u64_be(4),
+        ),
+        (
+            ("Witness", 3, ("read", (c1,)), c2, (c0, 1, 5)),
+            b"\x20\x04\x03" + _u64_be(4) + b"read" + _u64_be(1) + c1 + c2 + c0 + _u64_be(1) + _u64_be(5),
+        ),
+        (
+            ("Trace", c0, (c1,), (), (c2,), c0, 3, False),
+            b"\x20\x05" + c0 + _u64_be(1) + c1 + _u64_be(0) + _u64_be(1) + c2 + c0 + b"\x03\x00",
+        ),
+    )
+    for node, expected in node_fixtures:
+        actual = py_encode_node(node)
+        if actual != expected:
+            raise ProofFault(f"node fixture mismatch for {node}: {actual!r} != {expected!r}")
+        if py_decode_node(actual) != node:
+            raise ProofFault(f"node round-trip mismatch for {node}")
+        with_tail = actual + b"\xfe\xed"
+        dec_node, pos = py_decode_node_stream(with_tail, 0)
+        if dec_node != node or with_tail[pos:] != b"\xfe\xed":
+            raise ProofFault(f"node prefix-free framing failed for {node}")
+        seen_bytes.add(actual)
+
+    if len(seen_bytes) != len(fixtures) + len(node_fixtures):
         raise ProofFault("distinct fixtures produced colliding encodings")
 
-    # Verify rejection of excluded invalid in-memory states (§7.1.1):
-    # - Shade origin > 8
-    # - Empty struct name
-    # - Refusal code > 5
-    # - Bool byte > 1
-    # - Answer discriminant > 1
-    # - Node tag 0x20 fed to Value decoder
     for bad_bytes, expected_err in (
         (b"\x06\x09" + c0, "NoSuchStratum"),
         (b"\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", "EmptyStructName"),
@@ -632,7 +823,22 @@ def verify_codec_fixtures_and_exclusions() -> int:
         else:
             raise ProofFault(f"decoder accepted invalid bytes for {expected_err}")
 
-    return len(fixtures)
+    for bad_node, expected_err in (
+        (b"\x00\x00", "WrongShape"),
+        (b"\x20\x02" + _u64_be(0) + _u64_be(0) + b"\x00" + c0 + _u64_be(0) + _u64_be(0), "EmptyCallName"),
+        (b"\x20\x03" + c1 + c0 + _u64_be(5) + _u64_be(1), "BadSpan"),
+        (b"\x20\x05" + c0 + _u64_be(0) + _u64_be(0) + _u64_be(0) + c0 + b"\x09\x00", "NoSuchStratum"),
+        (b"\x20\x05" + c0 + _u64_be(0) + _u64_be(0) + _u64_be(0) + c0 + b"\x00\x02", "BadBool"),
+    ):
+        try:
+            py_decode_node(bad_node)
+        except ValueError as exc:
+            if str(exc) != expected_err:
+                raise ProofFault(f"expected {expected_err}, got {exc}") from exc
+        else:
+            raise ProofFault(f"node decoder accepted invalid bytes for {expected_err}")
+
+    return len(fixtures) + len(node_fixtures)
 
 
 if __name__ == "__main__":
