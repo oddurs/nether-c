@@ -1,4 +1,4 @@
-import { Graph, Navigation, PAGE_SIZE, hex, preview, references, short, sourceExcerpt } from "./graph.js";
+import { Graph, Navigation, PAGE_SIZE, hex, preview, references, short, sourceExcerpt, utf8Prefix } from "./graph.js";
 
 const $ = (id) => document.getElementById(id);
 const element = (tag, text, className) => {
@@ -66,8 +66,9 @@ function inspect(object) {
     note(`${object.data.length} bytes. Preview limited to the first 2,048 bytes.`);
     const body = element("pre");
     const sample = object.data.subarray(0, 2048);
+    const textSample = utf8Prefix(object.data, 2048);
     const showText = () => {
-      try { body.textContent = new TextDecoder("utf-8", { fatal: true }).decode(sample); }
+      try { body.textContent = new TextDecoder("utf-8", { fatal: true }).decode(textSample); }
       catch { body.textContent = "This preview is not valid UTF-8. Use hex to inspect the exact bytes."; }
     };
     detail.append(button("Text", showText), button("Hex", () => {
@@ -154,6 +155,7 @@ function bury() {
     } catch (e) { failed(e.message); }
   };
   active.onerror = () => { if (worker === active) failed("The burial worker stopped. Retry or reduce the source."); };
+  active.onmessageerror = () => { if (worker === active) failed("The burial worker returned an unreadable message."); };
   timer = setTimeout(() => { if (worker === active) failed("Burial exceeded the browser's 30-second limit. Reduce the source and retry."); }, 30000);
   active.postMessage({ source: $("source").value });
 }
@@ -161,10 +163,12 @@ function bury() {
 $("bury").addEventListener("click", bury);
 $("cancel").addEventListener("click", () => { stop(); $("state").textContent = graph ? "Cancelled. The previous trace remains below." : "Cancelled. Bury source to try again."; });
 for (const [id, delta] of [["back", -1], ["forward", 1]]) $(id).addEventListener("click", () => {
+  if (!navigation) return;
   navigation.move(delta); shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE }; render();
 });
-$("home").addEventListener("click", () => visit(graph.root));
+$("home").addEventListener("click", () => { if (graph) visit(graph.root); });
 $("copy").addEventListener("click", async () => {
+  if (!navigation) return;
   try { await navigator.clipboard.writeText(navigation.current); $("state").textContent = "Full cairn copied."; }
   catch { $("state").textContent = "Clipboard unavailable. Select and copy the full cairn shown below."; }
 });

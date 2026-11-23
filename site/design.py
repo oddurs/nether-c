@@ -14,7 +14,7 @@ a ramp built this way looks designed and one picked out of a box does not.
 Colour is role-based: indigo rooms, rose signals, and a violet-to-pink depth
 ramp. The light palette is rose porcelain and lavender paper with plum ink,
 not an inversion. Both palettes feed CSS, GIF colour tables and the favicon.
-Space follows a twelve-pixel grid; type follows an eight-pixel drawing grid.
+Space follows a ten-pixel grid; type follows an eight-pixel drawing grid.
 """
 
 from __future__ import annotations
@@ -134,7 +134,7 @@ def luminance(hex_colour: str) -> float:
     for i in (0, 2, 4):
         channel = int(raw[i:i + 2], 16) / 255
         out.append(
-            channel / 12.92 if channel <= 0.03928 else ((channel + 0.055) / 1.055) ** 2.4
+            channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
         )
     return 0.2126 * out[0] + 0.7152 * out[1] + 0.0722 * out[2]
 
@@ -194,6 +194,10 @@ def icon() -> str:
 
 
 def main() -> int:
+    unknown = [a for a in sys.argv[1:] if a not in ("--css", "--check")]
+    if unknown or ("--check" in sys.argv and "--css" not in sys.argv):
+        print("usage: python3 site/design.py [--css [--check]]", file=sys.stderr)
+        return 2
     if "--css" in sys.argv:
         stale = []
         for path, made in ((TOKENS, tokens()), (TOKENS.with_name("icon.svg"), icon())):

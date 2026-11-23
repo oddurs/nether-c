@@ -248,7 +248,7 @@ Buried. The lexer, the recursive descent parser, lowering, depth inference, diag
 
 ## necropolis — The Necropolis
 
-`#########·` 85% · 23 of 27 done · due 2027-07-15
+`#########·` 86% · 24 of 28 done · due 2027-07-15
 
 An inspectable local trace, followed by a provenance walk and capability/answer interaction. The basic browser is delivered; 0075 is starved on an unfamiliar-person observation.
 
@@ -287,6 +287,7 @@ An inspectable local trace, followed by a provenance walk and capability/answer 
 - [x] [`0244`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0244-navigate-trace-objects-and-inspect-their-recorded-contents.md) Navigate trace objects and inspect their recorded contents <sup>feature · p2 · 0</sup>
 - [x] [`0245`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0245-verify-and-finish-the-trace-browser-interface.md) Verify and finish the trace browser interface <sup>feature · p2 · 0</sup>
 - [x] [`0267`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0267-the-wasm-budget-has-513-bytes-left-and-nobody-said-so.md) The wasm budget has 513 bytes left, and nobody said so <sup>chore · p1 · 0</sup>
+- [x] [`0294`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0294-fix-site-generator-escaping-lamp-graphic-font-lookup-and-necropolis-utf-8.md) Fix site generator escaping, lamp graphic, font lookup, and Necropolis UTF-8 <sup>bug · p1 · 0</sup>
 
 ## face — The Face
 
