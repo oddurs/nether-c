@@ -11,6 +11,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
 
 # `scripts/notes` has no extension, so it is loaded by path rather than
@@ -41,6 +42,10 @@ Preamble that is not a release.
 
 - A thing that was wrong.
 
+```markdown
+## Not a release heading
+```
+
 ## [0.1.0] - 2026-12-01
 
 ### Added
@@ -62,6 +67,10 @@ CASES = [
      "v0.2.0", lambda r: "Something still descending." not in r),
     ("a version with no section is refused",
      "v9.9.9", lambda r: r is None),
+    ("fenced headings inside notes do not truncate the section",
+     "v0.2.0", lambda r: r is not None and "## Not a release heading" in r),
+    ("repeated leading v is not stripped",
+     "vv0.2.0", lambda r: r is None),
 ]
 
 
@@ -81,6 +90,10 @@ def main() -> int:
     # would happily find that section, and the guard is one line above it.
     if notes(SAMPLE, "Unreleased") is None:
         bad.append(("the sample has an Unreleased section to guard against", None))
+    if _notes.main(["scripts/notes", "Unreleased"]) != 1:
+        bad.append(("CLI refuses Unreleased", None))
+    if _notes.main(["scripts/notes", "v9.9.9"]) != 1:
+        bad.append(("CLI refuses missing version", None))
 
     if bad:
         print("\nnotes: the release notes would have been wrong:", file=sys.stderr)

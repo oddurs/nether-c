@@ -19,8 +19,11 @@ command -v cargo   >/dev/null 2>&1 || echo "setup: cargo not found; see rust-too
 # The Necropolis ships the core to a browser, so `scripts/task check` builds
 # for it. One target, installed once.
 if command -v rustup >/dev/null 2>&1; then
-  rustup target add wasm32-unknown-unknown >/dev/null 2>&1 \
-    && echo "setup: wasm32-unknown-unknown installed"
+  if rustup target add wasm32-unknown-unknown >/dev/null 2>&1; then
+    echo "setup: wasm32-unknown-unknown installed"
+  else
+    echo "setup: could not add wasm32-unknown-unknown target; run 'rustup target add wasm32-unknown-unknown' when online" >&2
+  fi
 fi
 command -v python3 >/dev/null 2>&1 || echo "setup: python3 not found; site/bake needs it"
 command -v node >/dev/null 2>&1 || echo "setup: install Node 22+ for the browser tests"

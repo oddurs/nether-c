@@ -38,7 +38,7 @@ TRAILER = re.compile(
 
 # And the stock phrases, which name nothing and still do it.
 PHRASE = re.compile(
-    r"generated with|\bAI\b|\U0001F916"
+    r"(?i:generated with)|\bAI\b|\U0001F916"
 )
 
 # dependabot opens pull requests and GitHub writes its trailer. That is a bot
@@ -72,7 +72,8 @@ def files() -> list[Path]:
 def main() -> int:
     bad: list[tuple[str, list[str]]] = []
 
-    for path in files():
+    scanned = files()
+    for path in scanned:
         rel = path.relative_to(ROOT)
         # The ban's own statement and its enforcement have to name what they
         # ban. Nothing else may.
@@ -88,16 +89,22 @@ def main() -> int:
 
     # And the commits on this branch, which is what a reviewer is being asked
     # to take.
-    base = subprocess.run(
+    base_proc = subprocess.run(
         ["git", "merge-base", "HEAD", "origin/main"],
         cwd=ROOT, capture_output=True, text=True,
-    ).stdout.strip()
-    span = f"{base}..HEAD" if base else "HEAD~20..HEAD"
-    log = subprocess.run(
-        ["git", "log", "--format=%H%n%an <%ae>%n%B%n--%-%-", span],
-        cwd=ROOT, capture_output=True, text=True,
-    ).stdout
-    if hits := offences(log, trailers=True):
+    )
+    base = base_proc.stdout.strip() if base_proc.returncode == 0 else ""
+    if base:
+        log_cmd = ["git", "log", "--format=%H%n%an <%ae>%n%B%n--%-%-", f"{base}..HEAD"]
+        span = f"{base}..HEAD"
+    else:
+        log_cmd = ["git", "log", "-n", "20", "--format=%H%n%an <%ae>%n%B%n--%-%-", "HEAD"]
+        span = "HEAD (last 20)"
+    log_proc = subprocess.run(log_cmd, cwd=ROOT, capture_output=True, text=True)
+    if log_proc.returncode != 0:
+        print(f"attribution: git log failed for {span}: {log_proc.stderr.strip()}", file=sys.stderr)
+        return 1
+    if hits := offences(log_proc.stdout, trailers=True):
         bad.append((f"commits in {span}", hits))
 
     for where, hits in bad:
@@ -110,7 +117,7 @@ def main() -> int:
         print("The work is published under the owner's name. AGENTS.md, NEVER.", file=sys.stderr)
         return 1
 
-    print(f"attribution: {len(files())} file(s) and this branch's commits name no tool")
+    print(f"attribution: {len(scanned)} file(s) and this branch's commits name no tool")
     return 0
 
 

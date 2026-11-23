@@ -418,7 +418,7 @@ A durable, inspectable store with measured retention costs. Export and integrity
 
 ## warden — The Warden
 
-`#########·` 86% · 6 of 7 done · due 2028-07-15
+`#########·` 88% · 7 of 8 done · due 2028-07-15
 
 A stated trust model and tested defenses across current entrypoints, not just the decoder.
 
@@ -434,6 +434,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 - [x] [`0219`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0219-a-bound-on-every-path-that-reads-a-stranger-s-bytes.md) A bound on every path that reads a stranger's bytes <sup>chore · p1 · 0</sup>
 - [x] [`0220`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0220-a-trace-s-claims-are-checkable-by-somebody-who-does-not-trust-it.md) A trace's claims are checkable by somebody who does not trust it <sup>feature · p1 · 1</sup>
 - [x] [`0279`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0279-a-residue-can-print-deeper-than-it-may-be-read.md) A residue can print deeper than it may be read <sup>bug · p1 · 0</sup>
+- [x] [`0293`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0293-harden-hooks-decay-counter-ci-workflows-and-test-gates.md) Harden hooks, decay counter, CI workflows, and test gates <sup>bug · p1 · 0</sup>
 
 ## assay — The Assay
 

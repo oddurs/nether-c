@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn a() { assert_eq!("}", "}"); }
     #[test]
-    fn b() {}
+    fn b<'a>(_x: &'a str) { let _ = r#"}"#; /* /* } */ */ }
     #[test]
     fn c() {}
 }
@@ -117,13 +117,16 @@ def main() -> int:
         # A ceiling that is not a number. Without a check the comparisons fail
         # and the script reports success, so an empty file turns the rule off
         # and says nothing.
-        for junk in ["", "\n", "not a number\n"]:
-            empty = tmp / f"empty{len(junk)}"
+        for idx, junk in enumerate(["", "\n", "not a number\n", "10 lines\n20\n"]):
+            empty = tmp / f"empty{idx}"
             empty.write_text(junk)
             r = run(src, empty)
             expect(f"a ceiling of {junk!r} FAILS", r.returncode == 1, r.stdout + r.stderr)
             expect("and says the core's size instead",
                    f"{actual} lines" in r.stderr, r.stderr)
+
+        r = run(tmp / "missing-dir", at)
+        expect("a missing source directory FAILS", r.returncode == 1, r.stdout + r.stderr)
 
         high = tmp / "high"
         high.write_text(f"{actual + 10}\n")

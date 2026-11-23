@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { access, mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve, sep } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -38,11 +39,12 @@ const chrome = spawn(binary, ["--headless=new", "--remote-debugging-pipe", "--no
   ...(process.env.CI || process.getuid?.() === 0 ? ["--no-sandbox"] : []), `--user-data-dir=${profile}`, "about:blank"],
   { stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"] });
 let serial = 0, buffer = "", session;
+const decoder = new StringDecoder("utf8");
 const pending = new Map(), exceptions = [], requests = [];
 let stderr = "";
 chrome.stderr.on("data", (b) => { stderr = (stderr + b).slice(-4000); });
 chrome.stdio[4].on("data", (chunk) => {
-  buffer += chunk.toString();
+  buffer += decoder.write(chunk);
   let end;
   while ((end = buffer.indexOf("\0")) >= 0) {
     const message = JSON.parse(buffer.slice(0, end)); buffer = buffer.slice(end + 1);
@@ -392,7 +394,11 @@ try {
 } finally {
   for (const { timer } of pending.values()) clearTimeout(timer);
   chrome.kill();
-  await new Promise((resolve) => { if (chrome.exitCode !== null) resolve(); else chrome.once("exit", resolve); });
+  await new Promise((resolve) => {
+    if (chrome.exitCode !== null) { resolve(); return; }
+    const killer = setTimeout(() => { chrome.kill("SIGKILL"); resolve(); }, 5000);
+    chrome.once("exit", () => { clearTimeout(killer); resolve(); });
+  });
   await new Promise((resolve) => server.close(resolve));
   // Chrome's helpers can finish profile writes after the parent exits.
   // Retry transient directory races, but still fail if cleanup cannot finish.

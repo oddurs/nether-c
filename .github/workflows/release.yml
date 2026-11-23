@@ -7,7 +7,7 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -19,9 +19,13 @@ jobs:
   # the failure behind `|| echo`, so the run went green whatever happened.
   check:
     name: check
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Install the pinned toolchain
         run: |
@@ -29,15 +33,15 @@ jobs:
           rustup component add rustfmt clippy
           rustup target add wasm32-unknown-unknown
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
 
-      # From the repository it is published from, pinned, and with no `||`.
+      # From the repository it is published from, pinned to a commit, and with no `||`.
       - name: Install cairn
-        run: cargo install --locked --git https://github.com/oddurs/cairn --tag v1.0.0-alpha.1 cairn-md
+        run: cargo install --locked --git https://github.com/oddurs/cairn --rev 68ac1549383870aa57548da65ed25119895bb201 cairn-md
 
       - name: scripts/task check
         run: scripts/task check
@@ -47,6 +51,7 @@ jobs:
 
   build:
     name: build ${{ matrix.target }}
+    timeout-minutes: 20
     needs: [check]
     runs-on: ${{ matrix.os }}
     strategy:
@@ -60,14 +65,16 @@ jobs:
           - target: x86_64-apple-darwin
             os: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Install the pinned toolchain
         run: |
           rustup show active-toolchain || rustup toolchain install
           rustup target add ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           key: ${{ matrix.target }}
 
@@ -89,11 +96,11 @@ jobs:
         run: |
           bin="target/${{ matrix.target }}/release/nether"
           want="${GITHUB_REF_NAME#v}"
-          if grep -qa "(not a release build)" "$bin"; then
+          if grep -qFa "(not a release build)" "$bin"; then
             echo "::error::$bin was built without NETHER_VERSION"
             exit 1
           fi
-          if ! grep -qa "$want" "$bin"; then
+          if ! grep -qFa "$want" "$bin"; then
             echo "::error::$bin does not carry the version $want"
             exit 1
           fi
@@ -109,7 +116,7 @@ jobs:
           cp README.md LICENSE CHANGELOG.md "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: nether-${{ matrix.target }}
           path: dist/*.tar.gz
@@ -120,10 +127,13 @@ jobs:
   # same commit the same way and must get the same bytes the build job shipped.
   reproduce:
     name: reproduce x86_64-unknown-linux-gnu
+    timeout-minutes: 20
     needs: [build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Install the pinned toolchain
         run: |
@@ -135,7 +145,7 @@ jobs:
           export NETHER_VERSION="${GITHUB_REF_NAME#v}"
           scripts/task release:build x86_64-unknown-linux-gnu
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: nether-x86_64-unknown-linux-gnu
           path: shipped
@@ -143,24 +153,29 @@ jobs:
       - name: The same bytes
         run: |
           tar -xzf shipped/*.tar.gz -C shipped
-          a=$(shasum -a 256 shipped/*/nether | cut -d' ' -f1)
-          b=$(shasum -a 256 target/x86_64-unknown-linux-gnu/release/nether | cut -d' ' -f1)
+          a=$(sha256sum shipped/*/nether | cut -d' ' -f1)
+          b=$(sha256sum target/x86_64-unknown-linux-gnu/release/nether | cut -d' ' -f1)
           echo "shipped $a"
           echo "rebuilt $b"
           [ "$a" = "$b" ] || { echo "::error::the binary did not reproduce"; exit 1; }
 
   publish:
     name: publish
+    timeout-minutes: 10
     needs: [check, build, reproduce]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: incoming
 
@@ -171,12 +186,13 @@ jobs:
           mkdir -p dist
           find incoming -name '*.tar.gz' -exec cp {} dist/ \;
           cp site/nether.woff "dist/nether-${GITHUB_REF_NAME}.woff"
+          cp site/nether-bold.woff "dist/nether-bold-${GITHUB_REF_NAME}.woff"
           tar -czf "dist/netherc-spec-${GITHUB_REF_NAME}.tar.gz" spec/
 
       # A project whose argument is that you can name what you were given
       # should not ship tarballs nobody can check.
       - name: Write the checksums
-        run: cd dist && sha256sum ./* > SHA256SUMS && cat SHA256SUMS
+        run: cd dist && rm -f SHA256SUMS && sha256sum * > ../SHA256SUMS && mv ../SHA256SUMS . && cat SHA256SUMS
 
       - name: The notes come from CHANGELOG.md
         run: scripts/notes "${GITHUB_REF_NAME}" > notes.md

@@ -25,14 +25,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CEILING = ROOT / ".wasm-ceiling"
 
-# What web/necropolis/necropolis.js calls. `memory` is exported by the linker.
-PROMISED = {"nether_alloc", "nether_free", "nether_bury", "memory"}
+# What web/necropolis/necropolis.js calls, and the WASM export kind of each
+# (0 = func, 2 = memory). `memory` is exported by the linker.
+PROMISED = {
+    "nether_alloc": 0,
+    "nether_free": 0,
+    "nether_bury": 0,
+    "memory": 2,
+}
 
 
 def leb128(data, at):
-    """One unsigned LEB128, and where it ended."""
+    """One unsigned LEB128 (up to 32-bit), and where it ended."""
     n = shift = 0
     while True:
+        if at >= len(data) or shift > 28:
+            raise SystemExit("wasm: truncated or oversized LEB128 integer")
         byte = data[at]
         at += 1
         n |= (byte & 0x7F) << shift
@@ -76,26 +84,31 @@ def sections(data):
 
 
 def exports(data):
-    """Every name the module exports."""
-    if data[:4] != b"\x00asm":
-        raise SystemExit("wasm: that is not a WebAssembly module")
+    """Every name the module exports, mapped to its export kind byte."""
+    if len(data) < 8 or data[:4] != b"\x00asm" or data[4:8] != b"\x01\x00\x00\x00":
+        raise SystemExit("wasm: that is not a WebAssembly 1.0 module")
     at = 8  # the magic and the version
     while at < len(data):
         kind = data[at]
         size, at = leb128(data, at + 1)
         end = at + size
+        if end > len(data):
+            raise SystemExit("wasm: section extends past end of module")
         if kind != 7:  # not the export section
             at = end
             continue
         count, at = leb128(data, at)
-        found = set()
+        found = {}
         for _ in range(count):
             length, at = leb128(data, at)
-            found.add(data[at : at + length].decode("utf-8"))
-            at += length + 1  # the kind byte
+            name = data[at : at + length].decode("utf-8")
+            at += length
+            export_kind = data[at]
+            at += 1
             _, at = leb128(data, at)  # the index
+            found[name] = export_kind
         return found
-    return set()
+    return {}
 
 
 def main():
@@ -105,9 +118,9 @@ def main():
     data = where.read_bytes()
 
     found = exports(data)
-    missing = PROMISED - found
+    missing = [name for name, kind in PROMISED.items() if found.get(name) != kind]
     if missing:
-        raise SystemExit(f"wasm: the module does not export {', '.join(sorted(missing))}")
+        raise SystemExit(f"wasm: missing or wrong-kind export(s): {', '.join(sorted(missing))}")
 
     ceiling = int(CEILING.read_text().strip())
     size = len(gzip.compress(data, 9))

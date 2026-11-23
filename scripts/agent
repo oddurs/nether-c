@@ -143,12 +143,17 @@ cmd_pr() {
   # stamp for this exact commit, once, and still runs everything for a push
   # typed by hand. 0292.
   say "checking $head"
-  ./scripts/task check
+  "$root/scripts/task" check
   cmd_clean
   [ "$head" = "$(git rev-parse HEAD)" ] || die "HEAD changed during checks; retry against the new commit"
-  printf '%s\n' "$head" > "$(git rev-parse --git-dir)/nether-checked"
+  stamp="$(git rev-parse --git-dir)/nether-checked"
+  printf '%s\n' "$head" > "$stamp"
   say "pushing $branch"
-  git push -u origin "$branch" || die "push of $branch failed (exit $?); nothing was opened or armed"
+  if ! git push -u origin "$branch"; then
+    rc=$?
+    rm -f "$stamp"
+    die "push of $branch failed (exit $rc); nothing was opened or armed"
+  fi
   # `--fill-first`, not `--fill`. With one commit they agree; with more than
   # one, `--fill` titles the pull request after the *branch* — and a squash
   # merge takes its subject from the title, so what lands on `main` is
@@ -190,7 +195,24 @@ cmd_wait() {
   state=$(gh pr view "$branch" --json state,headRefOid,isDraft --jq '[.state,.headRefOid,.isDraft] | @tsv')
   [ "$state" = "$(printf 'MERGED\t%s\tfalse' "$head")" ] && { say "merged $head"; return; }
   [ "$state" = "$(printf 'OPEN\t%s\tfalse' "$head")" ] || die "PR is not ready at local HEAD: $state"
-  gh pr checks "$branch" --watch --fail-fast --interval 10
+  wait_try=0
+  while [ "$wait_try" -lt 6 ]; do
+    rc=0
+    gh pr checks "$branch" --watch --fail-fast --interval 10 || rc=$?
+    [ "$rc" -eq 0 ] && break
+    state=$(gh pr view "$branch" --json state,headRefOid --jq '[.state,.headRefOid] | @tsv')
+    [ "$state" = "$(printf 'MERGED\t%s' "$head")" ] && { say "merged $head"; return; }
+    # Newly pushed PRs can briefly report no checks before Actions registers the run.
+    if [ "$wait_try" -lt 5 ] && [ "$state" = "$(printf 'OPEN\t%s' "$head")" ]; then
+      checks_count=$(gh pr view "$branch" --json statusCheckRollup --jq '.statusCheckRollup | length' 2>/dev/null || echo 1)
+      if [ "$checks_count" = "0" ]; then
+        sleep 5
+        wait_try=$((wait_try + 1))
+        continue
+      fi
+    fi
+    exit "$rc"
+  done
   # Green checks and a merged PR are different facts. Give the server time to
   # apply auto-merge, but never claim completion just because checks passed.
   attempt=0
@@ -251,9 +273,16 @@ cmd_done() {
 }
 
 cmd_list() {
-  git worktree list --porcelain | awk '/^worktree /{w=$2} /^branch /{sub("refs/heads/","",$2); print $2"\t"w}' \
+  cmd_list_awk='
+    /^worktree / { sub(/^worktree /, ""); w=$0 }
+    /^branch /   { sub(/^branch refs\/heads\//, ""); print $0 "\t" w }
+    /^detached$/ { print "(detached)\t" w }
+  '
+  git worktree list --porcelain | awk "$cmd_list_awk" \
   | while IFS="$(printf '\t')" read -r b w; do
-      st=$(gh pr view "$b" --json state --jq .state 2>/dev/null || echo "-")
+      if [ "$b" = "(detached)" ]; then st="-"
+      else st=$(gh pr view "$b" --json state --jq .state 2>/dev/null || echo "-")
+      fi
       printf '  %-34s %-10s %s\n' "$b" "$st" "$w"
     done
 }
