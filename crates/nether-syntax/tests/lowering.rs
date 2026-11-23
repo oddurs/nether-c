@@ -422,3 +422,88 @@ I64 from_early_return() {
     }
     clean(&unit);
 }
+
+#[test]
+fn shade_origin_cannot_be_laundered_across_bindings_calls_returns_or_fields() {
+    for exploit in [
+        r#"Bytes@0 steal() { Shade<Bytes@0> s = descend disk { shade must(read("f")) }; look s }"#,
+        r#"Bytes@0 open(Shade<Bytes@0> s) { look s } Bytes@0 steal() { open(descend unrecorded { shade must(call_foreign("x", b"")) }) }"#,
+        r#"Shade<Bytes@0> forge() { descend net { shade must(get("u")) } } Bytes@0 steal() { look forge() }"#,
+        r#"struct B { Shade<Bytes@0> s; }; Bytes@0 steal() { B b; b.s = descend net { shade must(get("u")) }; look b.s }"#,
+    ] {
+        let ast = parse(exploit.as_bytes()).expect("parses");
+        let lowered = lower(&ast);
+        let rejected = match lowered {
+            Err(_) => true,
+            Ok(unit) => !check(&unit).is_empty(),
+        };
+        assert!(rejected, "Orpheus bypass was accepted: {exploit}");
+    }
+}
+
+#[test]
+fn unmatched_split_shr_terminates_without_hanging_or_panicking() {
+    for bad in [
+        "Answer<I64>>",
+        "Answer<I64>> x = 1;",
+        "typedef Answer<I64>> T;",
+        "struct S { Answer<I64>> f; };",
+        "U0 f(Answer<I64>> x) {}",
+    ] {
+        assert!(parse(bad.as_bytes()).is_err(), "expected parse fault for: {bad}");
+    }
+}
+
+#[test]
+fn recursive_function_cannot_self_fulfill_forged_latent_depth() {
+    let src = "I64 f(I64 n) @3 { if (n <= 0) { return 0; } f(n - 1) }\n";
+    let unit = ir(src);
+    assert_eq!(unit.funcs[0].latent, Held::NONE);
+    assert!(!check(&unit).is_empty(), "forged @3 latent annotation must fail check");
+}
+
+#[test]
+fn lower_and_check_agree_on_assign_call_order_compound_assign_and_subexpr_pc() {
+    // Evaluation order in Assign and Call must match between lower and check.
+    for valid in [
+        r#"U0 f() { I64[2] arr; I64 i = 0; arr[i] = { i = descend disk { len(must(read("a"))) }; 1 }; }"#,
+        r#"U0 f() { I64[2] arr; I64 i = 0; arr[{ i = descend disk { len(must(read("a"))) }; 0 }] = i; }"#,
+        r#"I64 id(I64 x) { x } U0 f() { I64 i = 0; ({ i = descend disk { len(must(read("a"))) }; id })(i); }"#,
+        "U0 f() { I64[2] arr; I64 i = 0; arr[{ i = i + 1; 0 }] += 1; }",
+    ] {
+        let unit = ir(valid);
+        clean(&unit);
+    }
+
+    // Early returns inside subexpressions must taint subsequent writes via pc.
+    for tainted in [
+        r#"U0 f() { I64@0 x = 0; Bool d = descend disk { exists("f") }; if ({ if (d) { return; } true }) { x = 1; } }"#,
+        r#"U0 f() { I64@0 x = 0; Bool d = descend disk { exists("f") }; x = { if (d) { return; } 1 }; }"#,
+        r#"U0 f() { I64@0 x = 0; Bool d = descend disk { exists("f") }; I64 t = ({ if (d) { return; } 1 }) + ({ x = 1; 2 }); }"#,
+    ] {
+        let unit = ir(tainted);
+        assert!(!check(&unit).is_empty(), "implicit flow bypassed @0 assertion: {tainted}");
+    }
+
+    // Naming through short-circuit Select must freeze the local.
+    let frozen_src = "U0 f() { Bool b = true; seal (true && b); b = false; }\n";
+    let frozen_unit = ir(frozen_src);
+    let faults = check(&frozen_unit);
+    assert!(
+        faults.iter().any(|f| matches!(f.kind, nether_core::FaultKind::Frozen { .. })),
+        "expected Frozen fault through Select: {faults:?}"
+    );
+
+    // Arity on polymorphic prelude primitives, unused cyclic typedefs, and
+    // global/function name collisions must fail lowering.
+    for bad in [
+        "U0 f() { Answer<I64> a = refused(); }\n",
+        "U0 f() { Answer<I64> a = refused(absent, 1); }\n",
+        "U0 f() { Answer<I64> a = answered(1); I64 x = must(a, 2); }\n",
+        "typedef A B; typedef B A;\n",
+        "I64 foo = 1; I64 foo() { 2 }\n",
+    ] {
+        let ast = parse(bad.as_bytes()).unwrap_or_else(|e| panic!("should parse: {bad}\n{e:?}"));
+        assert!(lower(&ast).is_err(), "expected lowering error for: {bad}");
+    }
+}
