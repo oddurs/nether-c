@@ -278,3 +278,36 @@ fn exists_on_escaped_path_is_false_and_empty_path_is_malformed() {
     );
     assert_eq!(a.reading(""), AnswerOf::Refused(Refusal::Malformed));
 }
+
+#[test]
+#[cfg(unix)]
+fn exponential_symlink_dag_stops_at_total_hop_bound_and_remove_unlinks_symlink() {
+    let a = Asked::new("symlink-dag-and-remove", true);
+    // Build a binary-branching symlink DAG: s_i -> s_{i+1}/s_{i+1}.
+    // With a total hop budget of 40, this finishes immediately instead of 2^25 work.
+    std::fs::create_dir(a.root.join("d")).unwrap();
+    std::os::unix::fs::symlink(".", a.root.join("d/s24")).unwrap();
+    for i in (0..24).rev() {
+        let next = format!("s{}/s{}", i + 1, i + 1);
+        std::os::unix::fs::symlink(&next, a.root.join(format!("d/s{i}"))).unwrap();
+    }
+    assert_eq!(a.reading("d/s0"), AnswerOf::Refused(Refusal::Denied));
+
+    // Removing a symlink deletes the symlink itself, leaving its target intact.
+    std::fs::write(a.root.join("keep.txt"), b"keep").unwrap();
+    std::os::unix::fs::symlink("keep.txt", a.root.join("alias")).unwrap();
+    assert_eq!(
+        a.ask("remove", vec![a.arg(Value::Str("alias".into()))]),
+        AnswerOf::Given(Value::Unit)
+    );
+    assert!(a.root.join("keep.txt").exists(), "remove deleted target instead of symlink");
+    assert!(std::fs::symlink_metadata(a.root.join("alias")).is_err());
+
+    // A dangling symlink inside root is also removable.
+    std::os::unix::fs::symlink("does-not-exist", a.root.join("dangling")).unwrap();
+    assert_eq!(
+        a.ask("remove", vec![a.arg(Value::Str("dangling".into()))]),
+        AnswerOf::Given(Value::Unit)
+    );
+    assert!(std::fs::symlink_metadata(a.root.join("dangling")).is_err());
+}

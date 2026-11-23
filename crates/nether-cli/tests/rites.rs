@@ -2684,6 +2684,26 @@ fn graft_does_not_wrap_non_refusable_primitives_in_answer() {
     let shown = there(&dir, &["lamp", &grafted]);
     assert_eq!(code(&shown), 0, "{}", stderr(&shown));
     assert_eq!(stdout(&shown), "42\n");
+    // Grafting a fresh value must still record a witness and preserve stratum 2.
+    let Stored::Node(Node::Trace { depth, witnesses, .. }) =
+        store.get(grafted.parse().unwrap()).unwrap()
+    else {
+        panic!("expected grafted trace");
+    };
+    assert_eq!(depth, 2, "graft dropped depth when synthesizing fresh witness");
+    assert_eq!(witnesses.len(), 1, "graft dropped witness provenance");
+}
+
+#[test]
+fn lamp_provenance_surfaces_ragged_reverse_index_with_malformed_exit() {
+    let (dir, cairn) = with_object("lamp-ragged", Value::Int(9));
+    let hex = cairn.to_string();
+    let rev_dir = dir.join("refs").join(&hex[..2]);
+    std::fs::create_dir_all(&rev_dir).unwrap();
+    std::fs::write(rev_dir.join(&hex[2..]), b"bad").unwrap();
+
+    let out = nether(Some(&dir), &["lamp", &hex, "--provenance"]);
+    assert_eq!(code(&out), 65, "expected malformed exit on ragged index: {}", stderr(&out));
 }
 
 #[test]

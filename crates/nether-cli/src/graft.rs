@@ -113,11 +113,17 @@ fn prepare_graft(
         eprintln!("nether: {} is not a value in this ledger", with.short());
         return Err(ExitCode::from(code::ABSENT));
     };
-    let mut answers = Answers::none();
-    for (call, said) in told.all() {
-        answers = answers.and(call.clone(), said.clone());
+    if told.all().any(|(_, said)| said.cairn() == replace) {
+        eprintln!("nether: {} was already answered under {}", replace.short(), trace.short());
+        eprintln!("        §8.7: a graft replaces a hole. Graft or exhume the trace that");
+        eprintln!("        still has it.");
+        return Err(FAILED);
     }
 
+    // Only supply the targeted hole's replacement answer. Seeding `told.all()`
+    // would feed stale prior witnesses into remaining open holes of the same
+    // call (e.g. a second `draw` or `write`) instead of `--with`.
+    let mut answers = Answers::none();
     let mut matched_hole: Option<(Call, u8, Span, Value)> = None;
     for hole in holes {
         let Ok(Stored::Node(Node::Hole { call, stratum, span })) = store.get(*hole) else {
@@ -127,6 +133,14 @@ fn prepare_graft(
         if *hole == replace {
             let refusable = Prim::from_name(&call.function).is_some_and(Prim::refusable);
             let val = match &raw_instead {
+                Value::Answer(_) if !refusable => {
+                    eprintln!(
+                        "nether: {} is an Answer, but `{}` is not refusable",
+                        with.short(),
+                        call.function
+                    );
+                    return Err(FAILED);
+                }
                 Value::Answer(_) => raw_instead.clone(),
                 said if refusable => {
                     Value::Answer(Box::new(nether_ledger::AnswerOf::Given(said.clone())))
@@ -137,22 +151,28 @@ fn prepare_graft(
             matched_hole = Some((call, stratum, span, val));
         }
     }
-    if told.all().any(|(_, said)| said.cairn() == replace) {
-        eprintln!("nether: {} was already answered under {}", replace.short(), trace.short());
-        eprintln!("        §8.7: a graft replaces a hole. Graft or exhume the trace that");
-        eprintln!("        still has it.");
-        return Err(FAILED);
-    }
     let Some((g_call, g_stratum, g_span, g_val)) = matched_hole else {
         eprintln!("nether: {} answers nothing under {}", replace.short(), trace.short());
         eprintln!("        `nether strata {}` says what it was told.", trace.short());
         return Err(FAILED);
     };
-    let answer_cairn = g_val.cairn();
-    if let Some(w) = witnessing(store, answer_cairn, &g_call, g_stratum, g_span)
+    let answer_cairn = crate::kept(store, &Stored::Value(g_val))?;
+    let w = if let Some(existing) = witnessing(store, answer_cairn, &g_call, g_stratum, g_span)
         .or_else(|| witnessing(store, with, &g_call, g_stratum, g_span))
-        && !witnesses.contains(&w)
     {
+        existing
+    } else {
+        crate::kept(
+            store,
+            &Stored::Node(Node::Witness {
+                call: g_call,
+                answer: answer_cairn,
+                stratum: g_stratum,
+                span: g_span,
+            }),
+        )?
+    };
+    if !witnesses.contains(&w) {
         witnesses.push(w);
     }
     Ok((answers, witnesses))
@@ -166,8 +186,15 @@ fn take(
     fuel: u64,
     wants_json: bool,
 ) -> ExitCode {
-    let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. })) =
-        store.get(trace)
+    let Ok(Stored::Node(Node::Trace {
+        residue,
+        holes,
+        witnesses,
+        deposits,
+        source,
+        unrecorded: marked,
+        ..
+    })) = store.get(trace)
     else {
         return crate::not_a_trace(store, trace);
     };
@@ -220,7 +247,7 @@ fn take(
         crate::closing::depth(store, residue.depth.get(), &residue.holes, &witnesses),
         crate::closing::unrecorded(store, &witnesses),
     ) {
-        (Ok(d), Ok(u)) => (d, u),
+        (Ok(d), Ok(u)) => (d, marked || u),
         (Err(c), _) | (_, Err(c)) => return c,
     };
     let node = Stored::Node(Node::Trace {

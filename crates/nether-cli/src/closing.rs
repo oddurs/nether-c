@@ -59,11 +59,19 @@ pub fn residue_unit(
     Ok((text, unit))
 }
 
-/// The stratum a witness reached or a hole would reach, or an error if unreadable.
-fn reached(store: &Store, node: Cairn) -> Result<u8, StoreError> {
+/// The stratum a hole would reach, or an error if unreadable or the wrong node kind.
+fn reached_hole(store: &Store, node: Cairn) -> Result<u8, StoreError> {
     match store.get(node)? {
-        Stored::Node(Node::Witness { stratum, .. } | Node::Hole { stratum, .. }) => Ok(stratum),
-        _ => Ok(0),
+        Stored::Node(Node::Hole { stratum, .. }) => Ok(stratum),
+        _ => Err(StoreError::Corrupt { asked: node, found: None, why: None }),
+    }
+}
+
+/// The stratum a witness reached, or an error if unreadable or the wrong node kind.
+fn reached_witness(store: &Store, node: Cairn) -> Result<u8, StoreError> {
+    match store.get(node)? {
+        Stored::Node(Node::Witness { stratum, .. }) => Ok(stratum),
+        _ => Err(StoreError::Corrupt { asked: node, found: None, why: None }),
     }
 }
 
@@ -76,8 +84,17 @@ pub fn depth(
     witnesses: &[Cairn],
 ) -> Result<u8, ExitCode> {
     let mut out = residue;
-    for node in holes.iter().chain(witnesses) {
-        match reached(store, *node) {
+    for node in holes {
+        match reached_hole(store, *node) {
+            Ok(s) => out = out.max(s),
+            Err(e) => {
+                eprintln!("nether: {e}");
+                return Err(FAILED);
+            }
+        }
+    }
+    for node in witnesses {
+        match reached_witness(store, *node) {
             Ok(s) => out = out.max(s),
             Err(e) => {
                 eprintln!("nether: {e}");
@@ -91,7 +108,7 @@ pub fn depth(
 /// §1.7: marked when something *reached* stratum 8, which a hole at 8 has not.
 pub fn unrecorded(store: &Store, witnesses: &[Cairn]) -> Result<bool, ExitCode> {
     for w in witnesses {
-        match reached(store, *w) {
+        match reached_witness(store, *w) {
             Ok(s) if s == nether_ledger::MAX_STRATUM => return Ok(true),
             Ok(_) => {}
             Err(e) => {

@@ -288,6 +288,67 @@ fn chunked_transfer_encoding_truncated_body_and_url_shapes_work() {
     let b = Asked::reaching("trunc", vec![format!("127.0.0.1:{p2}")], false);
     assert_eq!(b.get(&format!("http://127.0.0.1:{p2}/")), AnswerOf::Refused(Refusal::Unreachable));
 
-    // 3. Garbage without `://` is Malformed, not Denied.
+    // 3. Garbage without `://` is Malformed, not Denied; port 0 is Malformed.
     assert_eq!(b.get("not-a-url"), AnswerOf::Refused(Refusal::Malformed));
+    assert_eq!(b.get("http://127.0.0.1:0/"), AnswerOf::Refused(Refusal::Malformed));
+}
+
+#[test]
+fn http_framing_handles_204_keepalive_conflicting_cl_and_bad_te() {
+    // 1. 204 No Content and keep-alive Content-Length return without waiting for EOF.
+    let l1 = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+    let p1 = l1.local_addr().expect("addr").port();
+    let hold1 = std::thread::spawn(move || {
+        let Ok((mut s, _)) = l1.accept() else { return };
+        let mut req = [0u8; 256];
+        let _ = s.read(&mut req);
+        let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\npingEXTRA");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    });
+    let client1 = Asked::reaching("keepalive-exact", vec![format!("127.0.0.1:{p1}")], false);
+    assert_eq!(
+        client1.get(&format!("http://127.0.0.1:{p1}/")),
+        AnswerOf::Given(Value::Bytes(b"ping".to_vec()))
+    );
+    let _ = hold1.join();
+
+    // 2. 204 No Content returns empty bytes immediately even when socket stays open.
+    let l2 = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+    let p2 = l2.local_addr().expect("addr").port();
+    let hold2 = std::thread::spawn(move || {
+        let Ok((mut s, _)) = l2.accept() else { return };
+        let mut req = [0u8; 256];
+        let _ = s.read(&mut req);
+        let _ = s.write_all(b"HTTP/1.1 204 No Content\r\n\r\n");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    });
+    let client2 = Asked::reaching("no-content-204", vec![format!("127.0.0.1:{p2}")], false);
+    assert_eq!(
+        client2.get(&format!("http://127.0.0.1:{p2}/")),
+        AnswerOf::Given(Value::Bytes(Vec::new()))
+    );
+    let _ = hold2.join();
+
+    // 3. Conflicting Content-Length headers and non-final Transfer-Encoding are refused.
+    for raw in [
+        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 4\r\n\r\nabcd".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: notchunked\r\n\r\n0\r\n\r\n".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, gzip\r\n\r\n0\r\n\r\n".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n+1\r\na\r\n0\r\n\r\n".as_slice(),
+    ] {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+        let port = listener.local_addr().expect("addr").port();
+        let raw = raw.to_vec();
+        std::thread::spawn(move || {
+            let Ok((mut sock, _)) = listener.accept() else { return };
+            let mut req = [0u8; 256];
+            let _ = sock.read(&mut req);
+            let _ = sock.write_all(&raw);
+        });
+        let client = Asked::reaching("bad-framing", vec![format!("127.0.0.1:{port}")], false);
+        assert_eq!(
+            client.get(&format!("http://127.0.0.1:{port}/")),
+            AnswerOf::Refused(Refusal::Unreachable)
+        );
+    }
 }

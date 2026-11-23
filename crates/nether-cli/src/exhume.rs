@@ -4,7 +4,6 @@
 //! answering produces a new trace with a new cairn, and the old one still
 //! exists with its hole in it.
 
-use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
@@ -305,20 +304,14 @@ fn gather_replay(store: &Store, witnesses: &[Cairn], holes: &[Cairn]) -> Result<
         FAILED
     })?;
     let asked = questions(store, holes).map_err(no_such_hole)?;
-    let mut needed: HashMap<&Call, usize> = HashMap::new();
-    for (call, _) in &asked {
-        *needed.entry(call).or_default() += 1;
-    }
-    let mut available: HashMap<&Call, usize> = HashMap::new();
-    for (call, _) in have.all() {
-        *available.entry(call).or_default() += 1;
-    }
-    for (call, want) in needed {
-        if available.get(call).copied().unwrap_or(0) < want {
-            eprintln!("nether: nothing recorded answers `{}`", call.function);
-            eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
-            return Err(FAILED);
-        }
+    if let Some((call, _)) = asked.first() {
+        // Any open hole in `trace.residue` was NOT answered by `trace.witnesses`
+        // (prior witnesses were already consumed into `trace.residue`). Feeding
+        // an earlier witness for the same `Call` into a new open hole would
+        // fabricate an answer instead of refusing.
+        eprintln!("nether: nothing recorded answers `{}`", call.function);
+        eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
+        return Err(FAILED);
     }
     let mut answers = Answers::none();
     for (call, value) in have.all() {
@@ -367,6 +360,20 @@ fn answer_holes(
         }
     }
     Ok(answers)
+}
+
+fn finish_replay(cairn: Cairn, next: Cairn, wants_json: bool) -> Result<(), ExitCode> {
+    if next == cairn {
+        if wants_json {
+            println!("{{\"cairn\":\"{cairn}\",\"identical\":true}}");
+        } else {
+            println!("identical.");
+        }
+        return Ok(());
+    }
+    eprintln!("nether: replay produced {} and not {}", next.short(), cairn.short());
+    eprintln!("        §6.7 calls that a bug in the implementation.");
+    Err(ExitCode::from(code::MALFORMED))
 }
 
 fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
@@ -419,36 +426,40 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
         }
     };
 
+    let printed = print(&residue.as_unit(&unit));
+    let residue_obj = Stored::Value(Value::Bytes(printed.into_bytes()));
+    let unrecorded = marked || crate::closing::unrecorded(store, &recorded)?;
+
+    if replaying {
+        // Replay verifies equality without mutating the store.
+        let deepest = crate::closing::depth(store, residue.depth.get(), &residue.holes, &recorded)?;
+        let deeper = Node::Trace {
+            residue: residue_obj.cairn(),
+            holes: residue.holes.clone(),
+            unrecorded,
+            deposits: crate::closing::deposits(&deposits, &residue.deposits),
+            witnesses: recorded,
+            source,
+            depth: deepest,
+        };
+        return finish_replay(cairn, Stored::Node(deeper).cairn(), wants_json);
+    }
+
     for (_, stored) in &residue.named {
         crate::kept(store, stored)?;
     }
-    let printed = print(&residue.as_unit(&unit));
-    let next_residue = crate::kept(store, &Stored::Value(Value::Bytes(printed.into_bytes())))?;
+    let next_residue = crate::kept(store, &residue_obj)?;
     let deepest = crate::closing::depth(store, residue.depth.get(), &residue.holes, &recorded)?;
     let deeper = Node::Trace {
         residue: next_residue,
         holes: residue.holes.clone(),
-        unrecorded: crate::closing::unrecorded(store, &recorded)?,
+        unrecorded,
         deposits: crate::closing::deposits(&deposits, &residue.deposits),
         witnesses: recorded,
         source,
         depth: deepest,
     };
     let next = crate::kept(store, &Stored::Node(deeper))?;
-
-    if replaying {
-        if next == cairn {
-            if wants_json {
-                println!("{{\"cairn\":\"{cairn}\",\"identical\":true}}");
-            } else {
-                println!("identical.");
-            }
-            return Ok(());
-        }
-        eprintln!("nether: replay produced {} and not {}", next.short(), cairn.short());
-        eprintln!("        §6.7 calls that a bug in the implementation.");
-        return Err(ExitCode::from(code::MALFORMED));
-    }
 
     let told = Sealed {
         was: cairn,
