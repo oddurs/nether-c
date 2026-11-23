@@ -52,8 +52,10 @@ named='(^|[^[:alnum:]_])(claude|anthropic|copilot|chatgpt|openai|gemini)([^[:aln
 trailer='^[[:space:]]*(co-authored-by|assisted-by|generated-by|authored-by)[[:space:]]*:'
 phrase='generated with|(^|[^[:alnum:]_])AI([^[:alnum:]_]|$)|🤖'
 
+allowed_trailer='^[[:space:]]*co-authored-by:[[:space:]]*(dependabot\[bot\][[:space:]]*<49699333\+dependabot\[bot\]@users\.noreply\.github\.com>|[^<]*<oddurs@users\.noreply\.github\.com>)[[:space:]]*$'
+
 if printf '%s\n' "$scrubbed" | grep -qiE "$named|$phrase" \
-  || printf '%s\n' "$body" | grep -iE "$trailer" | grep -qivE 'dependabot|oddurs@users\.noreply\.github\.com'; then
+  || printf '%s\n' "$body" | grep -iE "$trailer" | grep -qivE "$allowed_trailer"; then
   cat >&2 <<'MSG'
 commit-msg: attribution to a tool or model is not permitted in this repository.
 

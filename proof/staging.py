@@ -323,10 +323,18 @@ STAGED_EVAL = InductiveRelation(
                 app("Select", u1, u2, u3),
             ),
         ),
-        # Descent
+        # Descent extends the ambient capability sets of both stages with `s_k`
         Rule(
             "SE_Descend",
-            (staged_eval(e1, A, B, r1, u1),),
+            (
+                staged_eval(
+                    e1,
+                    s_union(A, singleton(s_k)),
+                    s_union(B, singleton(s_k)),
+                    r1,
+                    u1,
+                ),
+            ),
             staged_eval(app("Descend", s_k, e1), A, B, app("Descend", s_k, r1), app("Descend", s_k, u1)),
         ),
         # Seal

@@ -72,10 +72,14 @@ def sections(data):
     while at < len(data):
         tag = data[at]
         size, at = leb128(data, at + 1)
+        if at + size > len(data):
+            raise SystemExit("wasm: section extends past end of module")
         body = data[at : at + size]
         name = SECTIONS.get(tag, str(tag))
         if tag == 0:  # a custom section carries its own name
             length, j = leb128(body, 0)
+            if j + length > len(body):
+                raise SystemExit("wasm: custom section name extends past section")
             name = "custom:" + body[j : j + length].decode("utf-8", "replace")
         out.append((name, size, len(gzip.compress(body, 9))))
         at += size
@@ -101,12 +105,18 @@ def exports(data):
         found = {}
         for _ in range(count):
             length, at = leb128(data, at)
+            if at + length >= end:
+                raise SystemExit("wasm: export entry extends past export section")
             name = data[at : at + length].decode("utf-8")
             at += length
             export_kind = data[at]
             at += 1
             _, at = leb128(data, at)  # the index
+            if at > end:
+                raise SystemExit("wasm: export index extends past export section")
             found[name] = export_kind
+        if at != end:
+            raise SystemExit("wasm: trailing bytes in export section")
         return found
     return {}
 

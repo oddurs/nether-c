@@ -571,6 +571,8 @@ def owed() -> int:
         if not raw.startswith("---\n"):
             continue
         end = raw.find("\n---\n", 3)
+        if end < 0 and raw.endswith("\n---"):
+            end = len(raw) - 4
         if end < 0:
             continue
         front = raw[4:end]

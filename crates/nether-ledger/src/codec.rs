@@ -1126,4 +1126,94 @@ mod node_tests {
             Err(DecodeError::BackwardsSpan { start: 5, end: 4 })
         );
     }
+
+    #[test]
+    fn model_node_fixtures_match_the_rust_encoder() {
+        let c0_raw: [u8; 32] = core::array::from_fn(|i| u8::try_from(i).unwrap());
+        let c1_raw: [u8; 32] = core::array::from_fn(|i| u8::try_from(i + 32).unwrap());
+        let c2_raw: [u8; 32] = core::array::from_fn(|i| u8::try_from(i + 64).unwrap());
+        let (c0, c1, c2) =
+            (Cairn::from_bytes(c0_raw), Cairn::from_bytes(c1_raw), Cairn::from_bytes(c2_raw));
+        let mut expected_apply = vec![0x20, 0x01];
+        expected_apply.extend_from_slice(&c0_raw);
+        expected_apply.extend_from_slice(&1u64.to_be_bytes());
+        expected_apply.extend_from_slice(&c1_raw);
+        expected_apply.extend_from_slice(&c2_raw);
+        let mut expected_hole = vec![0x20, 0x02];
+        expected_hole.extend_from_slice(&4u64.to_be_bytes());
+        expected_hole.extend_from_slice(b"read");
+        expected_hole.extend_from_slice(&1u64.to_be_bytes());
+        expected_hole.extend_from_slice(&c1_raw);
+        expected_hole.push(0x03);
+        expected_hole.extend_from_slice(&c0_raw);
+        expected_hole.extend_from_slice(&1u64.to_be_bytes());
+        expected_hole.extend_from_slice(&5u64.to_be_bytes());
+        let mut expected_deposit = vec![0x20, 0x03];
+        expected_deposit.extend_from_slice(&c1_raw);
+        expected_deposit.extend_from_slice(&c0_raw);
+        expected_deposit.extend_from_slice(&0u64.to_be_bytes());
+        expected_deposit.extend_from_slice(&4u64.to_be_bytes());
+        let mut expected_witness = vec![0x20, 0x04, 0x03];
+        expected_witness.extend_from_slice(&4u64.to_be_bytes());
+        expected_witness.extend_from_slice(b"read");
+        expected_witness.extend_from_slice(&1u64.to_be_bytes());
+        expected_witness.extend_from_slice(&c1_raw);
+        expected_witness.extend_from_slice(&c2_raw);
+        expected_witness.extend_from_slice(&c0_raw);
+        expected_witness.extend_from_slice(&1u64.to_be_bytes());
+        expected_witness.extend_from_slice(&5u64.to_be_bytes());
+        let mut expected_trace = vec![0x20, 0x05];
+        expected_trace.extend_from_slice(&c0_raw);
+        expected_trace.extend_from_slice(&1u64.to_be_bytes());
+        expected_trace.extend_from_slice(&c1_raw);
+        expected_trace.extend_from_slice(&0u64.to_be_bytes());
+        expected_trace.extend_from_slice(&1u64.to_be_bytes());
+        expected_trace.extend_from_slice(&c2_raw);
+        expected_trace.extend_from_slice(&c0_raw);
+        expected_trace.extend_from_slice(&[0x03, 0x00]);
+        let node_fixtures = [
+            (
+                Node::Literal(Value::Int(7)),
+                b"\x20\x00\x02\x00\x00\x00\x00\x00\x00\x00\x07".to_vec(),
+            ),
+            (Node::Apply { function: c0, args: vec![c1], result: c2 }, expected_apply),
+            (
+                Node::Hole {
+                    call: Call { function: "read".to_owned(), args: vec![c1] },
+                    stratum: 3,
+                    span: Span { source: c0, start: 1, end: 5 },
+                },
+                expected_hole,
+            ),
+            (
+                Node::Deposit { value: c1, span: Span { source: c0, start: 0, end: 4 } },
+                expected_deposit,
+            ),
+            (
+                Node::Witness {
+                    stratum: 3,
+                    call: Call { function: "read".to_owned(), args: vec![c1] },
+                    answer: c2,
+                    span: Span { source: c0, start: 1, end: 5 },
+                },
+                expected_witness,
+            ),
+            (
+                Node::Trace {
+                    residue: c0,
+                    holes: vec![c1],
+                    witnesses: vec![],
+                    deposits: vec![c2],
+                    source: c0,
+                    depth: 3,
+                    unrecorded: false,
+                },
+                expected_trace,
+            ),
+        ];
+        for (node, expected) in node_fixtures {
+            assert_eq!(node.encode(), expected);
+            assert_eq!(decode_node(&expected).unwrap(), node);
+        }
+    }
 }

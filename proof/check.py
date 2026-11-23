@@ -19,6 +19,7 @@ from kernel import (
     conj,
     elem,
     eq,
+    eq_d,
     forall,
     gen,
     imp,
@@ -32,6 +33,7 @@ from kernel import (
     rewrite,
     rule_induction,
     subset,
+    sym,
     var,
 )
 import calculus
@@ -176,13 +178,13 @@ def verify_kernel_soundness_guards() -> None:
     else:
         raise AssertionError("lattice_decide accepted false max_set -> subset claim")
 
-    # 8. Incomparable sets with equal maxima exist: `|- ¬((δ1 ⊈ δ2 ∧ δ2 ⊈ δ1) ∧ max_set(δ1)=max_set(δ2))` must fail
+    # 8. Incomparable sets with equal maxima exist: `|- ¬((δ1 ⊈ δ2 ∧ δ2 ⊈ δ1) ∧ max_set(δ1)=_d max_set(δ2))` must fail
     try:
         lattice_decide(
             neg(
                 conj(
                     conj(not_subset(d1_s, d2_s), not_subset(d2_s, d1_s)),
-                    eq(app("max_set", d1_s), app("max_set", d2_s)),
+                    eq_d(app("max_set", d1_s), app("max_set", d2_s)),
                 )
             )
         )
@@ -231,7 +233,7 @@ def verify_kernel_soundness_guards() -> None:
 
     # 13. lattice_decide must distinguish opaque applications from variables
     try:
-        lattice_decide(eq(app("f", var("x")), var("f(x)")))
+        lattice_decide(eq_d(app("f", var("x")), var("f(x)")))
     except ProofFault:
         pass
     else:
@@ -285,6 +287,64 @@ def verify_kernel_soundness_guards() -> None:
     t_inst = inst(assume(f_all), var("y"))
     if t_inst.conclusion.binder == "y":
         raise AssertionError(f"inst captured bound variable `y`: {t_inst.conclusion}")
+
+    # 19. Duck-typed and subclassed Theorem / InductiveRelation objects must be rejected
+    class FakeThm:
+        assumptions = frozenset()
+        conclusion = eq(var("1"), var("0"))
+
+    try:
+        sym(FakeThm())  # type: ignore[arg-type]
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("kernel accepted duck-typed Theorem in sym")
+
+    try:
+        type("EvilThm", (Theorem,), {})
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("kernel allowed subclassing Theorem")
+
+    class FakeRel:
+        name = "HasType"
+        arity = 1
+        rules = ()
+
+    try:
+        rule_induction(FakeRel(), ("_a",), eq(var("0"), var("1")), {})  # type: ignore[arg-type]
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("kernel accepted duck-typed InductiveRelation in rule_induction")
+
+    # 20. Polymorphic FOL `=` must not be decided by finite-domain lattice_decide
+    try:
+        lattice_decide(eq(var("0"), var("0")))
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("lattice_decide accepted polymorphic FOL `=`")
+
+    # 21. Mutually negative InductiveRelation premises must be rejected
+    try:
+        InductiveRelation(
+            "MutNegA",
+            (Rule("NegStep", (neg(pred("MutNegB", var("x"))),), pred("MutNegA", var("x"))),),
+        )
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("InductiveRelation allowed negative predicate premise")
+
+    # 22. Malformed Formula construction must be rejected
+    try:
+        Formula("=", (var("0"), var("0")), (pred("False"),), "0")
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("Formula accepted extraneous subs/binder")
 
 
 def verify_closed_theorem(name: str, thm: Theorem, expected_head: str = "") -> None:

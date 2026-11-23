@@ -69,36 +69,42 @@ def rewrite_href(href: str) -> str:
 
 def inline(text: str) -> str:
     """Inline markdown. Code spans and links are extracted before emphasis."""
-    spans: list[str] = []
+    text = text.replace("\x00", "")
+    code_spans: list[str] = []
+    link_spans: list[str] = []
+
+    def expand_code(s: str) -> str:
+        return re.sub(r"\x00C(\d+)\x00", lambda m: code_spans[int(m.group(1))], s)
 
     def stash_code(m: re.Match[str]) -> str:
-        spans.append(f"<code>{esc(m.group(1))}</code>")
-        return f"\x00{len(spans) - 1}\x00"
+        code_spans.append(f"<code>{esc(m.group(1))}</code>")
+        return f"\x00C{len(code_spans) - 1}\x00"
 
     def stash_link(m: re.Match[str]) -> str:
         raw_label, raw_href = m.group(1), rewrite_href(m.group(2))
-        scheme = re.sub(r"[\x00-\x20]+", "", raw_href).lower()
-        if scheme.startswith(("javascript:", "data:", "vbscript:")):
-            return esc(raw_label)
         label = esc(raw_label)
         label = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", label)
         label = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", label)
+        label = expand_code(label)
+        scheme = re.sub(r"[\x00-\x20]+", "", raw_href).lower()
+        if "\x00" in raw_href or scheme.startswith(("javascript:", "data:", "vbscript:")):
+            link_spans.append(label)
+            return f"\x00L{len(link_spans) - 1}\x00"
         ext = (
             ' target="_blank" rel="noreferrer noopener"'
             if raw_href.startswith(("http://", "https://"))
             else ""
         )
-        spans.append(f'<a href="{esc(raw_href)}"{ext}>{label}</a>')
-        return f"\x00{len(spans) - 1}\x00"
+        link_spans.append(f'<a href="{esc(raw_href)}"{ext}>{label}</a>')
+        return f"\x00L{len(link_spans) - 1}\x00"
 
     text = re.sub(r"`([^`]+)`", stash_code, text)
-    text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", stash_link, text)
+    text = re.sub(r"\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)", stash_link, text)
     text = esc(text)
     text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"(?<![\w*])\*([^*\n]+)\*(?![\w*])", r"<em>\1</em>", text)
-    text = re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], text)
-    # Links stashed earlier may hold code-span placeholders in their label.
-    text = re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], text)
+    text = re.sub(r"\x00L(\d+)\x00", lambda m: link_spans[int(m.group(1))], text)
+    text = expand_code(text)
     return text
 
 

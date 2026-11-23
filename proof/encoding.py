@@ -12,9 +12,9 @@ Covers:
 3. Cairn preimage injectivity (`prove_cairn_preimage_injectivity`) separating
    `DOMAIN = b"netherc/cairn/v4\\x00"` and reducing `cairn(x) = cairn(y)` to BLAKE3
    collision resistance on `DOMAIN || encode(x)`.
-4. Stored-kind domain separation (`prove_stored_domain_separation`): `Value` tags
-   (`{0x00..0x08, 0x10, 0x11}`) and `Node` tag (`0x20`) are disjoint, so a `Value`
-   and a `Node` never share an encoding.
+4. Stored-kind domain separation: `Value` tags (`{0x00..0x08, 0x10, 0x11}`) and
+   `Node` tag (`0x20`) are disjoint, verified in `verify_codec_fixtures_and_exclusions`
+   alongside Rust `nether-ledger` codec tests.
 5. Executable byte-level reference codec checked against canonical byte fixtures
    for all 11 `Value` tags, all 6 `Node` kinds, signed `I64` two's-complement
    boundaries, and the invalid in-memory states excluded by §7.1.1 / §7.3.1
@@ -158,8 +158,8 @@ VAL_ROUNDTRIP = InductiveRelation(
         Rule(
             "V_SeqCons",
             (
-                val_rt(v, rest1, v1, rest2),
-                val_rt(xs, rest, out1, rest1),
+                val_rt(v, rest, v1, rest1),
+                val_rt(xs, rest1, out1, rest2),
             ),
             val_rt(
                 app("Cons", v, xs),
@@ -207,7 +207,7 @@ def prove_value_decode_encode() -> Theorem:
         "V_SeqNil": lambda _p, _ih: _leaf(app("Nil")),
         "V_SeqCons": lambda _p, ih: conj_intro(
             cong("Cons", [conj_elim_l(ih[0]), conj_elim_l(ih[1])]),
-            trans(conj_elim_r(ih[0]), conj_elim_r(ih[1])),
+            trans(conj_elim_r(ih[1]), conj_elim_r(ih[0])),
         ),
     }
     return rule_induction(
@@ -713,7 +713,7 @@ def py_decode_node_stream(buf: bytes, pos: int = 0) -> Tuple[Tuple[Any, ...], in
             raise ValueError("NoSuchStratum")
         mark_b = buf[pos + 1]
         if mark_b not in (0, 1):
-            raise ValueError("BadBool")
+            raise ValueError("BadMark")
         return (("Trace", res_c, holes, wits, deps, src_c, depth, bool(mark_b)), pos + 2)
     raise ValueError("UnknownNodeKind")
 
@@ -833,7 +833,7 @@ def verify_codec_fixtures_and_exclusions() -> int:
         (b"\x20\x02" + _u64_be(0) + _u64_be(0) + b"\x00" + c0 + _u64_be(0) + _u64_be(0), "EmptyCallName"),
         (b"\x20\x03" + c1 + c0 + _u64_be(5) + _u64_be(1), "BadSpan"),
         (b"\x20\x05" + c0 + _u64_be(0) + _u64_be(0) + _u64_be(0) + c0 + b"\x09\x00", "NoSuchStratum"),
-        (b"\x20\x05" + c0 + _u64_be(0) + _u64_be(0) + _u64_be(0) + c0 + b"\x00\x02", "BadBool"),
+        (b"\x20\x05" + c0 + _u64_be(0) + _u64_be(0) + _u64_be(0) + c0 + b"\x00\x02", "BadMark"),
     ):
         try:
             py_decode_node(bad_node)

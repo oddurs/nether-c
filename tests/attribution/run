@@ -38,12 +38,14 @@ TRAILER = re.compile(
 
 # And the stock phrases, which name nothing and still do it.
 PHRASE = re.compile(
-    r"(?i:generated with)|\bAI\b|\U0001F916"
+    r"(?i:generated with|\bAI\b)|\U0001F916"
 )
 
 # dependabot opens pull requests and GitHub writes its trailer. That is a bot
 # doing a bot's job under its own name, not this project's work handed away.
-ALLOWED_TRAILER = re.compile(r"(?i)dependabot|oddurs@users\.noreply\.github\.com")
+ALLOWED_TRAILER = re.compile(
+    r"(?i)^\s*co-authored-by:\s*(?:dependabot\[bot\]\s*<49699333\+dependabot\[bot\]@users\.noreply\.github\.com>|[^<]*<oddurs@users\.noreply\.github\.com>)\s*$"
+)
 
 SKIP_DIRS = {".git", "target", ".worktrees", ".nether"}
 

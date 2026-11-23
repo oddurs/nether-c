@@ -130,33 +130,45 @@ def core_lines(path: Path) -> int:
     bracket_depth = 0
     count = 0
 
-    for raw, bare in scan_rust(text):
-        if not skip and CFG_TEST.search(bare):
-            skip = True
-            pending = True
-            depth = 0
-            bracket_depth = 0
-        if skip:
-            for ch in bare:
-                if ch in "([":
-                    bracket_depth += 1
-                elif ch in ")]" and bracket_depth > 0:
-                    bracket_depth -= 1
-                elif ch == "{":
-                    pending = False
-                    depth += 1
-                elif ch == "}":
-                    depth -= 1
-                    if depth <= 0 and not pending:
-                        skip = False
-                        break
-                elif ch == ";" and pending and depth == 0 and bracket_depth == 0:
-                    skip = False
+    for _raw, bare in scan_rust(text):
+        pos = 0
+        n = len(bare)
+        has_core = False
+
+        while pos < n:
+            if not skip:
+                m = CFG_TEST.search(bare, pos)
+                if m is None:
+                    if bare[pos:].strip():
+                        has_core = True
                     break
-            continue
-        if BLANK_OR_COMMENT.match(raw):
-            continue
-        count += 1
+                if bare[pos : m.start()].strip():
+                    has_core = True
+                skip = True
+                pending = True
+                depth = 0
+                bracket_depth = 0
+                pos = m.end()
+                continue
+
+            ch = bare[pos]
+            pos += 1
+            if ch in "([":
+                bracket_depth += 1
+            elif ch in ")]" and bracket_depth > 0:
+                bracket_depth -= 1
+            elif ch == "{" and bracket_depth == 0:
+                pending = False
+                depth += 1
+            elif ch == "}" and bracket_depth == 0:
+                depth -= 1
+                if depth <= 0 and not pending:
+                    skip = False
+            elif ch == ";" and pending and depth == 0 and bracket_depth == 0:
+                skip = False
+
+        if has_core:
+            count += 1
     return count
 
 

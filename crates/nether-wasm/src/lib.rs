@@ -205,6 +205,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     }
     objects.sort_unstable_by_key(|(id, _)| *id);
     objects.dedup_by_key(|(id, _)| *id);
+    let node_count = objects.len();
     let objects = objects
         .iter()
         .map(|(id, object)| format!("[\"{id}\",\"{}\"]", hex(&object.encode())))
@@ -217,7 +218,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         residue_cairn,
         source_cairn,
         deepest,
-        residue.named.len() + 2,
+        node_count,
         residue.fuel_spent,
         holes.join(","),
         quoted(&printed)
