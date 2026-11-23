@@ -142,20 +142,35 @@ fn every_sample_in_the_specification_that_is_a_unit_survives_it() {
 fn unit_samples() -> Vec<String> {
     spec::of_shape(Shape::Unit)
         .into_iter()
-        // The samples name things the specification does not define in the
-        // fence — `compile`, `other`, `src` — so they arrive with the
-        // declarations a unit would need.
-        .map(|(_, body)| format!("{PRELUDE_FOR_SAMPLES}\n{body}\n"))
+        .map(|(_, body)| {
+            let declared: Vec<String> = parse(body.as_bytes()).map_or_else(
+                |_| Vec::new(),
+                |u| {
+                    u.items
+                        .into_iter()
+                        .filter_map(|i| match i {
+                            nether_syntax::ast::Item::Func(f) => Some(f.name.text),
+                            nether_syntax::ast::Item::Let(l) => Some(l.name.text),
+                            _ => None,
+                        })
+                        .collect()
+                },
+            );
+            let mut prelude = String::new();
+            for (decl, name) in [
+                ("Bytes compile(Bytes s) { concat(b\"obj:\", s) }\n", "compile"),
+                ("Bytes other = b\"\";\n", "other"),
+                ("Bytes src = b\"\";\n", "src"),
+                ("Str p = \"\";\n", "p"),
+            ] {
+                if !declared.iter().any(|d| d == name) {
+                    prelude.push_str(decl);
+                }
+            }
+            format!("{prelude}\n{body}\n")
+        })
         .collect()
 }
-
-/// What the samples assume exists around them.
-const PRELUDE_FOR_SAMPLES: &str = r#"
-Bytes compile(Bytes s) { concat(b"obj:", s) }
-Bytes other = b"";
-Bytes src = b"";
-Str p = "";
-"#;
 
 // ── what lowering does ──────────────────────────────────────────────────────
 
@@ -269,6 +284,139 @@ fn a_call_chain_longer_than_a_handful_still_settles() {
         let _ = writeln!(src, "Bytes up{i}() {{ {below}() }}");
     }
     let unit = ir(&src);
+    for f in &unit.funcs {
+        assert_eq!(f.ret_depth, Depth::DISK, "{}", f.name);
+    }
+    clean(&unit);
+}
+
+#[test]
+fn struct_type_faults_are_not_swallowed_by_fixpoint_passes() {
+    let ast = parse(b"struct Bad { NoSuch x; };\nU0 f() { 1; }\n").unwrap();
+    let faults = lower(&ast).expect_err("unknown struct field type must fail");
+    assert!(!faults.is_empty());
+}
+
+#[test]
+fn cyclic_typedef_through_generic_type_argument_fails_without_overflow() {
+    let ast = parse(b"typedef Answer<A> A;\nA f() { }\n").unwrap();
+    let faults = lower(&ast).expect_err("cyclic typedef must fail");
+    assert!(!faults.is_empty());
+}
+
+#[test]
+fn received_shade_origin_survives_lowering_and_round_trip() {
+    let src = "Cairn keep(Shade<Bytes@5> s) @0 { seal s }\n";
+    let unit = round_trip(src);
+    assert_eq!(
+        unit.funcs[0].locals[0].ty,
+        Type::Shade { origin: Depth::NET, inner: Box::new(Type::Bytes) }
+    );
+    clean(&unit);
+}
+
+#[test]
+fn refused_inherits_landing_type_across_blocks_descend_opaque_assign_and_calls() {
+    let src = r"
+Answer<Bytes> tail_fn() { refused(absent) }
+Answer<Bytes> block_fn() { ({ refused(absent) }) }
+Answer<Bytes> block_let() { Answer<Bytes> b = { refused(absent) }; b }
+Answer<Bytes> descend_fn() { descend disk { refused(absent) } }
+Answer<Bytes> opaque_fn() { opaque refused(absent) }
+U0 take(Answer<Bytes> a) { a; }
+U0 assign_and_call() {
+  Answer<Bytes> x;
+  x = refused(absent);
+  take(refused(absent));
+}
+";
+    let unit = round_trip(src);
+    clean(&unit);
+}
+
+#[test]
+fn round_trip_handles_multidim_arrays_nested_generics_negative_int_and_leading_block() {
+    let src = r"
+I64[2][3] arr_fn(I64[2][3] m) { m }
+Answer<Answer<I64>> nested(Answer<Answer<I64>> a) { a }
+I64 neg_min() { 0x8000000000000000 }
+U0 lead_block() { ({ 1 }) + 2; }
+";
+    let unit = round_trip(src);
+    clean(&unit);
+}
+
+#[test]
+fn duplicate_declarations_and_misplaced_control_flow_are_rejected() {
+    for bad in [
+        "struct S { I64 a; I64 a; };\n",
+        "struct S { I64 a; }; struct S { I64 b; };\n",
+        "typedef I64 T; typedef Str T;\n",
+        "U0 f() {} U0 f() {}\n",
+        "I64 g = 1; I64 g = 2;\n",
+        "U0 f(I64 x, I64 x) {}\n",
+        "U0 f() { break; }\n",
+        "U0 f() { continue; }\n",
+        "I64 g = { return 1; };\n",
+        "U0 f() { I64 x = 1; x[0] = 2; }\n",
+        "U0 f() { I64<Str> x = 1; }\n",
+        "U0 f() { must(1); }\n",
+        "U0 f() { answered(1, 2); }\n",
+    ] {
+        let ast = parse(bad.as_bytes()).unwrap_or_else(|e| panic!("should parse: {bad}\n{e:?}"));
+        assert!(lower(&ast).is_err(), "expected lowering error for: {bad}");
+    }
+}
+
+#[test]
+fn parser_rejects_trailing_commas_and_bounds_blocks_ifs_and_assignments() {
+    assert!(parse(b"U0 f(I64 a,) {}\n").is_err());
+    assert!(parse(b"U0 f() { g(1,); }\n").is_err());
+    // `a < b > c + 1;` is an expression, not a binding declaration.
+    assert!(parse(b"U0 f(I64 a, I64 b, I64 c) { a < b > c + 1; }\n").is_ok());
+
+    let deep_blocks = format!("U0 f() {}{}", "{ ".repeat(80), "}".repeat(80));
+    assert!(parse(deep_blocks.as_bytes()).is_err());
+
+    let mut deep_if = String::from("U0 f(Bool c) { if (c) {}");
+    for _ in 0..80 {
+        deep_if.push_str(" else if (c) {}");
+    }
+    deep_if.push_str(" }");
+    assert!(parse(deep_if.as_bytes()).is_err());
+
+    let deep_assign = format!("U0 f() {{ {}1; }}", "a = ".repeat(80));
+    assert!(parse(deep_assign.as_bytes()).is_err());
+}
+
+#[test]
+fn implicit_flow_in_if_while_and_indexed_assign_deepens_assigned_locals() {
+    let src = r#"
+I64 from_if() {
+  I64 x = 0;
+  Bytes b = descend disk { must(read("f")) };
+  if (len(b) > 0) {
+    x = 1;
+  }
+  return x;
+}
+I64 from_while() {
+  I64 x = 0;
+  Bytes b = descend disk { must(read("f")) };
+  while (len(b) > x) {
+    x = x + 1;
+  }
+  return x;
+}
+I64 from_early_return() {
+  Bytes b = descend disk { must(read("f")) };
+  if (len(b) > 0) {
+    return 1;
+  }
+  return 0;
+}
+"#;
+    let unit = ir(src);
     for f in &unit.funcs {
         assert_eq!(f.ret_depth, Depth::DISK, "{}", f.name);
     }

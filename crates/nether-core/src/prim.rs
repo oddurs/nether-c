@@ -171,20 +171,29 @@ impl Prim {
         self.signature().1
     }
 
-    /// Whether §09 types this one's result as an `Answer`.
+    /// Whether §09 types this one's result as an `Answer<T>`.
     ///
-    /// The rule every provider is written to. A function the world may say no
-    /// to returns `Answer<T>` and its answer is wrapped (§9.9: a refusal is an
-    /// answer); one it cannot returns `T`, and wrapping that anyway puts an
-    /// `Answer` where the program declared a `Bool` — the branch on it cannot
-    /// fold, and everything inside the branch silently does not happen.
-    ///
-    /// The five that cannot be refused are the ones whose question has an
-    /// answer either way: is it there, what time was pinned, what is the
-    /// target, and give me *n* bytes.
+    /// A primitive whose signature returns `Answer<T>` wraps its value in an
+    /// `Answer`; one that returns a plain `T` does not. Wrapping a plain `T`
+    /// puts an `Answer` where the program expects `Bool`, `I64`, `Str`, or
+    /// `Bytes`.
     #[must_use]
     pub const fn refusable(self) -> bool {
-        !matches!(self, Self::HasNode | Self::Clock | Self::Target | Self::Exists | Self::Draw)
+        matches!(
+            self,
+            Self::Utf8
+                | Self::Answered
+                | Self::Refused
+                | Self::FetchNode
+                | Self::Env
+                | Self::Read
+                | Self::List
+                | Self::Write
+                | Self::Remove
+                | Self::Get
+                | Self::Post
+                | Self::CallForeign
+        )
     }
 
     /// The prelude function of that name, if there is one.
@@ -239,6 +248,28 @@ mod tests {
                 Prim::ALL.iter().any(|p| p.latent() == c.stratum()),
                 "nothing in the prelude reaches `{c}`, so descending into it is pointless"
             );
+        }
+    }
+
+    #[test]
+    fn refusable_matches_answer_returning_primitives() {
+        for p in Prim::ALL {
+            let expected = matches!(
+                p,
+                Prim::Utf8
+                    | Prim::Answered
+                    | Prim::Refused
+                    | Prim::FetchNode
+                    | Prim::Env
+                    | Prim::Read
+                    | Prim::List
+                    | Prim::Write
+                    | Prim::Remove
+                    | Prim::Get
+                    | Prim::Post
+                    | Prim::CallForeign
+            );
+            assert_eq!(p.refusable(), expected, "{p}");
         }
     }
 }

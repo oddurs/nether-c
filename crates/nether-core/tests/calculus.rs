@@ -815,15 +815,17 @@ fn model_check(unit: &Unit) -> Vec<FaultKind> {
         gamma_global: Vec::new(),
         gamma_local: Vec::new(),
         named: Vec::new(),
+        deferred: Vec::new(),
         in_func: None,
         d_returns: Depth::PURE,
         d_latent: None,
     };
     m.reset_unit_frame();
     for g in &unit.globals {
-        let d = m.eval_expr(&g.value, Held::NONE);
+        let (d, _) = m.eval_expr(&g.value, Held::NONE, Depth::PURE);
         m.gamma_global.push(d);
         m.check_asserted(d, g.asserted);
+        m.check_deferred();
     }
     for f in &unit.funcs {
         m.eval_func(f);
@@ -831,9 +833,36 @@ fn model_check(unit: &Unit) -> Vec<FaultKind> {
     m.reset_unit_frame();
     for d in &unit.demands {
         // [DEMAND]: `Γ ; ∅ ⊢ e : τ@d  ==>  Γ ⊢ demand e : U0@d`
-        m.eval_expr(&d.value, Held::NONE);
+        m.eval_expr(&d.value, Held::NONE, Depth::PURE);
+        m.check_deferred();
     }
     m.faults
+}
+
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+struct ModelExit {
+    loop_exit: Option<Depth>,
+    fn_exit: Option<Depth>,
+}
+
+impl ModelExit {
+    const NONE: Self = Self { loop_exit: None, fn_exit: None };
+    fn join(self, other: Self) -> Self {
+        let j = |a: Option<Depth>, b: Option<Depth>| match (a, b) {
+            (Some(x), Some(y)) => Some(x.join(y)),
+            (a, b) => a.or(b),
+        };
+        Self {
+            loop_exit: j(self.loop_exit, other.loop_exit),
+            fn_exit: j(self.fn_exit, other.fn_exit),
+        }
+    }
+    fn deepest(self) -> Option<Depth> {
+        match (self.loop_exit, self.fn_exit) {
+            (Some(a), Some(b)) => Some(a.join(b)),
+            (a, b) => a.or(b),
+        }
+    }
 }
 
 struct Model<'a> {
@@ -842,6 +871,7 @@ struct Model<'a> {
     gamma_global: Vec<Depth>,
     gamma_local: Vec<Option<Depth>>,
     named: Vec<Option<Span>>,
+    deferred: Vec<LocalId>,
     in_func: Option<&'a FuncDef>,
     d_returns: Depth,
     d_latent: Option<Held>,
@@ -852,6 +882,7 @@ impl<'a> Model<'a> {
         self.in_func = None;
         self.gamma_local = vec![None; self.unit.locals.len()];
         self.named = vec![None; self.unit.locals.len()];
+        self.deferred.clear();
     }
 
     fn check_stated(&mut self, derived: Depth, stated: Depth) {
@@ -885,12 +916,52 @@ impl<'a> Model<'a> {
         }
     }
 
-    fn mark_named(&mut self, expr: &Expr) {
-        if let ExprKind::Local(id) = expr.kind {
-            if let Some(slot) = self.named.get_mut(id.0 as usize) {
-                if slot.is_none() {
-                    *slot = Some(expr.span);
+    fn declare_local(&mut self, id: LocalId) {
+        let idx = id.0 as usize;
+        if idx < self.gamma_local.len() {
+            self.gamma_local[idx] = Some(Depth::PURE);
+            self.named[idx] = None;
+        } else {
+            self.faults.push(FaultKind::Malformed("this binding names no local"));
+        }
+        if !self.deferred.contains(&id) {
+            self.deferred.push(id);
+        }
+    }
+
+    fn check_deferred(&mut self) {
+        let ids = std::mem::take(&mut self.deferred);
+        for id in ids {
+            let idx = id.0 as usize;
+            let Some(derived) = self.gamma_local.get(idx).copied().flatten() else { continue };
+            let def = match self.in_func {
+                Some(f) => f.locals.get(idx),
+                None => self.unit.locals.get(idx),
+            };
+            if let Some(l) = def {
+                self.check_asserted(derived, l.asserted);
+            }
+        }
+    }
+
+    fn mark_named(&mut self, mut expr: &Expr) {
+        loop {
+            match &expr.kind {
+                ExprKind::Local(id) => {
+                    if let Some(slot) = self.named.get_mut(id.0 as usize) {
+                        if slot.is_none() {
+                            *slot = Some(expr.span);
+                        }
+                    }
+                    return;
                 }
+                ExprKind::Rite { rite: Rite::Opaque, operand } => expr = operand,
+                ExprKind::Descend { body, .. } => expr = body,
+                ExprKind::Block(b) => match b.tail.as_deref() {
+                    Some(t) => expr = t,
+                    None => return,
+                },
+                _ => return,
             }
         }
     }
@@ -902,15 +973,17 @@ impl<'a> Model<'a> {
         self.in_func = Some(f);
         self.gamma_local = vec![None; f.locals.len()];
         self.named = vec![None; f.locals.len()];
+        self.deferred.clear();
         self.d_returns = Depth::PURE;
         self.d_latent = Some(Held::NONE);
         for p in &f.params {
             self.bind_local(*p, Depth::PURE);
         }
-        let d_body = self.eval_block(&f.body, Held::NONE);
+        let (d_body, _) = self.eval_block(&f.body, Held::NONE, Depth::PURE);
         let d_r = d_body.join(self.d_returns);
         let d_f = self.d_latent.take().unwrap_or(Held::NONE);
 
+        self.check_deferred();
         self.check_stated(d_r, f.ret_depth);
         self.check_asserted(d_r, f.asserted_ret);
         if d_f != f.latent {
@@ -924,51 +997,67 @@ impl<'a> Model<'a> {
         self.in_func = None;
     }
 
-    fn eval_block(&mut self, b: &Block, delta: Held) -> Depth {
+    fn eval_block(&mut self, b: &Block, delta: Held, pc: Depth) -> (Depth, ModelExit) {
+        let mut block_pc = pc;
+        let mut exit = ModelExit::NONE;
         for s in &b.stmts {
             match s {
                 Stmt::Let { local, value } => {
-                    let d = self.eval_expr(value, delta);
+                    let (d, ex) = self.eval_expr(value, delta, block_pc);
                     self.bind_local(*local, d);
+                    exit = exit.join(ex);
+                    if let Some(e) = ex.deepest() {
+                        block_pc = block_pc.join(e);
+                    }
                 }
                 Stmt::Declare { local } => {
-                    self.bind_local(*local, Depth::PURE);
+                    self.declare_local(*local);
                 }
                 Stmt::Expr(x) => {
-                    self.eval_expr(x, delta);
+                    let (_, ex) = self.eval_expr(x, delta, block_pc);
                     self.mark_named(x);
+                    exit = exit.join(ex);
+                    if let Some(e) = ex.deepest() {
+                        block_pc = block_pc.join(e);
+                    }
                 }
             }
         }
-        match &b.tail {
-            Some(t) => self.eval_expr(t, delta),
-            None => Depth::PURE,
-        }
+        let tail = match &b.tail {
+            Some(t) => self.eval_expr(t, delta, block_pc),
+            None => (Depth::PURE, ModelExit::NONE),
+        };
+        (tail.0, exit.join(tail.1))
     }
 
     #[expect(clippy::too_many_lines, reason = "eleven rules, one arm each")]
-    fn eval_expr(&mut self, x: &Expr, delta: Held) -> Depth {
-        let derived = match &x.kind {
+    fn eval_expr(&mut self, x: &Expr, delta: Held, pc: Depth) -> (Depth, ModelExit) {
+        let (derived, exit) = match &x.kind {
             // [LIT]
-            ExprKind::Literal(_) | ExprKind::Break | ExprKind::Continue => Depth::PURE,
+            ExprKind::Literal(_) => (Depth::PURE, ModelExit::NONE),
+            ExprKind::Break | ExprKind::Continue => {
+                (Depth::PURE, ModelExit { loop_exit: Some(pc), fn_exit: None })
+            }
 
             // [VAR]
             ExprKind::Local(id) => {
-                if let Some(d) = self.gamma_local.get(id.0 as usize).copied().flatten() {
+                let d = if let Some(d) = self.gamma_local.get(id.0 as usize).copied().flatten() {
                     d
                 } else {
                     self.faults.push(FaultKind::Malformed("this local is not bound here"));
                     x.depth
-                }
+                };
+                (d, ModelExit::NONE)
             }
             ExprKind::Global(id) => {
-                if let Some(d) = self.gamma_global.get(id.0 as usize).copied() {
+                let d = if let Some(d) = self.gamma_global.get(id.0 as usize).copied() {
                     d
                 } else {
                     self.faults
                         .push(FaultKind::Malformed("this unit-level binding is not declared yet"));
                     x.depth
-                }
+                };
+                (d, ModelExit::NONE)
             }
 
             // [ABS] value reference
@@ -994,7 +1083,7 @@ impl<'a> Model<'a> {
                 } else {
                     self.faults.push(FaultKind::Malformed("this names no function in the unit"));
                 }
-                Depth::PURE
+                (Depth::PURE, ModelExit::NONE)
             }
             ExprKind::Prim(p) => {
                 let s = p.latent();
@@ -1010,15 +1099,17 @@ impl<'a> Model<'a> {
                         self.faults.push(FaultKind::Malformed("a prelude function is a function"));
                     }
                 }
-                Depth::PURE
+                (Depth::PURE, ModelExit::NONE)
             }
 
             // [APP]: premise `dƒ ⊆ δ`, result `max(d_r, d_f, d_a)`
             ExprKind::Call { callee, args } => {
-                let d_f = self.eval_expr(callee, delta);
+                let (d_f, mut ex) = self.eval_expr(callee, delta, pc);
                 let mut d_a = Depth::PURE;
                 for a in args {
-                    d_a = d_a.join(self.eval_expr(a, delta));
+                    let (d, ae) = self.eval_expr(a, delta, pc);
+                    d_a = d_a.join(d);
+                    ex = ex.join(ae);
                 }
                 for a in args {
                     self.mark_named(a);
@@ -1030,28 +1121,29 @@ impl<'a> Model<'a> {
                     (Held::NONE, Depth::PURE)
                 };
                 if !d_fn_latent.subset_of(delta) {
+                    let missing = d_fn_latent.without(delta);
                     if let Some(acc) = &mut self.d_latent {
-                        *acc = acc.union(d_fn_latent);
+                        *acc = acc.union(missing);
                     } else {
-                        let needed = d_fn_latent.without(delta).deepest();
+                        let needed = missing.deepest();
                         self.faults.push(FaultKind::Ungranted { needed, held: delta });
                     }
                 }
-                d_r.join(d_f).join(d_a)
+                (d_r.join(d_f).join(d_a), ex)
             }
 
             // [DESCEND]: `δ ∪ {s(κ)}`
             ExprKind::Descend { capability, body } => {
-                self.eval_expr(body, delta.with(capability.stratum()))
+                self.eval_expr(body, delta.with(capability.stratum()), pc)
             }
 
             // [SEAL], [SHADE], [LOOK], [OPAQUE]
             ExprKind::Rite { rite, operand } => {
-                let d = self.eval_expr(operand, delta);
+                let (d, ex) = self.eval_expr(operand, delta, pc);
                 if matches!(rite, Rite::Seal | Rite::Shade) {
                     self.mark_named(operand);
                 }
-                match rite {
+                let res = match rite {
                     Rite::Seal => Depth::PURE,
                     Rite::Shade => {
                         let expected =
@@ -1064,7 +1156,12 @@ impl<'a> Model<'a> {
                         Depth::PURE
                     }
                     Rite::Look => {
-                        if let Type::Shade { origin, .. } = &operand.ty {
+                        if let Type::Shade { origin, inner } = &operand.ty {
+                            if x.ty != **inner {
+                                self.faults.push(FaultKind::Malformed(
+                                    "`look` gives back the type inside the shade",
+                                ));
+                            }
                             if !delta.holds(*origin) {
                                 self.faults
                                     .push(FaultKind::Orpheus { origin: *origin, held: delta });
@@ -1076,85 +1173,109 @@ impl<'a> Model<'a> {
                         }
                     }
                     Rite::Opaque => d,
-                }
+                };
+                (res, ex)
             }
 
             // [PRIM]
             ExprKind::Unary { operand, .. } | ExprKind::Field { base: operand, .. } => {
-                self.eval_expr(operand, delta)
+                self.eval_expr(operand, delta, pc)
             }
             ExprKind::Binary { lhs, rhs, .. } | ExprKind::Index { base: lhs, index: rhs } => {
-                self.eval_expr(lhs, delta).join(self.eval_expr(rhs, delta))
+                let (dl, el) = self.eval_expr(lhs, delta, pc);
+                let (dr, er) = self.eval_expr(rhs, delta, pc);
+                (dl.join(dr), el.join(er))
             }
             ExprKind::Select { cond, then, otherwise } => {
-                let d_c = self.eval_expr(cond, delta);
+                let (d_c, e_c) = self.eval_expr(cond, delta, pc);
+                let branch_pc = pc.join(d_c);
                 let saved_named = self.named.clone();
                 let saved_locals = self.gamma_local.clone();
-                let d_t = self.eval_expr(then, delta);
+                let (d_t, e_t) = self.eval_expr(then, delta, branch_pc);
                 let named_t = std::mem::replace(&mut self.named, saved_named);
                 let locals_t = std::mem::replace(&mut self.gamma_local, saved_locals);
-                let d_e = self.eval_expr(otherwise, delta);
+                let (d_e, e_e) = self.eval_expr(otherwise, delta, branch_pc);
                 for (a, b) in self.named.iter_mut().zip(&named_t) {
                     *a = a.or(*b);
                 }
                 for (a, b) in self.gamma_local.iter_mut().zip(&locals_t) {
                     *a = a.zip(*b).map(|(x, y)| x.join(y)).or(*a).or(*b);
                 }
-                d_c.join(d_t).join(d_e)
+                (d_c.join(d_t).join(d_e), e_c.join(e_t).join(e_e))
             }
-            // A turn starts in the state the last one ended in, so walk until
-            // a turn ends where it started. Every rule only joins, so this
-            // stops. The whole state is compared, on purpose: the model is the
-            // obvious version, and the checker's cheaper comparison is what it
-            // is checked against.
-            ExprKind::Loop { body, step } => loop {
-                let mark = self.faults.len();
-                let was = (self.gamma_local.clone(), self.named.clone());
-                let d_b = self.eval_expr(body, delta);
-                let d = match step {
-                    Some(s) => d_b.join(self.eval_expr(s, delta)),
-                    None => d_b,
-                };
-                if (&self.gamma_local, &self.named) == (&was.0, &was.1) {
-                    break d;
-                }
-                self.faults.truncate(mark);
-            },
-            ExprKind::Return(v) => {
-                let d = match v {
-                    Some(inner) => {
-                        let d = self.eval_expr(inner, delta);
-                        self.mark_named(inner);
-                        d
+            ExprKind::Loop { body, step } => {
+                let mut loop_pc = pc;
+                loop {
+                    let mark = self.faults.len();
+                    let was = (self.gamma_local.clone(), self.named.clone(), loop_pc);
+                    let (d_b, e_b) = self.eval_expr(body, delta, loop_pc);
+                    let step_pc = e_b.deepest().map_or(loop_pc, |e| loop_pc.join(e));
+                    let (d, e_s) = match step {
+                        Some(s) => {
+                            let (ds, es) = self.eval_expr(s, delta, step_pc);
+                            (d_b.join(ds), es)
+                        }
+                        None => (d_b, ModelExit::NONE),
+                    };
+                    let combined = e_b.join(e_s);
+                    if let Some(ex) = combined.deepest() {
+                        loop_pc = loop_pc.join(ex);
                     }
-                    None => Depth::PURE,
-                };
-                self.d_returns = self.d_returns.join(d);
-                d
+                    if (&self.gamma_local, &self.named, loop_pc) == (&was.0, &was.1, was.2) {
+                        break (d, ModelExit { loop_exit: None, fn_exit: combined.fn_exit });
+                    }
+                    self.faults.truncate(mark);
+                }
             }
-            ExprKind::Block(b) => self.eval_block(b, delta),
+            ExprKind::Return(v) => {
+                let (d, ex) = match v {
+                    Some(inner) => {
+                        let (d, ex) = self.eval_expr(inner, delta, pc);
+                        self.mark_named(inner);
+                        (d, ex)
+                    }
+                    None => (Depth::PURE, ModelExit::NONE),
+                };
+                self.d_returns = self.d_returns.join(d).join(pc);
+                (d, ex.join(ModelExit { loop_exit: None, fn_exit: Some(pc) }))
+            }
+            ExprKind::Block(b) => self.eval_block(b, delta, pc),
             ExprKind::Assign { place, value } => {
-                let d_v = self.eval_expr(value, delta);
+                let (d_v, mut ex) = self.eval_expr(value, delta, pc);
                 let mut d_p = Depth::PURE;
                 for p in &place.path {
                     if let Proj::Index(i) = p {
-                        d_p = d_p.join(self.eval_expr(i, delta));
+                        let (di, ei) = self.eval_expr(i, delta, pc);
+                        d_p = d_p.join(di);
+                        ex = ex.join(ei);
                     }
                 }
                 let idx = place.local.0 as usize;
                 if let Some(Some(named)) = self.named.get(idx).copied() {
                     self.faults.push(FaultKind::Frozen { named });
                 }
-                if let Some(slot) = self.gamma_local.get_mut(idx) {
-                    *slot = Some(slot.unwrap_or(Depth::PURE).join(d_v));
-                } else {
-                    self.faults.push(FaultKind::Malformed("this assigns to no local"));
+                let written = d_v.join(d_p).join(pc);
+                match self.gamma_local.get_mut(idx) {
+                    Some(Some(was)) => {
+                        let next = was.join(written);
+                        let deepened = next != *was;
+                        *was = next;
+                        if deepened && !self.deferred.contains(&place.local) {
+                            self.deferred.push(place.local);
+                        }
+                    }
+                    Some(None) => {
+                        self.faults.push(FaultKind::Malformed("this local is not bound here"));
+                    }
+                    None => {
+                        self.faults.push(FaultKind::Malformed("this assigns to no local"));
+                    }
                 }
-                d_v.join(d_p)
+                (d_v.join(d_p), ex)
             }
         };
         self.check_stated(derived, x.depth);
-        derived
+        (derived, exit)
     }
 }
 
@@ -2073,4 +2194,258 @@ fn ten_million_programs_agree_with_the_model() {
         combined.malformed,
     );
     assert_eq!(combined.valid + combined.invalid, total);
+}
+
+#[test]
+fn partial_descent_subtracts_ambient_from_callee_latent_set() {
+    // `helper` needs {3, 5}. `caller` descends disk (3) and calls `helper`, so
+    // `caller` only needs {5}, NOT {3, 5}.
+    let both = Held::of(Depth::DISK).with(Depth::NET);
+    let helper = FuncDef {
+        name: "helper".into(),
+        params: Vec::new(),
+        ret: Type::Bytes,
+        ret_depth: Depth::NET,
+        asserted_ret: None,
+        latent: both,
+        asserted_latent: Some(both),
+        locals: Vec::new(),
+        body: Block {
+            stmts: vec![Stmt::Expr(read("k"))],
+            tail: Some(Box::new(must(net_get()))),
+            span: Span::default(),
+        },
+        span: Span::default(),
+    };
+    let target = Expr {
+        kind: ExprKind::Func(FuncId(0)),
+        ty: Type::Fn {
+            params: Vec::new(),
+            latent: both,
+            result: Box::new(Type::Bytes),
+            result_depth: Depth::NET,
+        },
+        depth: Depth::PURE,
+        span: Span::default(),
+    };
+    let call_helper = Expr {
+        kind: ExprKind::Call { callee: Box::new(target), args: Vec::new() },
+        ty: Type::Bytes,
+        depth: Depth::NET,
+        span: Span::default(),
+    };
+    let caller = FuncDef {
+        name: "caller".into(),
+        params: Vec::new(),
+        ret: Type::Bytes,
+        ret_depth: Depth::NET,
+        asserted_ret: None,
+        latent: Held::of(Depth::NET),
+        asserted_latent: Some(Held::of(Depth::NET)),
+        locals: Vec::new(),
+        body: Block {
+            stmts: Vec::new(),
+            tail: Some(Box::new(descend(Capability::Disk, call_helper))),
+            span: Span::default(),
+        },
+        span: Span::default(),
+    };
+    let unit = Unit { funcs: vec![helper, caller], ..Unit::default() };
+    clean(&unit);
+    assert_eq!(kinds(&unit), model_check(&unit));
+}
+
+#[test]
+fn blame_is_linear_on_deep_dag_and_terminates_on_cyclic_globals() {
+    // 40-level diamond DAG: x_{k+1} = x_k + x_k. Without lazy/visited blame,
+    // checking this took O(2^40) steps.
+    let mut globals = vec![GlobalDef {
+        name: "g0".into(),
+        ty: Type::Int,
+        asserted: None,
+        value: int(1),
+        span: Span::default(),
+    }];
+    for i in 1..40u32 {
+        let prev = Expr {
+            kind: ExprKind::Global(GlobalId(i - 1)),
+            ty: Type::Int,
+            depth: Depth::PURE,
+            span: Span::default(),
+        };
+        let sum = Expr {
+            kind: ExprKind::Binary {
+                op: BinOp::Add,
+                lhs: Box::new(prev.clone()),
+                rhs: Box::new(prev),
+            },
+            ty: Type::Int,
+            depth: Depth::PURE,
+            span: Span::default(),
+        };
+        globals.push(GlobalDef {
+            name: format!("g{i}"),
+            ty: Type::Int,
+            asserted: if i == 39 { Some(Depth::DISK) } else { None },
+            value: sum,
+            span: Span::default(),
+        });
+    }
+    let unit = Unit { globals, ..Unit::default() };
+    let faults = check(&unit);
+    assert_eq!(faults.len(), 1);
+    assert!(matches!(faults[0].kind, FaultKind::Asserted { .. }));
+
+    // Hand-built cyclic global (GlobalId(0) references itself) with wrong @d.
+    let cyclic = Unit {
+        globals: vec![GlobalDef {
+            name: "cycle".into(),
+            ty: Type::Int,
+            asserted: Some(Depth::DISK),
+            value: Expr {
+                kind: ExprKind::Global(GlobalId(0)),
+                ty: Type::Int,
+                depth: Depth::PURE,
+                span: Span::default(),
+            },
+            span: Span::default(),
+        }],
+        ..Unit::default()
+    };
+    let faults = check(&cyclic);
+    assert!(faults.iter().any(|f| matches!(f.kind, FaultKind::Malformed(_))));
+}
+
+#[test]
+fn declare_asserted_depth_is_checked_against_final_depth_and_opaque_freezes_local() {
+    let mut f = FuncDef {
+        name: "f".into(),
+        params: Vec::new(),
+        ret: Type::Unit,
+        ret_depth: Depth::PURE,
+        asserted_ret: None,
+        latent: Held::NONE,
+        asserted_latent: None,
+        locals: vec![LocalDef {
+            name: "h".into(),
+            ty: Type::Bytes,
+            asserted: Some(Depth::DISK),
+            span: Span { start: 1, end: 2 },
+        }],
+        body: Block {
+            stmts: vec![
+                Stmt::Declare { local: LocalId(0) },
+                Stmt::Expr(Expr {
+                    kind: ExprKind::Assign {
+                        place: Place { local: LocalId(0), path: Vec::new() },
+                        value: Box::new(descend(Capability::Disk, must(read("k")))),
+                    },
+                    ty: Type::Unit,
+                    depth: Depth::DISK,
+                    span: Span::default(),
+                }),
+                // Naming through `opaque` still freezes `h`.
+                Stmt::Expr(rite(
+                    Rite::Seal,
+                    rite(
+                        Rite::Opaque,
+                        Expr {
+                            kind: ExprKind::Local(LocalId(0)),
+                            ty: Type::Bytes,
+                            depth: Depth::DISK,
+                            span: Span { start: 5, end: 6 },
+                        },
+                        Type::Bytes,
+                        Depth::DISK,
+                    ),
+                    Type::Cairn,
+                    Depth::PURE,
+                )),
+                Stmt::Expr(Expr {
+                    kind: ExprKind::Assign {
+                        place: Place { local: LocalId(0), path: Vec::new() },
+                        value: Box::new(descend(Capability::Disk, must(read("k")))),
+                    },
+                    ty: Type::Unit,
+                    depth: Depth::DISK,
+                    span: Span { start: 10, end: 11 },
+                }),
+            ],
+            tail: None,
+            span: Span::default(),
+        },
+        span: Span::default(),
+    };
+    let unit = Unit { funcs: vec![f.clone()], ..Unit::default() };
+    // `@3` matches final depth (no Asserted fault), while the post-`seal opaque h`
+    // assignment triggers Frozen!
+    assert_eq!(kinds(&unit), vec![FaultKind::Frozen { named: Span { start: 5, end: 6 } }]);
+    assert_eq!(kinds(&unit), model_check(&unit));
+
+    // And claiming `@0` on `h` IS caught once `h` is deepened to `@3`.
+    f.locals[0].asserted = Some(Depth::PURE);
+    let unit2 = Unit { funcs: vec![f], ..Unit::default() };
+    assert!(
+        kinds(&unit2)
+            .contains(&FaultKind::Asserted { derived: Depth::DISK, asserted: Depth::PURE })
+    );
+    assert_eq!(kinds(&unit2), model_check(&unit2));
+}
+
+#[test]
+fn look_verifies_result_type_and_assign_rejects_unbound_local() {
+    let shade = Expr {
+        kind: ExprKind::Rite {
+            rite: Rite::Shade,
+            operand: Box::new(descend(Capability::Disk, must(read("k")))),
+        },
+        ty: Type::Shade { origin: Depth::DISK, inner: Box::new(Type::Bytes) },
+        depth: Depth::PURE,
+        span: Span::default(),
+    };
+    let bad_look = Expr {
+        kind: ExprKind::Rite { rite: Rite::Look, operand: Box::new(shade) },
+        ty: Type::Int, // wrong: inner is Bytes
+        depth: Depth::DISK,
+        span: Span::default(),
+    };
+    let u = Unit {
+        demands: vec![Demand { value: descend(Capability::Disk, bad_look), span: Span::default() }],
+        ..Unit::default()
+    };
+    assert_eq!(
+        kinds(&u),
+        vec![FaultKind::Malformed("`look` gives back the type inside the shade")]
+    );
+    assert_eq!(kinds(&u), model_check(&u));
+
+    let unbound_assign = Unit {
+        funcs: vec![FuncDef {
+            name: "g".into(),
+            params: Vec::new(),
+            ret: Type::Unit,
+            ret_depth: Depth::PURE,
+            asserted_ret: None,
+            latent: Held::NONE,
+            asserted_latent: None,
+            locals: vec![binding("x", Type::Int)],
+            body: Block {
+                stmts: vec![Stmt::Expr(Expr {
+                    kind: ExprKind::Assign {
+                        place: Place { local: LocalId(0), path: Vec::new() },
+                        value: Box::new(int(1)),
+                    },
+                    ty: Type::Unit,
+                    depth: Depth::PURE,
+                    span: Span::default(),
+                })],
+                tail: None,
+                span: Span::default(),
+            },
+            span: Span::default(),
+        }],
+        ..Unit::default()
+    };
+    assert_eq!(kinds(&unbound_assign), vec![FaultKind::Malformed("this local is not bound here")]);
+    assert_eq!(kinds(&unbound_assign), model_check(&unbound_assign));
 }

@@ -51,14 +51,17 @@ pub struct Cause {
 pub fn report(d: &Diagnostic, source: &str, path: &str) -> String {
     let headline = &d.headline;
     let mut out = format!("error: {headline}\n");
+    let mut gutter = line_of(d.span, source).0.to_string().len();
+    if let Some(cause) = &d.cause {
+        gutter = gutter.max(line_of(cause.span, source).0.to_string().len());
+    }
     let more = d.cause.is_some() || d.note.is_some();
-    out.push_str(&snippet(d.span, d.label.as_deref(), source, path, more));
+    out.push_str(&snippet(d.span, d.label.as_deref(), source, path, gutter, more));
     if let Some(cause) = &d.cause {
         let label = Some(cause.label.as_str());
-        out.push_str(&snippet(cause.span, label, source, path, d.note.is_some()));
+        out.push_str(&snippet(cause.span, label, source, path, gutter, d.note.is_some()));
     }
     if let Some(note) = &d.note {
-        let gutter = line_of(d.span, source).0.to_string().len();
         let _ = writeln!(out, "{:gutter$} = {note}", "", gutter = gutter);
     }
     out
@@ -92,23 +95,34 @@ fn line_of(span: Span, source: &str) -> (usize, usize, usize) {
 ///
 /// The bar that closes it is a separator rather than a border: it is there
 /// when something follows and gone when nothing does.
-fn snippet(span: Span, label: Option<&str>, source: &str, path: &str, followed: bool) -> String {
+fn snippet(
+    span: Span,
+    label: Option<&str>,
+    source: &str,
+    path: &str,
+    gutter: usize,
+    followed: bool,
+) -> String {
     let start = cut(span.start, source);
     let (number, line_start, line_end) = line_of(span, source);
     let text = source[line_start..line_end].trim_end_matches('\r');
+    let text_end = line_start + text.len();
+    let start = start.min(text_end);
     let column = source[line_start..start].chars().count() + 1;
-    let end = cut(span.end, source).clamp(start, line_end);
+    let end = cut(span.end, source).clamp(start, text_end);
     let width = source[start..end].chars().count().max(1);
 
-    // Everything lines up against the widest line number, which is this one.
-    let gutter = number.to_string().len();
     let bar = format!("{:gutter$} |", "", gutter = gutter);
 
     let mut out = String::new();
     let _ = writeln!(out, "{:gutter$}--> {path}:{number}:{column}", "", gutter = gutter);
     let _ = writeln!(out, "{bar}");
-    let _ = writeln!(out, "{number} | {text}");
-    let _ = write!(out, "{bar} {:column$}{:^<width$}", "", "", column = column - 1, width = width);
+    let _ = writeln!(out, "{number:>gutter$} | {text}");
+    let _ = write!(out, "{bar} ");
+    for ch in source[line_start..start].chars() {
+        out.push(if ch == '\t' { '\t' } else { ' ' });
+    }
+    let _ = write!(out, "{:^<width$}", "", width = width);
     if let Some(label) = label {
         let _ = write!(out, " {label}");
     }
@@ -196,5 +210,25 @@ mod tests {
         let span = Span { start: skull + 2, end: skull + 3 };
         let out = report(&plain(span, "inside it"), source, "x.nc");
         assert!(out.contains(&format!("x.nc:1:{}", skull + 1)), "{out}");
+    }
+
+    #[test]
+    fn gutter_aligns_across_span_cause_and_note_and_excludes_cr() {
+        let source = format!("{}a\r\nb\r\n", "x\r\n".repeat(9));
+        let line1 = Span { start: 0, end: 2 }; // includes '\r'
+        let line10_start = u32::try_from("x\r\n".len() * 9).unwrap();
+        let line10 = Span { start: line10_start, end: line10_start + 1 };
+        let d = Diagnostic {
+            span: line1,
+            headline: "mismatch".into(),
+            label: None,
+            cause: Some(Cause { span: line10, label: "here".into() }),
+            note: Some("fix it".into()),
+        };
+        let out = report(&d, &source, "t.nc");
+        assert!(out.contains(" 1 | x\n"), "{out}");
+        assert!(out.contains("   | ^\n"), "CR must not widen caret:\n{out}");
+        assert!(out.contains("10 | a\n"), "{out}");
+        assert!(out.contains("   = fix it\n"), "{out}");
     }
 }

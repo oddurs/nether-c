@@ -77,7 +77,14 @@ pub fn levels() -> Vec<(Punct, u8, BinOp)> {
 /// guesses.
 pub fn parse(source: &[u8]) -> Result<Unit, Vec<Fault>> {
     let tokens = lex(source).map_err(|f| vec![f])?;
-    let mut p = Parser { tokens: &tokens, at: 0, faults: Vec::new(), end: end_of(source), deep: 0 };
+    let mut p = Parser {
+        tokens: &tokens,
+        at: 0,
+        faults: Vec::new(),
+        end: end_of(source),
+        deep: 0,
+        pending_gt: None,
+    };
     let unit = p.unit();
     if p.faults.is_empty() { Ok(unit) } else { Err(p.faults) }
 }
@@ -114,7 +121,11 @@ struct Parser<'a> {
     end: Span,
     /// How far in the current expression or type is. See [`MAX_NESTING`].
     deep: u32,
+    /// Second half of a split `>>` token while closing nested generic types.
+    pending_gt: Option<Span>,
 }
+
+const GT_KIND: TokenKind = TokenKind::Punct(Punct::Gt);
 
 /// The parser gave up on this construct. It has already recorded why.
 struct Given;
@@ -125,10 +136,16 @@ impl Parser<'_> {
     // ── the token stream ────────────────────────────────────────────────────
 
     fn peek(&self) -> Option<&TokenKind> {
+        if self.pending_gt.is_some() {
+            return Some(&GT_KIND);
+        }
         self.tokens.get(self.at).map(|t| &t.kind)
     }
 
     fn span(&self) -> Span {
+        if let Some(span) = self.pending_gt {
+            return span;
+        }
         self.tokens.get(self.at).map_or(self.end, |t| t.span)
     }
 
@@ -138,8 +155,12 @@ impl Parser<'_> {
     }
 
     fn bump(&mut self) -> Option<&TokenKind> {
+        if self.pending_gt.take().is_some() {
+            return Some(&GT_KIND);
+        }
+        let tok = self.tokens.get(self.at)?;
         self.at += 1;
-        self.tokens.get(self.at - 1).map(|t| &t.kind)
+        Some(&tok.kind)
     }
 
     fn at_punct(&self, p: Punct) -> bool {
@@ -151,11 +172,27 @@ impl Parser<'_> {
     }
 
     fn eat(&mut self, p: Punct) -> bool {
+        if p == Punct::Gt && self.pending_gt.take().is_some() {
+            return true;
+        }
         let here = self.at_punct(p);
         if here {
             self.at += 1;
         }
         here
+    }
+
+    fn expect_gt(&mut self, what: &'static str) -> Parsed<()> {
+        if self.eat(Punct::Gt) {
+            return Ok(());
+        }
+        if self.pending_gt.is_none() && self.at_punct(Punct::Shr) {
+            let s = self.span();
+            self.at += 1;
+            self.pending_gt = Some(Span { start: s.start + 1, end: s.end });
+            return Ok(());
+        }
+        Err(self.complain(what))
     }
 
     fn eat_keyword(&mut self, k: Keyword) -> bool {
@@ -323,13 +360,15 @@ impl Parser<'_> {
     fn func(&mut self, ret: Type, name: Name, from: Span) -> Parsed<Item> {
         self.expect(Punct::LParen, "`(`")?;
         let mut params = Vec::new();
-        while !self.at_punct(Punct::RParen) {
-            let at = self.span();
-            let ty = self.ty()?;
-            let pname = self.name("a name for the parameter")?;
-            params.push(Field { ty, name: pname, span: self.since(at) });
-            if !self.eat(Punct::Comma) {
-                break;
+        if !self.at_punct(Punct::RParen) {
+            loop {
+                let at = self.span();
+                let ty = self.ty()?;
+                let pname = self.name("a name for the parameter")?;
+                params.push(Field { ty, name: pname, span: self.since(at) });
+                if !self.eat(Punct::Comma) {
+                    break;
+                }
             }
         }
         self.expect(Punct::RParen, "`)` to close the parameters")?;
@@ -353,6 +392,7 @@ impl Parser<'_> {
                 Ok(Some(vec![d]))
             }
             Some(TokenKind::Punct(Punct::At)) => {
+                let from = self.span();
                 self.at += 1;
                 if !self.eat(Punct::LBrace) {
                     return Ok(Some(vec![self.stratum()?]));
@@ -372,7 +412,8 @@ impl Parser<'_> {
                 }
                 self.expect(Punct::RBrace, "`}` to close the latent set")?;
                 if set.len() < 2 {
-                    self.faults.push(Fault { span: self.span(), kind: FaultKind::NotAStratumSet });
+                    self.faults
+                        .push(Fault { span: self.since(from), kind: FaultKind::NotAStratumSet });
                     return Err(Given);
                 }
                 Ok(Some(set))
@@ -414,7 +455,7 @@ impl Parser<'_> {
                     break;
                 }
             }
-            self.expect(Punct::Gt, "`>` to close the type arguments")?;
+            self.expect_gt("`>` to close the type arguments")?;
         }
         let mut arrays = Vec::new();
         while self.eat(Punct::LBracket) {
@@ -444,12 +485,17 @@ impl Parser<'_> {
     /// A type followed by a name, or nothing. Used where §04 has two
     /// productions that start the same way and the token after decides.
     fn try_binding(&mut self) -> Option<(Type, Name)> {
-        let save = (self.at, self.faults.len());
-        let out = self.ty().ok().zip(self.name("a name").ok());
+        let save = (self.at, self.faults.len(), self.pending_gt);
+        let out = self
+            .ty()
+            .ok()
+            .zip(self.name("a name").ok())
+            .filter(|_| self.at_punct(Punct::Eq) || self.at_punct(Punct::Semi));
         // Nothing that was tried speculatively gets to complain about it.
         self.faults.truncate(save.1);
         if out.is_none() {
             self.at = save.0;
+            self.pending_gt = save.2;
         }
         out
     }
@@ -457,6 +503,13 @@ impl Parser<'_> {
     // ── §4.4 ────────────────────────────────────────────────────────────────
 
     fn block(&mut self) -> Parsed<Block> {
+        self.deeper()?;
+        let out = self.block_inner();
+        self.deep -= 1;
+        out
+    }
+
+    fn block_inner(&mut self) -> Parsed<Block> {
         let from = self.span();
         self.expect(Punct::LBrace, "`{`")?;
         let mut stmts = Vec::new();
@@ -534,6 +587,13 @@ impl Parser<'_> {
     }
 
     fn if_stmt(&mut self) -> Parsed<Stmt> {
+        self.deeper()?;
+        let out = self.if_stmt_inner();
+        self.deep -= 1;
+        out
+    }
+
+    fn if_stmt_inner(&mut self) -> Parsed<Stmt> {
         let from = self.span();
         self.at += 1;
         self.expect(Punct::LParen, "`(` after `if`")?;
@@ -578,13 +638,19 @@ impl Parser<'_> {
         let from = self.span();
         let lhs = self.binary(LOWEST)?;
         if self.eat(Punct::Eq) {
-            let value = self.expr()?;
+            self.deeper()?;
+            let value = self.expr();
+            self.deep -= 1;
+            let value = value?;
             let kind = ExprKind::Assign { op: None, place: Box::new(lhs), value: Box::new(value) };
             return Ok(Expr { kind, span: self.since(from) });
         }
         for (punct, op) in COMPOUND {
             if self.eat(punct) {
-                let value = self.expr()?;
+                self.deeper()?;
+                let value = self.expr();
+                self.deep -= 1;
+                let value = value?;
                 let kind =
                     ExprKind::Assign { op: Some(op), place: Box::new(lhs), value: Box::new(value) };
                 return Ok(Expr { kind, span: self.since(from) });
@@ -671,10 +737,12 @@ impl Parser<'_> {
         loop {
             let kind = if self.eat(Punct::LParen) {
                 let mut args = Vec::new();
-                while !self.at_punct(Punct::RParen) {
-                    args.push(self.expr()?);
-                    if !self.eat(Punct::Comma) {
-                        break;
+                if !self.at_punct(Punct::RParen) {
+                    loop {
+                        args.push(self.expr()?);
+                        if !self.eat(Punct::Comma) {
+                            break;
+                        }
                     }
                 }
                 self.expect(Punct::RParen, "`)` to close the arguments")?;
@@ -715,18 +783,41 @@ impl Parser<'_> {
             let kind = ExprKind::Descend { capability, body };
             return Ok(Expr { kind, span: self.since(from) });
         }
-        let kind = match self.bump() {
-            Some(TokenKind::Int(n)) => ExprKind::Int(*n),
-            Some(TokenKind::Str(s)) => ExprKind::Str(s.clone()),
-            Some(TokenKind::Bytes(b)) => ExprKind::Bytes(b.clone()),
-            Some(TokenKind::Cairn(c)) => ExprKind::Cairn(*c),
-            Some(TokenKind::Keyword(Keyword::True)) => ExprKind::Bool(true),
-            Some(TokenKind::Keyword(Keyword::False)) => ExprKind::Bool(false),
-            Some(TokenKind::Ident(text)) => ExprKind::Name(Name { text: text.clone(), span: from }),
-            _ => {
-                self.at -= usize::from(self.at > 0);
-                return Err(self.complain("an expression"));
+        let kind = match self.peek() {
+            Some(TokenKind::Int(n)) => {
+                let n = *n;
+                self.bump();
+                ExprKind::Int(n)
             }
+            Some(TokenKind::Str(s)) => {
+                let s = s.clone();
+                self.bump();
+                ExprKind::Str(s)
+            }
+            Some(TokenKind::Bytes(b)) => {
+                let b = b.clone();
+                self.bump();
+                ExprKind::Bytes(b)
+            }
+            Some(TokenKind::Cairn(c)) => {
+                let c = *c;
+                self.bump();
+                ExprKind::Cairn(c)
+            }
+            Some(TokenKind::Keyword(Keyword::True)) => {
+                self.bump();
+                ExprKind::Bool(true)
+            }
+            Some(TokenKind::Keyword(Keyword::False)) => {
+                self.bump();
+                ExprKind::Bool(false)
+            }
+            Some(TokenKind::Ident(text)) => {
+                let text = text.clone();
+                self.bump();
+                ExprKind::Name(Name { text, span: from })
+            }
+            _ => return Err(self.complain("an expression")),
         };
         Ok(Expr { kind, span: self.since(from) })
     }

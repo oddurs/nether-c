@@ -345,3 +345,27 @@ fn a_byte_escape_is_two_digits_and_only_in_bytes() {
         assert_eq!(fault(bad), FaultKind::UnknownEscape, "accepted {bad}");
     }
 }
+
+#[test]
+fn stray_cr_is_rejected_inside_comments_and_strings() {
+    assert_eq!(fault("// hi\rworld\n"), FaultKind::StrayCarriageReturn);
+    assert_eq!(fault("/* hi\rworld */"), FaultKind::StrayCarriageReturn);
+    assert_eq!(fault("\"hi\rworld\""), FaultKind::StrayCarriageReturn);
+    assert_eq!(fault("\"hi\r\n\""), FaultKind::UnterminatedString);
+    assert_eq!(kinds("// hi\r\n1"), vec![TokenKind::Int(1)]);
+    assert_eq!(kinds("/* hi\r\n*/ 1"), vec![TokenKind::Int(1)]);
+}
+
+#[test]
+fn multi_digit_depths_uppercase_prefixes_and_bad_escapes_are_rejected() {
+    assert_eq!(fault("@10"), FaultKind::NotAStratum);
+    assert_eq!(fault("0x_1"), FaultKind::EmptyNumber);
+    assert_eq!(fault("0b12"), FaultKind::Expected("binary digits (0 or 1)"));
+    assert_eq!(fault(r#""\u{}""#), FaultKind::NotAScalar);
+    // `0X` is not a hex prefix per §3.6, so it lexes as `0` followed by ident `X`.
+    assert_eq!(kinds("0X1"), vec![TokenKind::Int(0), TokenKind::Ident("X1".into())]);
+    // Escape fault span includes the backslash.
+    let f = lex(br#""\q""#).unwrap_err();
+    assert_eq!(f.kind, FaultKind::UnknownEscape);
+    assert_eq!(f.span, Span { start: 1, end: 3 });
+}

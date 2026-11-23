@@ -83,8 +83,22 @@ impl fmt::Display for Type {
             Self::Answer(inner) => write!(f, "Answer<{inner}>"),
             Self::Refusal => f.write_str("Refusal"),
             Self::Struct(name) => f.write_str(name),
-            Self::Array { elem, len: Some(n) } => write!(f, "{elem}[{n}]"),
-            Self::Array { elem, len: None } => write!(f, "{elem}[]"),
+            Self::Array { .. } => {
+                let mut dims = Vec::new();
+                let mut cur = self;
+                while let Self::Array { elem, len } = cur {
+                    dims.push(*len);
+                    cur = elem;
+                }
+                write!(f, "{cur}")?;
+                for len in dims {
+                    match len {
+                        Some(n) => write!(f, "[{n}]")?,
+                        None => f.write_str("[]")?,
+                    }
+                }
+                Ok(())
+            }
             Self::Fn { params, latent, result, result_depth } => {
                 write!(f, "{result}@{result_depth}(")?;
                 for (i, p) in params.iter().enumerate() {
