@@ -441,9 +441,15 @@ impl Store {
             let mut list = Vec::new();
             for entry in fs::read_dir(&objects)? {
                 let entry = entry?;
+                if !entry.file_type()?.is_dir() {
+                    continue;
+                }
                 let path = entry.path();
-                if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(prefix))
-                {
+                if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                    n.len() == 2
+                        && n.bytes().all(|b| b.is_ascii_hexdigit())
+                        && n.starts_with(prefix)
+                }) {
                     list.push(path);
                 }
             }
@@ -801,6 +807,9 @@ impl Store {
         if let Stored::Node(node) = &stored {
             for target in node.references() {
                 if !seen.contains(&target) {
+                    if !self.has(target) {
+                        return Err(StoreError::Bundle("bundle is not in topological order"));
+                    }
                     expected_before.insert(target);
                 }
             }
@@ -1051,15 +1060,17 @@ impl Package {
         let Stored::Value(Value::Struct { name, fields }) = store.get(pkg)? else {
             return Err(PackageError::Malformed(pkg, "not a Package struct"));
         };
-        let [Value::Str(domain), Value::Cairn(ep), Value::Array(raw_deps)] = &fields[..] else {
-            return Err(PackageError::Malformed(pkg, "wrong Package fields"));
-        };
         if name != "Package" {
             return Err(PackageError::Malformed(pkg, "not a Package struct"));
         }
-        if domain != PACKAGE_DOMAIN {
+        if let Some(Value::Str(domain)) = fields.first()
+            && domain != PACKAGE_DOMAIN
+        {
             return Err(PackageError::Incompatible(pkg, domain.clone()));
         }
+        let [Value::Str(_), Value::Cairn(ep), Value::Array(raw_deps)] = &fields[..] else {
+            return Err(PackageError::Malformed(pkg, "wrong Package fields"));
+        };
         let mut deps = Vec::with_capacity(raw_deps.len());
         let mut prev = "";
         for item in raw_deps {
@@ -2004,6 +2015,25 @@ mod tests {
             dst.import(&mut &reversed[..]),
             Err(StoreError::Bundle("bundle is not in topological order"))
         ));
+        assert!(dst.audit().unwrap().is_clean(), "rejected bundle must not leave dangling objects");
+
+        // Package with incompatible domain version and non-3 field shape returns Incompatible.
+        let v3_short = src
+            .put(&Stored::Value(Value::Struct {
+                name: "Package".into(),
+                fields: vec![Value::Str("netherc/cairn/v3".into())],
+            }))
+            .unwrap();
+        assert!(matches!(
+            Package::resolve(&src, v3_short),
+            Err(PackageError::Incompatible(c, ref d)) if c == v3_short && d == "netherc/cairn/v3"
+        ));
+
+        // Stray files or non-hex directories under objects/ do not break 1-char resolve.
+        let prefix = val.to_string();
+        std::fs::write(src.root.join("objects").join("a_stray_file"), b"junk").unwrap();
+        std::fs::create_dir_all(src.root.join("objects").join("a_non_hex_dir")).unwrap();
+        assert!(src.resolve(&prefix[..2]).is_ok());
 
         // Putting a valid value overwrites a corrupt on-disk file under that cairn.
         std::fs::write(src.fanned("objects", val), b"corrupt").unwrap();

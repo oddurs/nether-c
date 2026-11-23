@@ -646,3 +646,135 @@ fn cyclic_globals_collapse_cleanly_and_global_starve_does_not_poison_caller() {
     let err = bury(&cyclic, 1_000).expect_err("cyclic globals must collapse");
     assert!(matches!(err.kind, HaltKind::Collapsed(_)));
 }
+
+#[test]
+fn answer_reassignment_before_opaque_and_shade_residuals_stay_valid() {
+    // Reassigning an Answer local before `opaque` must preserve the update.
+    let ans_src = r"
+demand {
+    Answer<I64> a = answered(1);
+    a = answered(2);
+    opaque a
+};
+";
+    let ans_unit = parse_and_check(ans_src);
+    let ans_res = bury(&ans_unit, 10_000).expect("buries");
+    let ans_out = ans_res.as_unit(&ans_unit);
+    assert!(check(&ans_out).is_empty(), "residue faults: {:?}", check(&ans_out));
+    let printed = nether_syntax::print(&ans_out);
+    assert!(printed.contains("answered(2)"), "missing updated Answer assignment: {printed}");
+
+    // `shade(answered(1))` must not double-wrap as `shade(shade(...))`.
+    let shade_ans = parse_and_check("demand shade(answered(1));\n");
+    let shade_res = bury(&shade_ans, 10_000).expect("buries");
+    let shade_out = shade_res.as_unit(&shade_ans);
+    assert!(check(&shade_out).is_empty(), "residue faults: {:?}", check(&shade_out));
+    let shade_printed = nether_syntax::print(&shade_out);
+    assert!(
+        !shade_printed.contains("shade(shade(") && !shade_printed.contains("shade shade"),
+        "double-wrapped shade: {shade_printed}"
+    );
+
+    // `shade(must(read("f")))` answered by the world must stay valid under `check()`.
+    let deep_shade_src = r#"
+demand descend disk {
+    shade(must(read("f")))
+};
+"#;
+    let deep_unit = parse_and_check(deep_shade_src);
+    let call = nether_ledger::Call {
+        function: "read".into(),
+        args: vec![nether_ledger::Value::Str("f".into()).cairn()],
+    };
+    let answers = nether_bury::Answers::none().and(
+        call,
+        nether_ledger::Value::Answer(Box::new(nether_ledger::AnswerOf::Given(
+            nether_ledger::Value::Bytes(b"hi".to_vec()),
+        ))),
+    );
+    let deep_res = nether_bury::bury_with(
+        &deep_unit,
+        Cairn::of_encoded(deep_shade_src.as_bytes()),
+        10_000,
+        &answers,
+    )
+    .expect("buries with answer");
+    let deep_out = deep_res.as_unit(&deep_unit);
+    assert!(check(&deep_out).is_empty(), "answered shade faults: {:?}", check(&deep_out));
+}
+
+#[test]
+fn let_early_return_and_starved_act_global_and_concat_cap() {
+    // `let x = ({ return ...; 0 });` inside a function must preserve the early return
+    // even when evaluated under speculation.
+    let ret_src = r#"
+I64 f(Bool b) {
+    if (b) {
+        I64 x = ({ return 9; 0 });
+        x
+    } else {
+        descend disk { len(must(read("r"))) }
+    }
+}
+demand descend disk {
+    f(len(must(read("c"))) == 0)
+};
+"#;
+    let ret_unit = parse_and_check(ret_src);
+    let ret_res = bury(&ret_unit, 10_000).expect("buries");
+    let ret_out = ret_res.as_unit(&ret_unit);
+    assert!(check(&ret_out).is_empty(), "speculated let-return faults: {:?}", check(&ret_out));
+
+    // A starved global containing an act primitive must stay as a global reference
+    // rather than duplicating the act at every site.
+    let act_src = r#"
+Answer<U0> g = descend disk! { write("out", b"x") };
+demand descend disk! {
+    Bool a = given(g);
+    Bool b = given(g);
+    a && b
+};
+"#;
+    let act_unit = parse_and_check(act_src);
+    let act_res = bury(&act_unit, 10_000).expect("buries");
+    let act_out = act_res.as_unit(&act_unit);
+    assert!(check(&act_out).is_empty());
+    assert_eq!(act_res.holes.len(), 1, "starved act global must dig exactly one hole");
+    let act_printed = nether_syntax::print(&act_out);
+    assert_eq!(
+        act_printed.matches("write(").count(),
+        1,
+        "starved act global must not be duplicated across references: {act_printed}"
+    );
+
+    // Repeated `concat` doubling must collapse cleanly once it exceeds 64 MiB.
+    let oom_src = r#"
+Bytes blow(I64 n, Bytes b) {
+    if (n == 0) { b } else { blow(n - 1, concat(b, b)) }
+}
+demand blow(25, b"0123456789abcdef");
+"#;
+    let err = bury_source(oom_src, 100_000).expect_err("concat > 64 MiB must collapse");
+    assert!(matches!(err.kind, HaltKind::Collapsed(_)), "expected Collapsed, got {err:?}");
+}
+
+#[test]
+fn select_lowers_checks_control_flow_exit_depths() {
+    let src = r#"
+I64 g() {
+    if (true) {
+        descend disk { len(must(read("a"))) }
+    } else {
+        if (descend disk { len(must(read("b"))) == 0 }) {
+            return 1;
+        }
+        0
+    }
+}
+demand descend disk { g() };
+"#;
+    let unit = parse_and_check(src);
+    let res = bury(&unit, 10_000).expect("buries");
+    let out = res.as_unit(&unit);
+    assert!(check(&out).is_empty(), "select exit-depth faults: {:?}", check(&out));
+}
