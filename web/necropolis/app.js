@@ -134,8 +134,9 @@ function bury() {
   worker = active;
   active.onmessage = ({ data }) => {
     if (worker !== active) return;
-    if (data.error) { failed(data.error); return; }
     try {
+      if (!data || typeof data !== "object") throw new Error("The burial worker returned an invalid response.");
+      if (data.error) { failed(data.error); return; }
       const next = new Graph(data);
       const nextNav = new Navigation(next.root);
       const summary = `depth ${data.depth} · ${data.holes.length} hole${data.holes.length === 1 ? "" : "s"} · ${next.encoded.size} objects · ${data.fuel_spent.toLocaleString()} steps`;
@@ -143,23 +144,33 @@ function bury() {
       const prevGraph = graph;
       const prevNav = navigation;
       const prevShown = shown;
+      const prevTitle = $("trace-title").textContent;
+      const prevSummary = $("summary").textContent;
+      const prevRoots = Array.from($("roots").childNodes);
+      const prevHidden = $("explorer").hidden;
       graph = next;
       navigation = nextNav;
       shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
       try {
         $("trace-title").textContent = `Trace ${short(graph.root)}`;
         $("summary").textContent = summary;
-        $("roots").replaceChildren();
+        const frag = document.createDocumentFragment();
         for (const [label, ids] of [["hole", root.holes], ["deposit", root.deposits]]) {
-          ids.slice(0, 6).forEach((id, i) => $("roots").append(button(`${label} ${i + 1}`, () => visit(id), `nc-root-${label}`)));
-          if (ids.length > 6) $("roots").append(button(`All ${ids.length} ${label}s`, () => visit(graph.root)));
+          ids.slice(0, 6).forEach((id, i) => frag.append(button(`${label} ${i + 1}`, () => visit(id), `nc-root-${label}`)));
+          if (ids.length > 6) frag.append(button(`All ${ids.length} ${label}s`, () => visit(graph.root)));
         }
+        $("roots").replaceChildren(frag);
         $("explorer").hidden = false;
         render();
       } catch (inner) {
         graph = prevGraph;
         navigation = prevNav;
         shown = prevShown;
+        $("trace-title").textContent = prevTitle;
+        $("summary").textContent = prevSummary;
+        $("roots").replaceChildren(...prevRoots);
+        $("explorer").hidden = prevHidden;
+        if (prevGraph) render();
         throw inner;
       }
       stop();

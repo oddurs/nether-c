@@ -86,10 +86,10 @@ def g_of(e: Term) -> Term:
 
 # ── §2.2 The eleven typing rules (`HasType(Γ, δ, e, τ, d)`) ─────────────────
 #
-# Stated directly as written in `spec/02-calculus.md` §2.2 without strengthening
-# any premise. Context variables carry their bound `d_x <= max_set(δ ∪ g_var(x))`
-# and arrow types `(τ1 --df--> τ2@dr)` carry their body's ambient bound from [ABS]
-# (`dr <= max_set(df ∪ g_body(f))`).
+# Models `spec/02-calculus.md` §2.2 with explicit context/closure ambient-bound
+# hypotheses in `[VAR]` (`d <= max_set(δ ∪ g_var(x))`) and `[APP]`
+# (`d_r <= max_set(δ_f ∪ g_body(f))`), reflecting the well-formedness invariants
+# established when variables are bound and functions are abstracted by `[ABS]`.
 
 Γ = var("Γ")
 δ = var("δ")
@@ -511,6 +511,12 @@ STEP_TYPED = InductiveRelation(
             "StepLookShade",
             (elem(d, δ),),
             step_typed(app("Look", app("Shade", e)), e, d_max(d, ZERO), d),
+        ),
+        # Finished demand deposits its value and produces U0 at depth 0 (`0 <= d`)
+        Rule(
+            "StepDemandVal",
+            (pred("IsVal", e),),
+            step_typed(app("Demand", e), app("Lit", var("U0")), d, ZERO),
         ),
         # Congruence rules (note: `Opaque` is absent because burial never steps inside `opaque`)
         Rule(

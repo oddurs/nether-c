@@ -12,15 +12,36 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tupl
 _SEAL = object()
 
 
+_VALID_FORMULA_KINDS = frozenset(
+    {"Pred", "=", "=_d", "!=", "!=_d", "<=", "<", "∈", "∉", "⊆", "⊈", "¬", "∧", "∨", "→", "↔", "∀", "∃"}
+)
+_BINARY_TERM_KINDS = frozenset({"=", "=_d", "!=_d", "<=", "<", "∈", "∉", "⊆", "⊈"})
+_BINARY_SUB_KINDS = frozenset({"∧", "∨", "→", "↔"})
+
+
 @dataclass(frozen=True)
 class Term:
     op: str
     args: Tuple["Term", ...] = ()
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise ProofFault("Term cannot be subclassed")
+
+    def __post_init__(self) -> None:
+        _require(type(self.op) is str and bool(self.op), f"Term op must be non-empty str, got {self.op!r}")
+        _require(
+            type(self.args) is tuple and all(type(a) is Term for a in self.args),
+            f"Term args must be tuple[Term, ...], got {self.args!r}",
+        )
+
     def __repr__(self) -> str:
         if not self.args:
             return self.op
         return f"{self.op}({', '.join(repr(a) for a in self.args)})"
+
+
+def _require_term(t: Term, where: str) -> None:
+    _require(type(t) is Term, f"{where}: expected Term, got {type(t).__name__}")
 
 
 def var(name: str) -> Term:
@@ -40,7 +61,8 @@ def _is_constant_name(name: str) -> bool:
 
 def _require_var_name(name: str, where: str) -> None:
     _require(
-        bool(name)
+        type(name) is str
+        and bool(name)
         and not _is_constant_name(name)
         and not any(ch in name for ch in ("(", ")", ",", " ", "\t", "\n")),
         f"{where}: invalid variable name `{name}`",
@@ -48,14 +70,17 @@ def _require_var_name(name: str, where: str) -> None:
 
 
 def subst_term(t: Term, mapping: Dict[str, Term]) -> Term:
-    for k in mapping:
+    _require_term(t, "subst_term")
+    for k, v in mapping.items():
         _require_var_name(k, "subst_term")
+        _require_term(v, "subst_term")
     if not t.args and not _is_constant_name(t.op) and t.op in mapping:
         return mapping[t.op]
     return Term(t.op, tuple(subst_term(a, mapping) for a in t.args))
 
 
 def free_vars_term(t: Term) -> Set[str]:
+    _require_term(t, "free_vars_term")
     if not t.args:
         if _is_constant_name(t.op):
             return set()
@@ -73,18 +98,50 @@ class Formula:
     subs: Tuple["Formula", ...] = ()
     binder: str = ""
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise ProofFault("Formula cannot be subclassed")
+
+    def __post_init__(self) -> None:
+        _require(type(self.kind) is str, f"Formula kind must be str, got {self.kind!r}")
+        _require(
+            type(self.terms) is tuple and all(type(t) is Term for t in self.terms),
+            f"Formula terms must be tuple[Term, ...], got {self.terms!r}",
+        )
+        _require(
+            type(self.subs) is tuple and all(type(s) is Formula for s in self.subs),
+            f"Formula subs must be tuple[Formula, ...], got {self.subs!r}",
+        )
+        _require(type(self.binder) is str, f"Formula binder must be str, got {self.binder!r}")
+        if self.kind == "Pred":
+            _require(len(self.terms) == 1 and not self.subs and self.binder == "", f"malformed Pred: {self!r}")
+        elif self.kind in _BINARY_TERM_KINDS:
+            _require(len(self.terms) == 2 and not self.subs and self.binder == "", f"malformed {self.kind}: {self!r}")
+        elif self.kind == "¬":
+            _require(not self.terms and len(self.subs) == 1 and self.binder == "", f"malformed ¬: {self!r}")
+        elif self.kind in _BINARY_SUB_KINDS:
+            _require(not self.terms and len(self.subs) == 2 and self.binder == "", f"malformed {self.kind}: {self!r}")
+        elif self.kind in {"∀", "∃"}:
+            _require(not self.terms and len(self.subs) == 1, f"malformed quantifier: {self!r}")
+            _require_var_name(self.binder, "Formula")
+        else:
+            raise ProofFault(f"unknown Formula kind `{self.kind}`")
+
     def __repr__(self) -> str:
         if self.kind == "Pred":
             return repr(self.terms[0])
-        if self.kind in {"=", "<=", "<", "!=_d", "∈", "∉", "⊆", "⊈"}:
+        if self.kind in _BINARY_TERM_KINDS:
             return f"({self.terms[0]} {self.kind} {self.terms[1]})"
         if self.kind == "¬":
             return f"¬{self.subs[0]}"
-        if self.kind in {"∧", "∨", "→", "↔"}:
+        if self.kind in _BINARY_SUB_KINDS:
             return f"({self.subs[0]} {self.kind} {self.subs[1]})"
         if self.kind in {"∀", "∃"}:
             return f"({self.kind}{self.binder}. {self.subs[0]})"
         return f"{self.kind}({self.terms}, {self.subs})"
+
+
+def _require_formula(f: Formula, where: str) -> None:
+    _require(type(f) is Formula, f"{where}: expected Formula, got {type(f).__name__}")
 
 
 def pred(name: str, *args: Term) -> Formula:
@@ -93,6 +150,10 @@ def pred(name: str, *args: Term) -> Formula:
 
 def eq(a: Term, b: Term) -> Formula:
     return Formula("=", (a, b))
+
+
+def eq_d(a: Term, b: Term) -> Formula:
+    return Formula("=_d", (a, b))
 
 
 def neq_d(a: Term, b: Term) -> Formula:
@@ -228,12 +289,25 @@ class Theorem:
     assumptions: frozenset[Formula]
     conclusion: Formula
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise ProofFault("Theorem cannot be subclassed")
+
     def __post_init__(self) -> None:
         _require(self._token is _SEAL, "Theorem constructed outside kernel")
+        _require(
+            type(self.assumptions) is frozenset
+            and all(type(a) is Formula for a in self.assumptions),
+            "Theorem assumptions must be frozenset[Formula]",
+        )
+        _require_formula(self.conclusion, "Theorem")
 
     def __repr__(self) -> str:
         hyps = ", ".join(repr(a) for a in sorted(self.assumptions, key=repr))
         return f"{hyps} ⊢ {self.conclusion}"
+
+
+def _require_thm(thm: Theorem, where: str) -> None:
+    _require(type(thm) is Theorem and thm._token is _SEAL, f"{where}: expected kernel Theorem")
 
 
 def _thm(assumptions: Iterable[Formula], conclusion: Formula) -> Theorem:
@@ -244,20 +318,25 @@ def _thm(assumptions: Iterable[Formula], conclusion: Formula) -> Theorem:
 
 
 def assume(f: Formula) -> Theorem:
+    _require_formula(f, "assume")
     return _thm([f], f)
 
 
 def refl(t: Term) -> Theorem:
+    _require_term(t, "refl")
     return _thm([], eq(t, t))
 
 
 def sym(thm: Theorem) -> Theorem:
+    _require_thm(thm, "sym")
     _require(thm.conclusion.kind == "=", f"sym expects equality, got {thm.conclusion}")
     a, b = thm.conclusion.terms
     return _thm(thm.assumptions, eq(b, a))
 
 
 def trans(t1: Theorem, t2: Theorem) -> Theorem:
+    _require_thm(t1, "trans")
+    _require_thm(t2, "trans")
     _require(t1.conclusion.kind == "=" and t2.conclusion.kind == "=", "trans expects =")
     _require(t1.conclusion.terms[1] == t2.conclusion.terms[0], "trans middle mismatch")
     return _thm(
@@ -267,10 +346,12 @@ def trans(t1: Theorem, t2: Theorem) -> Theorem:
 
 
 def cong(op: str, eq_thms: Sequence[Theorem]) -> Theorem:
+    _require(type(op) is str and bool(op), f"cong expects non-empty op, got {op!r}")
     assumptions: Set[Formula] = set()
     lhs_args: List[Term] = []
     rhs_args: List[Term] = []
     for t in eq_thms:
+        _require_thm(t, "cong")
         _require(t.conclusion.kind == "=", f"cong expects =, got {t.conclusion}")
         assumptions |= t.assumptions
         lhs_args.append(t.conclusion.terms[0])
@@ -279,6 +360,8 @@ def cong(op: str, eq_thms: Sequence[Theorem]) -> Theorem:
 
 
 def mp(imp_thm: Theorem, ant_thm: Theorem) -> Theorem:
+    _require_thm(imp_thm, "mp")
+    _require_thm(ant_thm, "mp")
     _require(
         imp_thm.conclusion.kind == "→",
         f"mp expects implication, got {imp_thm.conclusion}",
@@ -292,24 +375,32 @@ def mp(imp_thm: Theorem, ant_thm: Theorem) -> Theorem:
 
 
 def discharge(hyp: Formula, thm: Theorem) -> Theorem:
+    _require_formula(hyp, "discharge")
+    _require_thm(thm, "discharge")
     return _thm(thm.assumptions - {hyp}, imp(hyp, thm.conclusion))
 
 
 def conj_intro(t1: Theorem, t2: Theorem) -> Theorem:
+    _require_thm(t1, "conj_intro")
+    _require_thm(t2, "conj_intro")
     return _thm(t1.assumptions | t2.assumptions, conj(t1.conclusion, t2.conclusion))
 
 
 def conj_elim_l(thm: Theorem) -> Theorem:
+    _require_thm(thm, "conj_elim_l")
     _require(thm.conclusion.kind == "∧", f"conj_elim_l expects ∧, got {thm.conclusion}")
     return _thm(thm.assumptions, thm.conclusion.subs[0])
 
 
 def conj_elim_r(thm: Theorem) -> Theorem:
+    _require_thm(thm, "conj_elim_r")
     _require(thm.conclusion.kind == "∧", f"conj_elim_r expects ∧, got {thm.conclusion}")
     return _thm(thm.assumptions, thm.conclusion.subs[1])
 
 
 def iff_intro(ab: Theorem, ba: Theorem) -> Theorem:
+    _require_thm(ab, "iff_intro")
+    _require_thm(ba, "iff_intro")
     _require(ab.conclusion.kind == "→" and ba.conclusion.kind == "→", "iff_intro expects →")
     a, b = ab.conclusion.subs
     b2, a2 = ba.conclusion.subs
@@ -318,6 +409,8 @@ def iff_intro(ab: Theorem, ba: Theorem) -> Theorem:
 
 
 def inst(thm: Theorem, term: Term) -> Theorem:
+    _require_thm(thm, "inst")
+    _require_term(term, "inst")
     _require(thm.conclusion.kind == "∀", f"inst expects ∀, got {thm.conclusion}")
     body = subst_formula(thm.conclusion.subs[0], {thm.conclusion.binder: term})
     return _thm(thm.assumptions, body)
@@ -332,6 +425,7 @@ def inst_all(thm: Theorem, terms: Sequence[Term]) -> Theorem:
 
 def gen(binder: str, thm: Theorem) -> Theorem:
     _require_var_name(binder, "gen")
+    _require_thm(thm, "gen")
     for a in thm.assumptions:
         _require(
             binder not in free_vars_formula(a),
@@ -341,6 +435,8 @@ def gen(binder: str, thm: Theorem) -> Theorem:
 
 
 def rewrite(eq_thm: Theorem, target: Theorem) -> Theorem:
+    _require_thm(eq_thm, "rewrite")
+    _require_thm(target, "rewrite")
     _require(eq_thm.conclusion.kind == "=", f"rewrite expects =, got {eq_thm.conclusion}")
     src, dst = eq_thm.conclusion.terms
     src_fv = free_vars_term(src)
@@ -468,7 +564,7 @@ def _collect_lattice_vars(
             if observed_full:
                 full_s.add(t)
 
-    if f.kind in {"<=", "<", "=", "!=_d"}:
+    if f.kind in {"<=", "<", "=_d", "!=_d"}:
         scan_d(f.terms[0])
         scan_d(f.terms[1])
     elif f.kind in {"∈", "∉"}:
@@ -499,7 +595,7 @@ def _eval_lattice_formula(f: Formula, env_d: Dict[Term, int], env_s: Dict[Term, 
         return ed(f.terms[0]) <= ed(f.terms[1])
     if f.kind == "<":
         return ed(f.terms[0]) < ed(f.terms[1])
-    if f.kind == "=":
+    if f.kind == "=_d":
         return ed(f.terms[0]) == ed(f.terms[1])
     if f.kind == "!=_d":
         return ed(f.terms[0]) != ed(f.terms[1])
@@ -560,9 +656,11 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
     since `A ⊆ B → max_set(A) <= max_set(B)` holds universally, validity of the
     weakened implication entails validity of the original implication.
     """
+    _require_formula(goal, "lattice_decide")
     assumptions: Set[Formula] = set()
     raw_antecedents: List[Formula] = []
     for h in hyps:
+        _require_thm(h, "lattice_decide")
         assumptions |= h.assumptions
         raw_antecedents.extend(_split_conj(h.conclusion))
 
@@ -611,7 +709,7 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
                 return True
             return any(_has_t(a) for a in t.args)
 
-        if f.kind in {"∈", "∉", "⊆", "⊈", "<", "!=_d", "¬", "∨", "↔", "→"}:
+        if f.kind in {"∈", "∉", "⊆", "⊈", "<", "=_d", "!=_d", "¬", "∨", "↔", "→"}:
             return True
         return any(_has_t(t) for t in f.terms) or any(_has_non_horn_f(s) for s in f.subs)
 
@@ -765,11 +863,41 @@ def _mentions_pred(f: Formula, name: str) -> bool:
     return any(_mentions_pred(s, name) for s in f.subs)
 
 
+def _mentions_any_pred(f: Formula) -> bool:
+    if f.kind == "Pred":
+        return True
+    return any(_mentions_any_pred(s) for s in f.subs)
+
+
+def _is_strictly_positive_premise(f: Formula) -> bool:
+    """Allow predicates only in strictly positive positions (never under `¬`,
+    `↔`, or the antecedent of `→`), preventing both direct and mutually negative
+    inductive definitions."""
+    if f.kind in {"¬", "↔"}:
+        return not _mentions_any_pred(f)
+    if f.kind == "→":
+        return (not _mentions_any_pred(f.subs[0])) and _is_strictly_positive_premise(f.subs[1])
+    if f.kind in {"∧", "∨", "∀", "∃"}:
+        return all(_is_strictly_positive_premise(s) for s in f.subs)
+    return True
+
+
 @dataclass(frozen=True)
 class Rule:
     name: str
     premises: Tuple[Formula, ...]
     conclusion: Formula
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise ProofFault("Rule cannot be subclassed")
+
+    def __post_init__(self) -> None:
+        _require(type(self.name) is str and bool(self.name), "Rule requires a non-empty name")
+        _require(
+            type(self.premises) is tuple and all(type(p) is Formula for p in self.premises),
+            f"Rule `{self.name}` premises must be tuple[Formula, ...]",
+        )
+        _require_formula(self.conclusion, f"Rule `{self.name}`")
 
 
 _RELATIONS: Dict[str, "InductiveRelation"] = {}
@@ -780,9 +908,15 @@ class InductiveRelation:
     name: str
     rules: Tuple[Rule, ...]
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise ProofFault("InductiveRelation cannot be subclassed")
+
     def __post_init__(self) -> None:
-        _require(bool(self.name), "InductiveRelation requires a non-empty name")
-        _require(bool(self.rules), f"InductiveRelation `{self.name}` requires at least one rule")
+        _require(type(self.name) is str and bool(self.name), "InductiveRelation requires a non-empty name")
+        _require(
+            type(self.rules) is tuple and bool(self.rules) and all(type(r) is Rule for r in self.rules),
+            f"InductiveRelation `{self.name}` requires non-empty tuple[Rule, ...]",
+        )
         seen: Set[str] = set()
         arity: Optional[int] = None
         for r in self.rules:
@@ -801,8 +935,13 @@ class InductiveRelation:
                     f"rule `{r.name}` arity {r_arity} does not match `{self.name}` arity {arity}",
                 )
             # Enforce strict positivity: recursive occurrences of `self.name` may
-            # only appear as top-level positive premise atoms with matching arity.
+            # only appear as top-level positive premise atoms with matching arity,
+            # and no predicate may appear negatively (blocking mutual negation).
             for p in r.premises:
+                _require(
+                    _is_strictly_positive_premise(p),
+                    f"non-positive predicate occurrence in premise `{p}` of `{r.name}`",
+                )
                 if p.kind == "Pred" and p.terms[0].op == self.name:
                     _require(
                         len(p.terms[0].args) == arity,
@@ -833,6 +972,13 @@ class InductiveRelation:
         raise ProofFault(f"unknown rule `{name}` in `{self.name}`")
 
 
+def _require_rel(rel: InductiveRelation, where: str) -> None:
+    _require(
+        type(rel) is InductiveRelation and _RELATIONS.get(rel.name) is rel,
+        f"{where}: expected registered InductiveRelation",
+    )
+
+
 def apply_rule(
     rel: InductiveRelation,
     rule_name: str,
@@ -840,6 +986,7 @@ def apply_rule(
     premise_thms: Sequence[Theorem],
 ) -> Theorem:
     """Derive a conclusion of `rel` by instantiating `rule_name` and discharging its premises."""
+    _require_rel(rel, "apply_rule")
     r = rel.rule(rule_name)
     _require(
         len(premise_thms) == len(r.premises),
@@ -847,6 +994,7 @@ def apply_rule(
     )
     assumptions: Set[Formula] = set()
     for expected, given in zip(r.premises, premise_thms):
+        _require_thm(given, f"apply_rule `{rule_name}`")
         inst_expected = subst_formula(expected, subst)
         _require(
             inst_expected == given.conclusion,
@@ -868,6 +1016,8 @@ def rule_induction(
     rather than an arbitrary Python callable, so the kernel itself substitutes
     rule arguments uniformly across every rule and the universal conclusion.
     """
+    _require_rel(rel, "rule_induction")
+    _require_formula(prop, "rule_induction")
     _require(
         len(params) == rel.arity and len(set(params)) == rel.arity,
         f"rule_induction on `{rel.name}` expects {rel.arity} distinct parameter names, got {params}",
@@ -914,6 +1064,7 @@ def rule_induction(
         ih_hyps = tuple(ih_hyps_list)
 
         case_thm = cases[r.name](prem_hyps, ih_hyps)
+        _require_thm(case_thm, f"rule_induction case `{r.name}`")
         expected = _inst_prop(r_conclusion.terms[0].args)
         _require(
             case_thm.conclusion == expected,

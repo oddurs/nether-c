@@ -192,7 +192,7 @@ export class Navigation {
 export function sourceExcerpt(graph, span) {
   const o = graph.get(span.source);
   if (o.kind !== "Bytes") return null;
-  if (span.end > BigInt(o.data.length) || span.start > span.end) return null;
+  if (span.start < 0n || span.end > BigInt(o.data.length) || span.start > span.end) return null;
   const start = Number(span.start), end = Number(span.end);
   // Slice bytes before decoding: JS string indices are not source offsets.
   let from = Math.max(0, start - 160);
