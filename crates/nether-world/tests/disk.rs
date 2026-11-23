@@ -173,17 +173,21 @@ fn removing_something_that_is_not_there_is_absent() {
 }
 
 #[test]
-fn the_disk_write_provider_answers_reads_too() {
-    // Granting `disk!` is not granting `disk`: authority is a set, §2.1. It
-    // reads because the provider handed over for `disk!` answers `read`, and
-    // not because 3 is less than 4.
+fn the_disk_write_provider_does_not_answer_reads() {
+    // §9.1 / §8.2: each capability grants its own stratum and no other.
     let a = Asked::new("deeper", true);
     assert!(a.world.holds(Capability::DiskWrite));
-    assert!(!a.world.holds(Capability::Disk), "a grant of disk! is a grant of disk");
-    assert!(!a.world.holds(Capability::Net), "disk! reaches the network");
+    assert!(!a.world.holds(Capability::Disk), "a grant of disk! is not a grant of disk");
+    assert!(!a.world.holds(Capability::Net), "disk! does not reach the network");
 
     std::fs::write(a.root.join("main.nc"), b"x").expect("a file");
-    assert_eq!(a.reading("main.nc"), AnswerOf::Given(Value::Bytes(b"x".to_vec())));
+    let call =
+        Call { function: "read".to_owned(), args: vec![a.arg(Value::Str("main.nc".into()))] };
+    let span = Span { source: a.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+    assert!(matches!(
+        a.world.ask(&call, span, &Recorder::new(&a.store)),
+        Err(nether_world::Unanswered::Ungranted { .. })
+    ));
 }
 
 #[test]
@@ -270,29 +274,31 @@ fn a_dangling_symlink_cannot_escape_the_root_on_write() {
 }
 
 #[test]
-fn exists_on_escaped_path_is_false_and_empty_path_is_malformed() {
+fn exists_on_escaped_path_is_false_and_empty_or_nul_path_is_malformed() {
     let a = Asked::new("exists-edge", false);
     assert_eq!(
         a.said("exists", vec![a.arg(Value::Str("../../etc/passwd".into()))]),
         Value::Bool(false)
     );
     assert_eq!(a.reading(""), AnswerOf::Refused(Refusal::Malformed));
+    assert_eq!(a.reading("a\0b"), AnswerOf::Refused(Refusal::Malformed));
 }
 
 #[test]
 #[cfg(unix)]
 fn exponential_symlink_dag_stops_at_total_hop_bound_and_remove_unlinks_symlink() {
-    let a = Asked::new("symlink-dag-and-remove", true);
+    let r = Asked::new("symlink-dag-read", false);
     // Build a binary-branching symlink DAG: s_i -> s_{i+1}/s_{i+1}.
     // With a total hop budget of 40, this finishes immediately instead of 2^25 work.
-    std::fs::create_dir(a.root.join("d")).unwrap();
-    std::os::unix::fs::symlink(".", a.root.join("d/s24")).unwrap();
+    std::fs::create_dir(r.root.join("d")).unwrap();
+    std::os::unix::fs::symlink(".", r.root.join("d/s24")).unwrap();
     for i in (0..24).rev() {
         let next = format!("s{}/s{}", i + 1, i + 1);
-        std::os::unix::fs::symlink(&next, a.root.join(format!("d/s{i}"))).unwrap();
+        std::os::unix::fs::symlink(&next, r.root.join(format!("d/s{i}"))).unwrap();
     }
-    assert_eq!(a.reading("d/s0"), AnswerOf::Refused(Refusal::Denied));
+    assert_eq!(r.reading("d/s0"), AnswerOf::Refused(Refusal::Denied));
 
+    let a = Asked::new("symlink-dag-and-remove", true);
     // Removing a symlink deletes the symlink itself, leaving its target intact.
     std::fs::write(a.root.join("keep.txt"), b"keep").unwrap();
     std::os::unix::fs::symlink("keep.txt", a.root.join("alias")).unwrap();

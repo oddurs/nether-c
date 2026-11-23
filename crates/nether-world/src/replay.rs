@@ -136,19 +136,17 @@ impl Replay {
         holes: &[Cairn],
         deliveries: &[&[(usize, Cairn)]],
     ) -> Result<(Vec<Cairn>, Self), MergeError> {
-        let mut base_said: HashMap<Call, Vec<Value>> = HashMap::new();
         let mut base_reads: HashMap<Call, (Cairn, Cairn)> = HashMap::new();
         for &w in base_witnesses {
             let Stored::Node(Node::Witness { stratum, call, answer, .. }) = store.get(w)? else {
                 return Err(MergeError::BaseWitness(w));
             };
-            let Stored::Value(val) = store.get(answer)? else {
+            let Stored::Value(_) = store.get(answer)? else {
                 return Err(MergeError::BaseWitness(w));
             };
             if Depth::new(stratum).is_some_and(Depth::reads) {
-                base_reads.entry(call.clone()).or_insert((w, answer));
+                base_reads.entry(call).or_insert((w, answer));
             }
-            base_said.entry(call).or_default().push(val);
         }
         let mut open: Vec<(Call, u8, Span)> = Vec::with_capacity(holes.len());
         for (slot, &h) in holes.iter().enumerate() {
@@ -200,7 +198,8 @@ impl Replay {
             }
             chosen[slot] = Some((witness, answer, val));
         }
-        let (mut witnesses, mut said) = (base_witnesses.to_vec(), base_said);
+        let (mut witnesses, mut said): (Vec<Cairn>, HashMap<Call, Vec<Value>>) =
+            (base_witnesses.to_vec(), HashMap::new());
         // How many slots before this one asked the same thing. Every one of
         // them has to be answered before this one can be.
         let mut earlier: HashMap<&Call, usize> = HashMap::new();

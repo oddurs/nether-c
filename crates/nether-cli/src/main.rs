@@ -142,10 +142,20 @@ fn not_a_trace(store: &Store, cairn: Cairn) -> ExitCode {
         Ok(stored) => {
             eprintln!("nether: {} is {}, not a trace", cairn.short(), kind(&stored));
             eprintln!("        `nether lamp {}` shows what is there", cairn.short());
+            FAILED
         }
-        Err(e) => eprintln!("nether: {e}"),
+        Err(
+            e @ (nether_ledger::StoreError::Corrupt { .. }
+            | nether_ledger::StoreError::Ragged { .. }),
+        ) => {
+            eprintln!("nether: {e}");
+            ExitCode::from(code::MALFORMED)
+        }
+        Err(e) => {
+            eprintln!("nether: {e}");
+            FAILED
+        }
     }
-    FAILED
 }
 
 const USAGE: &str = "\

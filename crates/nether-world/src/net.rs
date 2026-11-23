@@ -56,7 +56,10 @@ impl Net {
         Self { reach, sending: false }
     }
 
-    /// Fetching and sending: `post` as well, at depth 6.
+    /// Sending only: `post`, at depth 6.
+    ///
+    /// §9.1 / §8.2: each capability grants its own stratum and no other;
+    /// granting `net!` does not grant stratum-5 `net` fetches.
     #[must_use]
     pub fn sending(reach: Vec<String>) -> Self {
         Self { reach, sending: true }
@@ -135,7 +138,12 @@ fn split(url: &str) -> Result<Asked, Refusal> {
         return Err(Refusal::Malformed);
     }
     let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) => (h, p.parse().map_err(|_| Refusal::Malformed)?),
+        Some((h, p)) => {
+            if p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(Refusal::Malformed);
+            }
+            (h, p.parse().map_err(|_| Refusal::Malformed)?)
+        }
         None => (authority, 80u16),
     };
     if port == 0 || !hostlike(host) {
@@ -170,7 +178,7 @@ impl Provider for Net {
 
     fn answers(&self, function: &str) -> bool {
         match function {
-            "get" => true,
+            "get" => !self.sending,
             "post" => self.sending,
             _ => false,
         }
@@ -328,18 +336,49 @@ fn read_line_bytes(
     }
 }
 
+fn is_http_tchar(b: u8) -> bool {
+    b.is_ascii_alphanumeric()
+        || matches!(
+            b,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        )
+}
+
 /// Parse HTTP/1.x status line and framing headers on raw bytes, skipping `1xx`.
 fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<ResponseHead, Refusal> {
     let mut budget = MOST_HEAD;
     loop {
         let status_line = read_line_bytes(reading, &mut budget, deadline)?;
-        let line = core::str::from_utf8(&status_line).map_err(|_| Refusal::Unreachable)?;
-        let mut parts = line.split_whitespace();
-        let version = parts.next().ok_or(Refusal::Unreachable)?;
-        if !version.starts_with("HTTP/1.") {
+        let raw_line = core::str::from_utf8(&status_line).map_err(|_| Refusal::Unreachable)?;
+        let line = raw_line
+            .strip_suffix("\r\n")
+            .or_else(|| raw_line.strip_suffix('\n'))
+            .unwrap_or(raw_line);
+        let (version, after_ver) = line.split_once(' ').ok_or(Refusal::Unreachable)?;
+        if version != "HTTP/1.0" && version != "HTTP/1.1" {
             return Err(Refusal::Unreachable);
         }
-        let status: u16 = parts.next().and_then(|c| c.parse().ok()).ok_or(Refusal::Unreachable)?;
+        let status_tok = after_ver.split_once(' ').map_or(after_ver, |(code, _)| code);
+        if status_tok.len() != 3 || !status_tok.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(Refusal::Unreachable);
+        }
+        let status: u16 = status_tok.parse().map_err(|_| Refusal::Unreachable)?;
+        if !(100..=599).contains(&status) {
+            return Err(Refusal::Unreachable);
+        }
         let mut content_length: Option<u64> = None;
         let mut chunked = false;
         loop {
@@ -348,13 +387,19 @@ fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Resp
                 break;
             }
             let Some(colon) = hdr.iter().position(|&b| b == b':') else {
-                continue;
+                return Err(Refusal::Unreachable);
             };
             let name = &hdr[..colon];
+            if name.is_empty() || !name.iter().copied().all(is_http_tchar) {
+                return Err(Refusal::Unreachable);
+            }
             if name.eq_ignore_ascii_case(b"content-length") {
                 let value = core::str::from_utf8(&hdr[colon + 1..])
                     .map_err(|_| Refusal::Unreachable)?
                     .trim();
+                if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err(Refusal::Unreachable);
+                }
                 let parsed: u64 = value.parse().map_err(|_| Refusal::Unreachable)?;
                 if let Some(prev) = content_length
                     && prev != parsed
@@ -365,13 +410,16 @@ fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Resp
             } else if name.eq_ignore_ascii_case(b"transfer-encoding") {
                 let value =
                     core::str::from_utf8(&hdr[colon + 1..]).map_err(|_| Refusal::Unreachable)?;
-                let final_coding = value.split(',').map(str::trim).rfind(|tok| !tok.is_empty());
-                if final_coding.is_some_and(|tok| tok.eq_ignore_ascii_case("chunked")) {
-                    chunked = true;
-                } else {
+                let codings: Vec<&str> =
+                    value.split(',').map(str::trim).filter(|tok| !tok.is_empty()).collect();
+                if chunked || codings.len() != 1 || !codings[0].eq_ignore_ascii_case("chunked") {
                     return Err(Refusal::Unreachable);
                 }
+                chunked = true;
             }
+        }
+        if chunked && content_length.is_some() {
+            return Err(Refusal::Unreachable);
         }
         if (100..=199).contains(&status) {
             continue;
@@ -426,9 +474,9 @@ fn read_plain(
 
 fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Vec<u8>, Refusal> {
     let mut said = Vec::new();
+    let mut framing_budget = MOST_HEAD;
     loop {
-        let mut line_budget = MOST_HEAD;
-        let size_line = read_line_bytes(reading, &mut line_budget, deadline)?;
+        let size_line = read_line_bytes(reading, &mut framing_budget, deadline)?;
         let text = core::str::from_utf8(&size_line).map_err(|_| Refusal::Unreachable)?;
         let hex = text.split(';').next().unwrap_or("").trim();
         if hex.is_empty() || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -436,9 +484,8 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
         }
         let size = u64::from_str_radix(hex, 16).map_err(|_| Refusal::Unreachable)?;
         if size == 0 {
-            let mut trailer_budget = MOST_HEAD;
             loop {
-                let trailer = read_line_bytes(reading, &mut trailer_budget, deadline)?;
+                let trailer = read_line_bytes(reading, &mut framing_budget, deadline)?;
                 if trailer == b"\r\n" || trailer == b"\n" {
                     return Ok(said);
                 }
@@ -463,8 +510,7 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
             said.extend_from_slice(&buf[..n]);
             left -= n;
         }
-        let mut crlf_budget = 8;
-        let crlf = read_line_bytes(reading, &mut crlf_budget, deadline)?;
+        let crlf = read_line_bytes(reading, &mut framing_budget, deadline)?;
         if crlf != b"\r\n" && crlf != b"\n" {
             return Err(Refusal::Unreachable);
         }

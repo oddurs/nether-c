@@ -44,15 +44,34 @@ pub fn checked_unit(bytes: &[u8], shown: &str) -> Result<Unit, ExitCode> {
     Ok(unit)
 }
 
+fn store_exit(e: &StoreError) -> ExitCode {
+    match e {
+        StoreError::Corrupt { .. } | StoreError::Ragged { .. } => ExitCode::from(code::MALFORMED),
+        StoreError::Absent(_) => ExitCode::from(code::ABSENT),
+        _ => FAILED,
+    }
+}
+
 /// Read a trace's residue bytes and parse/lower/check them.
 pub fn residue_unit(
     store: &Store,
     trace: Cairn,
     residue: Cairn,
 ) -> Result<(Vec<u8>, Unit), ExitCode> {
-    let Ok(Stored::Value(Value::Bytes(text))) = store.get(residue) else {
-        eprintln!("nether: the residue of {} is not in this ledger", trace.short());
-        return Err(ExitCode::from(code::ABSENT));
+    let text = match store.get(residue) {
+        Ok(Stored::Value(Value::Bytes(text))) => text,
+        Ok(_) => {
+            eprintln!("nether: the residue of {} is not bytes", trace.short());
+            return Err(ExitCode::from(code::MALFORMED));
+        }
+        Err(StoreError::Absent(_)) => {
+            eprintln!("nether: the residue of {} is not in this ledger", trace.short());
+            return Err(ExitCode::from(code::ABSENT));
+        }
+        Err(e) => {
+            eprintln!("nether: {e}");
+            return Err(store_exit(&e));
+        }
     };
     let shown = format!("{}:residue", trace.short());
     let unit = checked_unit(&text, &shown)?;
@@ -89,7 +108,7 @@ pub fn depth(
             Ok(s) => out = out.max(s),
             Err(e) => {
                 eprintln!("nether: {e}");
-                return Err(FAILED);
+                return Err(store_exit(&e));
             }
         }
     }
@@ -98,7 +117,7 @@ pub fn depth(
             Ok(s) => out = out.max(s),
             Err(e) => {
                 eprintln!("nether: {e}");
-                return Err(FAILED);
+                return Err(store_exit(&e));
             }
         }
     }
@@ -113,7 +132,7 @@ pub fn unrecorded(store: &Store, witnesses: &[Cairn]) -> Result<bool, ExitCode> 
             Ok(_) => {}
             Err(e) => {
                 eprintln!("nether: {e}");
-                return Err(FAILED);
+                return Err(store_exit(&e));
             }
         }
     }

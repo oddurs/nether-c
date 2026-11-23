@@ -14,18 +14,44 @@
 //! is what stratum 8 *is*, and it is why §1.7 marks the trace rather than
 //! trying to make the call safe.
 
-use std::ffi::{CString, c_char, c_int, c_void};
+use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
+#[cfg(not(target_os = "linux"))]
+use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 
-// `dlopen`, `dlsym`, `dlclose`, `dlerror`. Three declarations and an error
-// string, which is less than a binding crate and all of what is needed.
+#[repr(C)]
+struct DlInfo {
+    fname: *const c_char,
+    fbase: *mut c_void,
+    sname: *const c_char,
+    saddr: *mut c_void,
+}
+
+#[cfg(target_os = "linux")]
+#[repr(C)]
+struct LinkMap {
+    addr: usize,
+    name: *const c_char,
+    ld: *mut c_void,
+    next: *mut LinkMap,
+    prev: *mut LinkMap,
+}
+
+#[cfg(target_os = "linux")]
+const RTLD_DI_LINKMAP: c_int = 2;
+
+// `dlopen`, `dlsym`, `dlclose`, `dlerror`, `dladdr` (and Linux `dlinfo`).
+// Minimal POSIX dynamic-loader declarations without an external binding crate.
 unsafe extern "C" {
     fn dlopen(file: *const c_char, mode: c_int) -> *mut c_void;
     fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
     fn dlclose(handle: *mut c_void) -> c_int;
     fn dlerror() -> *const c_char;
+    fn dladdr(addr: *const c_void, info: *mut DlInfo) -> c_int;
+    #[cfg(target_os = "linux")]
+    fn dlinfo(handle: *mut c_void, request: c_int, info: *mut c_void) -> c_int;
 }
 
 /// `RTLD_NOW | RTLD_LOCAL`. Now, so a missing symbol is an error at load
@@ -46,6 +72,8 @@ type Foreign = unsafe extern "C" fn(*const u8, usize, *mut u8, usize, *mut usize
 /// so two at once would be a race in code nobody here can see.
 pub struct Object {
     handle: Mutex<Handle>,
+    #[cfg(not(target_os = "linux"))]
+    canonical: Option<PathBuf>,
     /// What it was loaded from, for saying which object answered.
     pub path: String,
 }
@@ -80,7 +108,7 @@ fn last_error() -> String {
         return "the loader gave no reason".to_owned();
     }
     // SAFETY: non-null, and `dlerror` returns a NUL-terminated string.
-    unsafe { std::ffi::CStr::from_ptr(said) }.to_string_lossy().into_owned()
+    unsafe { CStr::from_ptr(said) }.to_string_lossy().into_owned()
 }
 
 impl Object {
@@ -102,7 +130,12 @@ impl Object {
         if handle.is_null() {
             Err(Failed(last_error()))
         } else {
-            Ok(Self { handle: Mutex::new(Handle(handle)), path: shown })
+            Ok(Self {
+                handle: Mutex::new(Handle(handle)),
+                #[cfg(not(target_os = "linux"))]
+                canonical: path.canonicalize().ok(),
+                path: shown,
+            })
         }
     }
 
@@ -110,16 +143,65 @@ impl Object {
     #[must_use]
     pub fn has(&self, symbol: &str) -> bool {
         let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
-        Self::find(&handle, symbol).is_some()
+        self.find(&handle, symbol).is_some()
     }
 
-    /// The symbol, if this object has it.
-    fn find(handle: &Handle, symbol: &str) -> Option<Foreign> {
+    /// Verify that `found` is defined in the opened shared object itself, not
+    /// resolved transitively through `DT_NEEDED` dependencies such as `libc`.
+    #[cfg(target_os = "linux")]
+    fn defined_in_object(&self, handle: &Handle, found: *mut c_void) -> bool {
+        let _ = self;
+        let mut lm: *mut LinkMap = core::ptr::null_mut();
+        // SAFETY: `handle.0` is an open `dlopen` handle and `RTLD_DI_LINKMAP`
+        // writes a `*mut LinkMap` into `lm`.
+        if unsafe { dlinfo(handle.0, RTLD_DI_LINKMAP, (&raw mut lm).cast()) } != 0 || lm.is_null() {
+            return false;
+        }
+        let mut info = DlInfo {
+            fname: core::ptr::null(),
+            fbase: core::ptr::null_mut(),
+            sname: core::ptr::null(),
+            saddr: core::ptr::null_mut(),
+        };
+        // SAFETY: `found` is a valid code address returned by `dlsym`.
+        if unsafe { dladdr(found.cast_const(), &raw mut info) } == 0 {
+            return false;
+        }
+        // SAFETY: `lm` is non-null and valid while `handle.0` remains open.
+        let base = unsafe { (*lm).addr };
+        info.fbase as usize == base
+    }
+
+    /// Verify that `found` is defined in the opened shared object itself, not
+    /// resolved transitively through linked system libraries.
+    #[cfg(not(target_os = "linux"))]
+    fn defined_in_object(&self, _handle: &Handle, found: *mut c_void) -> bool {
+        let Some(expected) = &self.canonical else {
+            return false;
+        };
+        let mut info = DlInfo {
+            fname: core::ptr::null(),
+            fbase: core::ptr::null_mut(),
+            sname: core::ptr::null(),
+            saddr: core::ptr::null_mut(),
+        };
+        // SAFETY: `found` is a valid code address returned by `dlsym`.
+        if unsafe { dladdr(found.cast_const(), &raw mut info) } == 0 || info.fname.is_null() {
+            return false;
+        }
+        // SAFETY: `fname` is a non-null NUL-terminated path from `dladdr`.
+        let fname = unsafe { CStr::from_ptr(info.fname) };
+        let resolved = Path::new(std::ffi::OsStr::from_bytes(fname.to_bytes()));
+        resolved.canonicalize().ok().as_ref() == Some(expected)
+    }
+
+    /// The symbol, if this object itself defines it.
+    fn find(&self, handle: &Handle, symbol: &str) -> Option<Foreign> {
         let name = CString::new(symbol).ok()?;
         // SAFETY: `handle` came from `dlopen` and has not been closed; `name`
         // is NUL-terminated and outlives the call.
         let found = unsafe { dlsym(handle.0, name.as_ptr()) };
-        if found.is_null() {
+        if found.is_null() || !self.defined_in_object(handle, found) {
             return None;
         }
         // SAFETY: this is the transmute stratum 8 is about. Nothing checks
@@ -145,7 +227,7 @@ impl Object {
         const MAX_OUTPUT: usize = 64 * 1024 * 1024;
         // Held to the end of the call, both tries: that is the turn.
         let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(function) = Self::find(&handle, symbol) else {
+        let Some(function) = self.find(&handle, symbol) else {
             return Err(Failed(format!("{} has no `{symbol}`", self.path)));
         };
         // Enough for most answers without asking, and small enough that being
