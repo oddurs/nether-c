@@ -43,14 +43,20 @@ impl Memo {
         let trace: Cairn = words.next()?.parse().ok()?;
         let steps: u64 = words.next()?.parse().ok()?;
         let nodes: usize = words.next()?.parse().ok()?;
-        let Ok(Stored::Node(Node::Trace { source: s, witnesses, .. })) = store.get(trace) else {
+        let Ok(Stored::Node(Node::Trace {
+            residue, holes, deposits, source: s, witnesses, ..
+        })) = store.get(trace)
+        else {
             return None;
         };
-        (s == source && witnesses.is_empty() && steps <= fuel).then_some(Remembered {
-            trace,
-            steps,
-            nodes,
-        })
+        let complete = s == source
+            && witnesses.is_empty()
+            && steps <= fuel
+            && store.has(source)
+            && store.has(residue)
+            && holes.iter().all(|h| store.has(*h))
+            && deposits.iter().all(|d| store.has(*d));
+        complete.then_some(Remembered { trace, steps, nodes })
     }
 
     /// Write the entry, beside it and then over it, so a reader sees a whole

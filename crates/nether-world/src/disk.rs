@@ -43,7 +43,10 @@ impl Disk {
         Self { root: root.into(), writable: false }
     }
 
-    /// Reading and writing: `write` and `remove` as well, at depth 4.
+    /// Writing only: `write` and `remove`, at depth 4.
+    ///
+    /// §9.1 / §8.2: each capability grants its own stratum and no other;
+    /// granting `disk!` does not grant stratum-3 `disk` reads.
     #[must_use]
     pub fn writing(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into(), writable: true }
@@ -63,7 +66,7 @@ impl Disk {
     /// was already there — which is the one a program being buried can arrange
     /// for itself, by writing at stratum 4 and reading at stratum 3.
     fn resolve(&self, path: &str, follow_final: bool) -> Result<PathBuf, Refusal> {
-        if path.is_empty() {
+        if path.is_empty() || path.contains('\0') {
             return Err(Refusal::Malformed);
         }
         let mut rel = Vec::new();
@@ -190,7 +193,7 @@ impl Provider for Disk {
 
     fn answers(&self, function: &str) -> bool {
         match function {
-            "read" | "list" | "exists" => true,
+            "read" | "list" | "exists" => !self.writable,
             "write" | "remove" => self.writable,
             _ => false,
         }

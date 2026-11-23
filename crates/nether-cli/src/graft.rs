@@ -5,12 +5,13 @@
 //! burying a program, and content addressing does the rest — everything whose
 //! inputs did not change already has its name.
 
+use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::process::ExitCode;
 
 use nether_bury::{Answers, HaltKind, bury_with};
-use nether_core::Prim;
-use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
+use nether_core::{Depth, Prim};
+use nether_ledger::{AnswerOf, Cairn, Call, Node, Span, Store, Stored, Value};
 use nether_syntax::print;
 use nether_world::Replay;
 
@@ -94,14 +95,87 @@ pub fn run(args: &[String]) -> ExitCode {
     take(&store, trace, replace, with, fuel, wants_json)
 }
 
+struct PreparedGraft {
+    answers: Answers,
+    witnesses: Vec<Cairn>,
+    call: Call,
+    stratum: u8,
+    span: Span,
+    value: Value,
+    is_read: bool,
+}
+
+fn prim_value_matches(p: Prim, v: &Value) -> bool {
+    match p {
+        Prim::Read | Prim::Get | Prim::Post | Prim::FetchNode | Prim::Draw | Prim::CallForeign => {
+            matches!(v, Value::Bytes(_))
+        }
+        Prim::Env | Prim::Target => matches!(v, Value::Str(_)),
+        Prim::Clock => matches!(v, Value::Int(_)),
+        Prim::Exists | Prim::HasNode => matches!(v, Value::Bool(_)),
+        Prim::Write | Prim::Remove => matches!(v, Value::Unit),
+        Prim::List => {
+            matches!(v, Value::Array(items) if items.iter().all(|x| matches!(x, Value::Str(_))))
+        }
+        _ => false,
+    }
+}
+
+fn wrap_graft_value(
+    prim: Prim,
+    function: &str,
+    with: Cairn,
+    raw_instead: &Value,
+) -> Result<Value, ExitCode> {
+    let refusable = prim.refusable();
+    match raw_instead {
+        Value::Answer(_) if !refusable => {
+            eprintln!("nether: {} is an Answer, but `{function}` is not refusable", with.short());
+            Err(FAILED)
+        }
+        Value::Answer(ans) => {
+            if let AnswerOf::Given(inner) = ans.as_ref()
+                && !prim_value_matches(prim, inner)
+            {
+                eprintln!(
+                    "nether: {} does not match the return type of `{function}`",
+                    with.short()
+                );
+                return Err(FAILED);
+            }
+            Ok(raw_instead.clone())
+        }
+        said if refusable => {
+            if !prim_value_matches(prim, said) {
+                eprintln!(
+                    "nether: {} does not match the return type of `{function}`",
+                    with.short()
+                );
+                return Err(FAILED);
+            }
+            Ok(Value::Answer(Box::new(AnswerOf::Given(said.clone()))))
+        }
+        said => {
+            if !prim_value_matches(prim, said) {
+                eprintln!(
+                    "nether: {} does not match the return type of `{function}`",
+                    with.short()
+                );
+                return Err(FAILED);
+            }
+            Ok(said.clone())
+        }
+    }
+}
+
 fn prepare_graft(
     store: &Store,
     trace: Cairn,
     holes: &[Cairn],
-    mut witnesses: Vec<Cairn>,
+    witnesses: Vec<Cairn>,
     replace: Cairn,
     with: Cairn,
-) -> Result<(Answers, Vec<Cairn>), ExitCode> {
+) -> Result<PreparedGraft, ExitCode> {
     let told = match Replay::of_trace(store, &witnesses) {
         Ok(t) => t,
         Err(e) => {
@@ -123,59 +197,46 @@ fn prepare_graft(
     // Only supply the targeted hole's replacement answer. Seeding `told.all()`
     // would feed stale prior witnesses into remaining open holes of the same
     // call (e.g. a second `draw` or `write`) instead of `--with`.
-    let mut answers = Answers::none();
-    let mut matched_hole: Option<(Call, u8, Span, Value)> = None;
+    let mut earlier_calls: HashSet<Call> = HashSet::new();
+    let mut matched: Option<(Call, u8, Span, Value)> = None;
     for hole in holes {
         let Ok(Stored::Node(Node::Hole { call, stratum, span })) = store.get(*hole) else {
             eprintln!("nether: hole {} is not readable in this ledger", hole.short());
             return Err(ExitCode::from(code::ABSENT));
         };
-        if *hole == replace {
-            let refusable = Prim::from_name(&call.function).is_some_and(Prim::refusable);
-            let val = match &raw_instead {
-                Value::Answer(_) if !refusable => {
-                    eprintln!(
-                        "nether: {} is an Answer, but `{}` is not refusable",
-                        with.short(),
-                        call.function
-                    );
-                    return Err(FAILED);
-                }
-                Value::Answer(_) => raw_instead.clone(),
-                said if refusable => {
-                    Value::Answer(Box::new(nether_ledger::AnswerOf::Given(said.clone())))
-                }
-                said => said.clone(),
+        if *hole == replace && matched.is_none() {
+            let is_read = Depth::new(stratum).is_some_and(Depth::reads);
+            if !is_read && earlier_calls.contains(&call) {
+                eprintln!(
+                    "nether: {} is not the first open act hole for `{}` under {}",
+                    replace.short(),
+                    call.function,
+                    trace.short()
+                );
+                return Err(FAILED);
+            }
+            let Some(prim) = Prim::from_name(&call.function) else {
+                eprintln!(
+                    "nether: unknown prelude call `{}` in hole {}",
+                    call.function,
+                    hole.short()
+                );
+                return Err(FAILED);
             };
-            answers = answers.and(call.clone(), val.clone());
-            matched_hole = Some((call, stratum, span, val));
+            let val = wrap_graft_value(prim, &call.function, with, &raw_instead)?;
+            matched = Some((call, stratum, span, val));
+            break;
         }
+        earlier_calls.insert(call);
     }
-    let Some((g_call, g_stratum, g_span, g_val)) = matched_hole else {
+    let Some((call, stratum, span, value)) = matched else {
         eprintln!("nether: {} answers nothing under {}", replace.short(), trace.short());
         eprintln!("        `nether strata {}` says what it was told.", trace.short());
         return Err(FAILED);
     };
-    let answer_cairn = crate::kept(store, &Stored::Value(g_val))?;
-    let w = if let Some(existing) = witnessing(store, answer_cairn, &g_call, g_stratum, g_span)
-        .or_else(|| witnessing(store, with, &g_call, g_stratum, g_span))
-    {
-        existing
-    } else {
-        crate::kept(
-            store,
-            &Stored::Node(Node::Witness {
-                call: g_call,
-                answer: answer_cairn,
-                stratum: g_stratum,
-                span: g_span,
-            }),
-        )?
-    };
-    if !witnesses.contains(&w) {
-        witnesses.push(w);
-    }
-    Ok((answers, witnesses))
+    let is_read = Depth::new(stratum).is_some_and(Depth::reads);
+    let answers = Answers::none().and(call.clone(), value.clone());
+    Ok(PreparedGraft { answers, witnesses, call, stratum, span, value, is_read })
 }
 
 fn take(
@@ -199,8 +260,8 @@ fn take(
         return crate::not_a_trace(store, trace);
     };
 
-    let (answers, witnesses) = match prepare_graft(store, trace, &holes, witnesses, replace, with) {
-        Ok(pair) => pair,
+    let mut prep = match prepare_graft(store, trace, &holes, witnesses, replace, with) {
+        Ok(p) => p,
         Err(code) => return code,
     };
 
@@ -209,7 +270,7 @@ fn take(
         Err(code) => return code,
     };
     let shown = format!("{}:residue", trace.short());
-    let residue = match bury_with(&unit, source, fuel, &answers) {
+    let residue = match bury_with(&unit, source, fuel, &prep.answers) {
         Ok(residue) => residue,
         Err(halt) => {
             eprint!(
@@ -232,6 +293,22 @@ fn take(
         }
         crate::kept(store, stored)
     };
+    let answer_cairn = match record(&Stored::Value(prep.value)) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let witness_cairn = match record(&Stored::Node(Node::Witness {
+        call: prep.call,
+        answer: answer_cairn,
+        stratum: prep.stratum,
+        span: prep.span,
+    })) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    if !prep.is_read || !prep.witnesses.contains(&witness_cairn) {
+        prep.witnesses.push(witness_cairn);
+    }
     for (_, stored) in &residue.named {
         if let Err(code) = record(stored) {
             return code;
@@ -244,8 +321,8 @@ fn take(
         Err(code) => return code,
     };
     let (depth, unrecorded) = match (
-        crate::closing::depth(store, residue.depth.get(), &residue.holes, &witnesses),
-        crate::closing::unrecorded(store, &witnesses),
+        crate::closing::depth(store, residue.depth.get(), &residue.holes, &prep.witnesses),
+        crate::closing::unrecorded(store, &prep.witnesses),
     ) {
         (Ok(d), Ok(u)) => (d, marked || u),
         (Err(c), _) | (_, Err(c)) => return c,
@@ -253,7 +330,7 @@ fn take(
     let node = Stored::Node(Node::Trace {
         residue: next_residue,
         holes: residue.holes.clone(),
-        witnesses: witnesses.clone(),
+        witnesses: prep.witnesses,
         deposits: crate::closing::deposits(&deposits, &residue.deposits),
         source,
         depth,
@@ -271,23 +348,6 @@ fn take(
         print!("{}", told.text());
     }
     ExitCode::SUCCESS
-}
-
-/// The witness that recorded that exact answer for that call and stratum. §7.4.
-fn witnessing(
-    store: &Store,
-    answer: Cairn,
-    want_call: &Call,
-    want_stratum: u8,
-    want_span: Span,
-) -> Option<Cairn> {
-    store.referrers(answer).ok()?.into_iter().find(|c| {
-        matches!(
-            store.get(*c),
-            Ok(Stored::Node(Node::Witness { call, stratum, span, .. }))
-                if &call == want_call && stratum == want_stratum && span == want_span
-        )
-    })
 }
 
 /// What §8.7 requires a graft to say.

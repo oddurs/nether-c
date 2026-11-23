@@ -148,6 +148,12 @@ fn a_symbol_in_nothing_loaded_is_denied() {
         a.call("nothing_defines_this", b"").expect("granted"),
         AnswerOf::Refused(Refusal::Denied)
     );
+    // Transitive symbols from `libc` (via DT_NEEDED) must also be denied.
+    assert_eq!(a.call("system", b"true\0").expect("granted"), AnswerOf::Refused(Refusal::Denied));
+    assert_eq!(
+        a.call("unlink", b"/nonexistent\0").expect("granted"),
+        AnswerOf::Refused(Refusal::Denied)
+    );
 
     // And loading nothing is a grant that answers nothing, which §8.3.3 calls
     // the one case where the useless invocation is also the safe one.

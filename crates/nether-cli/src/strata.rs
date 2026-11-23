@@ -133,7 +133,9 @@ fn survey(store: &Store, roots: &[Cairn]) -> Result<Survey, StoreError> {
             }
             Err(e) => return Err(e),
         };
-        let Stored::Node(n) = &stored else { continue };
+        let Stored::Node(n) = &stored else {
+            return Err(StoreError::Corrupt { asked: at, found: None, why: None });
+        };
         if let Node::Hole { call, stratum, span, .. } | Node::Witness { call, stratum, span, .. } =
             n
         {

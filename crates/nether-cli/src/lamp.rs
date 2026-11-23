@@ -434,10 +434,11 @@ fn inspect_at(
         eprintln!("nether: no expression at byte {byte} in {}", source.short());
         return FAILED;
     };
-    let descend = hit
-        .descend
-        .or_else(|| find_descend(&unit, hit.func, hit.expr, hit.depth, &mut HashSet::new()));
-    let call = find_call(&unit, hit.func, hit.expr, hit.depth, &mut HashSet::new());
+    let descend = hit.descend.or_else(|| {
+        find_descend(&unit, hit.func, hit.expr, hit.depth, &mut HashSet::new(), &mut HashSet::new())
+    });
+    let call =
+        find_call(&unit, hit.func, hit.expr, hit.depth, &mut HashSet::new(), &mut HashSet::new());
     let nodes = match trace_hits(store, &trace, source, byte, call.as_ref().map(|(_, s)| *s), limit)
     {
         Ok(n) => n,
@@ -708,6 +709,7 @@ fn find_descend(
     x: &Expr,
     want: Depth,
     seen: &mut HashSet<nether_core::GlobalId>,
+    seen_locals: &mut HashSet<LocalId>,
 ) -> Option<(Capability, Span)> {
     if want == Depth::PURE {
         return None;
@@ -718,15 +720,22 @@ fn find_descend(
         return Some((*capability, x.span));
     }
     if let ExprKind::Local(id) = x.kind {
-        return bound_local(unit, func, id).and_then(|v| find_descend(unit, func, v, want, seen));
+        if !seen_locals.insert(id) {
+            return None;
+        }
+        return bound_local(unit, func, id)
+            .and_then(|v| find_descend(unit, func, v, want, seen, seen_locals));
     }
     if let ExprKind::Global(id) = x.kind {
         if !seen.insert(id) {
             return None;
         }
-        return unit.global(id).and_then(|g| find_descend(unit, None, &g.value, want, seen));
+        let mut global_locals = HashSet::new();
+        return unit
+            .global(id)
+            .and_then(|g| find_descend(unit, None, &g.value, want, seen, &mut global_locals));
     }
-    children(x).into_iter().find_map(|c| find_descend(unit, func, c, want, seen))
+    children(x).into_iter().find_map(|c| find_descend(unit, func, c, want, seen, seen_locals))
 }
 
 fn find_call(
@@ -735,6 +744,7 @@ fn find_call(
     x: &Expr,
     want: Depth,
     seen: &mut HashSet<nether_core::GlobalId>,
+    seen_locals: &mut HashSet<LocalId>,
 ) -> Option<(String, Span)> {
     if want == Depth::PURE {
         return None;
@@ -753,15 +763,22 @@ fn find_call(
         }
     }
     if let ExprKind::Local(id) = x.kind {
-        return bound_local(unit, func, id).and_then(|v| find_call(unit, func, v, want, seen));
+        if !seen_locals.insert(id) {
+            return None;
+        }
+        return bound_local(unit, func, id)
+            .and_then(|v| find_call(unit, func, v, want, seen, seen_locals));
     }
     if let ExprKind::Global(id) = x.kind {
         if !seen.insert(id) {
             return None;
         }
-        return unit.global(id).and_then(|g| find_call(unit, None, &g.value, want, seen));
+        let mut global_locals = HashSet::new();
+        return unit
+            .global(id)
+            .and_then(|g| find_call(unit, None, &g.value, want, seen, &mut global_locals));
     }
-    children(x).into_iter().find_map(|c| find_call(unit, func, c, want, seen))
+    children(x).into_iter().find_map(|c| find_call(unit, func, c, want, seen, seen_locals))
 }
 
 fn bound_local<'a>(unit: &'a Unit, func: Option<&'a FuncDef>, id: LocalId) -> Option<&'a Expr> {

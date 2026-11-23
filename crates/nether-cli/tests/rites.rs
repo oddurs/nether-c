@@ -2739,3 +2739,97 @@ fn exhume_missing_foreign_library_fails_without_not_built_yet() {
         stderr(&out)
     );
 }
+
+#[test]
+fn pass3_graft_type_check_act_order_lamp_dag_strata_corrupt_and_memo_check() {
+    // 1. `graft --with` rejects wrong return types without writing a witness.
+    let dir = a_build("graft-type-check");
+    std::fs::write(
+        dir.join("read.nc"),
+        "Bytes@3 b = must(descend disk { read(\"a.txt\") });\ndemand b;\n",
+    )
+    .unwrap();
+    let buried = there(&dir, &["bury", "read.nc", "--json"]);
+    assert_eq!(code(&buried), 0, "{}", stderr(&buried));
+    let trace = field(&stdout(&buried), "cairn");
+    let store = Store::open(dir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { holes, .. }) = store.get(trace.parse().unwrap()).unwrap() else {
+        panic!("expected trace");
+    };
+    let wrong_val = store.put(&Stored::Value(Value::Int(42))).unwrap();
+    let bad_graft = there(
+        &dir,
+        &["graft", &trace, "--replace", &holes[0].to_string(), "--with", &wrong_val.to_string()],
+    );
+    assert_eq!(code(&bad_graft), 1, "graft must reject Int for Bytes read()");
+    assert!(stderr(&bad_graft).contains("return type"), "{}", stderr(&bad_graft));
+
+    // 2. `graft` rejects answering a later act hole before an earlier identical act call.
+    let act_dir = a_build("graft-act-order");
+    std::fs::write(
+        act_dir.join("acts.nc"),
+        "Bytes@7 a = descend entropy { draw(4) };\nBytes@7 b = descend entropy { draw(4) };\ndemand concat(a, b);\n",
+    )
+    .unwrap();
+    let act_buried = there(&act_dir, &["bury", "acts.nc", "--json"]);
+    assert_eq!(code(&act_buried), 0, "{}", stderr(&act_buried));
+    let act_trace = field(&stdout(&act_buried), "cairn");
+    let act_store = Store::open(act_dir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { holes: act_holes, .. }) =
+        act_store.get(act_trace.parse().unwrap()).unwrap()
+    else {
+        panic!("expected trace");
+    };
+    assert_eq!(act_holes.len(), 2);
+    let ok_bytes = act_store.put(&Stored::Value(Value::Bytes(b"abcd".to_vec()))).unwrap();
+    let out_of_order = there(
+        &act_dir,
+        &[
+            "graft",
+            &act_trace,
+            "--replace",
+            &act_holes[1].to_string(),
+            "--with",
+            &ok_bytes.to_string(),
+        ],
+    );
+    assert_eq!(code(&out_of_order), 1, "graft must reject second act slot before first");
+
+    // 3. `lamp --at` handles a 35-level local diamond DAG without exponential hang.
+    let dag_dir = a_build("lamp-dag");
+    let mut src = String::from("I64 f(Shade<I64@3> s) {\n    I64 a0 = descend disk { look s };\n");
+    for i in 1..=35 {
+        use std::fmt::Write as _;
+        let _ = writeln!(src, "    I64 a{i} = a{} + a{};", i - 1, i - 1);
+    }
+    let at_offset = src.len() + 4;
+    src.push_str("    a35\n}\ndemand 0;\n");
+    std::fs::write(dag_dir.join("dag.nc"), &src).unwrap();
+    let dag_buried = there(&dag_dir, &["bury", "dag.nc", "--json"]);
+    assert_eq!(code(&dag_buried), 0, "{}", stderr(&dag_buried));
+    let dag_trace = field(&stdout(&dag_buried), "cairn");
+    let lamp_out = there(&dag_dir, &["lamp", &dag_trace, "--at", &at_offset.to_string()]);
+    assert_eq!(code(&lamp_out), 0, "{}", stderr(&lamp_out));
+
+    // 4. `strata` on a corrupt root trace exits 65 (MALFORMED).
+    let hex = trace.clone();
+    let obj_path = dir.join(".nether").join("objects").join(&hex[..2]).join(&hex[2..]);
+    std::fs::write(&obj_path, b"corrupt-trace").unwrap();
+    let corrupt_strata = there(&dir, &["strata", &hex]);
+    assert_eq!(code(&corrupt_strata), 65, "{}", stderr(&corrupt_strata));
+
+    // 5. `memo` re-buries cleanly if the trace's residue object was deleted.
+    let memo_dir = a_build("memo-missing-residue");
+    std::fs::write(memo_dir.join("m.nc"), "demand 1 + 2;\n").unwrap();
+    let first = there(&memo_dir, &["bury", "m.nc", "--json"]);
+    assert_eq!(code(&first), 0, "{}", stderr(&first));
+    let first_trace = field(&stdout(&first), "cairn");
+    let first_res = field(&stdout(&first), "residue");
+    let res_path =
+        memo_dir.join(".nether").join("objects").join(&first_res[..2]).join(&first_res[2..]);
+    std::fs::remove_file(&res_path).unwrap();
+    let second = there(&memo_dir, &["bury", "m.nc", "--json"]);
+    assert_eq!(code(&second), 0, "{}", stderr(&second));
+    assert!(res_path.exists(), "memo miss must restore deleted residue object");
+    assert_eq!(field(&stdout(&second), "cairn"), first_trace);
+}

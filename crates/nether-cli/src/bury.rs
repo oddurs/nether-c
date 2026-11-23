@@ -114,9 +114,10 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
 
     let store = crate::opened()?;
 
-    // The source is named before anything is buried. A span points at a cairn
-    // rather than a path (§7.3.1), so the name has to exist first.
-    let source_cairn = crate::kept(&store, &Stored::Value(Value::Bytes(source.clone())))?;
+    // Compute the source cairn without mutating the store so a remembered
+    // burial (§8.2.1) writes nothing new.
+    let source_stored = Stored::Value(Value::Bytes(source));
+    let source_cairn = source_stored.cairn();
 
     // §8.2.1: a burial this implementation already did, within this budget,
     // is reported and not done again.
@@ -139,9 +140,10 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
             }
         };
 
-        // Everything burial named, then the residue as source, then the trace.
+        // Source, everything burial named, then the residue as source, then the trace.
         // Nothing was written until now: burial holds no capability at all,
         // and writing to a store is stratum 1.
+        crate::kept(&store, &source_stored)?;
         for (_, stored) in &residue.named {
             crate::kept(&store, stored)?;
         }

@@ -329,12 +329,19 @@ fn http_framing_handles_204_keepalive_conflicting_cl_and_bad_te() {
     );
     let _ = hold2.join();
 
-    // 3. Conflicting Content-Length headers and non-final Transfer-Encoding are refused.
+    // 3. Conflicting/malformed Content-Length, unsupported or duplicate Transfer-Encoding,
+    //    whitespace before header colon, and combined TE+CL are all refused.
     for raw in [
         b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 4\r\n\r\nabcd".as_slice(),
+        b"HTTP/1.1 200 OK\r\nContent-Length: +4\r\n\r\nabcd".as_slice(),
         b"HTTP/1.1 200 OK\r\nTransfer-Encoding: notchunked\r\n\r\n0\r\n\r\n".as_slice(),
         b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, gzip\r\n\r\n0\r\n\r\n".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n0\r\n\r\n".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding : chunked\r\n\r\n0\r\n\r\n".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 0\r\n\r\n0\r\n\r\n"
+            .as_slice(),
         b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n+1\r\na\r\n0\r\n\r\n".as_slice(),
+        b"HTTP/1.99 200 OK\r\nContent-Length: 0\r\n\r\n".as_slice(),
     ] {
         let listener = TcpListener::bind(("127.0.0.1", 0)).expect("port");
         let port = listener.local_addr().expect("addr").port();
@@ -351,4 +358,18 @@ fn http_framing_handles_204_keepalive_conflicting_cl_and_bad_te() {
             AnswerOf::Refused(Refusal::Unreachable)
         );
     }
+
+    // 4. `Net::sending` (stratum 6) must not answer stratum-5 `get` holes, and `+80` port is Malformed.
+    let sender = Asked::reaching("sending-only", vec!["127.0.0.1".into()], true);
+    let get_call = Call {
+        function: "get".into(),
+        args: vec![sender.arg(Value::Str("http://127.0.0.1/".into()))],
+    };
+    let span = Span { source: sender.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+    assert!(matches!(
+        sender.world.ask(&get_call, span, &Recorder::new(&sender.store)),
+        Err(nether_world::Unanswered::Ungranted { .. })
+    ));
+    let fetcher = Asked::reaching("plus-port", vec!["127.0.0.1:80".into()], false);
+    assert_eq!(fetcher.get("http://127.0.0.1:+80/"), AnswerOf::Refused(Refusal::Malformed));
 }

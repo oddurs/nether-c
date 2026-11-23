@@ -205,9 +205,12 @@ fn of_trace_rejects_missing_witnesses_and_merge_keeps_base_answers() {
     let base_w = rec.record(&call, Depth::DISK, span0, &Value::Bytes(b"v1".to_vec())).unwrap();
     let clash_w = rec.record(&call, Depth::DISK, span1, &Value::Bytes(b"v2".to_vec())).unwrap();
 
-    // Base witness is present in the returned Replay.
-    let (_, merged) = Replay::merge(&store, &[base_w.witness()], &[], &[]).unwrap();
-    assert_eq!(merged.answer(&call), Some(&Value::Bytes(b"v1".to_vec())));
+    // Base witness is preserved in the merged witness list, while the returned
+    // Replay holds only newly delivered answers so resumed burial does not
+    // re-serve stale act answers consumed in earlier stages.
+    let (merged_wits, merged) = Replay::merge(&store, &[base_w.witness()], &[], &[]).unwrap();
+    assert_eq!(merged_wits, vec![base_w.witness()]);
+    assert!(merged.is_empty());
 
     // A worker delivery contradicting a read-stratum base witness is rejected.
     let err = Replay::merge(&store, &[base_w.witness()], &[h1], &[&[(0, clash_w.witness())]]);
