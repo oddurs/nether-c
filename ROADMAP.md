@@ -421,7 +421,7 @@ A durable, inspectable store with measured retention costs. Export and integrity
 
 ## warden — The Warden
 
-`##########` 91% · 10 of 11 done · due 2028-07-15
+`##########` 92% · 11 of 12 done · due 2028-07-15
 
 A stated trust model and tested defenses across current entrypoints, not just the decoder.
 
@@ -441,6 +441,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 - [x] [`0296`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0296-harden-world-providers-foreign-loading-and-cli-rites.md) Harden world providers, foreign loading, and CLI rites <sup>feature · p2 · 8</sup>
 - [x] [`0298`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0298-harden-bury-ledger-and-wasm-correctness.md) Harden bury, ledger, and wasm correctness <sup>feature · p2 · 1</sup>
 - [x] [`0300`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0300-harden-world-providers-foreign-ffi-and-cli-rites-pass-2.md) Harden world providers, foreign FFI, and CLI rites (pass 2) <sup>feature · p2 · 1</sup>
+- [x] [`0302`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0302-harden-burial-rollback-residuals-and-ledger-store-imports.md) Harden burial rollback, residuals, and ledger store imports <sup>feature · p2 · 1</sup>
 
 ## assay — The Assay
 
