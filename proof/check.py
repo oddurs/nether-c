@@ -9,16 +9,25 @@ import tokenize
 from typing import Sequence
 
 from kernel import (
-     Formula,
+    Datatype,
+    Formula,
     InductiveRelation,
     ProofFault,
     Rule,
     Theorem,
+    app,
     assume,
+    conj,
+    eq,
+    forall,
+    inst,
     lattice_decide,
     le,
+    neg,
+    not_subset,
     pred,
     rule_induction,
+    subset,
     var,
 )
 import calculus
@@ -108,7 +117,8 @@ def verify_kernel_soundness_guards() -> None:
     try:
         rule_induction(
             rel,
-            lambda args: le(args[0], var("8")),
+            ("_d",),
+            le(var("_d"), var("8")),
             {"Base": lambda _prems, _ihs: lattice_decide(le(var("0"), var("8")))},
         )
     except ProofFault:
@@ -117,11 +127,12 @@ def verify_kernel_soundness_guards() -> None:
         raise AssertionError("kernel allowed rule_induction with missing rule case")
 
     # 4. Rule induction whose case leaves an extra undischarged assumption must fail
-    extra = pred("UnprovedExtra", var("d"))
+    extra = pred("UnprovedExtra", var("_d"))
     try:
         rule_induction(
             rel,
-            lambda args: extra,
+            ("_d",),
+            extra,
             {
                 "Base": lambda _prems, _ihs: assume(extra),
                 "Step": lambda _prems, ihs: ihs[0],
@@ -148,12 +159,77 @@ def verify_kernel_soundness_guards() -> None:
     else:
         raise AssertionError("scanner allowed a proof script to import the kernel seal")
 
+    # 7. False set-inclusion claim `(max_set(δ1) <= max_set(δ2)) |- (δ1 ⊆ δ2)` must fail
+    d1_s, d2_s = var("δ1"), var("δ2")
+    try:
+        lattice_decide(
+            subset(d1_s, d2_s),
+            [assume(le(app("max_set", d1_s), app("max_set", d2_s)))],
+        )
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("lattice_decide accepted false max_set -> subset claim")
 
-def verify_closed_theorem(name: str, thm: Theorem) -> None:
+    # 8. Incomparable sets with equal maxima exist: `|- ¬((δ1 ⊈ δ2 ∧ δ2 ⊈ δ1) ∧ max_set(δ1)=max_set(δ2))` must fail
+    try:
+        lattice_decide(
+            neg(
+                conj(
+                    conj(not_subset(d1_s, d2_s), not_subset(d2_s, d1_s)),
+                    eq(app("max_set", d1_s), app("max_set", d2_s)),
+                )
+            )
+        )
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("lattice_decide missed incomparable sets sharing a maximum")
+
+    # 9. InductiveRelation must reject non-predicate / non-matching conclusions (`0 = 1`)
+    try:
+        InductiveRelation("Forge", (Rule("Bad", (), eq(var("0"), var("1"))),))
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("InductiveRelation allowed non-predicate conclusion")
+
+    # 10. InductiveRelation must reject empty rules and non-positive recursion
+    try:
+        InductiveRelation("Empty", ())
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("InductiveRelation allowed empty rules")
+    try:
+        InductiveRelation("Neg", (Rule("Bad", (neg(pred("Neg", var("x"))),), pred("Neg", var("x"))),))
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("InductiveRelation allowed negative recursion")
+
+    # 11. Datatype must reject empty constructors
+    try:
+        Datatype("Empty", ())
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("Datatype allowed empty constructors")
+
+    # 12. inst must avoid variable capture under quantifiers
+    f_all = forall("x", forall("y", pred("R", var("x"), var("y"))))
+    t_inst = inst(assume(f_all), var("y"))
+    if t_inst.conclusion.binder == "y":
+        raise AssertionError(f"inst captured bound variable `y`: {t_inst.conclusion}")
+
+
+def verify_closed_theorem(name: str, thm: Theorem, expected_head: str = "") -> None:
     if not isinstance(thm, Theorem):
         raise ProofFault(f"`{name}` did not return a kernel Theorem")
     if thm.assumptions:
         raise ProofFault(f"`{name}` has undischarged assumptions: {thm.assumptions}")
+    if expected_head and expected_head not in repr(thm.conclusion):
+        raise ProofFault(f"`{name}` conclusion {thm.conclusion} does not match expected `{expected_head}`")
 
 
 def main(argv: Sequence[str] = ()) -> int:
@@ -162,64 +238,46 @@ def main(argv: Sequence[str] = ()) -> int:
     verify_kernel_soundness_guards()
 
     t_amb = calculus.prove_ambient_soundness()
-    verify_closed_theorem("ambient_soundness", t_amb)
+    verify_closed_theorem("ambient_soundness", t_amb, "HasType(_a0, _a1, _a2, _a3, _a4, _a5) → (_a4 <= max_set(∪(_a1, _a5)))")
 
     t_sub = calculus.prove_substitution_monotonicity()
-    verify_closed_theorem("substitution_monotonicity", t_sub)
+    verify_closed_theorem("substitution_monotonicity", t_sub, "SubstDepth(_a0, _a1, _a2, _a3) → (_a3 <= max(_a1, _a2))")
 
     t_mon = calculus.prove_soundness_of_bound()
-    verify_closed_theorem("soundness_of_bound", t_mon)
+    verify_closed_theorem("soundness_of_bound", t_mon, "StepTyped(_a0, _a1, _a2, _a3) → (_a3 <= _a2)")
 
     orpheus_thms = [
-        ("look_sufficiency_ambient", orpheus.prove_look_sufficiency_ambient()),
-        ("look_sufficiency_confinement", orpheus.prove_look_sufficiency_confinement()),
-        ("look_necessity_confinement", orpheus.prove_look_necessity_confinement()),
-        ("look_necessity_numeric", orpheus.prove_look_necessity_numeric()),
-        (
-            "numeric_vs_membership_counterexample",
-            orpheus.prove_numeric_vs_membership_counterexample(),
-        ),
-        ("binding_taint_violates_ambient", orpheus.prove_binding_taint_violates_ambient()),
-        (
-            "scope_restain_shifts_obligation_to_caller",
-            orpheus.prove_scope_restain_shifts_obligation_to_caller(),
-        ),
+        ("look_sufficiency_ambient", orpheus.prove_look_sufficiency_ambient(), "max(d, d_p) <= max_set(∪(δ, g(s)))"),
+        ("look_sufficiency_confinement", orpheus.prove_look_sufficiency_confinement(), "singleton(d) ⊆ ∪(δ, g(s))"),
+        ("look_necessity_confinement", orpheus.prove_look_necessity_confinement(), "(singleton(d) ⊆ ∪(δ, ∅_raw)) ↔ (d ∈ δ)"),
+        ("look_necessity_numeric", orpheus.prove_look_necessity_numeric(), "(max(d, 0) <= max_set(∪(δ, ∅_raw))) ↔ (d <= max_set(δ))"),
+        ("numeric_vs_membership_counterexample", orpheus.prove_numeric_vs_membership_counterexample(), "singleton(3) ⊈ ∪(∅, singleton(5))"),
+        ("binding_taint_violates_ambient", orpheus.prove_binding_taint_violates_ambient(), "¬(max(3, 0) <= max_set(∪(∅, ∅_raw)))"),
+        ("scope_restain_shifts_obligation_to_caller", orpheus.prove_scope_restain_shifts_obligation_to_caller(), "d ∈ δ_caller"),
     ]
-    for name, thm in orpheus_thms:
-        verify_closed_theorem(name, thm)
+    for name, thm, head in orpheus_thms:
+        verify_closed_theorem(name, thm, head)
 
     staging_thms = [
-        ("roundtrip_identity", staging.prove_roundtrip_identity()),
-        ("hole_set_union_law", staging.prove_hole_set_union_law()),
-        ("staging_idempotence_set", staging.prove_staging_idempotence_set()),
-        ("staging_law", staging.prove_staging_law()),
-        (
-            "dependent_hole_non_monotone_counterexample",
-            staging.prove_dependent_hole_non_monotone_counterexample(),
-        ),
-        (
-            "cumulative_dependent_hole_law",
-            staging.prove_cumulative_dependent_hole_law(),
-        ),
+        ("roundtrip_identity", staging.prove_roundtrip_identity(), "RoundTrip(_a0, _a1) → (_a1 = _a0)"),
+        ("hole_set_union_law", staging.prove_hole_set_union_law(), "s_k ∈ ∪(δ_A, δ_B)"),
+        ("staging_idempotence_set", staging.prove_staging_idempotence_set(), "s_k ∈ δ_A"),
+        ("staging_law", staging.prove_staging_law(), "StagedEval(_a0, _a1, _a2, _a3, _a4) → (_a3 = _a4)"),
+        ("dependent_hole_non_monotone_counterexample", staging.prove_dependent_hole_non_monotone_counterexample(), "3 ∉ ∪(∅, singleton(5))"),
+        ("cumulative_dependent_hole_law", staging.prove_cumulative_dependent_hole_law(), "δ_A ⊆ δ_B"),
     ]
-    for name, thm in staging_thms:
-        verify_closed_theorem(name, thm)
+    for name, thm, head in staging_thms:
+        verify_closed_theorem(name, thm, head)
 
     n_fixtures = encoding.verify_codec_fixtures_and_exclusions()
     encoding_thms = [
-        ("value_decode_encode", encoding.prove_value_decode_encode()),
-        ("node_decode_encode", encoding.prove_node_decode_encode()),
-        (
-            "injectivity_from_left_inverse",
-            encoding.prove_injectivity_from_left_inverse(),
-        ),
-        (
-            "cairn_preimage_injectivity",
-            encoding.prove_cairn_preimage_injectivity(),
-        ),
+        ("value_decode_encode", encoding.prove_value_decode_encode(), "ValRoundTrip(_a0, _a1, _a2, _a3) → ((_a2 = _a0) ∧ (_a3 = _a1))"),
+        ("node_decode_encode", encoding.prove_node_decode_encode(), "NodeRoundTrip(_a0, _a1, _a2) → (_a2 = Pair(_a0, _a1))"),
+        ("injectivity_from_left_inverse", encoding.prove_injectivity_from_left_inverse(), "(encode(x) = encode(y)) → (x = y)"),
+        ("cairn_preimage_injectivity", encoding.prove_cairn_preimage_injectivity(), "(domain_prefix(encode(x)) = domain_prefix(encode(y))) → (x = y)"),
     ]
-    for name, thm in encoding_thms:
-        verify_closed_theorem(name, thm)
+    for name, thm, head in encoding_thms:
+        verify_closed_theorem(name, thm, head)
 
     print(
         f"checked {scanned} proof modules (0 admitted obligations, kernel guards verified, {n_fixtures} codec fixtures verified)"
@@ -227,11 +285,11 @@ def main(argv: Sequence[str] = ()) -> int:
     print(f"  [OK] ambient_soundness          ({len(calculus.HAS_TYPE.rules)} typing rules)   |- {t_amb.conclusion}")
     print(f"  [OK] substitution_monotonicity  ({len(calculus.SUBST_DEPTH.rules)} subst rules)    |- {t_sub.conclusion}")
     print(f"  [OK] soundness_of_bound         ({len(calculus.STEP_TYPED.rules)} step rules)     |- {t_mon.conclusion}")
-    for name, thm in orpheus_thms:
+    for name, thm, _ in orpheus_thms:
         print(f"  [OK] {name:42s} |- {thm.conclusion}")
-    for name, thm in staging_thms:
+    for name, thm, _ in staging_thms:
         print(f"  [OK] {name:42s} |- {thm.conclusion}")
-    for name, thm in encoding_thms:
+    for name, thm, _ in encoding_thms:
         print(f"  [OK] {name:42s} |- {thm.conclusion}")
     return 0
 

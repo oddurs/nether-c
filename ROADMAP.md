@@ -439,7 +439,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 
 ## assay — The Assay
 
-`##########` 100% · 17 of 17 done · due 2028-10-01
+`##########` 100% · 18 of 18 done · due 2028-10-01
 
 Mechanized claims about a stated calculus, plus measured correspondence with Rust. Tooling and assumptions remain outside the trusted language core.
 
@@ -462,6 +462,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0290`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0290-burial-leaves-code-as-written-that-would-lower-a-depth.md) Burial leaves code as written that would lower a depth <sup>bug · p0 · 0</sup>
 - [x] [`0291`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0291-hand-demands-to-workers-at-no-cost-to-the-serial-order.md) Hand demands to workers at no cost to the serial order <sup>bug · p2 · 0</sup>
 - [x] [`0292`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0292-push-without-holding-github-s-connection-open-through-the-checks.md) Push without holding GitHub's connection open through the checks <sup>bug · p1</sup>
+- [x] [`0295`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0295-fix-proof-kernel-soundness-in-lattice-decide-induction-and-substitution.md) Fix proof kernel soundness in lattice_decide, induction, and substitution <sup>bug · p0 · 0</sup>
 
 ## Unscheduled
 

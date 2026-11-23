@@ -6,6 +6,7 @@ from typing import Dict, Tuple
 from kernel import (
     Formula,
     InductiveRelation,
+    ProofFault,
     Rule,
     Term,
     Theorem,
@@ -30,7 +31,8 @@ EMPTY_RAW = var("∅_raw")
 
 
 def d_max(*args: Term) -> Term:
-    assert len(args) >= 2
+    if len(args) < 2:
+        raise ProofFault("d_max requires at least two arguments")
     out = args[0]
     for a in args[1:]:
         out = app("max", out, a)
@@ -38,7 +40,8 @@ def d_max(*args: Term) -> Term:
 
 
 def s_union(*args: Term) -> Term:
-    assert len(args) >= 2
+    if len(args) < 2:
+        raise ProofFault("s_union requires at least two arguments")
     out = args[0]
     for a in args[1:]:
         out = app("∪", out, a)
@@ -116,8 +119,18 @@ d_a = var("d_a")
 df_set = var("δ_f")
 
 
-def has_type(ctx: Term, amb: Term, expr: Term, ty: Term, depth: Term) -> Formula:
-    return pred("HasType", ctx, amb, expr, ty, depth)
+g_e = var("g_e")
+g1 = var("g1")
+g2 = var("g2")
+g3 = var("g3")
+g_f = var("g_f")
+g_a = var("g_a")
+g_s = var("g_s")
+g_b = var("g_b")
+
+
+def has_type(ctx: Term, amb: Term, expr: Term, ty: Term, depth: Term, descents: Term) -> Formula:
+    return pred("HasType", ctx, amb, expr, ty, depth, descents)
 
 
 HAS_TYPE = InductiveRelation(
@@ -130,82 +143,106 @@ HAS_TYPE = InductiveRelation(
                 pred("InCtx", x, τ, d, Γ),
                 le(d, max_set(s_union(δ, app("g_var", x)))),
             ),
-            has_type(Γ, δ, app("Var", x), τ, d),
+            has_type(Γ, δ, app("Var", x), τ, d, app("g_var", x)),
         ),
         # [LIT]: ℓ a literal -> Γ ; δ ⊢ ℓ : τ@0
         Rule(
             "LIT",
             (pred("IsLit", ℓ, τ),),
-            has_type(Γ, δ, app("Lit", ℓ), τ, ZERO),
+            has_type(Γ, δ, app("Lit", ℓ), τ, ZERO, EMPTY_RAW),
         ),
         # [PRIM]: Γ ; δ ⊢ eᵢ : τᵢ@dᵢ -> Γ ; δ ⊢ ⊕(e₁..eₙ) : τ@max(d₁..dₙ)
         Rule(
             "PRIM",
             (
-                has_type(Γ, δ, e1, τ1, d1),
-                has_type(Γ, δ, e2, τ2, d2),
+                has_type(Γ, δ, e1, τ1, d1, g1),
+                has_type(Γ, δ, e2, τ2, d2, g2),
                 pred("PrimSig", op, τ1, τ2, τ),
             ),
-            has_type(Γ, δ, app("Prim", op, e1, e2), τ, d_max(d1, d2)),
+            has_type(Γ, δ, app("Prim", op, e1, e2), τ, d_max(d1, d2), s_union(g1, g2)),
+        ),
+        # [SELECT]: conditional is a primitive over condition and both arms (§2.3)
+        Rule(
+            "SELECT",
+            (
+                has_type(Γ, δ, e1, var("Bool"), d1, g1),
+                has_type(Γ, δ, e2, τ, d2, g2),
+                has_type(Γ, δ, e3, τ, d3, g3),
+            ),
+            has_type(Γ, δ, app("Select", e1, e2, e3), τ, d_max(d1, d2, d3), s_union(g1, g2, g3)),
         ),
         # [APP]: Γ ; δ ⊢ f : (τ₁ --df--> τ₂@d_r)@d_f, Γ ; δ ⊢ a : τ₁@d_a, df ⊆ δ
         Rule(
             "APP",
             (
-                has_type(Γ, δ, f, app("Fn", τ1, df_set, τ2, d_r), d_f),
-                has_type(Γ, δ, a, τ1, d_a),
+                has_type(Γ, δ, f, app("Fn", τ1, df_set, τ2, d_r), d_f, g_f),
+                has_type(Γ, δ, a, τ1, d_a, g_a),
                 subset(df_set, δ),
                 le(d_r, max_set(s_union(df_set, app("g_body", f)))),
             ),
-            has_type(Γ, δ, app("App", f, a), τ2, d_max(d_r, d_f, d_a)),
+            has_type(
+                Γ,
+                δ,
+                app("App", f, a),
+                τ2,
+                d_max(d_r, d_f, d_a),
+                s_union(g_f, g_a, app("g_body", f)),
+            ),
         ),
         # [ABS]: Γ, x : τ₁@0 ; df ⊢ b : τ₂@d₂, df least -> Γ ; δ ⊢ λx.b : (τ₁ --df--> τ₂@d₂)@0
         Rule(
             "ABS",
             (
-                has_type(app("Extend", Γ, x, τ1, ZERO), df_set, b, τ2, d2),
+                has_type(app("Extend", Γ, x, τ1, ZERO), df_set, b, τ2, d2, g_b),
                 pred("LeastLatent", Γ, x, τ1, b, df_set),
             ),
-            has_type(Γ, δ, app("Abs", x, τ1, df_set, b), app("Fn", τ1, df_set, τ2, d2), ZERO),
+            has_type(
+                Γ,
+                δ,
+                app("Abs", x, τ1, df_set, b),
+                app("Fn", τ1, df_set, τ2, d2),
+                ZERO,
+                EMPTY_RAW,
+            ),
         ),
         # [DESCEND]: Γ ; δ ∪ {s(κ)} ⊢ e : τ@d -> Γ ; δ ⊢ descend κ {e} : τ@d
         Rule(
             "DESCEND",
-            (has_type(Γ, s_union(δ, singleton(s_k)), e, τ, d),),
-            has_type(Γ, δ, app("Descend", s_k, e), τ, d),
+            (has_type(Γ, s_union(δ, singleton(s_k)), e, τ, d, g_e),),
+            has_type(Γ, δ, app("Descend", s_k, e), τ, d, s_union(singleton(s_k), g_e)),
         ),
         # [SEAL]: Γ ; δ ⊢ e : τ@d -> Γ ; δ ⊢ seal e : Cairn@0
         Rule(
             "SEAL",
-            (has_type(Γ, δ, e, τ, d),),
-            has_type(Γ, δ, app("Seal", e), var("Cairn"), ZERO),
+            (has_type(Γ, δ, e, τ, d, g_e),),
+            has_type(Γ, δ, app("Seal", e), var("Cairn"), ZERO, EMPTY_RAW),
         ),
         # [SHADE]: Γ ; δ ⊢ e : τ@d -> Γ ; δ ⊢ shade e : Shade^d<τ>@0
         Rule(
             "SHADE",
-            (has_type(Γ, δ, e, τ, d),),
-            has_type(Γ, δ, app("Shade", e), app("ShadeTy", d, τ), ZERO),
+            (has_type(Γ, δ, e, τ, d, g_e),),
+            has_type(Γ, δ, app("Shade", e), app("ShadeTy", d, τ), ZERO, EMPTY_RAW),
         ),
         # [LOOK]: Γ ; δ ⊢ s : Shade^d<τ>@d', d ∈ δ -> Γ ; δ ⊢ look s : τ@max(d, d')
         Rule(
             "LOOK",
             (
-                has_type(Γ, δ, s, app("ShadeTy", d, τ), d_p),
+                has_type(Γ, δ, s, app("ShadeTy", d, τ), d_p, g_s),
                 elem(d, δ),
             ),
-            has_type(Γ, δ, app("Look", s), τ, d_max(d, d_p)),
+            has_type(Γ, δ, app("Look", s), τ, d_max(d, d_p), g_s),
         ),
         # [OPAQUE]: Γ ; δ ⊢ e : τ@d -> Γ ; δ ⊢ opaque e : τ@d
         Rule(
             "OPAQUE",
-            (has_type(Γ, δ, e, τ, d),),
-            has_type(Γ, δ, app("Opaque", e), τ, d),
+            (has_type(Γ, δ, e, τ, d, g_e),),
+            has_type(Γ, δ, app("Opaque", e), τ, d, g_e),
         ),
         # [DEMAND]: Γ ; δ ⊢ e : τ@d -> Γ ; δ ⊢ demand e : U0@d
         Rule(
             "DEMAND",
-            (has_type(Γ, δ, e, τ, d),),
-            has_type(Γ, δ, app("Demand", e), var("U0"), d),
+            (has_type(Γ, δ, e, τ, d, g_e),),
+            has_type(Γ, δ, app("Demand", e), var("U0"), d, g_e),
         ),
     ),
 )
@@ -213,58 +250,35 @@ HAS_TYPE = InductiveRelation(
 
 # ── Theorem 1: Ambient soundness (`spec/02-calculus.md` §2.4) ───────────────
 #
-# If `Γ ; δ ⊢ e : τ@d` then `d <= max(δ ∪ g(e))`.
+# If `Γ ; δ ⊢ e : τ@d [g]` then `d <= max(δ ∪ g)`.
+
+_AMB_PARAMS = ("_ctx", "_amb", "_expr", "_ty", "_depth", "_descents")
+_AMB_PROP = le(var("_depth"), max_set(s_union(var("_amb"), var("_descents"))))
 
 
-def _ambient_prop(args: Tuple[Term, ...]) -> Formula:
-    _ctx, amb, expr, _ty, depth = args
-    return le(depth, max_set(s_union(amb, g_of(expr))))
+def _ambient_goal(rule_name: str) -> Formula:
+    args = HAS_TYPE.rule(rule_name).conclusion.terms[0].args
+    return le(args[4], max_set(s_union(args[1], args[5])))
 
 
 def prove_ambient_soundness() -> Theorem:
     cases = {
-        "VAR": lambda prems, _ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("VAR").conclusion.terms[0].args),
-            [prems[1]],
-        ),
-        "LIT": lambda _prems, _ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("LIT").conclusion.terms[0].args),
-        ),
-        "PRIM": lambda _prems, ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("PRIM").conclusion.terms[0].args),
-            [ihs[0], ihs[1]],
-        ),
+        "VAR": lambda prems, _ihs: lattice_decide(_ambient_goal("VAR"), [prems[1]]),
+        "LIT": lambda _prems, _ihs: lattice_decide(_ambient_goal("LIT")),
+        "PRIM": lambda _prems, ihs: lattice_decide(_ambient_goal("PRIM"), [ihs[0], ihs[1]]),
+        "SELECT": lambda _prems, ihs: lattice_decide(_ambient_goal("SELECT"), [ihs[0], ihs[1], ihs[2]]),
         "APP": lambda prems, ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("APP").conclusion.terms[0].args),
-            [ihs[0], ihs[1], prems[2], prems[3]],
+            _ambient_goal("APP"), [ihs[0], ihs[1], prems[2], prems[3]]
         ),
-        "ABS": lambda _prems, _ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("ABS").conclusion.terms[0].args),
-        ),
-        "DESCEND": lambda _prems, ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("DESCEND").conclusion.terms[0].args),
-            [ihs[0]],
-        ),
-        "SEAL": lambda _prems, _ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("SEAL").conclusion.terms[0].args),
-        ),
-        "SHADE": lambda _prems, _ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("SHADE").conclusion.terms[0].args),
-        ),
-        "LOOK": lambda prems, ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("LOOK").conclusion.terms[0].args),
-            [ihs[0], prems[1]],
-        ),
-        "OPAQUE": lambda _prems, ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("OPAQUE").conclusion.terms[0].args),
-            [ihs[0]],
-        ),
-        "DEMAND": lambda _prems, ihs: lattice_decide(
-            _ambient_prop(HAS_TYPE.rule("DEMAND").conclusion.terms[0].args),
-            [ihs[0]],
-        ),
+        "ABS": lambda _prems, _ihs: lattice_decide(_ambient_goal("ABS")),
+        "DESCEND": lambda _prems, ihs: lattice_decide(_ambient_goal("DESCEND"), [ihs[0]]),
+        "SEAL": lambda _prems, _ihs: lattice_decide(_ambient_goal("SEAL")),
+        "SHADE": lambda _prems, _ihs: lattice_decide(_ambient_goal("SHADE")),
+        "LOOK": lambda prems, ihs: lattice_decide(_ambient_goal("LOOK"), [ihs[0], prems[1]]),
+        "OPAQUE": lambda _prems, ihs: lattice_decide(_ambient_goal("OPAQUE"), [ihs[0]]),
+        "DEMAND": lambda _prems, ihs: lattice_decide(_ambient_goal("DEMAND"), [ihs[0]]),
     }
-    return rule_induction(HAS_TYPE, _ambient_prop, cases)
+    return rule_induction(HAS_TYPE, _AMB_PARAMS, _AMB_PROP, cases)
 
 
 # ── Lemma: Substitution depth bound across all typing forms ──────────────────
@@ -394,7 +408,12 @@ def prove_substitution_monotonicity() -> Theorem:
         )
         for r in SUBST_DEPTH.rules
     }
-    return rule_induction(SUBST_DEPTH, _subst_prop, cases)
+    return rule_induction(
+        SUBST_DEPTH,
+        ("_expr", "_d_before", "_d_arg", "_d_after"),
+        le(var("_d_after"), d_max(var("_d_before"), var("_d_arg"))),
+        cases,
+    )
 
 
 # ── Theorem 2: Soundness of the bound / Monotonicity (`spec/02-calculus.md` §2.4) ─
@@ -579,7 +598,12 @@ def prove_soundness_of_bound() -> Theorem:
                 _monotone_prop(r.conclusion.terms[0].args),
                 list(ihs),
             )
-    return rule_induction(STEP_TYPED, _monotone_prop, cases)  # type: ignore[arg-type]
+    return rule_induction(
+        STEP_TYPED,
+        ("_before", "_after", "_d_before", "_d_after"),
+        le(var("_d_after"), var("_d_before")),
+        cases,  # type: ignore[arg-type]
+    )
 
 
 if __name__ == "__main__":

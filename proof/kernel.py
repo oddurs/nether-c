@@ -39,7 +39,7 @@ def subst_term(t: Term, mapping: Dict[str, Term]) -> Term:
 
 def free_vars_term(t: Term) -> Set[str]:
     if not t.args:
-        if t.op.isdigit() or t.op in {"∅", "True", "False", "U0", "Cairn"}:
+        if t.op.isdigit() or t.op in {"∅", "∅_raw", "True", "False", "U0", "Cairn"}:
             return set()
         return {t.op}
     out: Set[str] = set()
@@ -114,7 +114,7 @@ def conj(a: Formula, b: Formula) -> Formula:
 
 
 def conj_all(items: Sequence[Formula]) -> Formula:
-    assert items, "conj_all requires at least one formula"
+    _require(bool(items), "conj_all requires at least one formula")
     out = items[0]
     for nxt in items[1:]:
         out = conj(out, nxt)
@@ -137,10 +137,46 @@ def forall(binder: str, body: Formula) -> Formula:
     return Formula("∀", (), (body,), binder)
 
 
+def free_vars_formula(f: Formula) -> Set[str]:
+    if f.kind in {"∀", "∃"}:
+        return free_vars_formula(f.subs[0]) - {f.binder}
+    out: Set[str] = set()
+    for t in f.terms:
+        out |= free_vars_term(t)
+    for s in f.subs:
+        out |= free_vars_formula(s)
+    return out
+
+
+def _fresh_var(base: str, avoid: Set[str]) -> str:
+    candidate = f"{base}_"
+    idx = 0
+    while candidate in avoid:
+        idx += 1
+        candidate = f"{base}_{idx}"
+    return candidate
+
+
 def subst_formula(f: Formula, mapping: Dict[str, Term]) -> Formula:
     if f.kind in {"∀", "∃"}:
         inner_map = {k: v for k, v in mapping.items() if k != f.binder}
-        return Formula(f.kind, (), (subst_formula(f.subs[0], inner_map),), f.binder)
+        if not inner_map:
+            return f
+        body = f.subs[0]
+        body_fv = free_vars_formula(body)
+        active = {k: v for k, v in inner_map.items() if k in body_fv}
+        if not active:
+            return f
+        captured: Set[str] = set()
+        for t in active.values():
+            captured |= free_vars_term(t)
+        binder = f.binder
+        if binder in captured:
+            avoid = body_fv | captured | set(active.keys()) | {binder}
+            fresh = _fresh_var(binder, avoid)
+            body = subst_formula(body, {binder: var(fresh)})
+            binder = fresh
+        return Formula(f.kind, (), (subst_formula(body, active),), binder)
     return Formula(
         f.kind,
         tuple(subst_term(t, mapping) for t in f.terms),
@@ -269,7 +305,7 @@ def inst_all(thm: Theorem, terms: Sequence[Term]) -> Theorem:
 def gen(binder: str, thm: Theorem) -> Theorem:
     for a in thm.assumptions:
         _require(
-            binder not in repr(a),
+            binder not in free_vars_formula(a),
             f"cannot generalize `{binder}` while free in assumption {a}",
         )
     return _thm(thm.assumptions, forall(binder, thm.conclusion))
@@ -278,6 +314,8 @@ def gen(binder: str, thm: Theorem) -> Theorem:
 def rewrite(eq_thm: Theorem, target: Theorem) -> Theorem:
     _require(eq_thm.conclusion.kind == "=", f"rewrite expects =, got {eq_thm.conclusion}")
     src, dst = eq_thm.conclusion.terms
+    src_fv = free_vars_term(src)
+    dst_fv = free_vars_term(dst)
 
     def replace_t(t: Term) -> Term:
         if t == src:
@@ -285,6 +323,19 @@ def rewrite(eq_thm: Theorem, target: Theorem) -> Theorem:
         return Term(t.op, tuple(replace_t(a) for a in t.args))
 
     def replace_f(f: Formula) -> Formula:
+        if f.kind in {"∀", "∃"}:
+            # If the bound variable appears free in `src`, occurrences inside the
+            # binder refer to the bound variable rather than the free one in `eq_thm`.
+            if f.binder in src_fv:
+                return f
+            body = f.subs[0]
+            binder = f.binder
+            if binder in dst_fv:
+                avoid = free_vars_formula(body) | src_fv | dst_fv | {binder}
+                fresh = _fresh_var(binder, avoid)
+                body = subst_formula(body, {binder: var(fresh)})
+                binder = fresh
+            return Formula(f.kind, (), (replace_f(body),), binder)
         return Formula(
             f.kind,
             tuple(replace_t(t) for t in f.terms),
@@ -301,6 +352,10 @@ def rewrite(eq_thm: Theorem, target: Theorem) -> Theorem:
 # Held  = subsets of {0..8} with 0 always present (§2.1: "Stratum 0 is in δ
 #         always"), union `∪`, singleton `{d}`, membership `∈`, subset `⊆`, and
 #         upper bound `max_set(δ)`.
+
+SET_OPS = frozenset({"singleton", "∪"})
+SET_CONSTS = frozenset({"∅", "∅_raw"})
+DEPTH_OPS = frozenset({"max", "max_set"})
 
 
 def _eval_depth(t: Term, env_d: Dict[str, int], env_s: Dict[str, int]) -> int:
@@ -339,56 +394,77 @@ def _eval_set(t: Term, env_d: Dict[str, int], env_s: Dict[str, int]) -> int:
     return env_s[repr(t)]
 
 
-def _collect_lattice_vars(f: Formula, d_vars: Set[str], s_vars: Set[str], ambient_s: Set[str]) -> None:
+def _collect_lattice_vars(
+    f: Formula,
+    d_vars: Set[str],
+    s_vars: Set[str],
+    ambient_s: Set[str],
+    full_s: Set[str],
+) -> None:
+    """Collect depth and set variables, enforcing sort separation and recording
+    which set variables are observed beyond `max_set` (`full_s`)."""
+
     def scan_d(t: Term) -> None:
         if not t.args:
+            _require(t.op not in SET_CONSTS, f"set constant `{t}` used in depth position")
             if not t.op.isdigit():
                 d_vars.add(t.op)
         elif t.op == "max":
             for a in t.args:
                 scan_d(a)
         elif t.op == "max_set":
-            scan_s(t.args[0])
+            _require(len(t.args) == 1, f"max_set expects 1 argument, got {t}")
+            scan_s(t.args[0], observed_full=False)
         else:
-            # Uninterpreted depth-valued term such as d_x or s(κ): treat as a depth variable
+            _require(t.op not in SET_OPS, f"set term `{t}` used in depth position")
             d_vars.add(repr(t))
 
-    def scan_s(t: Term) -> None:
+    def scan_s(t: Term, *, observed_full: bool) -> None:
         if not t.args:
-            if t.op not in {"∅", "∅_raw"}:
+            _require(not t.op.isdigit(), f"depth literal `{t}` used in set position")
+            if t.op not in SET_CONSTS:
                 s_vars.add(t.op)
                 if t.op.startswith("δ"):
                     ambient_s.add(t.op)
+                if observed_full:
+                    full_s.add(t.op)
         elif t.op == "singleton":
+            _require(len(t.args) == 1, f"singleton expects 1 argument, got {t}")
             scan_d(t.args[0])
         elif t.op == "∪":
             for a in t.args:
-                scan_s(a)
+                scan_s(a, observed_full=observed_full)
         else:
-            s_vars.add(repr(t))
+            _require(t.op not in DEPTH_OPS, f"depth term `{t}` used in set position")
+            name = repr(t)
+            s_vars.add(name)
+            if observed_full:
+                full_s.add(name)
 
     if f.kind in {"<=", "<", "=", "!=_d"}:
         scan_d(f.terms[0])
         scan_d(f.terms[1])
     elif f.kind in {"∈", "∉"}:
         scan_d(f.terms[0])
-        scan_s(f.terms[1])
+        scan_s(f.terms[1], observed_full=True)
     elif f.kind in {"⊆", "⊈"}:
-        scan_s(f.terms[0])
-        scan_s(f.terms[1])
-    else:
+        scan_s(f.terms[0], observed_full=True)
+        scan_s(f.terms[1], observed_full=True)
+    elif f.kind in {"¬", "∧", "∨", "→", "↔"}:
         for sub in f.subs:
-            _collect_lattice_vars(sub, d_vars, s_vars, ambient_s)
+            _collect_lattice_vars(sub, d_vars, s_vars, ambient_s, full_s)
+    else:
+        raise ProofFault(f"non-lattice formula `{f}` in lattice_decide")
 
 
 def _eval_lattice_formula(f: Formula, env_d: Dict[str, int], env_s: Dict[str, int]) -> bool:
     def ed(t: Term) -> int:
-        if t.args and t.op not in {"max", "max_set"}:
+        if t.args and t.op not in DEPTH_OPS:
             return env_d[repr(t)]
         return _eval_depth(t, env_d, env_s)
 
     def es(t: Term) -> int:
-        if t.args and t.op not in {"singleton", "∪"}:
+        if t.args and t.op not in SET_OPS:
             return env_s[repr(t)]
         return _eval_set(t, env_d, env_s)
 
@@ -431,34 +507,104 @@ def _eval_lattice_formula(f: Formula, env_d: Dict[str, int], env_s: Dict[str, in
     raise ProofFault(f"non-lattice formula `{f}` in lattice_decide")
 
 
-def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
-    """Exhaustively verify a universal lattice/capability-set formula over {0..8}.
+def _split_conj(f: Formula) -> List[Formula]:
+    if f.kind == "∧":
+        return _split_conj(f.subs[0]) + _split_conj(f.subs[1])
+    return [f]
 
-    Because `Depth = {0..8}` is a 9-element chain and every capability set is a
-    bitmask over `{0..8}`, any quantifier-free formula over depth variables and
-    capability-set expressions is decidable by complete finite-domain checking
-    (or algebraic reduction of `max_set` to its maximum element in `{0..8}`).
+
+def _has_set_rel(f: Formula) -> bool:
+    if f.kind in {"∈", "∉", "⊆", "⊈"}:
+        return True
+    return any(_has_set_rel(s) for s in f.subs)
+
+
+def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
+    """Soundly verify a universal lattice/capability-set formula over {0..8}.
+
+    Every set variable observed by membership/inclusion (`∈`, `∉`, `⊆`, `⊈`) is
+    checked over the **exact full powerset** of `{0..8}` (all 512 bitmasks, or
+    all 256 containing stratum 0 for ambient sets `δ*`). A set variable
+    observed solely through `max_set` is checked over its exact `max_set`
+    quotient (`∅` and intervals `{0..m}`).
+
+    When `goal` uses no set relations (`∈`/`∉`/`⊆`/`⊈`), a top-level positive
+    antecedent `A ⊆ B` may be soundly weakened to `max_set(A) <= max_set(B)`:
+    since `A ⊆ B → max_set(A) <= max_set(B)` holds universally, validity of the
+    weakened implication entails validity of the original implication.
     """
     assumptions: Set[Formula] = set()
-    antecedents: List[Formula] = []
+    raw_antecedents: List[Formula] = []
     for h in hyps:
         assumptions |= h.assumptions
-        antecedents.append(h.conclusion)
-    full = imp(conj_all(antecedents), goal) if antecedents else goal
+        raw_antecedents.extend(_split_conj(h.conclusion))
+
+    # Unpack top-level implications in `goal` for earlier antecedent pruning.
+    check_goal = goal
+    while check_goal.kind == "→":
+        raw_antecedents.extend(_split_conj(check_goal.subs[0]))
+        check_goal = check_goal.subs[1]
+
+    # Validate original formula sorts before any sound weakening.
+    orig_d: Set[str] = set()
+    orig_s: Set[str] = set()
+    orig_amb: Set[str] = set()
+    orig_full: Set[str] = set()
+    for ant in raw_antecedents:
+        _collect_lattice_vars(ant, orig_d, orig_s, orig_amb, orig_full)
+    _collect_lattice_vars(check_goal, orig_d, orig_s, orig_amb, orig_full)
+    _require(orig_d.isdisjoint(orig_s), f"variable used at both depth and set sort: {orig_d & orig_s}")
+
+    # Sound weakening: if `check_goal` has no set relations, weaken positive
+    # top-level `A ⊆ B` antecedents to `max_set(A) <= max_set(B)` so pure
+    # depth-bound proofs (`APP`) do not explode over unrelated set masks.
+    antecedents: List[Formula] = []
+    if not _has_set_rel(check_goal):
+        for ant in raw_antecedents:
+            if ant.kind == "⊆":
+                antecedents.append(le(app("max_set", ant.terms[0]), app("max_set", ant.terms[1])))
+            else:
+                antecedents.append(ant)
+    else:
+        antecedents = list(raw_antecedents)
 
     d_vars: Set[str] = set()
     s_vars: Set[str] = set()
     ambient_s: Set[str] = set()
-    _collect_lattice_vars(full, d_vars, s_vars, ambient_s)
-    # Precompute which depth and set variables each antecedent and the goal need
+    full_s: Set[str] = set()
+    for ant in antecedents:
+        _collect_lattice_vars(ant, d_vars, s_vars, ambient_s, full_s)
+    _collect_lattice_vars(check_goal, d_vars, s_vars, ambient_s, full_s)
+
+    # Full-domain checking over `{0..8}` for all depths and exact bitmasks for
+    # every set variable in `full_s`. Only pure positive order formulas with
+    # `full_s == empty` and no nonzero constants use the bounded-chain
+    # homomorphism (`{0, 1, 2}`).
+    def _has_non_horn_f(f: Formula) -> bool:
+        def _has_t(t: Term) -> bool:
+            if not t.args and t.op.isdigit() and int(t.op) > 0:
+                return True
+            return any(_has_t(a) for a in t.args)
+
+        if f.kind in {"∈", "∉", "⊆", "⊈", "<", "!=_d", "¬", "∨", "↔"}:
+            return True
+        return any(_has_t(t) for t in f.terms) or any(_has_non_horn_f(s) for s in f.subs)
+
+    full_formula = imp(conj_all(antecedents), check_goal) if antecedents else check_goal
+    chain_len = 9 if (full_s or _has_non_horn_f(full_formula)) else 3
+
+    # Build variable order so antecedents prune as early as possible.
     ant_vars: List[Tuple[Formula, Set[str], Set[str]]] = []
     for ant in antecedents:
         dv: Set[str] = set()
         sv: Set[str] = set()
-        _collect_lattice_vars(ant, dv, sv, set())
+        _collect_lattice_vars(ant, dv, sv, set(), set())
         ant_vars.append((ant, dv, sv))
 
-    # Order depth and set variables so antecedents become checkable as early as possible
+    # If antecedents constrain set-only pairs (e.g. `δ_A ⊆ δ_B`), order sets first.
+    s_only_ants = [item for item in ant_vars if not item[1] and item[2]]
+    sets_first = bool(s_only_ants and full_s)
+
     d_list: List[str] = []
     for _ant, dv, sv in sorted(ant_vars, key=lambda item: (len(item[2]), len(item[1]))):
         for v in sorted(dv):
@@ -469,7 +615,7 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
             d_list.append(v)
 
     s_list: List[str] = []
-    for _ant, _dv, sv in sorted(ant_vars, key=lambda item: len(item[2])):
+    for _ant, _dv, sv in sorted(ant_vars, key=lambda item: (len(item[1]), len(item[2]))):
         for v in sorted(sv):
             if v not in s_list:
                 s_list.append(v)
@@ -477,113 +623,122 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
         if v not in s_list:
             s_list.append(v)
 
-    def _has_non_horn_f(f: Formula) -> bool:
-        def _has_t(t: Term) -> bool:
-            if not t.args and t.op.isdigit() and int(t.op) > 0:
-                return True
-            return any(_has_t(a) for a in t.args)
+    def _domain_for_set(name: str) -> List[int]:
+        if name in full_s:
+            if name in ambient_s:
+                return [m | 1 for m in range(0, 512, 2)]
+            return list(range(512))
+        if name in ambient_s:
+            return [(1 << (m + 1)) - 1 for m in range(chain_len)]
+        return [0] + [(1 << (m + 1)) - 1 for m in range(chain_len)]
 
-        if f.kind in {"∈", "∉", "⊈", "<", "!=_d", "¬", "∨"}:
-            return True
-        return any(_has_t(t) for t in f.terms) or any(_has_non_horn_f(s) for s in f.subs)
-
-    has_elem_ops = any(tok in repr(full) for tok in ("∈", "∉", "⊈"))
-    has_strict_or_const = _has_non_horn_f(full)
-    # By the bounded-chain homomorphism theorem: for any positive order formula
-    # over `{0, max, max_set, ∪, singleton, ⊆, <=}` without nonzero constants,
-    # if a counterexample σ exists in `{0..8}` (so lhs(σ) > rhs(σ) >= 0), the
-    # monotone map π(0)=0, π(0<x<=rhs(σ))=1, π(x>rhs(σ))=2 preserves all `0`,
-    # `max`, `∪`, `⊆`, `<=` antecedents while keeping π(lhs(σ))=2 > π(rhs(σ)),
-    # yielding a counterexample in `{0, 1, 2}`. Formulas with membership, strict
-    # inequality, or nonzero constants check all 9 strata `0..8`.
-    chain_len = 9 if has_strict_or_const else 3
-    interval_domains = [
-        (
-            [(1 << (m + 1)) - 1 for m in range(chain_len)]
-            if v in ambient_s
-            else [0] + [(1 << (m + 1)) - 1 for m in range(chain_len)]
-        )
-        for v in s_list
-    ]
-
+    s_doms = [_domain_for_set(v) for v in s_list]
     env_d: Dict[str, int] = {}
     env_s: Dict[str, int] = {}
 
-    def domains_for_env_d() -> List[List[int]]:
-        if not has_elem_ops:
-            return interval_domains
-        # Exact finite-model quotient given env_d: all subsets of active depths
-        # combined with each possible maximum element m in 0..8 and witness bit.
-        active = sorted({0} | set(env_d.values()))
-        non_active = [b for b in range(9) if b not in active]
-        witness = non_active[0] if non_active else 0
-        extra_bits = active + ([witness] if witness not in active else [])
-        sub_masks: List[int] = [0]
-        for b in extra_bits:
-            sub_masks = sub_masks + [m | (1 << b) for m in sub_masks]
-        raw_masks: Set[int] = set(sub_masks)
-        for m in range(9):
-            for sm in sub_masks:
-                # Clear bits above m and set bit m so max_set is exactly m
-                clipped = (sm & ((1 << (m + 1)) - 1)) | (1 << m)
-                raw_masks.add(clipped)
-        sorted_masks = sorted(raw_masks)
-        return [
-            [m | (1 if v in ambient_s else 0) for m in sorted_masks]
-            for v in s_list
-        ]
+    if sets_first:
+        s_bound_at = [set(s_list[: i + 1]) for i in range(len(s_list))]
+        ants_at_s: List[List[Formula]] = [[] for _ in range(len(s_list))]
+        placed: Set[int] = set()
+        for i, bound in enumerate(s_bound_at):
+            for a_idx, (ant, dv, sv) in enumerate(ant_vars):
+                if a_idx not in placed and not dv and sv <= bound:
+                    ants_at_s[i].append(ant)
+                    placed.add(a_idx)
+        d_bound_at = [set(d_list[: i + 1]) for i in range(len(d_list))]
+        ants_at_d: List[List[Formula]] = [[] for _ in range(len(d_list))]
+        for i, bound in enumerate(d_bound_at):
+            for a_idx, (ant, dv, _sv) in enumerate(ant_vars):
+                if a_idx not in placed and dv <= bound:
+                    ants_at_d[i].append(ant)
+                    placed.add(a_idx)
+        ants_before = [ant for a_idx, (ant, _dv, _sv) in enumerate(ant_vars) if a_idx not in placed]
 
-    # Check antecedents whose set/depth variables are all bound at step `idx`
-    d_bound_at: List[Set[str]] = [set(d_list[: i + 1]) for i in range(len(d_list))]
-    ants_at_d: List[List[Formula]] = [[] for _ in range(len(d_list))]
-    placed: Set[int] = set()
-    for i, bound in enumerate(d_bound_at):
-        for a_idx, (ant, dv, sv) in enumerate(ant_vars):
-            if a_idx not in placed and not sv and dv <= bound:
-                ants_at_d[i].append(ant)
-                placed.add(a_idx)
+        def check_d(idx: int) -> None:
+            if idx == len(d_list):
+                if not _eval_lattice_formula(check_goal, env_d, env_s):
+                    raise ProofFault(
+                        f"lattice_decide counterexample for `{goal}`:\n"
+                        f"  depths: {env_d}\n  sets:   {env_s}"
+                    )
+                return
+            name = d_list[idx]
+            checks = ants_at_d[idx]
+            for val in range(chain_len):
+                env_d[name] = val
+                if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
+                    check_d(idx + 1)
 
-    s_bound_at: List[Set[str]] = [set(s_list[: i + 1]) for i in range(len(s_list))]
-    ants_at_s: List[List[Formula]] = [[] for _ in range(len(s_list))]
-    for i, bound in enumerate(s_bound_at):
-        for a_idx, (ant, _dv, sv) in enumerate(ant_vars):
-            if a_idx not in placed and sv <= bound:
-                ants_at_s[i].append(ant)
-                placed.add(a_idx)
-    ants_before_s = [ant for a_idx, (ant, _dv, sv) in enumerate(ant_vars) if a_idx not in placed and not sv]
+        def check_s(idx: int) -> None:
+            if idx == len(s_list):
+                if all(_eval_lattice_formula(c, env_d, env_s) for c in ants_before):
+                    check_d(0)
+                return
+            name = s_list[idx]
+            checks = ants_at_s[idx]
+            for val in s_doms[idx]:
+                env_s[name] = val
+                if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
+                    check_s(idx + 1)
 
-    def check_s(idx: int, s_doms: List[List[int]]) -> None:
-        if idx == len(s_list):
-            if not _eval_lattice_formula(goal, env_d, env_s):
-                raise ProofFault(
-                    f"lattice_decide counterexample for `{goal}`:\n"
-                    f"  depths: {env_d}\n  sets:   {env_s}"
-                )
-            return
-        name = s_list[idx]
-        checks = ants_at_s[idx]
-        for val in s_doms[idx]:
-            env_s[name] = val
-            if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
-                check_s(idx + 1, s_doms)
+        check_s(0)
+    else:
+        d_bound_at = [set(d_list[: i + 1]) for i in range(len(d_list))]
+        ants_at_d = [[] for _ in range(len(d_list))]
+        placed = set()
+        for i, bound in enumerate(d_bound_at):
+            for a_idx, (ant, dv, sv) in enumerate(ant_vars):
+                if a_idx not in placed and not sv and dv <= bound:
+                    ants_at_d[i].append(ant)
+                    placed.add(a_idx)
+        s_bound_at = [set(s_list[: i + 1]) for i in range(len(s_list))]
+        ants_at_s = [[] for _ in range(len(s_list))]
+        for i, bound in enumerate(s_bound_at):
+            for a_idx, (ant, _dv, sv) in enumerate(ant_vars):
+                if a_idx not in placed and sv <= bound:
+                    ants_at_s[i].append(ant)
+                    placed.add(a_idx)
+        ants_before = [ant for a_idx, (ant, _dv, _sv) in enumerate(ant_vars) if a_idx not in placed]
 
-    def check_d(idx: int) -> None:
-        if idx == len(d_list):
-            if all(_eval_lattice_formula(c, env_d, env_s) for c in ants_before_s):
-                check_s(0, domains_for_env_d())
-            return
-        name = d_list[idx]
-        checks = ants_at_d[idx]
-        for val in range(chain_len):
-            env_d[name] = val
-            if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
-                check_d(idx + 1)
+        def check_s(idx: int) -> None:
+            if idx == len(s_list):
+                if not _eval_lattice_formula(check_goal, env_d, env_s):
+                    raise ProofFault(
+                        f"lattice_decide counterexample for `{goal}`:\n"
+                        f"  depths: {env_d}\n  sets:   {env_s}"
+                    )
+                return
+            name = s_list[idx]
+            checks = ants_at_s[idx]
+            for val in s_doms[idx]:
+                env_s[name] = val
+                if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
+                    check_s(idx + 1)
 
-    check_d(0)
+        def check_d(idx: int) -> None:
+            if idx == len(d_list):
+                if all(_eval_lattice_formula(c, env_d, env_s) for c in ants_before):
+                    check_s(0)
+                return
+            name = d_list[idx]
+            checks = ants_at_d[idx]
+            for val in range(chain_len):
+                env_d[name] = val
+                if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
+                    check_d(idx + 1)
+
+        check_d(0)
+
     return _thm(assumptions, goal)
 
 
 # ── Inductive relations & rule induction ─────────────────────────────────────
+
+
+def _mentions_pred(f: Formula, name: str) -> bool:
+    if f.kind == "Pred" and f.terms[0].op == name:
+        return True
+    return any(_mentions_pred(s, name) for s in f.subs)
 
 
 @dataclass(frozen=True)
@@ -598,6 +753,44 @@ class InductiveRelation:
     name: str
     rules: Tuple[Rule, ...]
 
+    def __post_init__(self) -> None:
+        _require(bool(self.name), "InductiveRelation requires a non-empty name")
+        _require(bool(self.rules), f"InductiveRelation `{self.name}` requires at least one rule")
+        seen: Set[str] = set()
+        arity: Optional[int] = None
+        for r in self.rules:
+            _require(r.name not in seen, f"duplicate rule `{r.name}` in `{self.name}`")
+            seen.add(r.name)
+            _require(
+                r.conclusion.kind == "Pred" and r.conclusion.terms[0].op == self.name,
+                f"rule `{r.name}` conclusion must be `{self.name}(...)`, got `{r.conclusion}`",
+            )
+            r_arity = len(r.conclusion.terms[0].args)
+            if arity is None:
+                arity = r_arity
+            else:
+                _require(
+                    r_arity == arity,
+                    f"rule `{r.name}` arity {r_arity} does not match `{self.name}` arity {arity}",
+                )
+            # Enforce strict positivity: recursive occurrences of `self.name` may
+            # only appear as top-level positive premise atoms with matching arity.
+            for p in r.premises:
+                if p.kind == "Pred" and p.terms[0].op == self.name:
+                    _require(
+                        len(p.terms[0].args) == arity,
+                        f"recursive premise `{p}` in `{r.name}` has wrong arity",
+                    )
+                else:
+                    _require(
+                        not _mentions_pred(p, self.name),
+                        f"non-positive occurrence of `{self.name}` in premise `{p}` of `{r.name}`",
+                    )
+
+    @property
+    def arity(self) -> int:
+        return len(self.rules[0].conclusion.terms[0].args)
+
     def rule(self, name: str) -> Rule:
         for r in self.rules:
             if r.name == name:
@@ -605,7 +798,12 @@ class InductiveRelation:
         raise ProofFault(f"unknown rule `{name}` in `{self.name}`")
 
 
-def apply_rule(rel: InductiveRelation, rule_name: str, subst: Dict[str, Term], premise_thms: Sequence[Theorem]) -> Theorem:
+def apply_rule(
+    rel: InductiveRelation,
+    rule_name: str,
+    subst: Dict[str, Term],
+    premise_thms: Sequence[Theorem],
+) -> Theorem:
     """Derive a conclusion of `rel` by instantiating `rule_name` and discharging its premises."""
     r = rel.rule(rule_name)
     _require(
@@ -625,18 +823,20 @@ def apply_rule(rel: InductiveRelation, rule_name: str, subst: Dict[str, Term], p
 
 def rule_induction(
     rel: InductiveRelation,
-    prop_fn: Callable[[Tuple[Term, ...]], Formula],
+    params: Tuple[str, ...],
+    prop: Formula,
     cases: Dict[str, Callable[[Tuple[Theorem, ...], Tuple[Theorem, ...]], Theorem]],
 ) -> Theorem:
     """Verify a proof by rule induction over every rule of `rel`.
 
-    For each rule `R` of `rel`:
-    - `prem_hyps` are the assumed premises `P_1..P_k` of `R`;
-    - `ih_hyps` are the induction hypotheses `prop_fn(args)` for every recursive
-      premise `rel(args)` in `R`;
-    - `cases[R.name](prem_hyps, ih_hyps)` must return a valid `Theorem` whose
-      conclusion is `prop_fn(conclusion_args)` using only `prem_hyps` and `ih_hyps`.
+    The induction property is passed as a syntactic `(params, prop)` template
+    rather than an arbitrary Python callable, so the kernel itself substitutes
+    rule arguments uniformly across every rule and the universal conclusion.
     """
+    _require(
+        len(params) == rel.arity and len(set(params)) == rel.arity,
+        f"rule_induction on `{rel.name}` expects {rel.arity} distinct parameter names, got {params}",
+    )
     rule_names = {r.name for r in rel.rules}
     given_names = set(cases.keys())
     _require(
@@ -645,16 +845,19 @@ def rule_induction(
         f"or extra cases {given_names - rule_names}",
     )
 
+    def _inst_prop(args: Tuple[Term, ...]) -> Formula:
+        return subst_formula(prop, dict(zip(params, args)))
+
     for r in rel.rules:
         prem_hyps = tuple(assume(p) for p in r.premises)
         ih_hyps_list: List[Theorem] = []
         for p in r.premises:
             if p.kind == "Pred" and p.terms[0].op == rel.name:
-                ih_hyps_list.append(assume(prop_fn(p.terms[0].args)))
+                ih_hyps_list.append(assume(_inst_prop(p.terms[0].args)))
         ih_hyps = tuple(ih_hyps_list)
 
         case_thm = cases[r.name](prem_hyps, ih_hyps)
-        expected = prop_fn(r.conclusion.terms[0].args)
+        expected = _inst_prop(r.conclusion.terms[0].args)
         _require(
             case_thm.conclusion == expected,
             f"rule_induction case `{r.name}` proved wrong conclusion:\n"
@@ -667,8 +870,15 @@ def rule_induction(
             f"rule_induction case `{r.name}` left undischarged assumptions: {extra}",
         )
 
-    generic_args = tuple(var(f"_a{i}") for i in range(len(rel.rules[0].conclusion.terms[0].args)))
-    goal = imp(pred(rel.name, *generic_args), prop_fn(generic_args))
+    avoid = free_vars_formula(prop) - set(params)
+    generic_names: List[str] = []
+    for i in range(rel.arity):
+        name = f"_a{i}"
+        while name in avoid or name in generic_names:
+            name = f"{name}_"
+        generic_names.append(name)
+    generic_args = tuple(var(n) for n in generic_names)
+    goal = imp(pred(rel.name, *generic_args), _inst_prop(generic_args))
     for v in reversed(generic_args):
         goal = forall(v.op, goal)
     return _thm([], goal)
@@ -688,10 +898,19 @@ class Datatype:
     name: str
     constructors: Tuple[Constructor, ...]
 
+    def __post_init__(self) -> None:
+        _require(bool(self.name), "Datatype requires a non-empty name")
+        _require(bool(self.constructors), f"Datatype `{self.name}` requires at least one constructor")
+        seen: Set[str] = set()
+        for c in self.constructors:
+            _require(c.name not in seen, f"duplicate constructor `{c.name}` in `{self.name}`")
+            seen.add(c.name)
+
 
 def structural_induction(
     dt: Datatype,
-    prop_fn: Callable[[Term], Formula],
+    param: str,
+    prop: Formula,
     cases: Dict[str, Callable[[Tuple[Term, ...], Tuple[Theorem, ...]], Theorem]],
 ) -> Theorem:
     """Verify a proof by structural induction over every constructor of `dt`."""
@@ -702,16 +921,23 @@ def structural_induction(
         f"structural_induction on `{dt.name}` mismatch: expected {ctor_names}, got {given_names}",
     )
 
+    def _inst_prop(arg: Term) -> Formula:
+        return subst_formula(prop, {param: arg})
+
+    avoid = free_vars_formula(prop) - {param}
     for c in dt.constructors:
-        fields = tuple(var(f"_{c.name}_{i}") for i in range(len(c.field_sorts)))
+        fields = tuple(
+            var(_fresh_var(f"_{c.name}_{i}", avoid) if f"_{c.name}_{i}" in avoid else f"_{c.name}_{i}")
+            for i in range(len(c.field_sorts))
+        )
         ihs = tuple(
-            assume(prop_fn(f))
+            assume(_inst_prop(f))
             for f, sort in zip(fields, c.field_sorts)
             if sort == dt.name
         )
         term = app(c.name, *fields)
         case_thm = cases[c.name](fields, ihs)
-        expected = prop_fn(term)
+        expected = _inst_prop(term)
         _require(
             case_thm.conclusion == expected,
             f"structural_induction case `{c.name}` conclusion mismatch:\n"
@@ -724,5 +950,8 @@ def structural_induction(
             f"structural_induction case `{c.name}` left undischarged assumptions: {extra}",
         )
 
-    x = var(f"_x_{dt.name}")
-    return _thm([], forall(x.op, prop_fn(x)))
+    binder = f"_x_{dt.name}"
+    if binder in avoid:
+        binder = _fresh_var(binder, avoid)
+    x = var(binder)
+    return _thm([], forall(x.op, _inst_prop(x)))

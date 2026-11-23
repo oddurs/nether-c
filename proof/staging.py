@@ -170,7 +170,7 @@ def prove_roundtrip_identity() -> Theorem:
         "RT_Demand": lambda _p, ih: cong("Demand", [ih[0]]),
         "RT_App": lambda _p, ih: cong("App", [ih[0], ih[1]]),
     }
-    return rule_induction(ROUND_TRIP, _rt_prop, cases)
+    return rule_induction(ROUND_TRIP, ("_e", "_out"), eq(var("_out"), var("_e")), cases)
 
 
 # ── 2. Capability-set algebra for staged vs direct hole resolution ───────────
@@ -203,10 +203,6 @@ def prove_staging_idempotence_set() -> Theorem:
 
 def staged_eval(expr: Term, cap_a: Term, cap_b: Term, res_staged: Term, res_direct: Term) -> Formula:
     return pred("StagedEval", expr, cap_a, cap_b, res_staged, res_direct)
-
-
-def resolve_hole(world: Term, cap_set: Term, stratum: Term, q: Term, arg_v: Term) -> Term:
-    return app("ResolveHole", world, cap_set, stratum, q, arg_v)
 
 
 STAGED_EVAL = InductiveRelation(
@@ -402,7 +398,12 @@ def prove_staging_law() -> Theorem:
         "SE_Demand": lambda _p, ih: cong("Demand", [ih[0]]),
         "SE_App": lambda _p, ih: cong("App", [ih[0], ih[1]]),
     }
-    return rule_induction(STAGED_EVAL, _staged_prop, cases)
+    return rule_induction(
+        STAGED_EVAL,
+        ("_expr", "_cap_a", "_cap_b", "_res_staged", "_res_direct"),
+        eq(var("_res_staged"), var("_res_direct")),
+        cases,
+    )
 
 
 # ── 4. Dependent nested holes: non-monotone counterexample vs cumulative law ─
