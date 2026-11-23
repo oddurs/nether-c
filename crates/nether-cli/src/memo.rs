@@ -55,8 +55,11 @@ impl Memo {
     pub fn record(&self, r: &Remembered) {
         let Some(dir) = self.0.parent() else { return };
         let tmp = self.0.with_extension(format!("{}.tmp", std::process::id()));
-        let _ = std::fs::create_dir_all(dir)
+        let wrote = std::fs::create_dir_all(dir)
             .and_then(|()| std::fs::write(&tmp, format!("{} {} {}\n", r.trace, r.steps, r.nodes)))
             .and_then(|()| std::fs::rename(&tmp, &self.0));
+        if wrote.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
     }
 }

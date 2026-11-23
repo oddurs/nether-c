@@ -76,7 +76,10 @@ fn holds(store: &Store, cairn: Cairn, stored: &Stored, wants_json: bool) -> Exit
         Stored::Value(_) => "value",
         Stored::Node(_) => "node",
     };
-    let referrers = store.referrers(cairn).map(|r| r.len()).unwrap_or_default();
+    let referrers = match store.referrers(cairn) {
+        Ok(r) => r.len(),
+        Err(e) => return complain(&e, &cairn.to_string(), wants_json),
+    };
     if wants_json {
         println!(
             "{{\"cairn\":\"{cairn}\",\"holds\":true,\"kind\":\"{what}\",\
@@ -137,10 +140,11 @@ fn complain(e: &StoreError, prefix: &str, wants_json: bool) -> ExitCode {
         StoreError::Bundle(why) => (FAILED, (*why).to_owned()),
     };
     if wants_json {
+        let collapsed = said.split_whitespace().collect::<Vec<_>>().join(" ");
         println!(
             "{{\"cairn\":{},\"holds\":false,\"why\":{}}}",
             json::string(prefix),
-            json::string(&said.replace('\n', " ").replace("  ", " "))
+            json::string(&collapsed)
         );
     } else {
         eprintln!("nether: {said}");

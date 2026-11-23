@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use nether_core::Depth;
 use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
 
 /// Why worker deliveries could not be merged into one trace (`spec/06-evaluation.md` §6.6).
@@ -67,20 +68,26 @@ impl Replay {
     ///
     /// The store is used here and not kept: what comes back is a `Replay` that
     /// has already been told everything it will ever know.
-    #[must_use]
-    pub fn of_trace(store: &Store, witnesses: &[Cairn]) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] if any witness or its recorded answer is absent,
+    /// corrupt, or has the wrong object kind.
+    pub fn of_trace(store: &Store, witnesses: &[Cairn]) -> Result<Self, StoreError> {
         // In the order the trace names them, because §6.3 merges a hole only
         // at a read stratum: one call can have been asked more than once, and
         // then the answers to it are told apart by nothing but their order.
         let mut said: HashMap<Call, Vec<Value>> = HashMap::new();
         for w in witnesses {
-            if let Ok(Stored::Node(Node::Witness { call, answer, .. })) = store.get(*w)
-                && let Ok(Stored::Value(v)) = store.get(answer)
-            {
-                said.entry(call).or_default().push(v);
-            }
+            let Stored::Node(Node::Witness { call, answer, .. }) = store.get(*w)? else {
+                return Err(StoreError::Corrupt { asked: *w, found: None, why: None });
+            };
+            let Stored::Value(v) = store.get(answer)? else {
+                return Err(StoreError::Corrupt { asked: answer, found: None, why: None });
+            };
+            said.entry(call).or_default().push(v);
         }
-        Self { said }
+        Ok(Self { said })
     }
 
     /// What was recorded for that question, if anything was.
@@ -129,13 +136,19 @@ impl Replay {
         holes: &[Cairn],
         deliveries: &[&[(usize, Cairn)]],
     ) -> Result<(Vec<Cairn>, Self), MergeError> {
+        let mut base_said: HashMap<Call, Vec<Value>> = HashMap::new();
+        let mut base_reads: HashMap<Call, (Cairn, Cairn)> = HashMap::new();
         for &w in base_witnesses {
-            let Stored::Node(Node::Witness { answer, .. }) = store.get(w)? else {
+            let Stored::Node(Node::Witness { stratum, call, answer, .. }) = store.get(w)? else {
                 return Err(MergeError::BaseWitness(w));
             };
-            if !matches!(store.get(answer)?, Stored::Value(_)) {
+            let Stored::Value(val) = store.get(answer)? else {
                 return Err(MergeError::BaseWitness(w));
+            };
+            if Depth::new(stratum).is_some_and(Depth::reads) {
+                base_reads.entry(call.clone()).or_insert((w, answer));
             }
+            base_said.entry(call).or_default().push(val);
         }
         let mut open: Vec<(Call, u8, Span)> = Vec::with_capacity(holes.len());
         for (slot, &h) in holes.iter().enumerate() {
@@ -169,7 +182,12 @@ impl Replay {
                 }
                 return Err(MergeError::Conflict(slot, hole, first, witness));
             }
-            if matches!(h_stratum, 1 | 2 | 3 | 5) {
+            if Depth::new(*h_stratum).is_some_and(Depth::reads) {
+                if let Some(&(base_w, base_ans)) = base_reads.get(h_call)
+                    && base_ans != answer
+                {
+                    return Err(MergeError::Conflict(slot, hole, base_w, witness));
+                }
                 match first.get(h_call) {
                     Some(&(_, said, ans)) if ans != answer => {
                         return Err(MergeError::Conflict(slot, hole, said, witness));
@@ -182,18 +200,20 @@ impl Replay {
             }
             chosen[slot] = Some((witness, answer, val));
         }
-        let (mut witnesses, mut said) =
-            (base_witnesses.to_vec(), HashMap::<Call, Vec<Value>>::new());
+        let (mut witnesses, mut said) = (base_witnesses.to_vec(), base_said);
         // How many slots before this one asked the same thing. Every one of
         // them has to be answered before this one can be.
         let mut earlier: HashMap<&Call, usize> = HashMap::new();
+        let mut delivered: HashMap<&Call, usize> = HashMap::new();
         for (slot, got) in chosen.into_iter().enumerate() {
             let call = &open[slot].0;
             let asked = earlier.entry(call).or_default();
             if let Some((witness, _, val)) = got {
-                if said.get(call).map_or(0, Vec::len) != *asked {
+                let seen = delivered.entry(call).or_default();
+                if *seen != *asked {
                     return Err(MergeError::Mismatched(slot, holes[slot], witness));
                 }
+                *seen += 1;
                 witnesses.push(witness);
                 said.entry(call.clone()).or_default().push(val);
             }

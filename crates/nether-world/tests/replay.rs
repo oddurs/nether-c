@@ -185,3 +185,31 @@ fn conflicting_and_mismatched_worker_witnesses_are_rejected() {
     let base = Replay::merge(&store, &[h1], &holes, &[]);
     assert!(matches!(base, Err(MergeError::BaseWitness(w)) if w == h1), "{base:?}");
 }
+
+#[test]
+fn of_trace_rejects_missing_witnesses_and_merge_keeps_base_answers() {
+    let root = temp_dir("replay-base");
+    let store = Store::open(root.join("store")).unwrap();
+    let missing = nether_ledger::Cairn::of_encoded(b"absent-witness");
+    assert!(matches!(Replay::of_trace(&store, &[missing]), Err(StoreError::Absent(_))));
+
+    let src = store.put(&Stored::Value(Value::Bytes(b"m.nc".to_vec()))).unwrap();
+    let arg = store.put(&Stored::Value(Value::Str("a.txt".into()))).unwrap();
+    let call = Call { function: "read".into(), args: vec![arg] };
+    let span0 = Span { source: src, start: 0, end: 4 };
+    let span1 = Span { source: src, start: 5, end: 9 };
+    let h1 = store
+        .put(&Stored::Node(Node::Hole { call: call.clone(), stratum: 3, span: span1 }))
+        .unwrap();
+    let rec = Recorder::new(&store);
+    let base_w = rec.record(&call, Depth::DISK, span0, &Value::Bytes(b"v1".to_vec())).unwrap();
+    let clash_w = rec.record(&call, Depth::DISK, span1, &Value::Bytes(b"v2".to_vec())).unwrap();
+
+    // Base witness is present in the returned Replay.
+    let (_, merged) = Replay::merge(&store, &[base_w.witness()], &[], &[]).unwrap();
+    assert_eq!(merged.answer(&call), Some(&Value::Bytes(b"v1".to_vec())));
+
+    // A worker delivery contradicting a read-stratum base witness is rejected.
+    let err = Replay::merge(&store, &[base_w.witness()], &[h1], &[&[(0, clash_w.witness())]]);
+    assert!(matches!(err, Err(MergeError::Conflict(0, ..))), "{err:?}");
+}

@@ -102,7 +102,13 @@ fn opened() -> Result<Store, ExitCode> {
 fn named(store: &Store, prefix: &str) -> Result<Cairn, ExitCode> {
     store.resolve(prefix).map_err(|e| {
         eprintln!("nether: {e}");
-        ExitCode::from(code::ABSENT)
+        match e {
+            nether_ledger::StoreError::Absent(_) | nether_ledger::StoreError::NoMatch(_) => {
+                ExitCode::from(code::ABSENT)
+            }
+            nether_ledger::StoreError::BadPrefix(_) => usage_error(),
+            _ => FAILED,
+        }
     })
 }
 

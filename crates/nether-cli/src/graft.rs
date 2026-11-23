@@ -8,10 +8,10 @@
 use std::fmt::Write as _;
 use std::process::ExitCode;
 
-use nether_bury::{Answers, bury_with};
-use nether_core::check;
-use nether_ledger::{Cairn, Node, Store, Stored, Value};
-use nether_syntax::{lower, parse, print};
+use nether_bury::{Answers, HaltKind, bury_with};
+use nether_core::Prim;
+use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
+use nether_syntax::print;
 use nether_world::Replay;
 
 use crate::{FAILED, code, usage_error};
@@ -19,9 +19,10 @@ use crate::{FAILED, code, usage_error};
 /// The budget, as §8.2 gives `bury` one.
 const DEFAULT_FUEL: u64 = 1_000_000;
 
-/// `nether graft <cairn> --replace <cairn> --with <cairn> [--json]`
+/// `nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
     let mut wants_json = false;
+    let mut fuel = DEFAULT_FUEL;
     let (mut trace, mut replace, mut with): (Option<&str>, Option<&str>, Option<&str>) =
         (None, None, None);
 
@@ -29,10 +30,38 @@ pub fn run(args: &[String]) -> ExitCode {
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--json" => wants_json = true,
-            "--replace" => replace = rest.next().map(|c| &**c),
-            "--with" => with = rest.next().map(|c| &**c),
+            "--fuel" => {
+                if let Some(Ok(n)) = rest.next().map(|n| n.parse::<u64>()) {
+                    fuel = n;
+                } else {
+                    eprintln!("nether: --fuel wants a number of steps");
+                    return usage_error();
+                }
+            }
+            "--replace" => match rest.next() {
+                Some(v) if !v.starts_with("--") && replace.is_none() => replace = Some(v),
+                _ => {
+                    eprintln!(
+                        "usage: nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]"
+                    );
+                    return usage_error();
+                }
+            },
+            "--with" => match rest.next() {
+                Some(v) if !v.starts_with("--") && with.is_none() => with = Some(v),
+                _ => {
+                    eprintln!(
+                        "usage: nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]"
+                    );
+                    return usage_error();
+                }
+            },
             other if other.starts_with("--") => {
                 eprintln!("nether: unknown option {other}");
+                return usage_error();
+            }
+            _ if trace.is_some() => {
+                eprintln!("nether: one trace cairn at a time");
                 return usage_error();
             }
             other => trace = Some(other),
@@ -40,7 +69,9 @@ pub fn run(args: &[String]) -> ExitCode {
     }
 
     let (Some(trace), Some(replace), Some(with)) = (trace, replace, with) else {
-        eprintln!("usage: nether graft <cairn> --replace <cairn> --with <cairn> [--json]");
+        eprintln!(
+            "usage: nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]"
+        );
         return usage_error();
     };
 
@@ -48,152 +79,162 @@ pub fn run(args: &[String]) -> ExitCode {
         Ok(store) => store,
         Err(code) => return code,
     };
-    let name = |what: &str| match store.resolve(what) {
-        Ok(c) => Ok(c),
-        Err(e) => {
-            eprintln!("nether: {e}");
-            Err(ExitCode::from(code::ABSENT))
-        }
+    let trace = match crate::named(&store, trace) {
+        Ok(c) => c,
+        Err(code) => return code,
     };
-    let (Ok(trace), Ok(replace), Ok(with)) = (name(trace), name(replace), name(with)) else {
-        return ExitCode::from(code::ABSENT);
+    let replace = match crate::named(&store, replace) {
+        Ok(c) => c,
+        Err(code) => return code,
     };
-    take(&store, trace, replace, with, wants_json)
+    let with = match crate::named(&store, with) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    take(&store, trace, replace, with, fuel, wants_json)
 }
 
-#[expect(clippy::too_many_lines, reason = "one pass, in the order §8.7 puts it")]
-fn take(store: &Store, trace: Cairn, replace: Cairn, with: Cairn, wants_json: bool) -> ExitCode {
-    let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. })) =
-        store.get(trace)
-    else {
-        return crate::not_a_trace(store, trace);
+fn prepare_graft(
+    store: &Store,
+    trace: Cairn,
+    holes: &[Cairn],
+    mut witnesses: Vec<Cairn>,
+    replace: Cairn,
+    with: Cairn,
+) -> Result<(Answers, Vec<Cairn>), ExitCode> {
+    let told = match Replay::of_trace(store, &witnesses) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("nether: {e}");
+            return Err(FAILED);
+        }
     };
-
-    // What the trace was told, with one thing said differently. The answer
-    // being replaced is named by its own cairn, because that is what a value
-    // is: §7.2's whole argument is that a thing and its name are the same
-    // question.
-    let told = Replay::of_trace(store, &witnesses);
-    let Ok(Stored::Value(instead)) = store.get(with) else {
+    let Ok(Stored::Value(raw_instead)) = store.get(with) else {
         eprintln!("nether: {} is not a value in this ledger", with.short());
-        return ExitCode::from(code::ABSENT);
-    };
-    // `--with` names what the world should have said, and what a witness holds
-    // is what the world said — an `Answer`. A bare value is wrapped the way the
-    // recorder would have wrapped it, because "pretend `read` returned these
-    // bytes" is the thing anybody grafting is trying to say.
-    let instead = match instead {
-        Value::Answer(_) => instead,
-        said => Value::Answer(Box::new(nether_ledger::AnswerOf::Given(said))),
+        return Err(ExitCode::from(code::ABSENT));
     };
     let mut answers = Answers::none();
     for (call, said) in told.all() {
         answers = answers.and(call.clone(), said.clone());
     }
 
-    // What is substituted is a subtrace, and the subtrace worth substituting is
-    // a hole: a trace that has already been answered has the answer folded into
-    // its residue, so replacing it there would change nothing. Answering a hole
-    // differently is the operation a build tool wants — "pretend this file said
-    // that" — and it is what makes the reuse count mean anything.
-    let mut grafted = 0usize;
-    for hole in &holes {
-        let Ok(Stored::Node(Node::Hole { call, .. })) = store.get(*hole) else { continue };
+    let mut matched_hole: Option<(Call, u8, Span, Value)> = None;
+    for hole in holes {
+        let Ok(Stored::Node(Node::Hole { call, stratum, span })) = store.get(*hole) else {
+            eprintln!("nether: hole {} is not readable in this ledger", hole.short());
+            return Err(ExitCode::from(code::ABSENT));
+        };
         if *hole == replace {
-            answers = answers.and(call, instead.clone());
-            grafted += 1;
+            let refusable = Prim::from_name(&call.function).is_some_and(Prim::refusable);
+            let val = match &raw_instead {
+                Value::Answer(_) => raw_instead.clone(),
+                said if refusable => {
+                    Value::Answer(Box::new(nether_ledger::AnswerOf::Given(said.clone())))
+                }
+                said => said.clone(),
+            };
+            answers = answers.and(call.clone(), val.clone());
+            matched_hole = Some((call, stratum, span, val));
         }
     }
-    // §8.7: a graft replaces a hole. An answer the trace was already given has
-    // been consumed, and what it produced is in the trace's deposits rather
-    // than its residue, so burying the residue again could not change it.
     if told.all().any(|(_, said)| said.cairn() == replace) {
         eprintln!("nether: {} was already answered under {}", replace.short(), trace.short());
         eprintln!("        §8.7: a graft replaces a hole. Graft or exhume the trace that");
         eprintln!("        still has it.");
-        return FAILED;
+        return Err(FAILED);
     }
-    if grafted == 0 {
+    let Some((g_call, g_stratum, g_span, g_val)) = matched_hole else {
         eprintln!("nether: {} answers nothing under {}", replace.short(), trace.short());
         eprintln!("        `nether strata {}` says what it was told.", trace.short());
-        return FAILED;
+        return Err(FAILED);
+    };
+    let answer_cairn = g_val.cairn();
+    if let Some(w) = witnessing(store, answer_cairn, &g_call, g_stratum, g_span)
+        .or_else(|| witnessing(store, with, &g_call, g_stratum, g_span))
+        && !witnesses.contains(&w)
+    {
+        witnesses.push(w);
     }
-    // The trace has to name what answered it, and after a graft that is
-    // whatever recorded the substitute — §7.4's reverse index is how a value
-    // finds the node that produced it. A substitute nothing witnessed means
-    // nobody was ever told it, and then there is no witness to name.
-    let mut witnesses = witnesses;
-    if let Some(w) = witnessing(store, with) {
-        if !witnesses.contains(&w) {
-            witnesses.push(w);
+    Ok((answers, witnesses))
+}
+
+fn take(
+    store: &Store,
+    trace: Cairn,
+    replace: Cairn,
+    with: Cairn,
+    fuel: u64,
+    wants_json: bool,
+) -> ExitCode {
+    let Ok(Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. })) =
+        store.get(trace)
+    else {
+        return crate::not_a_trace(store, trace);
+    };
+
+    let (answers, witnesses) = match prepare_graft(store, trace, &holes, witnesses, replace, with) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let (text, unit) = match crate::closing::residue_unit(store, trace, residue) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let shown = format!("{}:residue", trace.short());
+    let residue = match bury_with(&unit, source, fuel, &answers) {
+        Ok(residue) => residue,
+        Err(halt) => {
+            eprint!(
+                "{}",
+                nether_core::report(&halt.diagnostic(), &String::from_utf8_lossy(&text), &shown)
+            );
+            return match halt.kind {
+                HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
+                _ => FAILED,
+            };
         }
-    }
-
-    let Ok(Stored::Value(Value::Bytes(text))) = store.get(residue) else {
-        eprintln!("nether: the residue of {} is not in this ledger", trace.short());
-        return ExitCode::from(code::ABSENT);
-    };
-    let Ok(unit) = parse(&text).and_then(|ast| lower(&ast)) else {
-        eprintln!("nether: the residue of {} does not lower", trace.short());
-        return ExitCode::from(code::MALFORMED);
-    };
-    if !check(&unit).is_empty() {
-        eprintln!("nether: the residue of {} does not check", trace.short());
-        return ExitCode::from(code::MALFORMED);
-    }
-
-    let Ok(residue) = bury_with(&unit, source, DEFAULT_FUEL, &answers) else {
-        eprintln!("nether: burying the graft did not finish");
-        return FAILED;
     };
 
-    // §8.7: report how many were reused and how many recomputed. The store
-    // already knows — a name it holds is a thing nothing had to make again.
     let (mut reused, mut made) = (0usize, 0usize);
-    for (_, stored) in &residue.named {
-        // Asked before it is written, because writing is what makes the
-        // difference disappear: a name the store already holds is a thing
-        // nothing had to make again.
+    let mut record = |stored: &Stored| -> Result<Cairn, ExitCode> {
         if store.has(stored.cairn()) {
             reused += 1;
         } else {
             made += 1;
         }
-        if let Err(e) = store.put(stored) {
-            eprintln!("nether: {e}");
-            return FAILED;
+        crate::kept(store, stored)
+    };
+    for (_, stored) in &residue.named {
+        if let Err(code) = record(stored) {
+            return code;
         }
     }
 
     let printed = print(&residue.as_unit(&unit));
-    let next_residue = Stored::Value(Value::Bytes(printed.into_bytes()));
-    if store.has(next_residue.cairn()) {
-        reused += 1;
-    } else {
-        made += 1;
-    }
-    let Ok(next_residue) = store.put(&next_residue) else {
-        eprintln!("nether: the ledger would not take the residue");
-        return FAILED;
+    let next_residue = match record(&Stored::Value(Value::Bytes(printed.into_bytes()))) {
+        Ok(c) => c,
+        Err(code) => return code,
     };
-
+    let (depth, unrecorded) = match (
+        crate::closing::depth(store, residue.depth.get(), &residue.holes, &witnesses),
+        crate::closing::unrecorded(store, &witnesses),
+    ) {
+        (Ok(d), Ok(u)) => (d, u),
+        (Err(c), _) | (_, Err(c)) => return c,
+    };
     let node = Stored::Node(Node::Trace {
         residue: next_residue,
         holes: residue.holes.clone(),
         witnesses: witnesses.clone(),
         deposits: crate::closing::deposits(&deposits, &residue.deposits),
         source,
-        depth: crate::closing::depth(store, residue.depth.get(), &residue.holes, &witnesses),
-        unrecorded: crate::closing::unrecorded(store, &witnesses),
+        depth,
+        unrecorded,
     });
-    if store.has(node.cairn()) {
-        reused += 1;
-    } else {
-        made += 1;
-    }
-    let Ok(next) = store.put(&node) else {
-        eprintln!("nether: the ledger would not take the trace");
-        return FAILED;
+    let next = match record(&node) {
+        Ok(c) => c,
+        Err(code) => return code,
     };
 
     let told = Grafted { was: trace, now: next, replaced: replace, with, reused, made };
@@ -205,13 +246,21 @@ fn take(store: &Store, trace: Cairn, replace: Cairn, with: Cairn, wants_json: bo
     ExitCode::SUCCESS
 }
 
-/// The witness that recorded that answer, read backwards. §7.4.
-fn witnessing(store: &Store, answer: Cairn) -> Option<Cairn> {
-    store
-        .referrers(answer)
-        .ok()?
-        .into_iter()
-        .find(|c| matches!(store.get(*c), Ok(Stored::Node(Node::Witness { .. }))))
+/// The witness that recorded that exact answer for that call and stratum. §7.4.
+fn witnessing(
+    store: &Store,
+    answer: Cairn,
+    want_call: &Call,
+    want_stratum: u8,
+    want_span: Span,
+) -> Option<Cairn> {
+    store.referrers(answer).ok()?.into_iter().find(|c| {
+        matches!(
+            store.get(*c),
+            Ok(Stored::Node(Node::Witness { call, stratum, span, .. }))
+                if &call == want_call && stratum == want_stratum && span == want_span
+        )
+    })
 }
 
 /// What §8.7 requires a graft to say.

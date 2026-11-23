@@ -37,7 +37,7 @@ const SOURCE: &str = "/dev/urandom";
 pub const MOST: i64 = 16 * 1024 * 1024;
 
 /// The Oracle, buried.
-pub struct Entropy;
+pub struct Entropy(File);
 
 impl Entropy {
     /// A provider, if this machine has a source to draw from.
@@ -51,7 +51,7 @@ impl Entropy {
     ///
     /// The reason the source could not be opened.
     pub fn opening() -> Result<Self, std::io::Error> {
-        File::open(SOURCE).map(|_| Self)
+        File::open(SOURCE).map(Self)
     }
 }
 
@@ -92,7 +92,9 @@ impl Provider for Entropy {
         };
 
         let mut drawn = vec![0u8; want];
-        if let Err(e) = File::open(SOURCE).and_then(|mut f| f.read_exact(&mut drawn)) {
+        if want > 0
+            && let Err(e) = (&self.0).read_exact(&mut drawn)
+        {
             // Not a refusal — §9.7 gives `draw` no way to say no — and not the
             // program's mistake either. The machine promised a source at the
             // grant and does not have one now.

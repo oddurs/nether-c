@@ -4,50 +4,110 @@
 //! write a trace. Working them out at each of those three is how each of them
 //! came to be wrong at least once.
 
-use nether_ledger::{Cairn, Node, Store, Stored};
+use std::process::ExitCode;
 
-/// The stratum a witness reached or a hole would reach, or 0 if it is neither.
-fn reached(store: &Store, node: Cairn) -> u8 {
-    match store.get(node) {
-        Ok(Stored::Node(Node::Witness { stratum, .. } | Node::Hole { stratum, .. })) => stratum,
-        _ => 0,
+use nether_core::{Unit, check, report};
+use nether_ledger::{Cairn, Node, Store, StoreError, Stored, Value};
+use nether_syntax::{lower, parse};
+
+use crate::{FAILED, code};
+
+/// Parse, lower, and check source or residue bytes, reporting every fault.
+pub fn checked_unit(bytes: &[u8], shown: &str) -> Result<Unit, ExitCode> {
+    let text = String::from_utf8_lossy(bytes);
+    let complain = |d: &nether_core::Diagnostic| eprint!("{}", report(d, &text, shown));
+    let ast = match parse(bytes) {
+        Ok(ast) => ast,
+        Err(faults) => {
+            for f in &faults {
+                complain(&f.diagnostic());
+            }
+            return Err(ExitCode::from(code::MALFORMED));
+        }
+    };
+    let unit = match lower(&ast) {
+        Ok(unit) => unit,
+        Err(faults) => {
+            for f in &faults {
+                complain(&f.diagnostic());
+            }
+            return Err(ExitCode::from(code::MALFORMED));
+        }
+    };
+    let faults = check(&unit);
+    if !faults.is_empty() {
+        for f in &faults {
+            complain(&f.diagnostic());
+        }
+        return Err(ExitCode::from(code::MALFORMED));
+    }
+    Ok(unit)
+}
+
+/// Read a trace's residue bytes and parse/lower/check them.
+pub fn residue_unit(
+    store: &Store,
+    trace: Cairn,
+    residue: Cairn,
+) -> Result<(Vec<u8>, Unit), ExitCode> {
+    let Ok(Stored::Value(Value::Bytes(text))) = store.get(residue) else {
+        eprintln!("nether: the residue of {} is not in this ledger", trace.short());
+        return Err(ExitCode::from(code::ABSENT));
+    };
+    let shown = format!("{}:residue", trace.short());
+    let unit = checked_unit(&text, &shown)?;
+    Ok((text, unit))
+}
+
+/// The stratum a witness reached or a hole would reach, or an error if unreadable.
+fn reached(store: &Store, node: Cairn) -> Result<u8, StoreError> {
+    match store.get(node)? {
+        Stored::Node(Node::Witness { stratum, .. } | Node::Hole { stratum, .. }) => Ok(stratum),
+        _ => Ok(0),
     }
 }
 
 /// §7.3.2: the join of what the residue still reaches, what a hole would
 /// reach, and what a witness reached.
-///
-/// All three are needed. A stage-one burial has answered nothing, so the
-/// witnesses say 0; a sealed trace has no holes left, so the holes say 0; and a
-/// world-question demanded through a `seal` is a hole the residue does not
-/// count, because §1.5 makes the seal pure.
-pub fn depth(store: &Store, residue: u8, holes: &[Cairn], witnesses: &[Cairn]) -> u8 {
-    holes.iter().chain(witnesses).map(|n| reached(store, *n)).fold(residue, u8::max)
+pub fn depth(
+    store: &Store,
+    residue: u8,
+    holes: &[Cairn],
+    witnesses: &[Cairn],
+) -> Result<u8, ExitCode> {
+    let mut out = residue;
+    for node in holes.iter().chain(witnesses) {
+        match reached(store, *node) {
+            Ok(s) => out = out.max(s),
+            Err(e) => {
+                eprintln!("nether: {e}");
+                return Err(FAILED);
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// §1.7: marked when something *reached* stratum 8, which a hole at 8 has not.
-///
-/// Not the same test as the depth. A trace whose only stratum-8 call is still a
-/// hole has depth 8 and is not marked, because nothing has happened off the
-/// record yet.
-pub fn unrecorded(store: &Store, witnesses: &[Cairn]) -> bool {
-    witnesses.iter().any(|w| reached(store, *w) == nether_ledger::MAX_STRATUM)
-}
-
-/// §8.4: what the trace deposited, then what burying its residue deposited.
-///
-/// Carried forward the way witnesses are. A deposit is something the program
-/// already did, and a residue is right not to do it again — so a trace that
-/// does not name the deposits of the one it came from loses them, and `nether
-/// lamp` shows less after exhuming than before. In order, without repeating
-/// one: a deposit is named by its content, so the same value at the same place
-/// gives the same cairn, and naming it twice would say it happened twice.
-pub fn deposits(before: &[Cairn], now: &[Cairn]) -> Vec<Cairn> {
-    let mut out = before.to_vec();
-    for one in now {
-        if !out.contains(one) {
-            out.push(*one);
+pub fn unrecorded(store: &Store, witnesses: &[Cairn]) -> Result<bool, ExitCode> {
+    for w in witnesses {
+        match reached(store, *w) {
+            Ok(s) if s == nether_ledger::MAX_STRATUM => return Ok(true),
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("nether: {e}");
+                return Err(FAILED);
+            }
         }
     }
+    Ok(false)
+}
+
+/// §8.4 / §7.3.1: carry prior deposits forward, then append every new deposit
+/// produced by burying the residue in exact order (preserving repeats in `now`).
+pub fn deposits(before: &[Cairn], now: &[Cairn]) -> Vec<Cairn> {
+    let mut out = Vec::with_capacity(before.len() + now.len());
+    out.extend_from_slice(before);
+    out.extend_from_slice(now);
     out
 }
