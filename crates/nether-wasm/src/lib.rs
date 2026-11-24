@@ -33,7 +33,7 @@
 use core::fmt::Write as _;
 
 use nether_core::{Depth, check, report};
-use nether_ledger::{Node, Stored, Value};
+use nether_ledger::{Cairn, Node, Stored, Value};
 use nether_syntax::{lower, parse, print};
 
 /// The budget, as §8.2 gives `bury` one.
@@ -82,7 +82,7 @@ pub unsafe extern "C" fn nether_free(at: *mut u8, len: usize) {
 /// `source` is readable for `len` bytes.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nether_bury(source: *const u8, len: usize, fuel: u64) -> *mut u8 {
-    if source.is_null() {
+    if source.is_null() || len > isize::MAX as usize {
         return block(&trouble("nothing was handed in", ""));
     }
     // SAFETY: the caller's half of the bargain in the module documentation.
@@ -161,11 +161,19 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     let printed = print(&residue.as_unit(&unit));
     let printed_value = Stored::Value(Value::Bytes(printed.clone().into_bytes()));
     let residue_cairn = printed_value.cairn();
+    // Index `residue.named` once so hole lookups are O(log N) rather than O(H*N).
+    let mut named_index: Vec<(Cairn, &Stored)> =
+        residue.named.iter().map(|(id, object)| (*id, object)).collect();
+    named_index.sort_unstable_by_key(|(id, _)| *id);
+    named_index.dedup_by_key(|(id, _)| *id);
+    let lookup = |c: Cairn| -> Option<&Stored> {
+        named_index.binary_search_by_key(&c, |(id, _)| *id).ok().map(|idx| named_index[idx].1)
+    };
     // §7.3.2: a trace's depth is the deepest of its residue and every hole it
     // owes, matching `nether bury` (e.g. a pure `seal` of a deep call).
     let mut deepest = residue.depth.get();
     for h in &residue.holes {
-        if let Some(Stored::Node(Node::Hole { stratum, .. })) = residue.get(*h) {
+        if let Some(Stored::Node(Node::Hole { stratum, .. })) = lookup(*h) {
             deepest = deepest.max(*stratum);
         }
     }
@@ -183,7 +191,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         .holes
         .iter()
         .filter_map(|h| {
-            let Some(Stored::Node(Node::Hole { call, stratum, .. })) = residue.get(*h) else {
+            let Some(Stored::Node(Node::Hole { call, stratum, .. })) = lookup(*h) else {
                 return None;
             };
             let cap = Depth::new(*stratum)
@@ -199,7 +207,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     // Transport the frozen ledger encoding, not a second value format.
     // Include source, residue and trace explicitly: `named` holds evaluation's
     // objects, not the envelope. Sorting also deduplicates shared values.
-    let mut objects: Vec<_> = residue.named.iter().map(|(id, object)| (*id, object)).collect();
+    let mut objects = named_index;
     for object in [&named, &printed_value, &trace] {
         objects.push((object.cairn(), object));
     }
