@@ -2833,3 +2833,160 @@ fn pass3_graft_type_check_act_order_lamp_dag_strata_corrupt_and_memo_check() {
     assert!(res_path.exists(), "memo miss must restore deleted residue object");
     assert_eq!(field(&stdout(&second), "cairn"), first_trace);
 }
+
+#[test]
+fn pass4_graft_lamp_and_strata_hardening() {
+    use nether_ledger::{AnswerOf, Node, Store, Stored, Value};
+
+    // 1. `graft` rejects replacing a read-stratum hole with an answer that
+    //    disagrees with an earlier read witness for the same Call (§6.3), and
+    //    exits 65 (MALFORMED) when `--with` is corrupt on disk.
+    let gdir = a_build("pass4-graft");
+    std::fs::write(
+        gdir.join("r.nc"),
+        "Bytes@3 a = must(descend disk { read(\"k\") });\ndemand a;\n",
+    )
+    .unwrap();
+    let buried = there(&gdir, &["bury", "r.nc", "--json"]);
+    assert_eq!(code(&buried), 0, "{}", stderr(&buried));
+    let base_trace: nether_ledger::Cairn = field(&stdout(&buried), "cairn").parse().unwrap();
+    let store = Store::open(gdir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { residue, holes, source, depth, .. }) =
+        store.get(base_trace).unwrap()
+    else {
+        panic!("expected trace");
+    };
+    let Stored::Node(Node::Hole { call, stratum, span }) = store.get(holes[0]).unwrap() else {
+        panic!("expected hole");
+    };
+    let ans1 = store
+        .put(&Stored::Value(Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b"v1".to_vec()))))))
+        .unwrap();
+    let wit1 =
+        store.put(&Stored::Node(Node::Witness { stratum, call, answer: ans1, span })).unwrap();
+    let forged_trace = store
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes: holes.clone(),
+            witnesses: vec![wit1],
+            deposits: vec![],
+            unrecorded: false,
+            source,
+            depth,
+        }))
+        .unwrap();
+    let ans2 = store.put(&Stored::Value(Value::Bytes(b"v2".to_vec()))).unwrap();
+    let clash = there(
+        &gdir,
+        &[
+            "graft",
+            &forged_trace.to_string(),
+            "--replace",
+            &holes[0].to_string(),
+            "--with",
+            &ans2.to_string(),
+        ],
+    );
+    assert_eq!(code(&clash), 1, "graft must reject conflicting read answer: {}", stderr(&clash));
+
+    let ans2_hex = ans2.to_string();
+    std::fs::write(
+        gdir.join(".nether").join("objects").join(&ans2_hex[..2]).join(&ans2_hex[2..]),
+        b"tampered",
+    )
+    .unwrap();
+    let corrupt_with = there(
+        &gdir,
+        &[
+            "graft",
+            &base_trace.to_string(),
+            "--replace",
+            &holes[0].to_string(),
+            "--with",
+            &ans2_hex,
+        ],
+    );
+    assert_eq!(code(&corrupt_with), 65, "corrupt --with must exit 65: {}", stderr(&corrupt_with));
+
+    // 2. `lamp` on a corrupt object exits 65 (MALFORMED).
+    let corrupt_lamp = there(&gdir, &["lamp", &ans2_hex]);
+    assert_eq!(code(&corrupt_lamp), 65, "corrupt lamp must exit 65: {}", stderr(&corrupt_lamp));
+
+    // 3. `strata` rejects a trace placing a Witness cairn into `deposits` (exit 65).
+    let bad_strata_trace = store
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes: vec![],
+            witnesses: vec![],
+            deposits: vec![wit1],
+            unrecorded: false,
+            source,
+            depth,
+        }))
+        .unwrap();
+    let bad_strata = there(&gdir, &["strata", &bad_strata_trace.to_string()]);
+    assert_eq!(code(&bad_strata), 65, "witness in deposits must exit 65: {}", stderr(&bad_strata));
+}
+
+#[test]
+fn pass4_exhume_and_memo_hardening() {
+    use nether_ledger::{Node, Store, Stored};
+
+    // 4. `exhume` validates prior witnesses BEFORE opening foreign providers (`--load`).
+    let edir = a_build("pass4-exhume");
+    std::fs::write(
+        edir.join("e.nc"),
+        "Bytes@3 a = must(descend disk { read(\"k\") });\ndemand a;\n",
+    )
+    .unwrap();
+    let buried = there(&edir, &["bury", "e.nc", "--json"]);
+    assert_eq!(code(&buried), 0, "{}", stderr(&buried));
+    let base_trace: nether_ledger::Cairn = field(&stdout(&buried), "cairn").parse().unwrap();
+    let store = Store::open(edir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { residue, holes, source, depth, .. }) =
+        store.get(base_trace).unwrap()
+    else {
+        panic!("expected trace");
+    };
+    let bad_wit = store
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes: holes.clone(),
+            witnesses: vec![holes[0]],
+            deposits: vec![],
+            unrecorded: false,
+            source,
+            depth,
+        }))
+        .unwrap();
+    let exhume_bad = there(
+        &edir,
+        &[
+            "exhume",
+            &bad_wit.to_string(),
+            "--grant",
+            "unrecorded",
+            "--load",
+            "/nonexistent/should-not-open.so",
+        ],
+    );
+    assert_eq!(
+        code(&exhume_bad),
+        65,
+        "corrupt witness must fail with 65 before --load: {}",
+        stderr(&exhume_bad)
+    );
+
+    // 5. `memo` rejects corrupted residue payloads and trailing tokens, re-burying cleanly.
+    let mdir = a_build("pass4-memo");
+    std::fs::write(mdir.join("m.nc"), "demand 2 + 2;\n").unwrap();
+    let m1 = there(&mdir, &["bury", "m.nc", "--json"]);
+    assert_eq!(code(&m1), 0, "{}", stderr(&m1));
+    let m_trace = field(&stdout(&m1), "cairn");
+    let m_res = field(&stdout(&m1), "residue");
+    let m_res_path = mdir.join(".nether").join("objects").join(&m_res[..2]).join(&m_res[2..]);
+    std::fs::write(&m_res_path, b"corrupt-residue").unwrap();
+    let m2 = there(&mdir, &["bury", "m.nc", "--json"]);
+    assert_eq!(code(&m2), 0, "memo must miss on corrupt residue and repair: {}", stderr(&m2));
+    assert_eq!(field(&stdout(&m2), "cairn"), m_trace);
+}

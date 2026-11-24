@@ -373,3 +373,45 @@ fn http_framing_handles_204_keepalive_conflicting_cl_and_bad_te() {
     let fetcher = Asked::reaching("plus-port", vec!["127.0.0.1:80".into()], false);
     assert_eq!(fetcher.get("http://127.0.0.1:+80/"), AnswerOf::Refused(Refusal::Malformed));
 }
+
+#[test]
+fn http_101_does_not_stall_and_strict_ows_framing_is_enforced() {
+    // 1. 101 Switching Protocols returns Unreachable immediately instead of waiting for another header.
+    let l1 = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+    let p1 = l1.local_addr().expect("addr").port();
+    let hold = std::thread::spawn(move || {
+        let Ok((mut s, _)) = l1.accept() else { return };
+        let mut req = [0u8; 256];
+        let _ = s.read(&mut req);
+        let _ = s.write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    });
+    let c1 = Asked::reaching("proto-101", vec![format!("127.0.0.1:{p1}")], false);
+    assert_eq!(c1.get(&format!("http://127.0.0.1:{p1}/")), AnswerOf::Refused(Refusal::Unreachable));
+    let _ = hold.join();
+
+    // 2. Non-OWS whitespace (\x0b, \x0c), bare \r, and leading space in chunk size are refused.
+    for raw in [
+        b"HTTP/1.1 200 OK\r\nContent-Length: \x0b4\r\n\r\nabcd".as_slice(),
+        b"HTTP/1.1 200 OK\r\nContent-Length: \x0c4\r\n\r\nabcd".as_slice(),
+        b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\r\n\r\nabcd".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: \x0bchunked\r\n\r\n0\r\n\r\n".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n 1\r\na\r\n0\r\n\r\n".as_slice(),
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\r\na\r\n0\r\n\r\n".as_slice(),
+    ] {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+        let port = listener.local_addr().expect("addr").port();
+        let raw = raw.to_vec();
+        std::thread::spawn(move || {
+            let Ok((mut sock, _)) = listener.accept() else { return };
+            let mut req = [0u8; 256];
+            let _ = sock.read(&mut req);
+            let _ = sock.write_all(&raw);
+        });
+        let client = Asked::reaching("strict-ows", vec![format!("127.0.0.1:{port}")], false);
+        assert_eq!(
+            client.get(&format!("http://127.0.0.1:{port}/")),
+            AnswerOf::Refused(Refusal::Unreachable)
+        );
+    }
+}

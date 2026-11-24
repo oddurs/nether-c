@@ -44,7 +44,7 @@ pub fn checked_unit(bytes: &[u8], shown: &str) -> Result<Unit, ExitCode> {
     Ok(unit)
 }
 
-fn store_exit(e: &StoreError) -> ExitCode {
+pub(crate) fn store_exit(e: &StoreError) -> ExitCode {
     match e {
         StoreError::Corrupt { .. } | StoreError::Ragged { .. } => ExitCode::from(code::MALFORMED),
         StoreError::Absent(_) => ExitCode::from(code::ABSENT),

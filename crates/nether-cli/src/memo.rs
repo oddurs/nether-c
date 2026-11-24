@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nether_ledger::{Cairn, Node, Store, Stored};
+use nether_ledger::{Cairn, Node, Store, Stored, Value};
 
 static MEMO_NONCE: AtomicU64 = AtomicU64::new(0);
 
@@ -43,19 +43,41 @@ impl Memo {
         let trace: Cairn = words.next()?.parse().ok()?;
         let steps: u64 = words.next()?.parse().ok()?;
         let nodes: usize = words.next()?.parse().ok()?;
+        if words.next().is_some() {
+            return None;
+        }
         let Ok(Stored::Node(Node::Trace {
-            residue, holes, deposits, source: s, witnesses, ..
+            residue,
+            holes,
+            deposits,
+            source: s,
+            witnesses,
+            unrecorded,
+            ..
         })) = store.get(trace)
         else {
             return None;
         };
         let complete = s == source
+            && !unrecorded
             && witnesses.is_empty()
             && steps <= fuel
-            && store.has(source)
-            && store.has(residue)
-            && holes.iter().all(|h| store.has(*h))
-            && deposits.iter().all(|d| store.has(*d));
+            && matches!(store.get(source), Ok(Stored::Value(Value::Bytes(_))))
+            && matches!(store.get(residue), Ok(Stored::Value(Value::Bytes(_))))
+            && holes.iter().all(|h| {
+                matches!(
+                    store.get(*h),
+                    Ok(Stored::Node(Node::Hole { call, .. }))
+                        if call.args.iter().all(|a| matches!(store.get(*a), Ok(Stored::Value(_))))
+                )
+            })
+            && deposits.iter().all(|d| {
+                matches!(
+                    store.get(*d),
+                    Ok(Stored::Node(Node::Deposit { value, .. }))
+                        if matches!(store.get(value), Ok(Stored::Value(_)))
+                )
+            });
         complete.then_some(Remembered { trace, steps, nodes })
     }
 

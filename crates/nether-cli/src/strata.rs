@@ -32,14 +32,16 @@ pub fn run(args: &[String]) -> ExitCode {
         Ok(c) => c,
         Err(code) => return code,
     };
-    let Ok(Stored::Node(trace @ Node::Trace { depth, unrecorded: marked, .. })) = store.get(cairn)
+    let Ok(Stored::Node(Node::Trace {
+        holes, witnesses, deposits, depth, unrecorded: marked, ..
+    })) = store.get(cairn)
     else {
         return crate::not_a_trace(&store, cairn);
     };
 
-    // A trace names its holes, its witnesses and its deposits. The residue and
-    // the source it also names are `Bytes`.
-    let found = match survey(&store, &trace.nodes()) {
+    // Validate each trace slot against its expected node kind so a witness or
+    // hole smuggled into the wrong slot is rejected as malformed (§7.3.2).
+    let found = match survey(&store, &holes, &witnesses, &deposits) {
         Ok(found) => found,
         Err(e) => {
             eprintln!("nether: {e}");
@@ -109,53 +111,69 @@ fn order(r: &Reach) -> (Reverse<u8>, [u8; 32], u64, bool, &str) {
     (Reverse(r.stratum), *r.at.source.as_bytes(), r.at.start, r.answered, &r.call)
 }
 
-/// Walk the graph from a trace's roots and collect every hole and witness.
-///
-/// Along `nodes` and not `references`: an argument, an answer and a span's
-/// source are values, and reading them would say nothing about depth while
-/// making every unsealed source look like a gap in the record. §7.3 makes the
-/// graph acyclic by construction, so `seen` is an economy and not a safety
-/// measure.
-fn survey(store: &Store, roots: &[Cairn]) -> Result<Survey, StoreError> {
+/// Validate each trace slot (`holes`, `witnesses`, `deposits`) against its
+/// expected node kind and collect every hole and witness.
+fn survey(
+    store: &Store,
+    holes: &[Cairn],
+    witnesses: &[Cairn],
+    deposits: &[Cairn],
+) -> Result<Survey, StoreError> {
     let mut reaches: Vec<Reach> = Vec::new();
     let mut missing = 0;
-    let mut seen = HashSet::new();
-    let mut stack: Vec<Cairn> = roots.to_vec();
-    while let Some(at) = stack.pop() {
-        if !seen.insert(at) {
+    let mut seen_holes = HashSet::new();
+    for &at in holes {
+        if !seen_holes.insert(at) {
             continue;
         }
-        let stored = match store.get(at) {
-            Ok(stored) => stored,
-            Err(StoreError::Absent(_)) => {
-                missing += 1;
-                continue;
+        match store.get(at) {
+            Ok(Stored::Node(Node::Hole { call, stratum, span })) => {
+                reaches.push(Reach {
+                    stratum,
+                    answered: false,
+                    call: lamp::said(store, &call.function, &call.args),
+                    at: span,
+                });
             }
+            Ok(_) => return Err(StoreError::Corrupt { asked: at, found: None, why: None }),
+            Err(StoreError::Absent(_)) => missing += 1,
             Err(e) => return Err(e),
-        };
-        let Stored::Node(n) = &stored else {
-            return Err(StoreError::Corrupt { asked: at, found: None, why: None });
-        };
-        if let Node::Hole { call, stratum, span, .. } | Node::Witness { call, stratum, span, .. } =
-            n
-        {
-            reaches.push(Reach {
-                stratum: *stratum,
-                answered: matches!(n, Node::Witness { .. }),
-                call: lamp::said(store, &call.function, &call.args),
-                at: *span,
-            });
         }
-        stack.extend(n.nodes());
+    }
+    let mut seen_witnesses = HashSet::new();
+    for &at in witnesses {
+        if !seen_witnesses.insert(at) {
+            continue;
+        }
+        match store.get(at) {
+            Ok(Stored::Node(Node::Witness { call, stratum, span, .. })) => {
+                reaches.push(Reach {
+                    stratum,
+                    answered: true,
+                    call: lamp::said(store, &call.function, &call.args),
+                    at: span,
+                });
+            }
+            Ok(_) => return Err(StoreError::Corrupt { asked: at, found: None, why: None }),
+            Err(StoreError::Absent(_)) => missing += 1,
+            Err(e) => return Err(e),
+        }
+    }
+    let mut seen_deposits = HashSet::new();
+    for &at in deposits {
+        if !seen_deposits.insert(at) {
+            continue;
+        }
+        match store.get(at) {
+            Ok(Stored::Node(Node::Deposit { .. } | Node::Literal(_))) => {}
+            Ok(_) => return Err(StoreError::Corrupt { asked: at, found: None, why: None }),
+            Err(StoreError::Absent(_)) => missing += 1,
+            Err(e) => return Err(e),
+        }
     }
 
     // Deepest first, because that is the line the reader came for; then in
     // source order, so the rest reads like the program.
-    //
-    // Nothing is collapsed. A node is named by its content and `seen` is keyed
-    // on that, so two entries here are two nodes — and two witnesses of one
-    // call at one place are two different answers, which is the thing a blame
-    // tool exists to show rather than tidy away.
     reaches.sort_by(|a, b| order(a).cmp(&order(b)));
     Ok(Survey { reaches, missing })
 }
