@@ -95,7 +95,7 @@ fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
         Ok(stored) => stored,
         Err(e) => {
             eprintln!("nether: {e}");
-            return FAILED;
+            return crate::closing::store_exit(&e);
         }
     };
     let text = match &stored {
@@ -107,7 +107,7 @@ fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
                 Ok(found) => found,
                 Err(e) => {
                     eprintln!("nether: {e}");
-                    return FAILED;
+                    return crate::closing::store_exit(&e);
                 }
             };
             if found.is_empty() { "nothing was deposited\n".to_string() } else { found.concat() }

@@ -180,12 +180,19 @@ fn prepare_graft(
         Ok(t) => t,
         Err(e) => {
             eprintln!("nether: {e}");
-            return Err(FAILED);
+            return Err(crate::closing::store_exit(&e));
         }
     };
-    let Ok(Stored::Value(raw_instead)) = store.get(with) else {
-        eprintln!("nether: {} is not a value in this ledger", with.short());
-        return Err(ExitCode::from(code::ABSENT));
+    let raw_instead = match store.get(with) {
+        Ok(Stored::Value(v)) => v,
+        Ok(_) => {
+            eprintln!("nether: {} is not a value in this ledger", with.short());
+            return Err(ExitCode::from(code::MALFORMED));
+        }
+        Err(e) => {
+            eprintln!("nether: {e}");
+            return Err(crate::closing::store_exit(&e));
+        }
     };
     if told.all().any(|(_, said)| said.cairn() == replace) {
         eprintln!("nether: {} was already answered under {}", replace.short(), trace.short());
@@ -200,9 +207,16 @@ fn prepare_graft(
     let mut earlier_calls: HashSet<Call> = HashSet::new();
     let mut matched: Option<(Call, u8, Span, Value)> = None;
     for hole in holes {
-        let Ok(Stored::Node(Node::Hole { call, stratum, span })) = store.get(*hole) else {
-            eprintln!("nether: hole {} is not readable in this ledger", hole.short());
-            return Err(ExitCode::from(code::ABSENT));
+        let (call, stratum, span) = match store.get(*hole) {
+            Ok(Stored::Node(Node::Hole { call, stratum, span })) => (call, stratum, span),
+            Ok(_) => {
+                eprintln!("nether: hole {} is not a hole node in this ledger", hole.short());
+                return Err(ExitCode::from(code::MALFORMED));
+            }
+            Err(e) => {
+                eprintln!("nether: {e}");
+                return Err(crate::closing::store_exit(&e));
+            }
         };
         if *hole == replace && matched.is_none() {
             let is_read = Depth::new(stratum).is_some_and(Depth::reads);
@@ -224,6 +238,15 @@ fn prepare_graft(
                 return Err(FAILED);
             };
             let val = wrap_graft_value(prim, &call.function, with, &raw_instead)?;
+            if is_read && told.answer(&call).is_some_and(|prev| prev != &val) {
+                eprintln!(
+                    "nether: {} disagrees with an earlier read witness for `{}` under {}",
+                    with.short(),
+                    call.function,
+                    trace.short()
+                );
+                return Err(FAILED);
+            }
             matched = Some((call, stratum, span, val));
             break;
         }

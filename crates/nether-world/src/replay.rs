@@ -145,7 +145,13 @@ impl Replay {
                 return Err(MergeError::BaseWitness(w));
             };
             if Depth::new(stratum).is_some_and(Depth::reads) {
-                base_reads.entry(call).or_insert((w, answer));
+                if let Some(&(_, prev_ans)) = base_reads.get(&call) {
+                    if prev_ans != answer {
+                        return Err(MergeError::BaseWitness(w));
+                    }
+                } else {
+                    base_reads.insert(call, (w, answer));
+                }
             }
         }
         let mut open: Vec<(Call, u8, Span)> = Vec::with_capacity(holes.len());

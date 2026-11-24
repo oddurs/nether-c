@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use nether_bury::{Answers, HaltKind, bury_with};
 use nether_core::Capability;
-use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
 use nether_syntax::print;
 use nether_world::{
     Declared, Disk, Entropy, Env, Ledger, Net, Recorder, Replay, Unrecorded, World,
@@ -243,12 +243,20 @@ pub fn run(args: &[String]) -> ExitCode {
 /// `Err` is the cairn of a hole this ledger cannot read. Dropping one instead
 /// left it a hole in the new trace, so a trace half of whose holes were missing
 /// exhumed to a trace with fewer holes and no complaint.
-fn questions(store: &Store, holes: &[Cairn]) -> Result<Vec<(Call, Span)>, Cairn> {
+fn questions(store: &Store, holes: &[Cairn]) -> Result<Vec<(Call, Span)>, ExitCode> {
     holes
         .iter()
         .map(|h| match store.get(*h) {
             Ok(Stored::Node(Node::Hole { call, span, .. })) => Ok((call, span)),
-            _ => Err(*h),
+            Ok(_) => {
+                eprintln!("nether: hole {} is not a hole node in this ledger", h.short());
+                Err(ExitCode::from(code::MALFORMED))
+            }
+            Err(StoreError::Absent(_)) => Err(no_such_hole(*h)),
+            Err(e) => {
+                eprintln!("nether: {e}");
+                Err(crate::closing::store_exit(&e))
+            }
         })
         .collect()
 }
@@ -301,9 +309,9 @@ fn world_from(asked: &Asked) -> Result<World, ExitCode> {
 fn gather_replay(store: &Store, witnesses: &[Cairn], holes: &[Cairn]) -> Result<Answers, ExitCode> {
     let have = Replay::of_trace(store, witnesses).map_err(|e| {
         eprintln!("nether: {e}");
-        FAILED
+        crate::closing::store_exit(&e)
     })?;
-    let asked = questions(store, holes).map_err(no_such_hole)?;
+    let asked = questions(store, holes)?;
     if let Some((call, _)) = asked.first() {
         // Any open hole in `trace.residue` was NOT answered by `trace.witnesses`
         // (prior witnesses were already consumed into `trace.residue`). Feeding
@@ -327,9 +335,9 @@ fn answer_holes(
     said: &mut Vec<(Call, Cairn)>,
     recorded: &mut Vec<Cairn>,
 ) -> Result<Answers, ExitCode> {
+    let asked_holes = questions(store, holes)?;
     let world = world_from(asked)?;
     let into = Recorder::new(store);
-    let asked_holes = questions(store, holes).map_err(no_such_hole)?;
     let outcomes = world.ask_all(&asked_holes, &into);
     let mut answers = Answers::none();
     for ((call, _), res) in asked_holes.into_iter().zip(outcomes) {
@@ -394,7 +402,9 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     let (text, unit) = crate::closing::residue_unit(store, cairn, residue)?;
     let shown = format!("{}:residue", cairn.short());
 
-    if replaying && (marked || crate::closing::unrecorded(store, &witnesses)?) {
+    let prior_unrecorded = crate::closing::unrecorded(store, &witnesses)?;
+    let _ = crate::closing::depth(store, 0, &[], &witnesses)?;
+    if replaying && (marked || prior_unrecorded) {
         eprintln!("nether: {} reached stratum 8, so replaying it proves nothing.", cairn.short());
         eprintln!();
         eprintln!("  §1.7: nothing downstream of an unrecorded call is recorded, so a");

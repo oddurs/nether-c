@@ -215,4 +215,11 @@ fn of_trace_rejects_missing_witnesses_and_merge_keeps_base_answers() {
     // A worker delivery contradicting a read-stratum base witness is rejected.
     let err = Replay::merge(&store, &[base_w.witness()], &[h1], &[&[(0, clash_w.witness())]]);
     assert!(matches!(err, Err(MergeError::Conflict(0, ..))), "{err:?}");
+
+    // Contradictory read-stratum base witnesses in the same trace are rejected.
+    let bad_base = Replay::merge(&store, &[base_w.witness(), clash_w.witness()], &[], &[]);
+    assert!(
+        matches!(bad_base, Err(MergeError::BaseWitness(w)) if w == clash_w.witness()),
+        "{bad_base:?}"
+    );
 }

@@ -357,16 +357,29 @@ fn is_http_tchar(b: u8) -> bool {
         )
 }
 
-/// Parse HTTP/1.x status line and framing headers on raw bytes, skipping `1xx`.
+/// Strip one trailing `\r\n` or `\n` and reject bare `\r` inside HTTP framing.
+fn strip_http_eol(raw: &str) -> Result<&str, Refusal> {
+    let line =
+        raw.strip_suffix("\r\n").or_else(|| raw.strip_suffix('\n')).ok_or(Refusal::Unreachable)?;
+    if line.as_bytes().contains(&b'\r') {
+        return Err(Refusal::Unreachable);
+    }
+    Ok(line)
+}
+
+/// Trim RFC 9110 optional whitespace (`SP` / `HTAB`) only.
+fn trim_ows(s: &str) -> &str {
+    s.trim_matches([' ', '\t'])
+}
+
+/// Parse HTTP/1.x status line and framing headers on raw bytes, skipping
+/// interim `1xx` responses other than `101 Switching Protocols`.
 fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<ResponseHead, Refusal> {
     let mut budget = MOST_HEAD;
     loop {
         let status_line = read_line_bytes(reading, &mut budget, deadline)?;
         let raw_line = core::str::from_utf8(&status_line).map_err(|_| Refusal::Unreachable)?;
-        let line = raw_line
-            .strip_suffix("\r\n")
-            .or_else(|| raw_line.strip_suffix('\n'))
-            .unwrap_or(raw_line);
+        let line = strip_http_eol(raw_line)?;
         let (version, after_ver) = line.split_once(' ').ok_or(Refusal::Unreachable)?;
         if version != "HTTP/1.0" && version != "HTTP/1.1" {
             return Err(Refusal::Unreachable);
@@ -394,9 +407,9 @@ fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Resp
                 return Err(Refusal::Unreachable);
             }
             if name.eq_ignore_ascii_case(b"content-length") {
-                let value = core::str::from_utf8(&hdr[colon + 1..])
-                    .map_err(|_| Refusal::Unreachable)?
-                    .trim();
+                let raw =
+                    core::str::from_utf8(&hdr[colon + 1..]).map_err(|_| Refusal::Unreachable)?;
+                let value = trim_ows(strip_http_eol(raw)?);
                 if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
                     return Err(Refusal::Unreachable);
                 }
@@ -408,10 +421,11 @@ fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Resp
                 }
                 content_length = Some(parsed);
             } else if name.eq_ignore_ascii_case(b"transfer-encoding") {
-                let value =
+                let raw =
                     core::str::from_utf8(&hdr[colon + 1..]).map_err(|_| Refusal::Unreachable)?;
+                let value = strip_http_eol(raw)?;
                 let codings: Vec<&str> =
-                    value.split(',').map(str::trim).filter(|tok| !tok.is_empty()).collect();
+                    value.split(',').map(trim_ows).filter(|tok| !tok.is_empty()).collect();
                 if chunked || codings.len() != 1 || !codings[0].eq_ignore_ascii_case("chunked") {
                     return Err(Refusal::Unreachable);
                 }
@@ -421,7 +435,7 @@ fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Resp
         if chunked && content_length.is_some() {
             return Err(Refusal::Unreachable);
         }
-        if (100..=199).contains(&status) {
+        if (100..=199).contains(&status) && status != 101 {
             continue;
         }
         return Ok(ResponseHead { status, content_length, chunked });
@@ -478,7 +492,8 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
     loop {
         let size_line = read_line_bytes(reading, &mut framing_budget, deadline)?;
         let text = core::str::from_utf8(&size_line).map_err(|_| Refusal::Unreachable)?;
-        let hex = text.split(';').next().unwrap_or("").trim();
+        let line = strip_http_eol(text)?;
+        let hex = line.split(';').next().unwrap_or("").trim_end_matches([' ', '\t']);
         if hex.is_empty() || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
             return Err(Refusal::Unreachable);
         }

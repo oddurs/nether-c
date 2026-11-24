@@ -17,7 +17,7 @@
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 
@@ -29,7 +29,7 @@ struct DlInfo {
     saddr: *mut c_void,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
 #[repr(C)]
 struct LinkMap {
     addr: usize,
@@ -39,10 +39,10 @@ struct LinkMap {
     prev: *mut LinkMap,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
 const RTLD_DI_LINKMAP: c_int = 2;
 
-// `dlopen`, `dlsym`, `dlclose`, `dlerror`, `dladdr` (and Linux `dlinfo`).
+// `dlopen`, `dlsym`, `dlclose`, `dlerror`, `dladdr` (and glibc Linux `dlinfo`).
 // Minimal POSIX dynamic-loader declarations without an external binding crate.
 unsafe extern "C" {
     fn dlopen(file: *const c_char, mode: c_int) -> *mut c_void;
@@ -50,7 +50,7 @@ unsafe extern "C" {
     fn dlclose(handle: *mut c_void) -> c_int;
     fn dlerror() -> *const c_char;
     fn dladdr(addr: *const c_void, info: *mut DlInfo) -> c_int;
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
     fn dlinfo(handle: *mut c_void, request: c_int, info: *mut c_void) -> c_int;
 }
 
@@ -72,8 +72,8 @@ type Foreign = unsafe extern "C" fn(*const u8, usize, *mut u8, usize, *mut usize
 /// so two at once would be a race in code nobody here can see.
 pub struct Object {
     handle: Mutex<Handle>,
-    #[cfg(not(target_os = "linux"))]
-    canonical: Option<PathBuf>,
+    #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
+    canonical: PathBuf,
     /// What it was loaded from, for saying which object answered.
     pub path: String,
 }
@@ -119,8 +119,17 @@ impl Object {
     /// [`Failed`] with whatever the loader said, which is the only account of
     /// what happened that exists.
     pub fn open(path: &Path) -> Result<Self, Failed> {
+        if path.as_os_str().is_empty() {
+            return Err(Failed("shared object path is empty".to_owned()));
+        }
         let shown = path.display().to_string();
-        let Ok(name) = CString::new(path.as_os_str().as_bytes()) else {
+        #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
+        let canonical = path.canonicalize().map_err(|e| Failed(format!("{shown}: {e}")))?;
+        #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
+        let load_path = canonical.as_path();
+        #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+        let load_path = path;
+        let Ok(name) = CString::new(load_path.as_os_str().as_bytes()) else {
             return Err(Failed(format!("{shown} has a NUL in it")));
         };
         // SAFETY: `name` is a valid NUL-terminated string that outlives the
@@ -132,8 +141,8 @@ impl Object {
         } else {
             Ok(Self {
                 handle: Mutex::new(Handle(handle)),
-                #[cfg(not(target_os = "linux"))]
-                canonical: path.canonicalize().ok(),
+                #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
+                canonical,
                 path: shown,
             })
         }
@@ -148,7 +157,7 @@ impl Object {
 
     /// Verify that `found` is defined in the opened shared object itself, not
     /// resolved transitively through `DT_NEEDED` dependencies such as `libc`.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
     fn defined_in_object(&self, handle: &Handle, found: *mut c_void) -> bool {
         let _ = self;
         let mut lm: *mut LinkMap = core::ptr::null_mut();
@@ -174,11 +183,8 @@ impl Object {
 
     /// Verify that `found` is defined in the opened shared object itself, not
     /// resolved transitively through linked system libraries.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
     fn defined_in_object(&self, _handle: &Handle, found: *mut c_void) -> bool {
-        let Some(expected) = &self.canonical else {
-            return false;
-        };
         let mut info = DlInfo {
             fname: core::ptr::null(),
             fbase: core::ptr::null_mut(),
@@ -191,8 +197,7 @@ impl Object {
         }
         // SAFETY: `fname` is a non-null NUL-terminated path from `dladdr`.
         let fname = unsafe { CStr::from_ptr(info.fname) };
-        let resolved = Path::new(std::ffi::OsStr::from_bytes(fname.to_bytes()));
-        resolved.canonicalize().ok().as_ref() == Some(expected)
+        Path::new(std::ffi::OsStr::from_bytes(fname.to_bytes())) == self.canonical.as_path()
     }
 
     /// The symbol, if this object itself defines it.
@@ -284,5 +289,17 @@ impl Drop for Object {
         let handle = self.handle.get_mut().unwrap_or_else(PoisonError::into_inner);
         // SAFETY: `handle` came from `dlopen` and is closed once, here.
         unsafe { dlclose(handle.0) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Object;
+    use std::path::Path;
+
+    #[test]
+    fn empty_path_is_refused_before_dlopen() {
+        let err = Object::open(Path::new("")).err().expect("empty path must fail");
+        assert!(err.0.contains("empty"), "{err}");
     }
 }
