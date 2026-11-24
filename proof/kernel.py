@@ -8,6 +8,7 @@ private `_SEAL` token. Any file in `proof/` that mentions `admit`, `sorry`, or
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+import weakref
 
 _SEAL = object()
 
@@ -52,11 +53,15 @@ def app(op: str, *args: Term) -> Term:
     return Term(op, tuple(args))
 
 
-RESERVED_CONSTANTS = frozenset({"∅", "∅_raw", "True", "False", "U0", "Cairn"})
+RESERVED_CONSTANTS = frozenset({"∅", "∅_raw", "True", "False", "U0", "Cairn", "Bool", "VUnit", "Nil"})
+
+
+def _is_ascii_digits(name: str) -> bool:
+    return bool(name) and name.isascii() and name.isdigit()
 
 
 def _is_constant_name(name: str) -> bool:
-    return name.isdigit() or name in RESERVED_CONSTANTS
+    return _is_ascii_digits(name) or name in RESERVED_CONSTANTS
 
 
 def _require_var_name(name: str, where: str) -> None:
@@ -69,14 +74,25 @@ def _require_var_name(name: str, where: str) -> None:
     )
 
 
-def subst_term(t: Term, mapping: Dict[str, Term]) -> Term:
+def _clean_subst(mapping: Dict[str, Term], where: str) -> Dict[str, Term]:
+    _require(isinstance(mapping, dict), f"{where}: expected mapping dict")
+    clean: Dict[str, Term] = {}
+    for k, v in dict.items(mapping):
+        _require_var_name(k, where)
+        _require_term(v, where)
+        clean[k] = v
+    return clean
+
+
+def _subst_term(t: Term, mapping: Dict[str, Term]) -> Term:
     _require_term(t, "subst_term")
-    for k, v in mapping.items():
-        _require_var_name(k, "subst_term")
-        _require_term(v, "subst_term")
     if not t.args and not _is_constant_name(t.op) and t.op in mapping:
         return mapping[t.op]
-    return Term(t.op, tuple(subst_term(a, mapping) for a in t.args))
+    return Term(t.op, tuple(_subst_term(a, mapping) for a in t.args))
+
+
+def subst_term(t: Term, mapping: Dict[str, Term]) -> Term:
+    return _subst_term(t, _clean_subst(mapping, "subst_term"))
 
 
 def free_vars_term(t: Term) -> Set[str]:
@@ -242,9 +258,8 @@ def _fresh_var(base: str, avoid: Set[str]) -> str:
     return candidate
 
 
-def subst_formula(f: Formula, mapping: Dict[str, Term]) -> Formula:
-    for k in mapping:
-        _require_var_name(k, "subst_formula")
+def _subst_formula(f: Formula, mapping: Dict[str, Term]) -> Formula:
+    _require_formula(f, "subst_formula")
     if f.kind in {"∀", "∃"}:
         inner_map = {k: v for k, v in mapping.items() if k != f.binder}
         if not inner_map:
@@ -261,17 +276,21 @@ def subst_formula(f: Formula, mapping: Dict[str, Term]) -> Formula:
         if binder in captured:
             avoid = body_fv | captured | set(active.keys()) | {binder}
             fresh = _fresh_var(binder, avoid)
-            body = subst_formula(body, {binder: var(fresh)})
+            body = _subst_formula(body, {binder: var(fresh)})
             binder = fresh
-        return Formula(f.kind, (), (subst_formula(body, active),), binder)
+        return Formula(f.kind, (), (_subst_formula(body, active),), binder)
     if f.kind == "Pred":
-        return pred(f.terms[0].op, *(subst_term(a, mapping) for a in f.terms[0].args))
+        return pred(f.terms[0].op, *(_subst_term(a, mapping) for a in f.terms[0].args))
     return Formula(
         f.kind,
-        tuple(subst_term(t, mapping) for t in f.terms),
-        tuple(subst_formula(s, mapping) for s in f.subs),
+        tuple(_subst_term(t, mapping) for t in f.terms),
+        tuple(_subst_formula(s, mapping) for s in f.subs),
         f.binder,
     )
+
+
+def subst_formula(f: Formula, mapping: Dict[str, Term]) -> Formula:
+    return _subst_formula(f, _clean_subst(mapping, "subst_formula"))
 
 
 class ProofFault(Exception):
@@ -283,23 +302,58 @@ def _require(cond: bool, msg: str) -> None:
         raise ProofFault(msg)
 
 
-@dataclass(frozen=True)
+_THEOREM_DATA: Dict[int, Tuple["weakref.ref[Theorem]", frozenset[Formula], Formula]] = {}
+
+
+def _thm_payload(thm: object) -> Optional[Tuple[frozenset[Formula], Formula]]:
+    if type(thm) is not Theorem:
+        return None
+    entry = _THEOREM_DATA.get(id(thm))
+    if entry is None or entry[0]() is not thm:
+        return None
+    return entry[1], entry[2]
+
+
 class Theorem:
-    _token: object
-    assumptions: frozenset[Formula]
-    conclusion: Formula
+    __slots__ = ("__weakref__",)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Theorem cannot be subclassed")
 
-    def __post_init__(self) -> None:
-        _require(self._token is _SEAL, "Theorem constructed outside kernel")
+    def __init__(self, _token: object, assumptions: frozenset[Formula], conclusion: Formula) -> None:
+        _require(_token is _SEAL, "Theorem constructed outside kernel")
         _require(
-            type(self.assumptions) is frozenset
-            and all(type(a) is Formula for a in self.assumptions),
+            type(assumptions) is frozenset and all(type(a) is Formula for a in assumptions),
             "Theorem assumptions must be frozenset[Formula]",
         )
-        _require_formula(self.conclusion, "Theorem")
+        _require_formula(conclusion, "Theorem")
+        oid = id(self)
+        _THEOREM_DATA[oid] = (weakref.ref(self), assumptions, conclusion)
+        weakref.finalize(self, _THEOREM_DATA.pop, oid, None)
+
+    @property
+    def assumptions(self) -> frozenset[Formula]:
+        payload = _thm_payload(self)
+        _require(payload is not None, "unsealed Theorem")
+        assert payload is not None
+        return payload[0]
+
+    @property
+    def conclusion(self) -> Formula:
+        payload = _thm_payload(self)
+        _require(payload is not None, "unsealed Theorem")
+        assert payload is not None
+        return payload[1]
+
+    def __eq__(self, other: object) -> bool:
+        p1 = _thm_payload(self)
+        p2 = _thm_payload(other)
+        return p1 is not None and p2 is not None and p1 == p2
+
+    def __hash__(self) -> int:
+        payload = _thm_payload(self)
+        _require(payload is not None, "unsealed Theorem")
+        return hash(payload)
 
     def __repr__(self) -> str:
         hyps = ", ".join(repr(a) for a in sorted(self.assumptions, key=repr))
@@ -307,7 +361,7 @@ class Theorem:
 
 
 def _require_thm(thm: Theorem, where: str) -> None:
-    _require(type(thm) is Theorem and thm._token is _SEAL, f"{where}: expected kernel Theorem")
+    _require(_thm_payload(thm) is not None, f"{where}: expected kernel Theorem")
 
 
 def _thm(assumptions: Iterable[Formula], conclusion: Formula) -> Theorem:
@@ -487,7 +541,7 @@ DEPTH_OPS = frozenset({"max", "max_set"})
 
 def _eval_depth(t: Term, env_d: Dict[Term, int], env_s: Dict[Term, int]) -> int:
     if not t.args:
-        if t.op.isdigit():
+        if _is_ascii_digits(t.op):
             v = int(t.op)
             _require(0 <= v <= 8, f"depth literal {v} out of range 0..8")
             return v
@@ -533,7 +587,14 @@ def _collect_lattice_vars(
     def scan_d(t: Term) -> None:
         if not t.args:
             _require(t.op not in SET_CONSTS, f"set constant `{t}` used in depth position")
-            if not t.op.isdigit():
+            if _is_ascii_digits(t.op):
+                v = int(t.op)
+                _require(0 <= v <= 8, f"depth literal {v} out of range 0..8")
+            else:
+                _require(
+                    t.op not in RESERVED_CONSTANTS and not t.op.isdigit(),
+                    f"non-depth constant `{t}` used in depth position",
+                )
                 d_vars.add(t)
         elif t.op == "max":
             for a in t.args:
@@ -547,8 +608,15 @@ def _collect_lattice_vars(
 
     def scan_s(t: Term, *, observed_full: bool) -> None:
         if not t.args:
-            _require(not t.op.isdigit(), f"depth literal `{t}` used in set position")
+            _require(
+                not _is_ascii_digits(t.op) and not t.op.isdigit(),
+                f"depth literal `{t}` used in set position",
+            )
             if t.op not in SET_CONSTS:
+                _require(
+                    t.op not in RESERVED_CONSTANTS,
+                    f"non-set constant `{t}` used in set position",
+                )
                 s_vars.add(t)
                 if observed_full:
                     full_s.add(t)
@@ -705,7 +773,7 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
     # the bounded-chain homomorphism (`{0, 1, 2}`).
     def _has_non_horn_f(f: Formula) -> bool:
         def _has_t(t: Term) -> bool:
-            if not t.args and t.op.isdigit() and int(t.op) > 0:
+            if not t.args and _is_ascii_digits(t.op) and int(t.op) > 0:
                 return True
             return any(_has_t(a) for a in t.args)
 
@@ -900,31 +968,39 @@ class Rule:
         _require_formula(self.conclusion, f"Rule `{self.name}`")
 
 
-_RELATIONS: Dict[str, "InductiveRelation"] = {}
+_RELATIONS: Dict[str, Tuple["InductiveRelation", Tuple[Rule, ...]]] = {}
+_REL_DATA: Dict[int, Tuple["weakref.ref[InductiveRelation]", str, Tuple[Rule, ...]]] = {}
 
 
-@dataclass(frozen=True)
+def _rel_payload(rel: object) -> Optional[Tuple[str, Tuple[Rule, ...]]]:
+    if type(rel) is not InductiveRelation:
+        return None
+    entry = _REL_DATA.get(id(rel))
+    if entry is None or entry[0]() is not rel:
+        return None
+    return entry[1], entry[2]
+
+
 class InductiveRelation:
-    name: str
-    rules: Tuple[Rule, ...]
+    __slots__ = ("__weakref__",)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("InductiveRelation cannot be subclassed")
 
-    def __post_init__(self) -> None:
-        _require(type(self.name) is str and bool(self.name), "InductiveRelation requires a non-empty name")
+    def __init__(self, name: str, rules: Tuple[Rule, ...]) -> None:
+        _require(type(name) is str and bool(name), "InductiveRelation requires a non-empty name")
         _require(
-            type(self.rules) is tuple and bool(self.rules) and all(type(r) is Rule for r in self.rules),
-            f"InductiveRelation `{self.name}` requires non-empty tuple[Rule, ...]",
+            type(rules) is tuple and bool(rules) and all(type(r) is Rule for r in rules),
+            f"InductiveRelation `{name}` requires non-empty tuple[Rule, ...]",
         )
         seen: Set[str] = set()
         arity: Optional[int] = None
-        for r in self.rules:
-            _require(r.name not in seen, f"duplicate rule `{r.name}` in `{self.name}`")
+        for r in rules:
+            _require(r.name not in seen, f"duplicate rule `{r.name}` in `{name}`")
             seen.add(r.name)
             _require(
-                r.conclusion.kind == "Pred" and r.conclusion.terms[0].op == self.name,
-                f"rule `{r.name}` conclusion must be `{self.name}(...)`, got `{r.conclusion}`",
+                r.conclusion.kind == "Pred" and r.conclusion.terms[0].op == name,
+                f"rule `{r.name}` conclusion must be `{name}(...)`, got `{r.conclusion}`",
             )
             r_arity = len(r.conclusion.terms[0].args)
             if arity is None:
@@ -932,34 +1008,48 @@ class InductiveRelation:
             else:
                 _require(
                     r_arity == arity,
-                    f"rule `{r.name}` arity {r_arity} does not match `{self.name}` arity {arity}",
+                    f"rule `{r.name}` arity {r_arity} does not match `{name}` arity {arity}",
                 )
-            # Enforce strict positivity: recursive occurrences of `self.name` may
-            # only appear as top-level positive premise atoms with matching arity,
-            # and no predicate may appear negatively (blocking mutual negation).
             for p in r.premises:
                 _require(
                     _is_strictly_positive_premise(p),
                     f"non-positive predicate occurrence in premise `{p}` of `{r.name}`",
                 )
-                if p.kind == "Pred" and p.terms[0].op == self.name:
+                if p.kind == "Pred" and p.terms[0].op == name:
                     _require(
                         len(p.terms[0].args) == arity,
                         f"recursive premise `{p}` in `{r.name}` has wrong arity",
                     )
                 else:
                     _require(
-                        not _mentions_pred(p, self.name),
-                        f"non-positive occurrence of `{self.name}` in premise `{p}` of `{r.name}`",
+                        not _mentions_pred(p, name),
+                        f"non-positive occurrence of `{name}` in premise `{p}` of `{r.name}`",
                     )
-        existing = _RELATIONS.get(self.name)
+        existing = _RELATIONS.get(name)
         if existing is not None:
             _require(
-                existing == self,
-                f"conflicting InductiveRelation definition for `{self.name}`",
+                existing[1] == rules,
+                f"conflicting InductiveRelation definition for `{name}`",
             )
         else:
-            _RELATIONS[self.name] = self
+            _RELATIONS[name] = (self, rules)
+        oid = id(self)
+        _REL_DATA[oid] = (weakref.ref(self), name, rules)
+        weakref.finalize(self, _REL_DATA.pop, oid, None)
+
+    @property
+    def name(self) -> str:
+        payload = _rel_payload(self)
+        _require(payload is not None, "unregistered InductiveRelation")
+        assert payload is not None
+        return payload[0]
+
+    @property
+    def rules(self) -> Tuple[Rule, ...]:
+        payload = _rel_payload(self)
+        _require(payload is not None, "unregistered InductiveRelation")
+        assert payload is not None
+        return payload[1]
 
     @property
     def arity(self) -> int:
@@ -972,11 +1062,14 @@ class InductiveRelation:
         raise ProofFault(f"unknown rule `{name}` in `{self.name}`")
 
 
-def _require_rel(rel: InductiveRelation, where: str) -> None:
-    _require(
-        type(rel) is InductiveRelation and _RELATIONS.get(rel.name) is rel,
-        f"{where}: expected registered InductiveRelation",
-    )
+def _require_rel(rel: InductiveRelation, where: str) -> Tuple[str, Tuple[Rule, ...]]:
+    payload = _rel_payload(rel)
+    _require(payload is not None, f"{where}: expected registered InductiveRelation")
+    assert payload is not None
+    name, rules = payload
+    entry = _RELATIONS.get(name)
+    _require(entry is not None and entry[1] == rules, f"{where}: expected registered InductiveRelation")
+    return name, entry[1]
 
 
 def apply_rule(
@@ -986,8 +1079,15 @@ def apply_rule(
     premise_thms: Sequence[Theorem],
 ) -> Theorem:
     """Derive a conclusion of `rel` by instantiating `rule_name` and discharging its premises."""
-    _require_rel(rel, "apply_rule")
-    r = rel.rule(rule_name)
+    rel_name, rules = _require_rel(rel, "apply_rule")
+    clean = _clean_subst(subst, f"apply_rule `{rule_name}`")
+    r: Optional[Rule] = None
+    for cand in rules:
+        if cand.name == rule_name:
+            r = cand
+            break
+    _require(r is not None, f"unknown rule `{rule_name}` in `{rel_name}`")
+    assert r is not None
     _require(
         len(premise_thms) == len(r.premises),
         f"rule `{rule_name}` expects {len(r.premises)} premises, got {len(premise_thms)}",
@@ -995,13 +1095,13 @@ def apply_rule(
     assumptions: Set[Formula] = set()
     for expected, given in zip(r.premises, premise_thms):
         _require_thm(given, f"apply_rule `{rule_name}`")
-        inst_expected = subst_formula(expected, subst)
+        inst_expected = _subst_formula(expected, clean)
         _require(
             inst_expected == given.conclusion,
             f"rule `{rule_name}` premise mismatch:\n  expected: {inst_expected}\n  got:      {given.conclusion}",
         )
         assumptions |= given.assumptions
-    return _thm(assumptions, subst_formula(r.conclusion, subst))
+    return _thm(assumptions, _subst_formula(r.conclusion, clean))
 
 
 def rule_induction(
@@ -1016,27 +1116,29 @@ def rule_induction(
     rather than an arbitrary Python callable, so the kernel itself substitutes
     rule arguments uniformly across every rule and the universal conclusion.
     """
-    _require_rel(rel, "rule_induction")
+    rel_name, rules = _require_rel(rel, "rule_induction")
     _require_formula(prop, "rule_induction")
+    params_snap = tuple(params)
+    rel_arity = len(rules[0].conclusion.terms[0].args)
     _require(
-        len(params) == rel.arity and len(set(params)) == rel.arity,
-        f"rule_induction on `{rel.name}` expects {rel.arity} distinct parameter names, got {params}",
+        len(params_snap) == rel_arity and len(set(params_snap)) == rel_arity,
+        f"rule_induction on `{rel_name}` expects {rel_arity} distinct parameter names, got {params_snap}",
     )
-    for p_name in params:
+    for p_name in params_snap:
         _require_var_name(p_name, "rule_induction")
-    rule_names = {r.name for r in rel.rules}
+    rule_names = {r.name for r in rules}
     given_names = set(cases.keys())
     _require(
         rule_names == given_names,
-        f"rule_induction on `{rel.name}` missing cases {rule_names - given_names} "
+        f"rule_induction on `{rel_name}` missing cases {rule_names - given_names} "
         f"or extra cases {given_names - rule_names}",
     )
 
     def _inst_prop(args: Tuple[Term, ...]) -> Formula:
-        return subst_formula(prop, dict(zip(params, args)))
+        return _subst_formula(prop, dict(zip(params_snap, args)))
 
-    avoid = free_vars_formula(prop) - set(params)
-    for r in rel.rules:
+    avoid = free_vars_formula(prop) - set(params_snap)
+    for r in rules:
         # Alpha-rename rule variables away from any free variables in `prop`
         # so schematic rule variables cannot accidentally unify with `prop`.
         rule_fvs = free_vars_formula(r.conclusion)
@@ -1044,14 +1146,14 @@ def rule_induction(
             rule_fvs |= free_vars_formula(p)
         clashes = rule_fvs & avoid
         if clashes:
-            taken = avoid | rule_fvs | set(params)
+            taken = avoid | rule_fvs | set(params_snap)
             rename: Dict[str, Term] = {}
             for name in sorted(clashes):
                 fresh = _fresh_var(name, taken)
                 taken.add(fresh)
                 rename[name] = var(fresh)
-            r_premises = tuple(subst_formula(p, rename) for p in r.premises)
-            r_conclusion = subst_formula(r.conclusion, rename)
+            r_premises = tuple(_subst_formula(p, rename) for p in r.premises)
+            r_conclusion = _subst_formula(r.conclusion, rename)
         else:
             r_premises = r.premises
             r_conclusion = r.conclusion
@@ -1059,7 +1161,7 @@ def rule_induction(
         prem_hyps = tuple(assume(p) for p in r_premises)
         ih_hyps_list: List[Theorem] = []
         for p in r_premises:
-            if p.kind == "Pred" and p.terms[0].op == rel.name:
+            if p.kind == "Pred" and p.terms[0].op == rel_name:
                 ih_hyps_list.append(assume(_inst_prop(p.terms[0].args)))
         ih_hyps = tuple(ih_hyps_list)
 
@@ -1079,13 +1181,13 @@ def rule_induction(
         )
 
     generic_names: List[str] = []
-    for i in range(rel.arity):
+    for i in range(rel_arity):
         name = f"_a{i}"
         while name in avoid or name in generic_names:
             name = f"{name}_"
         generic_names.append(name)
     generic_args = tuple(var(n) for n in generic_names)
-    goal = imp(pred(rel.name, *generic_args), _inst_prop(generic_args))
+    goal = imp(pred(rel_name, *generic_args), _inst_prop(generic_args))
     for v in reversed(generic_args):
         goal = forall(v.op, goal)
     return _thm([], goal)

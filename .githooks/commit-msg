@@ -47,7 +47,7 @@ fi
 body=$(grep -v '^#' "$msg_file" || true)
 # Strip `CLAUDE.md` filename references before checking banned vendor/model names
 # so prose like "claude wrote this" or "claude." is never bypassed.
-scrubbed=$(printf '%s\n' "$body" | sed -E 's/(^|[^[:alnum:]_])[Cc][Ll][Aa][Uu][Dd][Ee]\.[Mm][Dd]([^[:alnum:]_]|$)/\1\2/g')
+scrubbed=$(printf '%s\n' "$body" | sed -E ':a; s/(^|[^[:alnum:]_])[Cc][Ll][Aa][Uu][Dd][Ee]\.[Mm][Dd]([^[:alnum:]_]|$)/\1\2/g; ta')
 named='(^|[^[:alnum:]_])(claude|anthropic|copilot|chatgpt|openai|gemini)([^[:alnum:]_]|$)'
 trailer='^[[:space:]]*(co-authored-by|assisted-by|generated-by|authored-by)[[:space:]]*:'
 phrase='generated with|(^|[^[:alnum:]_])AI([^[:alnum:]_]|$)|🤖'

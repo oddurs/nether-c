@@ -447,7 +447,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 
 ## assay — The Assay
 
-`##########` 100% · 20 of 20 done · due 2028-10-01
+`##########` 100% · 21 of 21 done · due 2028-10-01
 
 Mechanized claims about a stated calculus, plus measured correspondence with Rust. Tooling and assumptions remain outside the trusted language core.
 
@@ -473,6 +473,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0295`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0295-fix-proof-kernel-soundness-in-lattice-decide-induction-and-substitution.md) Fix proof kernel soundness in lattice_decide, induction, and substitution <sup>bug · p0 · 0</sup>
 - [x] [`0299`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0299-close-proof-kernel-soundness-gaps-and-gate-web-regressions.md) Close proof kernel soundness gaps and gate/web regressions <sup>feature · p2 · 0</sup>
 - [x] [`0303`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0303-close-pass-3-proof-kernel-site-web-and-gate-defects.md) Close Pass-3 proof kernel, site, web, and gate defects <sup>feature · p2 · 0</sup>
+- [x] [`0306`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0306-harden-proof-kernel-site-tables-decay-counter-and-hooks.md) Harden proof kernel, site tables, decay counter, and hooks <sup>bug · p0 · 0</sup>
 
 ## Unscheduled
 
