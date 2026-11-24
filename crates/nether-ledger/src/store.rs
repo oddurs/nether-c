@@ -635,20 +635,36 @@ impl Store {
     /// [`StoreError::Bundle`] if `objects/` contains a malformed filename, or
     /// [`StoreError::Io`] if reading or writing fails.
     pub fn export(&self, out: &mut impl io::Write) -> Result<usize, StoreError> {
+        const MAX_BUNDLE_OBJECTS: usize = 1_000_000;
+        const MAX_BUNDLE_BYTES: usize = 512 * 1024 * 1024;
+
         let mut malformed = BTreeSet::new();
         let files = self.scan_area("objects", &mut malformed)?;
         if !malformed.is_empty() {
             return Err(StoreError::Bundle("malformed path in objects/"));
         }
-        // What each object references inside this store, and its bytes.
-        let mut found: BTreeMap<Cairn, (Vec<Cairn>, Vec<u8>)> = BTreeMap::new();
+        if files.len() > MAX_BUNDLE_OBJECTS {
+            return Err(StoreError::Bundle("bundle count exceeds bound"));
+        }
+        // What each object references inside this store, and its on-disk path.
+        // Payload bytes are streamed from disk during emission rather than held
+        // in RAM all at once.
+        let mut found: BTreeMap<Cairn, (Vec<Cairn>, PathBuf)> = BTreeMap::new();
+        let mut total_bytes: usize = 0;
         for (cairn, path) in files {
-            let bytes = fs::read(path)?;
+            let bytes = fs::read(&path)?;
+            if bytes.len() > MAX_BUNDLE_OBJECT {
+                return Err(StoreError::Bundle("bundle object exceeds size bound"));
+            }
+            total_bytes = total_bytes
+                .checked_add(bytes.len())
+                .filter(|&t| t <= MAX_BUNDLE_BYTES)
+                .ok_or(StoreError::Bundle("bundle exceeds total size bound"))?;
             let refs = match verify_bytes(cairn, &bytes)? {
                 Stored::Node(n) => n.references(),
                 Stored::Value(_) => Vec::new(),
             };
-            found.insert(cairn, (refs, bytes));
+            found.insert(cairn, (refs, path));
         }
         // An object's height is 0 if it references nothing here, and one more
         // than the highest thing it references otherwise. Sorting by height and
@@ -684,8 +700,8 @@ impl Store {
                 todo.pop();
             }
         }
-        let mut entries: Vec<(Cairn, Vec<u8>)> =
-            found.into_iter().map(|(c, (_, bytes))| (c, bytes)).collect();
+        let mut entries: Vec<(Cairn, PathBuf)> =
+            found.into_iter().map(|(c, (_, path))| (c, path)).collect();
         entries.sort_by_key(|(c, _)| (height[c], *c));
         let mut hasher = blake3::Hasher::new();
         let mut send = |slice: &[u8]| -> io::Result<()> {
@@ -694,10 +710,12 @@ impl Store {
         };
         send(BUNDLE_MAGIC)?;
         send(&(entries.len() as u64).to_be_bytes())?;
-        for (cairn, bytes) in &entries {
+        for (cairn, path) in &entries {
+            let bytes = fs::read(path)?;
+            verify_bytes(*cairn, &bytes)?;
             send(cairn.as_bytes())?;
             send(&(bytes.len() as u64).to_be_bytes())?;
-            send(bytes)?;
+            send(&bytes)?;
         }
         out.write_all(hasher.finalize().as_bytes())?;
         Ok(entries.len())
@@ -735,18 +753,18 @@ impl Store {
             .ok_or(StoreError::Bundle("bundle count exceeds bound"))?;
         let mut seen = BTreeSet::new();
         let mut expected_before = BTreeSet::new();
-        let mut ref_cache: HashMap<Cairn, HashSet<Cairn>> = HashMap::new();
         let mut total_bytes: usize = 0;
+        let mut staged: Vec<(Cairn, Stored, Vec<u8>)> = Vec::with_capacity(count.min(4096));
         for _ in 0..count {
-            self.import_entry(
+            let entry = Self::read_bundle_entry(
                 src,
                 &mut hasher,
                 MAX_BUNDLE_BYTES,
                 &mut total_bytes,
                 &mut seen,
                 &mut expected_before,
-                &mut ref_cache,
             )?;
+            staged.push(entry);
         }
         let mut trailer = [0u8; 32];
         src.read_exact(&mut trailer).map_err(|e| {
@@ -762,20 +780,41 @@ impl Store {
         if src.read(&mut [0u8; 1])? != 0 {
             return Err(StoreError::Bundle("trailing bytes after bundle"));
         }
+        let mut ref_cache: HashMap<Cairn, HashSet<Cairn>> = HashMap::new();
+        for (cairn, stored, bytes) in staged {
+            if self.has(cairn) {
+                // §7.5.4: verify the on-disk object directly rather than relying
+                // on the in-memory `self.seen` cache.
+                let existing = fs::read(self.fanned("objects", cairn))?;
+                verify_bytes(cairn, &existing)?;
+                if let Stored::Node(node) = &stored {
+                    for target in node.references() {
+                        let known = match ref_cache.entry(target) {
+                            std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                            std::collections::hash_map::Entry::Vacant(e) => {
+                                e.insert(self.referrers(target)?.into_iter().collect())
+                            }
+                        };
+                        if known.insert(cairn) {
+                            self.add_ref(target, cairn)?;
+                        }
+                    }
+                }
+            } else {
+                self.put_verified(cairn, &stored, &bytes)?;
+            }
+        }
         Ok(count)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn import_entry(
-        &self,
+    fn read_bundle_entry(
         src: &mut impl io::Read,
         hasher: &mut blake3::Hasher,
         max_bundle_bytes: usize,
         total_bytes: &mut usize,
         seen: &mut BTreeSet<Cairn>,
         expected_before: &mut BTreeSet<Cairn>,
-        ref_cache: &mut HashMap<Cairn, HashSet<Cairn>>,
-    ) -> Result<(), StoreError> {
+    ) -> Result<(Cairn, Stored, Vec<u8>), StoreError> {
         let mut raw = [0u8; 32];
         read_hashed(src, hasher, &mut raw)?;
         let cairn = Cairn::from_bytes(raw);
@@ -807,32 +846,11 @@ impl Store {
         if let Stored::Node(node) = &stored {
             for target in node.references() {
                 if !seen.contains(&target) {
-                    if !self.has(target) {
-                        return Err(StoreError::Bundle("bundle is not in topological order"));
-                    }
                     expected_before.insert(target);
                 }
             }
         }
-        if self.has(cairn) {
-            self.get(cairn)?;
-            if let Stored::Node(node) = &stored {
-                for target in node.references() {
-                    let known = match ref_cache.entry(target) {
-                        std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-                        std::collections::hash_map::Entry::Vacant(e) => {
-                            e.insert(self.referrers(target)?.into_iter().collect())
-                        }
-                    };
-                    if known.insert(cairn) {
-                        self.add_ref(target, cairn)?;
-                    }
-                }
-            }
-        } else {
-            self.put_verified(cairn, &stored, &bytes)?;
-        }
-        Ok(())
+        Ok((cairn, stored, bytes))
     }
 }
 
@@ -2070,5 +2088,62 @@ mod tests {
             unknowable: false,
         });
         assert!(!audit.is_clean());
+    }
+
+    #[test]
+    fn bundle_partial_store_cache_collision_and_export_size_bounds() {
+        // Partial-store bundles produced by `export` (nodes referencing cairns
+        // not present in the source store) must round-trip through `import`
+        // while truncated bundles still leave the destination store untouched.
+        let partial_src_dir = Scratch::new();
+        let partial_src = partial_src_dir.store();
+        let leaf = partial_src.put(&Stored::Value(Value::Int(7))).unwrap();
+        let apply = partial_src
+            .put(&Stored::Node(Node::Apply {
+                function: Cairn::of_encoded(b"external-fn"),
+                args: vec![leaf],
+                result: Cairn::of_encoded(b"external-res"),
+            }))
+            .unwrap();
+        let mut bundle = Vec::new();
+        assert_eq!(partial_src.export(&mut bundle).unwrap(), 2);
+
+        let trunc_dst_dir = Scratch::new();
+        let trunc_dst = trunc_dst_dir.store();
+        assert!(matches!(
+            trunc_dst.import(&mut &bundle[..bundle.len() - 4]),
+            Err(StoreError::Bundle("truncated bundle"))
+        ));
+        assert!(trunc_dst.audit().unwrap().is_clean(), "truncated bundle must commit nothing");
+        assert!(!trunc_dst.has(leaf));
+
+        let partial_dst_dir = Scratch::new();
+        let partial_dst = partial_dst_dir.store();
+        assert_eq!(partial_dst.import(&mut &bundle[..]).unwrap(), 2);
+        assert!(partial_dst.has(leaf));
+        assert!(partial_dst.has(apply));
+
+        // Corrupting an already-cached destination object on disk must be caught
+        // by `import` rather than hidden by the in-memory `cache`.
+        let cached_dst_dir = Scratch::new();
+        let cached_dst = cached_dst_dir.store();
+        assert_eq!(cached_dst.put(&Stored::Value(Value::Int(7))).unwrap(), leaf);
+        assert_eq!(cached_dst.get(leaf).unwrap(), Stored::Value(Value::Int(7)));
+        std::fs::write(cached_dst.fanned("objects", leaf), b"tampered").unwrap();
+        assert!(matches!(
+            cached_dst.import(&mut &bundle[..]),
+            Err(StoreError::Corrupt { asked, .. }) if asked == leaf
+        ));
+
+        // Oversized objects are rejected by `export` with a bundle error.
+        let big_dir = Scratch::new();
+        let big = big_dir.store();
+        let huge = Cairn::of_encoded(b"huge");
+        let huge_path = big.fanned("objects", huge);
+        std::fs::create_dir_all(huge_path.parent().unwrap()).unwrap();
+        let f = std::fs::File::create(&huge_path).unwrap();
+        f.set_len(16 * 1024 * 1024 + 1).unwrap();
+        let mut sink = Vec::new();
+        assert!(matches!(big.export(&mut sink), Err(StoreError::Bundle(_))));
     }
 }

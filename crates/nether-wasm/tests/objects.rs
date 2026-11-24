@@ -100,3 +100,18 @@ fn invalid_utf8_source_returns_clean_error_and_alloc_free_round_trip() {
         nether_wasm::nether_free(q, 32);
     }
 }
+
+#[test]
+fn oversize_len_returns_error_block_without_ub() {
+    let dummy = 0u8;
+    // SAFETY: `nether_bury` rejects `len > isize::MAX` before forming a slice.
+    unsafe {
+        let out = nether_wasm::nether_bury(&raw const dummy, (isize::MAX as usize) + 1, 0);
+        assert!(!out.is_null());
+        let len_bytes = core::slice::from_raw_parts(out, 4);
+        let len = u32::from_le_bytes(len_bytes.try_into().unwrap()) as usize;
+        let text = core::str::from_utf8(core::slice::from_raw_parts(out.add(4), len)).unwrap();
+        assert!(text.contains("nothing was handed in"), "{text}");
+        nether_wasm::nether_free(out, len + 4);
+    }
+}

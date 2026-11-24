@@ -754,7 +754,7 @@ Bytes blow(I64 n, Bytes b) {
 }
 demand blow(25, b"0123456789abcdef");
 "#;
-    let err = bury_source(oom_src, 100_000).expect_err("concat > 64 MiB must collapse");
+    let err = bury_source(oom_src, 5_000_000).expect_err("concat > 64 MiB must collapse");
     assert!(matches!(err.kind, HaltKind::Collapsed(_)), "expected Collapsed, got {err:?}");
 }
 
@@ -777,4 +777,556 @@ demand descend disk { g() };
     let res = bury(&unit, 10_000).expect("buries");
     let out = res.as_unit(&unit);
     assert!(check(&out).is_empty(), "select exit-depth faults: {:?}", check(&out));
+}
+
+#[test]
+fn pass3_descend_return_and_nested_block() {
+    // 1. `descend` must be preserved on stuck `return` inside a function body.
+    let desc_src = r#"
+Bytes f() {
+    descend disk {
+        return must(read("a.txt"));
+    }
+}
+demand f();
+"#;
+    let desc_unit = parse_and_check(desc_src);
+    let desc_res = bury(&desc_unit, 10_000).expect("buries");
+    let desc_out = desc_res.as_unit(&desc_unit);
+    assert!(check(&desc_out).is_empty(), "descend return faults: {:?}", check(&desc_out));
+    let desc_printed = nether_syntax::print(&desc_out);
+    assert!(check(&parse_and_check(&desc_printed)).is_empty());
+
+    // 2. Nested block returning a stuck expression must retain its local bindings.
+    let nested_src = r#"
+Bytes f() {
+    {
+        Bytes w = b"hi";
+        return opaque w;
+    }
+    b"nope"
+}
+demand f();
+"#;
+    let nested_unit = parse_and_check(nested_src);
+    let nested_res = bury(&nested_unit, 10_000).expect("buries");
+    let nested_out = nested_res.as_unit(&nested_unit);
+    assert!(check(&nested_out).is_empty(), "nested block return faults: {:?}", check(&nested_out));
+    let nested_printed = nether_syntax::print(&nested_out);
+    assert!(check(&parse_and_check(&nested_printed)).is_empty());
+}
+
+#[test]
+fn pass3_specialise_caller_locals_latent_asserted_and_apart() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
+
+    // 3. `specialise` must never splice caller-frame LocalIds for deep Answered/Shade args.
+    let caller_local = r#"
+Bytes f(Answer<Bytes> a) {
+    Bytes u = must(descend net { get("u") });
+    concat(u, must(a))
+}
+Bytes caller() {
+    Bytes p1 = b"1";
+    Bytes p2 = b"2";
+    Answer<Bytes> local_ans = descend disk { read("f.txt") };
+    f(local_ans)
+}
+demand caller();
+"#;
+    let caller_unit = parse_and_check(caller_local);
+    let caller_ans = Answers::none().and(
+        Call { function: "read".into(), args: vec![Value::Str("f.txt".into()).cairn()] },
+        given_bytes(b"hi"),
+    );
+    let caller_res =
+        bury_with(&caller_unit, Cairn::of_encoded(caller_local.as_bytes()), 10_000, &caller_ans)
+            .expect("buries");
+    let caller_out = caller_res.as_unit(&caller_unit);
+    assert!(
+        check(&caller_out).is_empty(),
+        "caller-local specialise faults: {:?}",
+        check(&caller_out)
+    );
+    let caller_printed = nether_syntax::print(&caller_out);
+    assert!(check(&parse_and_check(&caller_printed)).is_empty());
+
+    // 4. `specialise` must recompute latent capabilities and clear local asserted depths.
+    let stale_latent = r#"
+Bytes f(Bool flag) {
+    if (flag) { must(read("a.txt")) } else { must(get("https://x")) }
+}
+demand descend disk { descend net { f(false) } };
+"#;
+    let latent_unit = parse_and_check(stale_latent);
+    let latent_res = bury(&latent_unit, 10_000).expect("buries");
+    let latent_out = latent_res.as_unit(&latent_unit);
+    assert!(check(&latent_out).is_empty(), "stale latent faults: {:?}", check(&latent_out));
+
+    let stale_assert = r#"
+Bytes@5 f(I64 k) {
+    Bytes@3 a = must(descend disk { read("a.txt") });
+    Bytes@5 b = must(descend net { get("u") });
+    opaque concat(a, b)
+}
+demand f(0);
+"#;
+    let assert_unit = parse_and_check(stale_assert);
+    let assert_ans = Answers::none().and(
+        Call { function: "read".into(), args: vec![Value::Str("a.txt".into()).cairn()] },
+        given_bytes(b"hi"),
+    );
+    let assert_res =
+        bury_with(&assert_unit, Cairn::of_encoded(stale_assert.as_bytes()), 10_000, &assert_ans)
+            .expect("buries");
+    let assert_out = assert_res.as_unit(&assert_unit);
+    assert!(check(&assert_out).is_empty(), "stale asserted local faults: {:?}", check(&assert_out));
+    let assert_printed = nether_syntax::print(&assert_out);
+    assert!(check(&parse_and_check(&assert_printed)).is_empty());
+
+    // 5. `apart` must not collide with global or local names.
+    let apart_src = r#"
+I64 f__1 = 0;
+Bytes f(I64 x) {
+    I64 y = x + 1;
+    must(descend disk { read("a") })
+}
+demand f(1);
+"#;
+    let apart_unit = parse_and_check(apart_src);
+    let apart_res = bury(&apart_unit, 10_000).expect("buries");
+    let apart_out = apart_res.as_unit(&apart_unit);
+    assert!(check(&apart_out).is_empty());
+    let apart_printed = nether_syntax::print(&apart_out);
+    assert!(check(&parse_and_check(&apart_printed)).is_empty(), "apart collision: {apart_printed}");
+}
+
+#[test]
+fn pass3_shade_origin_select_lowers_globals_residuals_and_declare() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
+
+    // 5a. Shade origin preserved on pure op over answered deep value.
+    let shade_eq = r#"
+Bytes b = must(descend disk { read("f") });
+demand (shade b) == (shade concat(b, b""));
+"#;
+    let eq_unit = parse_and_check(shade_eq);
+    let read_f = Answers::none().and(
+        Call { function: "read".into(), args: vec![Value::Str("f".into()).cairn()] },
+        given_bytes(b"hi"),
+    );
+    let eq_res = bury_with(&eq_unit, Cairn::of_encoded(shade_eq.as_bytes()), 10_000, &read_f)
+        .expect("buries");
+    assert_eq!(eq_res.demands[0].kind, ExprKind::Literal(Literal::Bool(true)));
+
+    // 5b. Stuck shade whose subexpression got answered must not lower origin under descend.
+    let shade_stuck = r#"
+demand descend net {
+    look (shade concat(must(descend disk { read("f") }), must(descend net { get("u") })))
+};
+"#;
+    let stuck_unit = parse_and_check(shade_stuck);
+    let get_u = Answers::none().and(
+        Call { function: "get".into(), args: vec![Value::Str("u".into()).cairn()] },
+        given_bytes(b"hi"),
+    );
+    let stuck_res =
+        bury_with(&stuck_unit, Cairn::of_encoded(shade_stuck.as_bytes()), 10_000, &get_u)
+            .expect("buries");
+    let stuck_out = stuck_res.as_unit(&stuck_unit);
+    assert!(check(&stuck_out).is_empty(), "stuck shade origin faults: {:?}", check(&stuck_out));
+
+    // 5c. Answered deep value shaded then consumed before starvation must prune cleanly.
+    let shade_prune = r#"
+demand {
+    Bytes b = must(descend disk { read("f") });
+    Shade<Bytes@3> s = shade b;
+    Bytes u = must(descend net { get("u") });
+    concat(u, descend disk { look s })
+};
+"#;
+    let prune_unit = parse_and_check(shade_prune);
+    let prune_res =
+        bury_with(&prune_unit, Cairn::of_encoded(shade_prune.as_bytes()), 10_000, &read_f)
+            .expect("buries");
+    let prune_out = prune_res.as_unit(&prune_unit);
+    assert!(check(&prune_out).is_empty(), "pruned shade faults: {:?}", check(&prune_out));
+
+    // 5d. Reassigning a deep Shade before opaque must not synthesize `s = s;`.
+    let shade_assign = r#"
+Bytes f() {
+    Shade<Bytes@3> s = shade must(descend disk { read("a") });
+    s = shade must(descend disk { read("b") });
+    descend disk { opaque (look s) }
+}
+demand f();
+"#;
+    let assign_unit = parse_and_check(shade_assign);
+    let read_ab = Answers::none()
+        .and(
+            Call { function: "read".into(), args: vec![Value::Str("a".into()).cairn()] },
+            given_bytes(b"A"),
+        )
+        .and(
+            Call { function: "read".into(), args: vec![Value::Str("b".into()).cairn()] },
+            given_bytes(b"B"),
+        );
+    let assign_res =
+        bury_with(&assign_unit, Cairn::of_encoded(shade_assign.as_bytes()), 10_000, &read_ab)
+            .expect("buries");
+    let assign_out = assign_res.as_unit(&assign_unit);
+    assert!(check(&assign_out).is_empty(), "shade assign faults: {:?}", check(&assign_out));
+    let assign_printed = nether_syntax::print(&assign_out);
+    assert!(!assign_printed.contains("s = s;"), "must not emit no-op s = s: {assign_printed}");
+}
+
+#[test]
+fn pass3_select_lowers_guards() {
+    // 6a & 6b. Decided select preserves local write depths under speculation and before opaque.
+    let sel_spec = r#"
+Bytes@5 g(Bool c) {
+    Bytes x = must(descend disk { read("f") });
+    if (must(descend net { get("u") }) == b"a") { return b"early"; }
+    if (c) { x = b"pure"; }
+    descend net { look shade x }
+}
+demand g(false);
+"#;
+    let spec_unit = parse_and_check(sel_spec);
+    let spec_res = bury(&spec_unit, 10_000).expect("buries");
+    let spec_out = spec_res.as_unit(&spec_unit);
+    assert!(check(&spec_out).is_empty(), "speculated select lowers faults: {:?}", check(&spec_out));
+
+    let sel_opaque = r#"
+Bytes@5 g(Bool c) {
+    Bytes x;
+    if (c) { x = must(descend net { get("u") }); }
+    else   { x = b"ok"; }
+    Shade<Bytes@5> s = opaque (shade x);
+    descend net { look s }
+}
+demand g(false);
+"#;
+    let opq_unit = parse_and_check(sel_opaque);
+    let opq_res = bury(&opq_unit, 10_000).expect("buries");
+    let opq_out = opq_res.as_unit(&opq_unit);
+    assert!(check(&opq_out).is_empty(), "opaque select lowers faults: {:?}", check(&opq_out));
+    let opq_printed = nether_syntax::print(&opq_out);
+    assert!(
+        check(&parse_and_check(&opq_printed)).is_empty(),
+        "reparsed select guard: {opq_printed}"
+    );
+}
+
+#[test]
+fn pass3_globals_residuals_declare_and_rollback() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{Call, Value};
+
+    // 7a. Starved global inside rolled-back loop must not dig duplicate act holes.
+    let dup_global = r"
+Bytes g = descend entropy { draw(4) };
+demand { for (I64 i = 0; i < 1; i = i + 1) { g; } };
+demand g;
+";
+    let dup_unit = parse_and_check(dup_global);
+    let dup_res = bury(&dup_unit, 10_000).expect("buries");
+    assert_eq!(dup_res.holes.len(), 1, "one global must dig at most one entropy hole");
+
+    // 7b. Rolled-back act answer must not be stolen by a later demand.
+    let steal_act = r#"
+Bytes g = {
+    Bytes a = descend entropy { draw(4) };
+    Bytes b = must(descend net { get("u") });
+    concat(a, b)
+};
+demand g;
+demand descend entropy { draw(4) };
+"#;
+    let steal_unit = parse_and_check(steal_act);
+    let draw_four = Answers::none().and(
+        Call { function: "draw".into(), args: vec![Value::Int(4).cairn()] },
+        Value::Bytes(b"AAAA".to_vec()),
+    );
+    let steal_res =
+        bury_with(&steal_unit, Cairn::of_encoded(steal_act.as_bytes()), 10_000, &draw_four)
+            .expect("buries");
+    assert!(
+        !matches!(steal_res.demands[1].kind, ExprKind::Literal(_)),
+        "second demand must not steal rolled-back draw answer"
+    );
+
+    // 7c. Starved global calling an act helper indirectly must not be inlined twice.
+    let indirect_act = r"
+Bytes do_draw() { descend entropy { draw(4) } }
+Bytes g = do_draw();
+demand g;
+demand g;
+";
+    let ind_unit = parse_and_check(indirect_act);
+    let ind_res = bury(&ind_unit, 10_000).expect("buries");
+    let ind_printed = nether_syntax::print(&ind_res.as_unit(&ind_unit));
+    assert_eq!(
+        ind_printed.matches("demand g;").count(),
+        2,
+        "indirect act global must stay as `demand g;` at both demands: {ind_printed}"
+    );
+    assert_eq!(
+        ind_printed.matches("do_draw(").count(),
+        2,
+        "only the function definition and global initializer may name do_draw(: {ind_printed}"
+    );
+}
+
+#[test]
+fn pass3_residuals_declare_and_rollback() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
+
+    // 8a. Pure `answered(x)` captures mutated `x` cleanly as `answered(b"new")`.
+    let ans_mut = r#"
+Bytes f() {
+    Bytes x = b"old";
+    x = b"new";
+    Answer<Bytes> a = answered(x);
+    Bytes u = must(descend disk { read("f") });
+    opaque concat(must(a), u)
+}
+demand f();
+"#;
+    let mut_unit = parse_and_check(ans_mut);
+    let mut_res = bury(&mut_unit, 10_000).expect("buries");
+    let mut_out = mut_res.as_unit(&mut_unit);
+    assert!(check(&mut_out).is_empty(), "answered(x) faults: {:?}", check(&mut_out));
+    let mut_printed = nether_syntax::print(&mut_out);
+    assert!(
+        mut_printed.contains("answered(b\"new\")"),
+        "expected answered(b\"new\"), got: {mut_printed}"
+    );
+
+    // 8b. Answered `post` whose binding is consumed before starvation is pruned from residue.
+    let post_prune = r#"
+demand {
+    Answer<Bytes> a = descend net! { post("https://x", b"hi") };
+    Bytes x = must(a);
+    Bytes u = must(descend net { get("u") });
+    concat(x, u)
+};
+"#;
+    let post_unit = parse_and_check(post_prune);
+    let post_ans = Answers::none().and(
+        Call {
+            function: "post".into(),
+            args: vec![
+                Value::Str("https://x".into()).cairn(),
+                Value::Bytes(b"hi".to_vec()).cairn(),
+            ],
+        },
+        given_bytes(b"ok"),
+    );
+    let post_res =
+        bury_with(&post_unit, Cairn::of_encoded(post_prune.as_bytes()), 10_000, &post_ans)
+            .expect("buries");
+    let post_out = post_res.as_unit(&post_unit);
+    assert!(check(&post_out).is_empty());
+    let post_printed = nether_syntax::print(&post_out);
+    assert!(
+        !post_printed.contains("post("),
+        "consumed answered post must not stay in residue: {post_printed}"
+    );
+
+    // 10. `Stmt::Declare` inside a loop resets `env` between iterations.
+    let decl_loop = r"
+I64 f() {
+    I64 out = 0;
+    for (I64 i = 0; i < 2; i = i + 1) {
+        I64 x;
+        if (i == 0) { x = 10; } else { out = x; }
+    }
+    out
+}
+demand f();
+";
+    let decl_unit = parse_and_check(decl_loop);
+    let decl_res = bury(&decl_unit, 10_000).expect("buries");
+    assert_ne!(
+        decl_res.demands[0].kind,
+        ExprKind::Literal(Literal::Int(10)),
+        "loop-local Declare must not leak turn 0 value into turn 1"
+    );
+
+    // 11. Rolled-back deposit in an abandoned loop must not leak its Value into `named`.
+    let rollback_val = r#"
+demand {
+    for (I64 i = 0; i < 2; i = i + 1) {
+        if (i == 0) { 12345; }
+        else { must(descend disk { read("f") }); }
+    }
+};
+"#;
+    let rb_unit = parse_and_check(rollback_val);
+    let rb_res = bury(&rb_unit, 10_000).expect("buries");
+    let leaked = Value::Int(12345).cairn();
+    assert!(
+        !rb_res.named.iter().any(|(c, _)| *c == leaked),
+        "rolled-back deposit value must not leak into residue.named"
+    );
+}
+
+#[test]
+fn pass4_pc_assign_rollback_seal_and_fuel() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
+
+    // 1. Outer-local `Answer` assignment inside a finished nested block survives into residue.
+    let nested_ans = r#"
+demand {
+    Answer<Bytes> a = refused(absent);
+    {
+        a = descend disk { read("k") };
+    }
+    Bytes u = must(descend disk { read("u") });
+    concat(must(a), u)
+};
+"#;
+    let na_unit = parse_and_check(nested_ans);
+    let na_ans = Answers::none().and(
+        Call { function: "read".into(), args: vec![Value::Str("k".into()).cairn()] },
+        given_bytes(b"hello"),
+    );
+    let na_res =
+        bury_with(&na_unit, Cairn::of_encoded(nested_ans.as_bytes()), 10_000, &na_ans).unwrap();
+    let na_out = na_res.as_unit(&na_unit);
+    assert!(check(&na_out).is_empty(), "nested Answer assign faults: {:?}", check(&na_out));
+    let na_printed = nether_syntax::print(&na_out);
+    assert!(
+        na_printed.contains("read(\"k\")"),
+        "outer-local Answer assign in inner block must survive: {na_printed}"
+    );
+
+    // 2. Global and Stmt::Let returning Answer after a deposit roll back that deposit.
+    let global_dep = r#"
+Answer<Bytes> g = {
+    777;
+    descend disk { read("g") }
+};
+demand g;
+demand g;
+"#;
+    let gd_unit = parse_and_check(global_dep);
+    let gd_ans = Answers::none().and(
+        Call { function: "read".into(), args: vec![Value::Str("g".into()).cairn()] },
+        given_bytes(b"ok"),
+    );
+    let gd_res =
+        bury_with(&gd_unit, Cairn::of_encoded(global_dep.as_bytes()), 10_000, &gd_ans).unwrap();
+    assert!(
+        gd_res.deposits.is_empty(),
+        "global that cannot close-residualise must roll back deposits: {:?}",
+        gd_res.deposits
+    );
+
+    let let_dep = r#"
+demand {
+    Answer<Bytes> a = {
+        888;
+        descend disk { read("l") }
+    };
+    Bytes u = must(descend disk { read("u") });
+    concat(must(a), u)
+};
+"#;
+    let ld_unit = parse_and_check(let_dep);
+    let ld_ans = Answers::none().and(
+        Call { function: "read".into(), args: vec![Value::Str("l".into()).cairn()] },
+        given_bytes(b"ok"),
+    );
+    let ld_res =
+        bury_with(&ld_unit, Cairn::of_encoded(let_dep.as_bytes()), 10_000, &ld_ans).unwrap();
+    assert!(
+        ld_res.deposits.is_empty(),
+        "Stmt::Let that cannot close-residualise must roll back deposits: {:?}",
+        ld_res.deposits
+    );
+}
+
+#[test]
+fn pass4_seal_list_fuel_and_branch_pc() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    // 3. Speculative `seal` does not leak its Value into `residue.named`.
+    let spec_seal = r#"
+demand {
+    Bytes u = must(descend disk { read("u") });
+    Cairn c = seal 99999;
+    u
+};
+"#;
+    let ss_unit = parse_and_check(spec_seal);
+    let ss_res = bury(&ss_unit, 10_000).unwrap();
+    let sealed_val = Value::Int(99999).cairn();
+    assert!(
+        !ss_res.named.iter().any(|(c, _)| *c == sealed_val),
+        "speculative seal must not leak Value into residue.named"
+    );
+
+    // 4. Answered `list(expr)` preserves reduced argument in residue.
+    let list_arg = r#"
+demand {
+    Str dir = "sub";
+    Answer<Str[]> ls = descend disk { list(dir) };
+    Bytes u = must(descend disk { read("u") });
+    if (given(ls)) { u } else { b"" }
+};
+"#;
+    let la_unit = parse_and_check(list_arg);
+    let la_ans = Answers::none().and(
+        Call { function: "list".into(), args: vec![Value::Str("sub".into()).cairn()] },
+        Value::Answer(Box::new(AnswerOf::Given(Value::Array(vec![Value::Str("a".into())])))),
+    );
+    let la_res =
+        bury_with(&la_unit, Cairn::of_encoded(list_arg.as_bytes()), 10_000, &la_ans).unwrap();
+    let la_out = la_res.as_unit(&la_unit);
+    assert!(check(&la_out).is_empty(), "list aggregate answer faults: {:?}", check(&la_out));
+
+    // 5. Byte-proportional fuel halts exponential concat amplification within fuel budget.
+    let amp = r#"
+Bytes grow(I64 n, Bytes b) {
+    if (n == 0) { b } else { grow(n - 1, concat(b, b)) }
+}
+demand grow(18, b"0123456789abcdef");
+"#;
+    let amp_unit = parse_and_check(amp);
+    let amp_err =
+        bury(&amp_unit, 1_000).expect_err("byte-proportional fuel must halt amplification");
+    assert!(matches!(amp_err.kind, HaltKind::OutOfFuel { .. }), "got {amp_err:?}");
+
+    // 6. Undecided branch arm `pc` and stuck-RHS assign preserve valid depths in residue.
+    let pc_assign = r#"
+demand {
+    I64 x = 0;
+    if (given(descend disk { read("flag") })) {
+        Bytes u = must(descend disk { read("u") });
+        x = 1;
+        u
+    } else {
+        b""
+    }
+};
+"#;
+    let pc_unit = parse_and_check(pc_assign);
+    let pc_res = bury(&pc_unit, 10_000).unwrap();
+    let pc_out = pc_res.as_unit(&pc_unit);
+    assert!(check(&pc_out).is_empty(), "undecided branch pc faults: {:?}", check(&pc_out));
 }
