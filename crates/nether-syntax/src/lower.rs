@@ -171,11 +171,11 @@ impl<'a> Lowering<'a> {
         self.ty_in(t, false).0
     }
 
-    /// Lower an `ast::Type`, returning `(ir_type, effective_asserted_depth)`.
+    /// Lower an `ast::Type`, returning `(ir_type, effective_asserted_depth, has_inferred_shade)`.
     /// When `allow_inferred_shade` is true (initialized `let` bindings), direct
     /// `Shade<T>` annotations may omit `@d` and inherit the RHS origin.
-    fn ty_in(&mut self, t: &ast::Type, allow_inferred_shade: bool) -> (ir::Type, Asserted) {
-        let (mut inner, alias_asserted) = self.atom_in(t, allow_inferred_shade);
+    fn ty_in(&mut self, t: &ast::Type, allow_inferred_shade: bool) -> (ir::Type, Asserted, bool) {
+        let (mut inner, alias_asserted, has_inferred) = self.atom_in(t, allow_inferred_shade);
         for len in t.arrays.iter().rev() {
             let len = match len {
                 Some(n) if *n < 0 => {
@@ -187,10 +187,16 @@ impl<'a> Lowering<'a> {
             };
             inner = ir::Type::Array { elem: Box::new(inner), len };
         }
-        (inner, Self::asserted(t).or(alias_asserted))
+        let own = Self::asserted(t);
+        if let (Some(a), Some(b)) = (own, alias_asserted)
+            && a != b
+        {
+            self.fault(t.span, FaultKind::Expected("a matching depth annotation on typedef"));
+        }
+        (inner, own.or(alias_asserted), has_inferred)
     }
 
-    fn atom_in(&mut self, t: &ast::Type, allow_inferred_shade: bool) -> (ir::Type, Asserted) {
+    fn atom_in(&mut self, t: &ast::Type, allow_inferred_shade: bool) -> (ir::Type, Asserted, bool) {
         let name = t.name.text.as_str();
         let reject_args = |this: &mut Self, ok_len: usize| {
             if t.args.len() > ok_len {
@@ -202,7 +208,7 @@ impl<'a> Lowering<'a> {
             reject_args(self, 0);
             if self.expanding.contains(&key) || self.expanding.len() > 16 {
                 self.fault(t.span, FaultKind::Expected("a non-cyclic typedef"));
-                return (ir::Type::Unit, None);
+                return (ir::Type::Unit, None, false);
             }
             self.expanding.push(key);
             let expanded = self.ty_in(alias, false);
@@ -211,10 +217,11 @@ impl<'a> Lowering<'a> {
         }
         if self.structs.contains_key(name) {
             reject_args(self, 0);
-            return (ir::Type::Struct(name.to_string()), None);
+            return (ir::Type::Struct(name.to_string()), None, false);
         }
-        let args: Vec<ir::Type> =
-            t.args.iter().map(|a| self.ty_in(a, allow_inferred_shade).0).collect();
+        let args: Vec<(ir::Type, Asserted, bool)> =
+            t.args.iter().map(|a| self.ty_in(a, allow_inferred_shade)).collect();
+        let mut has_inferred = args.iter().any(|(_, _, inf)| *inf);
         let ty = match name {
             "U0" => {
                 reject_args(self, 0);
@@ -246,7 +253,7 @@ impl<'a> Lowering<'a> {
             }
             "Answer" => {
                 reject_args(self, 1);
-                if let Some(a) = args.into_iter().next() {
+                if let Some((a, _, _)) = args.into_iter().next() {
                     ir::Type::Answer(Box::new(a))
                 } else {
                     self.fault(t.span, FaultKind::Expected("`Answer<T>` to say what it answers"));
@@ -257,10 +264,11 @@ impl<'a> Lowering<'a> {
             // An initialized binding may omit it (`Shade<Bytes>`) and inherit it from the value.
             "Shade" => {
                 reject_args(self, 1);
-                if let Some((arg_ast, arg_ir)) = t.args.first().zip(args.into_iter().next()) {
-                    let origin = if let Some(d) = arg_ast.depth.and_then(Depth::new) {
+                if let Some((arg_ir, arg_asserted, _)) = args.into_iter().next() {
+                    let origin = if let Some(d) = arg_asserted {
                         d
                     } else {
+                        has_inferred = true;
                         if !allow_inferred_shade {
                             self.fault(
                                 t.span,
@@ -281,7 +289,7 @@ impl<'a> Lowering<'a> {
                 ir::Type::Unit
             }
         };
-        (ty, None)
+        (ty, None, has_inferred)
     }
 
     fn asserted(t: &ast::Type) -> Asserted {
@@ -301,7 +309,7 @@ impl<'a> Lowering<'a> {
                         if !seen_fields.insert(f.name.text.as_str()) {
                             self.fault(f.name.span, FaultKind::Expected("a unique field name"));
                         }
-                        let (ty, asserted) = self.ty_in(&f.ty, false);
+                        let (ty, asserted, _) = self.ty_in(&f.ty, false);
                         ir::Field { name: f.name.text.clone(), ty, asserted, span: f.span }
                     })
                     .collect();
@@ -395,8 +403,8 @@ impl<'a> Lowering<'a> {
                 self.scopes.pop();
                 continue;
             };
-            let (ty, asserted) = self.ty_in(&binding.ty, true);
-            let value = self.landed(init, Some(ty.clone()));
+            let (ty, asserted, has_inferred) = self.ty_in(&binding.ty, true);
+            let value = self.landed(init, (!has_inferred).then(|| ty.clone()));
             self.scopes.pop();
             let ty = self.binding_type(&binding.ty, ty, &value);
             let id = ir::GlobalId(u32::try_from(out.len()).unwrap_or(0));
@@ -482,7 +490,7 @@ impl<'a> Lowering<'a> {
                 ir::Type::Shade { origin: val_origin, inner: val_inner },
             ) => {
                 let arg_ast = ty_ast.args.first();
-                let explicit = arg_ast.and_then(|a| a.depth).is_some();
+                let explicit = arg_ast.is_some_and(|a| self.has_explicit_depth(a));
                 let next_origin = if explicit { origin } else { *val_origin };
                 let next_inner = if let Some(arg) = arg_ast {
                     self.fill_shades(arg, arg.arrays.len(), *inner, val_inner)
@@ -492,6 +500,23 @@ impl<'a> Lowering<'a> {
                 ir::Type::Shade { origin: next_origin, inner: Box::new(next_inner) }
             }
             (_, other, _) => other,
+        }
+    }
+
+    fn has_explicit_depth(&self, mut t: &'a ast::Type) -> bool {
+        let mut hops = 0;
+        loop {
+            if t.depth.is_some() {
+                return true;
+            }
+            let Some(alias) = self.aliases.get(t.name.text.as_str()).copied() else {
+                return false;
+            };
+            hops += 1;
+            if hops > 16 {
+                return false;
+            }
+            t = alias;
         }
     }
 
@@ -513,14 +538,14 @@ impl<'a> Lowering<'a> {
                 if !seen_params.insert(p.name.text.as_str()) {
                     self.fault(p.name.span, FaultKind::Expected("a unique parameter name"));
                 }
-                let (ty, asserted) = self.ty_in(&p.ty, false);
+                let (ty, asserted, _) = self.ty_in(&p.ty, false);
                 // [ABS]: a parameter is bound at depth 0, and its real depth
                 // arrives at the call site.
                 self.bind(&p.name, ty, asserted, Depth::PURE, p.span)
             })
             .collect();
 
-        let ret_ty = self.ty(&f.ret);
+        let (ret_ty, asserted_ret, _) = self.ty_in(&f.ret, false);
         self.returning = Some(ret_ty.clone());
         let body = self.block_landed(&f.body, Some(ret_ty));
         let ret = self.returning.take().unwrap_or(ir::Type::Unit);
@@ -530,7 +555,7 @@ impl<'a> Lowering<'a> {
             params,
             ret,
             ret_depth: tail_depth.join(self.ret_depth),
-            asserted_ret: Self::asserted(&f.ret),
+            asserted_ret,
             latent: Self::needs(&body),
             asserted_latent: Self::written(f.latent.as_deref()),
             locals: std::mem::take(&mut self.locals),
@@ -675,14 +700,14 @@ impl Lowering<'_> {
                 // No initialiser is how an aggregate is constructed: declare
                 // it, then write its fields. §4.2, §5.4.
                 let Some(init) = binding.value.as_ref() else {
-                    let (ty, asserted) = self.ty_in(&binding.ty, false);
+                    let (ty, asserted, _) = self.ty_in(&binding.ty, false);
                     let local = self.bind(&binding.name, ty, asserted, Depth::PURE, binding.span);
                     out.push(ir::Stmt::Declare { local });
                     self.last_exit = ExitPc::NONE;
                     return;
                 };
-                let (ty, asserted) = self.ty_in(&binding.ty, true);
-                let value = self.landed(init, Some(ty.clone()));
+                let (ty, asserted, has_inferred) = self.ty_in(&binding.ty, true);
+                let value = self.landed(init, (!has_inferred).then(|| ty.clone()));
                 let ty = self.binding_type(&binding.ty, ty, &value);
                 let depth = value.depth;
                 let local = self.bind(&binding.name, ty, asserted, depth, binding.span);

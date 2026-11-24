@@ -575,3 +575,281 @@ Bytes@0 steal() {
         assert!(lower(&ast).is_err(), "expected lowering error for: {bad_lower}");
     }
 }
+
+#[test]
+fn pass4_core_prim_control_dag_field_assert_and_syntax_hardening() {
+    use nether_core::{Depth, Expr, ExprKind, Held, Prim, Span, Type, Unit};
+
+    let sp = Span::default();
+    let shade0 = Type::Shade { origin: Depth::PURE, inner: Box::new(Type::Bytes) };
+    let shade5 = Type::Shade { origin: Depth::new(5).unwrap(), inner: Box::new(Type::Bytes) };
+
+    // 1. Monomorphic Prim::Len cannot forge Shade<Bytes@0> from Shade<Bytes@5>.
+    let bad_prim = Unit {
+        structs: vec![],
+        globals: vec![],
+        locals: vec![],
+        funcs: vec![],
+        demands: vec![nether_core::Demand {
+            value: Expr {
+                kind: ExprKind::Prim(Prim::Len),
+                ty: Type::Fn {
+                    params: vec![shade5],
+                    latent: Held::NONE,
+                    result: Box::new(shade0.clone()),
+                    result_depth: Depth::PURE,
+                },
+                depth: Depth::PURE,
+                span: sp,
+            },
+            span: sp,
+        }],
+    };
+    assert!(!check(&bad_prim).is_empty(), "monomorphic Prim must not forge Shade");
+
+    // 2. Loop / Break / Continue / Return cannot forge Shade<Bytes@0> or run outside valid scopes.
+    let bad_loop = Unit {
+        structs: vec![],
+        globals: vec![],
+        locals: vec![],
+        funcs: vec![],
+        demands: vec![nether_core::Demand {
+            value: Expr {
+                kind: ExprKind::Loop {
+                    body: Box::new(Expr {
+                        kind: ExprKind::Break,
+                        ty: Type::Unit,
+                        depth: Depth::PURE,
+                        span: sp,
+                    }),
+                    step: None,
+                },
+                ty: shade0.clone(),
+                depth: Depth::PURE,
+                span: sp,
+            },
+            span: sp,
+        }],
+    };
+    assert!(!check(&bad_loop).is_empty(), "Loop must not fabricate Shade");
+
+    let bad_top_return = Unit {
+        structs: vec![],
+        globals: vec![],
+        locals: vec![],
+        funcs: vec![],
+        demands: vec![nether_core::Demand {
+            value: Expr {
+                kind: ExprKind::Return(None),
+                ty: Type::Unit,
+                depth: Depth::PURE,
+                span: sp,
+            },
+            span: sp,
+        }],
+    };
+    assert!(!check(&bad_top_return).is_empty(), "Return outside a function must be rejected");
+}
+
+#[test]
+fn pass4_break_before_return_and_dag_and_field_assert() {
+    use nether_core::{Block, Depth, Expr, ExprKind, FuncDef, Held, Span, Stmt, Type, Unit};
+    use std::fmt::Write as _;
+
+    let sp = Span::default();
+    let shade0 = Type::Shade { origin: Depth::PURE, inner: Box::new(Type::Bytes) };
+
+    let bad_break_before_ret = Unit {
+        structs: vec![],
+        globals: vec![],
+        locals: vec![],
+        funcs: vec![FuncDef {
+            name: "f".into(),
+            params: vec![],
+            ret: shade0.clone(),
+            ret_depth: Depth::PURE,
+            asserted_ret: None,
+            latent: Held::NONE,
+            asserted_latent: None,
+            locals: vec![],
+            body: Block {
+                stmts: vec![
+                    Stmt::Expr(Expr {
+                        kind: ExprKind::Break,
+                        ty: Type::Unit,
+                        depth: Depth::PURE,
+                        span: sp,
+                    }),
+                    Stmt::Expr(Expr {
+                        kind: ExprKind::Return(Some(Box::new(Expr {
+                            kind: ExprKind::Rite {
+                                rite: nether_core::Rite::Shade,
+                                operand: Box::new(Expr {
+                                    kind: ExprKind::Literal(nether_core::Literal::Bytes(vec![])),
+                                    ty: Type::Bytes,
+                                    depth: Depth::PURE,
+                                    span: sp,
+                                }),
+                            },
+                            ty: shade0,
+                            depth: Depth::PURE,
+                            span: sp,
+                        }))),
+                        ty: Type::Unit,
+                        depth: Depth::PURE,
+                        span: sp,
+                    }),
+                ],
+                tail: None,
+                span: sp,
+            },
+            span: sp,
+        }],
+        demands: vec![],
+    };
+    assert!(
+        !check(&bad_break_before_ret).is_empty(),
+        "Break outside loop / before Return must be rejected"
+    );
+
+    // 4. Acyclic diamond struct DAG (30 levels) must check in linear time without hanging.
+    let mut dag = String::from("struct S0 { I64 a; };\n");
+    for i in 1..=30 {
+        let _ = writeln!(dag, "struct S{i} {{ S{} a; S{} b; }};", i - 1, i - 1);
+    }
+    dag.push_str("U0 f() { S30 x; x; }\n");
+    clean(&ir(&dag));
+
+    // 5. Struct Field::asserted depth annotations are checked on field assignment.
+    let field_assert = ir(
+        "struct Header { Bytes@0 tag; };\nU0 f() { Header h; h.tag = descend disk { must(read(\"s\")) }; }\n",
+    );
+    assert!(
+        check(&field_assert)
+            .iter()
+            .any(|f| matches!(f.kind, nether_core::FaultKind::Asserted { .. })),
+        "struct field @0 assertion must reject depth-3 assignment"
+    );
+
+    // 6. Long flat binary, postfix, and array-dimension chains hit TooDeep instead of stack overflow.
+    let mut long_add = String::from("I64 x = 1");
+    for _ in 0..300 {
+        long_add.push_str(" + 1");
+    }
+    long_add.push_str(";\n");
+    assert!(parse(long_add.as_bytes()).is_err(), "long binary chain must hit TooDeep");
+
+    let mut long_arr = String::from("I64");
+    for _ in 0..300 {
+        long_arr.push_str("[]");
+    }
+    long_arr.push_str(" x;\n");
+    assert!(parse(long_arr.as_bytes()).is_err(), "long array dimension chain must hit TooDeep");
+}
+
+#[test]
+fn pass4_typedef_short_circuit_print_and_refused_shade() {
+    use nether_core::{Block, Depth, Expr, ExprKind, FuncDef, Held, Span, Stmt, Type, Unit};
+
+    let sp = Span::default();
+
+    // 7. Typedef asserted depths apply on returns and Shade<Typedef>, and conflicts fault.
+    let td_ret =
+        ir("typedef Bytes@0 PureBytes;\nPureBytes leak() { descend disk { must(read(\"s\")) } }\n");
+    assert!(
+        check(&td_ret).iter().any(|f| matches!(f.kind, nether_core::FaultKind::Asserted { .. })),
+        "typedef @0 must be enforced on function return"
+    );
+    clean(&ir(
+        "typedef Bytes@3 DiskBytes;\nU0 f(Shade<DiskBytes> s) { descend disk { look s; } }\n",
+    ));
+    let td_shade_bad =
+        ir("typedef Bytes@3 DiskBytes;\nU0 g() { Shade<DiskBytes> s = shade b\"p\"; }\n");
+    assert!(!check(&td_shade_bad).is_empty(), "Shade<DiskBytes> must keep @3 origin");
+    let td_conflict = parse(
+        b"typedef Bytes@0 PureBytes;\nU0 f() { PureBytes@3 x = descend disk { must(read(\"s\")) }; }\n",
+    )
+    .expect("parses");
+    assert!(lower(&td_conflict).is_err(), "conflicting typedef @0 and use @3 must fail lowering");
+
+    // 8. `print::short_circuit` must not emit `«a branch outside a statement»` on non-bool `if`/`else if`.
+    let sel_unit = Unit {
+        structs: vec![],
+        globals: vec![],
+        locals: vec![],
+        funcs: vec![FuncDef {
+            name: "f".into(),
+            params: vec![],
+            ret: Type::Unit,
+            ret_depth: Depth::PURE,
+            asserted_ret: None,
+            latent: Held::NONE,
+            asserted_latent: None,
+            locals: vec![],
+            body: Block {
+                stmts: vec![Stmt::Expr(Expr {
+                    kind: ExprKind::Select {
+                        cond: Box::new(Expr {
+                            kind: ExprKind::Literal(nether_core::Literal::Bool(true)),
+                            ty: Type::Bool,
+                            depth: Depth::PURE,
+                            span: sp,
+                        }),
+                        then: Box::new(Expr {
+                            kind: ExprKind::Literal(nether_core::Literal::Bool(true)),
+                            ty: Type::Bool,
+                            depth: Depth::PURE,
+                            span: sp,
+                        }),
+                        otherwise: Box::new(Expr {
+                            kind: ExprKind::Select {
+                                cond: Box::new(Expr {
+                                    kind: ExprKind::Literal(nether_core::Literal::Bool(false)),
+                                    ty: Type::Bool,
+                                    depth: Depth::PURE,
+                                    span: sp,
+                                }),
+                                then: Box::new(Expr {
+                                    kind: ExprKind::Literal(nether_core::Literal::Int(1)),
+                                    ty: Type::Int,
+                                    depth: Depth::PURE,
+                                    span: sp,
+                                }),
+                                otherwise: Box::new(Expr {
+                                    kind: ExprKind::Literal(nether_core::Literal::Int(2)),
+                                    ty: Type::Int,
+                                    depth: Depth::PURE,
+                                    span: sp,
+                                }),
+                            },
+                            ty: Type::Int,
+                            depth: Depth::PURE,
+                            span: sp,
+                        }),
+                    },
+                    ty: Type::Unit,
+                    depth: Depth::PURE,
+                    span: sp,
+                })],
+                tail: None,
+                span: sp,
+            },
+            span: sp,
+        }],
+        demands: vec![],
+    };
+    let printed_sel = nether_syntax::print(&sel_unit);
+    assert!(
+        !printed_sel.contains("«a branch outside a statement»"),
+        "must not misprint non-bool Select as ||: {printed_sel}"
+    );
+    assert!(parse(printed_sel.as_bytes()).is_ok(), "printed Select must parse: {printed_sel}");
+
+    // 9. `Answer<Shade<Bytes>> x = refused(absent);` must not fabricate @8 origin.
+    let bad_refused =
+        parse(b"U0 f() { Answer<Shade<Bytes>> x = refused(absent); }\n").expect("parses");
+    assert!(
+        lower(&bad_refused).is_err(),
+        "refused(absent) must reject omitted Shade<T> origin instead of fabricating @8"
+    );
+}

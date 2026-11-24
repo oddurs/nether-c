@@ -248,11 +248,28 @@ fn as_block(x: &Expr, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
     }
 }
 
+/// Whether an arm of a short-circuit `Select` can be printed in expression position.
+fn expr_printable(x: &Expr) -> bool {
+    match &x.kind {
+        ExprKind::Loop { .. } | ExprKind::Return(_) | ExprKind::Break | ExprKind::Continue => false,
+        ExprKind::Select { .. } => short_circuit(x),
+        _ => true,
+    }
+}
+
 /// Whether this select is one of the two that were operators.
 fn short_circuit(x: &Expr) -> bool {
+    if x.ty != Type::Bool {
+        return false;
+    }
     let ExprKind::Select { then, otherwise, .. } = &x.kind else { return false };
-    matches!(otherwise.kind, ExprKind::Literal(Literal::Bool(false)))
-        || matches!(then.kind, ExprKind::Literal(Literal::Bool(true)))
+    if is_false(otherwise) {
+        then.ty == Type::Bool && expr_printable(then)
+    } else if matches!(then.kind, ExprKind::Literal(Literal::Bool(true))) {
+        otherwise.ty == Type::Bool && expr_printable(otherwise)
+    } else {
+        false
+    }
 }
 
 /// An expression in a place that takes any expression.
@@ -360,9 +377,11 @@ fn bare(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
         // way §04 lets one appear there.
         ExprKind::Block(b) => block(b, unit, f, 0),
         ExprKind::Select { cond, then, otherwise } => {
-            if is_false(otherwise) {
+            if short_circuit(x) && is_false(otherwise) {
                 format!("{} && {}", at(cond, level("&&")), at(then, level("&&") - 1))
-            } else if matches!(then.kind, ExprKind::Literal(Literal::Bool(true))) {
+            } else if short_circuit(x)
+                && matches!(then.kind, ExprKind::Literal(Literal::Bool(true)))
+            {
                 format!("{} || {}", at(cond, level("||")), at(otherwise, level("||") - 1))
             } else {
                 // §04 has no `if` expression, so this cannot have come from
