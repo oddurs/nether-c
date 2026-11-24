@@ -113,6 +113,11 @@ fn end_of(source: &[u8]) -> Span {
 /// produced, so neither states a bound of its own.
 pub const MAX_NESTING: u32 = 64;
 
+/// Maximum length of a flat left-associative binary, postfix, or array-dimension
+/// chain. Bounds AST depth for recursive downstream passes (`lower`, `check`,
+/// `print`, and `Drop`) where `MAX_NESTING` resets between flat chain steps.
+pub const MAX_CHAIN: usize = 256;
+
 struct Parser<'a> {
     tokens: &'a [Token],
     at: usize,
@@ -462,6 +467,10 @@ impl Parser<'_> {
         }
         let mut arrays = Vec::new();
         while self.eat(Punct::LBracket) {
+            if arrays.len() >= MAX_CHAIN {
+                self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
+                return Err(Given);
+            }
             let len = match self.peek() {
                 Some(TokenKind::Int(n)) => {
                     let n = *n;
@@ -669,7 +678,13 @@ impl Parser<'_> {
         }
         let from = self.span();
         let mut lhs = self.binary(level - 1)?;
+        let mut chain = 0usize;
         while let Some(op) = self.operator_at(level) {
+            if chain >= MAX_CHAIN {
+                self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
+                return Err(Given);
+            }
+            chain += 1;
             let rhs = self.binary(level - 1)?;
             let kind = ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) };
             lhs = Expr { kind, span: self.since(from) };
@@ -738,8 +753,14 @@ impl Parser<'_> {
     fn postfix(&mut self) -> Parsed<Expr> {
         let from = self.span();
         let mut base = self.primary()?;
+        let mut chain = 0usize;
         loop {
             let kind = if self.eat(Punct::LParen) {
+                if chain >= MAX_CHAIN {
+                    self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
+                    return Err(Given);
+                }
+                chain += 1;
                 let mut args = Vec::new();
                 if !self.at_punct(Punct::RParen) {
                     loop {
@@ -752,10 +773,20 @@ impl Parser<'_> {
                 self.expect(Punct::RParen, "`)` to close the arguments")?;
                 ExprKind::Call { callee: Box::new(base), args }
             } else if self.eat(Punct::LBracket) {
+                if chain >= MAX_CHAIN {
+                    self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
+                    return Err(Given);
+                }
+                chain += 1;
                 let index = Box::new(self.expr()?);
                 self.expect(Punct::RBracket, "`]` to close the index")?;
                 ExprKind::Index { base: Box::new(base), index }
             } else if self.eat(Punct::Dot) {
+                if chain >= MAX_CHAIN {
+                    self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
+                    return Err(Given);
+                }
+                chain += 1;
                 let name = self.name("a field name")?;
                 ExprKind::Field { base: Box::new(base), name }
             } else {

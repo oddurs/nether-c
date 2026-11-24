@@ -258,6 +258,7 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
         returns: Depth::PURE,
         needs: None,
         fixpoint_steps: 0,
+        in_loop: 0,
     };
     // A unit-level binding may name one declared before it and not one
     // declared after, so declaration order is checking order. Unit-level code
@@ -347,6 +348,8 @@ struct Checker<'a> {
     needs: Option<Held>,
     /// Total loop fixpoint re-iterations used in this unit.
     fixpoint_steps: usize,
+    /// Number of enclosing `Loop` expressions around the current expression.
+    in_loop: u32,
 }
 
 impl<'a> Checker<'a> {
@@ -587,42 +590,43 @@ impl<'a> Checker<'a> {
         self.func.map_or_else(|| self.unit.local(id), |f| f.local(id)).map(|l| &l.ty)
     }
 
-    fn field_ty(&self, base_ty: &Type, index: u32) -> Option<&'a Type> {
+    fn field_def(&self, base_ty: &Type, index: u32) -> Option<&'a crate::Field> {
         let Type::Struct(name) = base_ty else { return None };
         let def = self.unit.structs.iter().find(|s| s.name == *name)?;
-        def.fields.get(index as usize).map(|f| &f.ty)
+        def.fields.get(index as usize)
     }
 
-    fn place_ty(&self, place: &crate::Place) -> Option<&'a Type> {
+    fn field_ty(&self, base_ty: &Type, index: u32) -> Option<&'a Type> {
+        self.field_def(base_ty, index).map(|f| &f.ty)
+    }
+
+    fn place_ty_and_asserts(&self, place: &crate::Place) -> Option<(&'a Type, Vec<(Span, Depth)>)> {
         let mut cur = self.local_ty(place.local)?;
+        let mut asserts = Vec::new();
         for proj in &place.path {
             cur = match proj {
-                Proj::Field(idx) => self.field_ty(cur, *idx)?,
+                Proj::Field(idx) => {
+                    let field = self.field_def(cur, *idx)?;
+                    if let Some(d) = field.asserted {
+                        asserts.push((field.span, d));
+                    }
+                    &field.ty
+                }
                 Proj::Index(_) => match cur {
                     Type::Array { elem, .. } => elem,
                     _ => return None,
                 },
             };
         }
-        Some(cur)
+        Some((cur, asserts))
     }
 
-    /// [ABS], which produces both of an arrow's depths.
-    ///
-    /// The body is checked with the parameters at depth 0 — a parameter's real
-    /// depth arrives at the call site and [APP] joins it there. What comes
-    /// back is the body's value depth, including through every `return`, which
-    /// is the other way a value leaves. What the function asks of its caller
-    /// is whatever an application in it needed and did not have.
-    ///
-    /// The ambient depth it is checked at does not matter, because the ambient
-    /// depth gates premises and nothing else: no derived depth depends on it.
-    /// So the body is walked once, at 0, collecting what it asks for.
     fn unit_frame(&mut self) {
         self.func = None;
         self.locals = vec![None; self.unit.locals.len()];
         self.named = vec![None; self.unit.locals.len()];
         self.deferred_asserts.clear();
+        self.in_loop = 0;
     }
 
     fn func(&mut self, f: &'a FuncDef) {
@@ -632,6 +636,7 @@ impl<'a> Checker<'a> {
         self.deferred_asserts.clear();
         self.returns = Depth::PURE;
         self.needs = Some(Held::NONE);
+        self.in_loop = 0;
         for p in &f.params {
             self.bind(*p, Depth::PURE, f.span);
         }
@@ -714,6 +719,12 @@ impl<'a> Checker<'a> {
                 (Depth::PURE, ExitPc::NONE)
             }
             ExprKind::Break | ExprKind::Continue => {
+                if self.in_loop == 0 {
+                    self.malformed(x.span, "loop jump outside a loop");
+                }
+                if !self.depth_types_agree(&x.ty, &Type::Unit) {
+                    self.malformed(x.span, "loop jump produces U0");
+                }
                 (Depth::PURE, ExitPc { loop_exit: Some(pc), fn_exit: None })
             }
 
@@ -932,12 +943,16 @@ impl<'a> Checker<'a> {
             // stop. Two walks were not enough: `z = y; y = x; x = deep;` takes
             // a turn per link to carry `x`'s depth to `z`.
             ExprKind::Loop { body, step } => {
+                if !self.depth_types_agree(&x.ty, &Type::Unit) {
+                    self.malformed(x.span, "loop produces U0");
+                }
                 let mut inner = bound_inside(body);
                 if let Some(s) = step.as_deref() {
                     inner.extend(bound_inside(s));
                 }
                 let mut loop_pc = pc;
-                loop {
+                self.in_loop += 1;
+                let res = loop {
                     let mark = self.faults.len();
                     let was = (self.carried(&inner), loop_pc);
                     for id in &inner {
@@ -972,9 +987,17 @@ impl<'a> Checker<'a> {
                         break (d, out_exit);
                     }
                     self.faults.truncate(mark);
-                }
+                };
+                self.in_loop -= 1;
+                res
             }
             ExprKind::Return(v) => {
+                if self.func.is_none() {
+                    self.malformed(x.span, "return outside a function");
+                }
+                if !self.depth_types_agree(&x.ty, &Type::Unit) {
+                    self.malformed(x.span, "return produces U0");
+                }
                 let (d, ex) =
                     v.as_ref().map_or((Depth::PURE, ExitPc::NONE), |v| self.expr(v, ambient, pc));
                 if let Some(v) = v.as_ref() {
@@ -1030,10 +1053,12 @@ impl<'a> Checker<'a> {
                 if let Some(ed) = e_val.deepest() {
                     cur_pc = cur_pc.join(ed);
                 }
-                if let Some(pty) = self.place_ty(place) {
+                let mut field_asserts = Vec::new();
+                if let Some((pty, asserts)) = self.place_ty_and_asserts(place) {
                     if !self.depth_types_agree(&value.ty, pty) {
                         self.malformed(value.span, "shade origin does not match assigned place");
                     }
+                    field_asserts = asserts;
                 } else if self.carries_depth_type(&value.ty) {
                     self.malformed(x.span, "assigned place has no valid type");
                 }
@@ -1044,6 +1069,11 @@ impl<'a> Checker<'a> {
                     self.fault(x.span, FaultKind::Frozen { named });
                 }
                 let written = d_value.join(d_path).join(cur_pc);
+                for (_, asserted) in field_asserts {
+                    self.asserted_lazy(x.span, written, Some(asserted), |this| {
+                        this.blame(value, written)
+                    });
+                }
                 match self.locals.get_mut(place.local.0 as usize) {
                     Some(Some(was)) => {
                         let next = was.join(written);
@@ -1190,7 +1220,35 @@ impl<'a> Checker<'a> {
                             self.malformed(x.span, "shade origin does not match `must` result");
                         }
                     }
-                    _ => {}
+                    Prim::Refused => {
+                        let ok = params.len() == 1
+                            && !self.carries_depth_type(&params[0])
+                            && matches!(result.as_ref(), Type::Answer(_));
+                        if !ok {
+                            self.malformed(x.span, "`refused` produces an `Answer<T>`");
+                        }
+                    }
+                    Prim::Given | Prim::Refusal => {
+                        let ok = params.len() == 1
+                            && matches!(&params[0], Type::Answer(_))
+                            && !self.carries_depth_type(result);
+                        if !ok {
+                            self.malformed(
+                                x.span,
+                                "answer inspector takes `Answer<T>` and returns no shade or function",
+                            );
+                        }
+                    }
+                    _ => {
+                        if self.carries_depth_type(result)
+                            || params.iter().any(|t| self.carries_depth_type(t))
+                        {
+                            self.malformed(
+                                x.span,
+                                "monomorphic prelude function cannot take or return a shade or function",
+                            );
+                        }
+                    }
                 }
             }
             Type::Fn { .. } => self.malformed(x.span, "this prelude function has another stratum"),
@@ -1217,11 +1275,11 @@ impl<'a> Checker<'a> {
                     return false;
                 }
                 seen.push(name.as_str());
-                let found = self.unit.structs.iter().find(|s| s.name == *name).is_some_and(|s| {
-                    s.fields.iter().any(|f| self.carries_depth_inner(&f.ty, seen))
-                });
-                seen.pop();
-                found
+                self.unit
+                    .structs
+                    .iter()
+                    .find(|s| s.name == *name)
+                    .is_some_and(|s| s.fields.iter().any(|f| self.carries_depth_inner(&f.ty, seen)))
             }
             _ => false,
         }
@@ -1256,8 +1314,40 @@ impl<'a> Checker<'a> {
 }
 
 fn block_always_returns(b: &Block) -> bool {
-    b.stmts.iter().any(|s| matches!(s, Stmt::Expr(e) if always_returns(e)))
-        || b.tail.as_deref().is_some_and(always_returns)
+    for s in &b.stmts {
+        match s {
+            Stmt::Expr(e) => {
+                if always_returns(e) {
+                    return true;
+                }
+                if may_jump_loop(e) {
+                    return false;
+                }
+            }
+            Stmt::Let { value, .. } => {
+                if always_returns(value) {
+                    return true;
+                }
+                if may_jump_loop(value) {
+                    return false;
+                }
+            }
+            Stmt::Declare { .. } => {}
+        }
+    }
+    b.tail.as_deref().is_some_and(always_returns)
+}
+
+fn may_jump_loop(x: &Expr) -> bool {
+    let mut todo = vec![x];
+    while let Some(cur) = todo.pop() {
+        match &cur.kind {
+            ExprKind::Break | ExprKind::Continue => return true,
+            ExprKind::Loop { .. } => {}
+            _ => todo.extend(children(cur)),
+        }
+    }
+    false
 }
 
 fn always_returns(x: &Expr) -> bool {
@@ -1267,7 +1357,8 @@ fn always_returns(x: &Expr) -> bool {
             always_returns(body)
         }
         ExprKind::Select { cond, then, otherwise } => {
-            always_returns(cond) || (always_returns(then) && always_returns(otherwise))
+            always_returns(cond)
+                || (!may_jump_loop(cond) && always_returns(then) && always_returns(otherwise))
         }
         ExprKind::Block(b) => block_always_returns(b),
         _ => false,

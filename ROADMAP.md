@@ -128,7 +128,7 @@ Buried. Canonical encoding frozen and complete, cairns under a versioned domain 
 
 ## calculus — The Core Calculus
 
-`##########` 100% · 22 of 22 done · due 2027-01-15
+`##########` 100% · 23 of 23 done · due 2027-01-15
 
 Buried. The IR, the bidirectional depth checker, normalization by evaluation, holes and residualization, fuel and starvation diagnostics, seal/shade/look, the generative monotonicity test, and the stage one proof.
 
@@ -156,6 +156,7 @@ Buried. The IR, the bidirectional depth checker, normalization by evaluation, ho
 - [x] [`0297`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0297-enforce-depth-soundness-parser-bounds-and-ir-round-trip.md) Enforce depth soundness, parser bounds, and IR round-trip <sup>feature · p2 · 0</sup>
 - [x] [`0301`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0301-close-shade-origin-bypass-split-shr-hang-and-pc-order-gaps.md) Close Shade origin bypass, split-shr hang, and pc/order gaps <sup>feature · p2 · 0</sup>
 - [x] [`0305`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0305-close-pass-3-orpheus-depth-type-and-syntax-lowering-gaps.md) Close Pass-3 Orpheus, depth-type, and syntax lowering gaps <sup>bug · p1 · 0</sup>
+- [x] [`0307`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0307-close-pass-4-prim-control-flow-dag-and-syntax-gaps.md) Close Pass-4 prim, control-flow, DAG, and syntax gaps <sup>bug · p0 · 0</sup>
 
 ## surface — The Surface
 
