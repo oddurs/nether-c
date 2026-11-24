@@ -13,10 +13,13 @@ from kernel import (
     InductiveRelation,
     ProofFault,
     Rule,
+    Term,
     Theorem,
     app,
+    apply_rule,
     assume,
     conj,
+    disj,
     elem,
     eq,
     eq_d,
@@ -33,6 +36,7 @@ from kernel import (
     rewrite,
     rule_induction,
     subset,
+    subst_term,
     sym,
     var,
 )
@@ -58,7 +62,9 @@ FORBIDDEN_IDENTIFIERS = frozenset(
 # The seal is a Python name, so any proof script could import it and mint a
 # theorem without an inference rule. Only the kernel may name it. A string
 # passed to `getattr` still gets past this scan, which a reviewer must catch.
-KERNEL_PRIVATE = frozenset({"_SEAL", "_thm", "_token"})
+KERNEL_PRIVATE = frozenset(
+    {"_SEAL", "_thm", "_token", "_THEOREM_DATA", "_REL_DATA", "_RELATIONS", "_thm_payload", "_rel_payload"}
+)
 
 
 def scan_source_for_admissions(path: Path, text: str) -> None:
@@ -345,6 +351,94 @@ def verify_kernel_soundness_guards() -> None:
         pass
     else:
         raise AssertionError("Formula accepted extraneous subs/binder")
+
+    # 23. rule_induction must snapshot `params` against stateful iterables
+    pair_rel = InductiveRelation("Pair01", (Rule("Mk", (), pred("Pair01", var("0"), var("1"))),))
+
+    class EvilParams:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __len__(self) -> int:
+            return 2
+
+        def __iter__(self):
+            self.calls += 1
+            return iter(("_a", "_a") if self.calls == 4 else ("_a", "_b"))
+
+    try:
+        rule_induction(
+            pair_rel,
+            EvilParams(),  # type: ignore[arg-type]
+            eq(var("_a"), var("1")),
+            {"Mk": lambda _p, _ih: refl(var("1"))},
+        )
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("rule_induction accepted stateful params iterable")
+
+    # 24. apply_rule must snapshot `subst` against stateful dict subclasses
+    eq_zero = InductiveRelation(
+        "EqZero",
+        (Rule("R", (eq(var("x"), var("0")),), pred("EqZero", var("x"))),),
+    )
+
+    class EvilMap(dict):
+        def __init__(self) -> None:
+            super().__init__({"x": var("0")})
+            self.n = 0
+
+        def __getitem__(self, k: str) -> Term:
+            self.n += 1
+            return var("0") if self.n == 1 else var("1")
+
+    res_map = apply_rule(eq_zero, "R", EvilMap(), [refl(var("0"))])
+    if res_map.conclusion != pred("EqZero", var("0")):
+        raise AssertionError(f"apply_rule accepted stateful dict substitution: {res_map.conclusion}")
+
+    # 25. Theorem and InductiveRelation must not expose __dict__ or allow attribute mutation
+    t0 = refl(var("0"))
+    try:
+        vars(t0)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("Theorem exposed __dict__ via vars()")
+    try:
+        object.__setattr__(t0, "conclusion", eq(var("0"), var("1")))
+    except AttributeError:
+        pass
+    else:
+        raise AssertionError("Theorem allowed object.__setattr__ mutation")
+    try:
+        object.__setattr__(pair_rel, "rules", ())
+    except AttributeError:
+        pass
+    else:
+        raise AssertionError("InductiveRelation allowed object.__setattr__ mutation")
+
+    # 26. Reserved 0-ary constructors (Bool, VUnit, Nil) cannot be substituted as variables
+    for cname in ("Bool", "VUnit", "Nil"):
+        try:
+            subst_term(var(cname), {cname: var("I64")})
+        except ProofFault:
+            pass
+        else:
+            raise AssertionError(f"subst_term treated reserved constant `{cname}` as a variable")
+
+    # 27. lattice_decide must reject short-circuited out-of-range depths, reserved constants, and Unicode digits
+    for bad_goal in (
+        disj(le(var("0"), var("0")), le(var("999"), var("0"))),
+        le(var("True"), var("8")),
+        le(var("²"), var("8")),
+    ):
+        try:
+            lattice_decide(bad_goal)
+        except ProofFault:
+            pass
+        else:
+            raise AssertionError(f"lattice_decide accepted invalid goal `{bad_goal}`")
 
 
 def verify_closed_theorem(name: str, thm: Theorem, expected_head: str = "") -> None:

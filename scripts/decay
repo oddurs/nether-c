@@ -39,6 +39,8 @@ def scan_rust(text: str) -> list[tuple[str, str]]:
     for raw in lines:
         buf: list[str] = []
         i, n = 0, len(raw)
+        if (in_string or raw_hashes is not None) and raw.strip():
+            buf.append("_")
         while i < n:
             if block_depth > 0:
                 if raw[i : i + 2] == "/*":
@@ -87,11 +89,13 @@ def scan_rust(text: str) -> list[tuple[str, str]]:
                         hashes += 1
                         j += 1
                     if j < n and raw[j] == '"':
+                        buf.append("_")
                         raw_hashes = hashes
                         i = j + 1
                         continue
 
             if raw[i] == '"':
+                buf.append("_")
                 in_string = True
                 i += 1
                 continue
@@ -105,9 +109,11 @@ def scan_rust(text: str) -> list[tuple[str, str]]:
                     j = i + 3
                     while j < n and raw[j] != "'":
                         j += 1
+                    buf.append("_")
                     i = j + 1 if j < n else n
                     continue
                 if i + 2 < n and raw[i + 2] == "'":
+                    buf.append("_")
                     i += 3
                     continue
                 buf.append("'")
@@ -121,13 +127,19 @@ def scan_rust(text: str) -> list[tuple[str, str]]:
     return out
 
 
+_ITEM_HEAD = re.compile(r"\b(use|static|type|const|fn|mod|struct|enum|union|trait|impl|extern|macro_rules)\b")
+
+
 def core_lines(path: Path) -> int:
     """Count core lines in one Rust file, excluding `#[cfg(test)]` items."""
     text = path.read_text(encoding="utf-8")
     skip = False
     pending = False
+    semi_item = False
+    head_tokens: list[str] = []
     depth = 0
     bracket_depth = 0
+    angle_depth = 0
     count = 0
 
     for _raw, bare in scan_rust(text):
@@ -146,10 +158,49 @@ def core_lines(path: Path) -> int:
                     has_core = True
                 skip = True
                 pending = True
+                semi_item = False
+                head_tokens = []
                 depth = 0
                 bracket_depth = 0
+                angle_depth = 0
                 pos = m.end()
                 continue
+
+            # Identify whether the skipped item terminates at `;` (use/static/type/const value)
+            # or at a matching `}` (fn/mod/struct/enum/union/trait/impl/extern/macro_rules).
+            if pending and depth == 0 and bracket_depth == 0 and angle_depth == 0 and not semi_item and not head_tokens:
+                if bare[pos].isspace():
+                    pos += 1
+                    continue
+                if bare[pos : pos + 2] == "#[":
+                    bracket_depth = 1
+                    pos += 2
+                    continue
+                if bare[pos].isalpha() or bare[pos] == "_":
+                    j = pos
+                    while j < n and (bare[j].isalnum() or bare[j] == "_"):
+                        j += 1
+                    word = bare[pos:j]
+                    pos = j
+                    if word in ("pub", "unsafe", "async", "default"):
+                        continue
+                    if word in ("use", "static", "type"):
+                        semi_item = True
+                        head_tokens.append(word)
+                        continue
+                    if word == "const":
+                        rest = bare[pos:].lstrip()
+                        if rest.startswith("fn") and (len(rest) == 2 or not (rest[2].isalnum() or rest[2] == "_")):
+                            head_tokens.append("fn")
+                        elif rest.startswith("unsafe") and (len(rest) == 6 or not (rest[6].isalnum() or rest[6] == "_")):
+                            head_tokens.append("fn")
+                        else:
+                            semi_item = True
+                            head_tokens.append("const")
+                        continue
+                    if _ITEM_HEAD.fullmatch(word):
+                        head_tokens.append(word)
+                        continue
 
             ch = bare[pos]
             pos += 1
@@ -157,14 +208,20 @@ def core_lines(path: Path) -> int:
                 bracket_depth += 1
             elif ch in ")]" and bracket_depth > 0:
                 bracket_depth -= 1
-            elif ch == "{" and bracket_depth == 0:
-                pending = False
+            elif pending and bracket_depth == 0 and ch == "<":
+                angle_depth += 1
+            elif pending and bracket_depth == 0 and angle_depth > 0 and ch == ">":
+                if pos < 2 or bare[pos - 2] != "-":
+                    angle_depth -= 1
+            elif ch == "{" and bracket_depth == 0 and angle_depth == 0:
+                if not semi_item:
+                    pending = False
                 depth += 1
-            elif ch == "}" and bracket_depth == 0:
+            elif ch == "}" and bracket_depth == 0 and angle_depth == 0:
                 depth -= 1
-                if depth <= 0 and not pending:
+                if depth <= 0 and not pending and not semi_item:
                     skip = False
-            elif ch == ";" and pending and depth == 0 and bracket_depth == 0:
+            elif ch == ";" and depth == 0 and bracket_depth == 0 and angle_depth == 0 and (pending or semi_item):
                 skip = False
 
         if has_core:

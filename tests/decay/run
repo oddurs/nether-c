@@ -45,6 +45,17 @@ mod tests {
 fn helper() -> [u8; 4] {
     [0; 4]
 }
+#[cfg(test)]
+use std::collections::{HashMap, HashSet};
+#[cfg(test)]
+const CFG_OBJ: S = S {
+    a: 1,
+};
+#[cfg(test)]
+fn const_generic() -> Arr<{ 1 }> {
+    let x = 1;
+    Arr
+}
 """
 
 
@@ -119,6 +130,16 @@ def main() -> int:
                f"{seal3.read_text().strip() if seal3.exists() else 'nothing'}, wanted {actual}")
 
         (src / "lib.rs").write_text(BODY, encoding="utf-8")
+
+        # Literal-only core lines must still count toward the ceiling.
+        lit_src = tmp / "lit"
+        lit_src.mkdir()
+        (lit_src / "lib.rs").write_text('fn msg() -> &\'static str {\n    "hello"\n}\n', encoding="utf-8")
+        lit_seal = tmp / "lit_sealed"
+        lit_r = run(lit_src, lit_seal)
+        expect("literal-only core lines are counted",
+               lit_r.returncode == 0 and int(lit_seal.read_text().strip()) == 3,
+               f"got {lit_seal.read_text().strip() if lit_seal.exists() else lit_r.stderr}")
 
         # A ceiling that is not a number. Without a check the comparisons fail
         # and the script reports success, so an empty file turns the rule off

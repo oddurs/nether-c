@@ -149,8 +149,9 @@ cmd_pr() {
   stamp="$(git rev-parse --git-dir)/nether-checked"
   printf '%s\n' "$head" > "$stamp"
   say "pushing $branch"
-  if ! git push -u origin "$branch"; then
-    rc=$?
+  rc=0
+  git push -u origin "$branch" || rc=$?
+  if [ "$rc" -ne 0 ]; then
     rm -f "$stamp"
     die "push of $branch failed (exit $rc); nothing was opened or armed"
   fi
