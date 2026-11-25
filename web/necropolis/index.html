@@ -1,15 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-lamp="out">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'">
 <title>The necropolis — trace browser</title>
 <link rel="stylesheet" href="../../site/tokens.css">
 <link rel="stylesheet" href="../../site/nether.css">
+<link rel="icon" href="../../site/icon.svg" type="image/svg+xml">
+<script src="theme.js"></script>
+</head>
 <body class="necropolis">
 <a class="skip" href="#explorer">Skip to the trace</a>
 <header class="nc-header">
-  <p class="nc-eyebrow"><a href="../../site/index.html">NETHER C</a> / THE NECROPOLIS</p>
+  <div class="nc-header-bar">
+    <p class="nc-eyebrow"><a href="../../site/index.html">NETHER C</a> / THE NECROPOLIS</p>
+    <button class="lamp nc-lamp" type="button" data-lamp-toggle aria-pressed="false">lamp: <span data-lamp-state>out</span></button>
+  </div>
   <h1>What remains.</h1>
   <p>A program was buried. These are the things it left behind.</p>
   <p class="nc-private">Local burial. No source leaves this page. No world capabilities granted.</p>

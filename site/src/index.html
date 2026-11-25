@@ -7,10 +7,6 @@
 <p class="desk-notice">Please keep all limbs inside the current stratum.</p>
 </div>
 
-<p class="tagline">A C dialect in which <em>nothing runs</em>. A program is
-buried &mdash; evaluated as far as the world permits &mdash; and what ships is
-a trace and the holes the world still owes an answer to.</p>
-
 <details class="complaints">
 <summary>Complaints hatch</summary>
 <p>You were promised a running program. Understandable.</p>
@@ -234,7 +230,7 @@ because a design document that lists only its advantages is marketing.</p>
 
 <p>Burial evaluates everything it can and stops at the first thing it has to ask
 the world. That question becomes a <strong>hole</strong>, and the hole is carried
-in the artifact along with the whole dependency graph that leads to it.</p>
+in the trace along with the whole dependency graph that leads to it.</p>
 
 <p>A hole is always a question the world can answer immediately. Its arguments
 are already buried: <code>read(concat(dir, name))</code> does not leave a hole
@@ -395,6 +391,12 @@ and the build fails the day the board moves and the page does not.</p>
 Every rite in <a href="spec/08-rites.html">&sect;08</a> is built. A trace that
 reached stratum 7 replays byte for byte, and one that reached stratum 8 refuses
 to claim it can. What is left is the part you can look at.</p>
+
+<p>To inspect a buried trace locally in a browser, build and serve the
+Necropolis trace browser in
+<a href="https://github.com/oddurs/nether-c/tree/main/web/necropolis">web/necropolis/</a>
+with <code>scripts/task wasm &amp;&amp; scripts/task serve</code> and open
+<code>/web/necropolis/</code>.</p>
 
 {{HOLES}}
 

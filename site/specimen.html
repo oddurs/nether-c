@@ -4,17 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The face &mdash; Nether C</title>
-<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="description" content="Type specimen for Nether 8: every glyph in regular and bold weights across 8, 16, 24 and 32px.">
 <meta name="color-scheme" content="dark light">
+<link rel="canonical" href="https://netherc.org/specimen.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="The face &mdash; Nether C">
-<meta property="og:description" content="A C dialect in which nothing runs. Programs are buried, not executed; what ships is the trace and the holes the world still owes an answer to.">
+<meta property="og:description" content="Type specimen for Nether 8: every glyph in regular and bold weights across 8, 16, 24 and 32px.">
+<meta property="og:url" content="https://netherc.org/specimen.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Nether C. A C dialect in which nothing runs. The program has already run; you read what is left of it.">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="nether.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="nether-bold.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="nether.css">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -22,9 +26,10 @@
 /* Before paint, so nothing flashes. The lamp is out by default: the nether is
    unlit, and seeing anything down here is something you choose to do. */
 try {
-  if (localStorage.getItem("nc-lamp") === "lit") {
-    document.documentElement.setAttribute("data-lamp", "lit");
-  }
+  var lit = localStorage.getItem("nc-lamp") === "lit";
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (lit) document.documentElement.setAttribute("data-lamp", "lit");
+  if (lit || reduced) document.documentElement.setAttribute("data-img-pending", "");
 } catch (e) {}
 </script>
 </head>
@@ -34,31 +39,31 @@ try {
 
 <div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
 <header class="terminal-header">
-<pre class="sign" aria-label="Nether C">
+<pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
 █ █ █ ████    █   █████ ████  ████    █
 █  ██ █       █   █   █ █     █  █    █
 █   █ █████   █   █   █ █████ █   █    ████
 </pre>
-<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor" aria-hidden="true">_</span></p>
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="index.html">front desk</a><a href="manual/index.html">manual</a><a href="spec/index.html">specification</a><a href="specimen.html" aria-current="page">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="index.html">front desk</a><a href="manual/index.html">manual</a><a href="spec/index.html">specification</a><a href="specimen.html" aria-current="page">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
 <details open class="directory-drawer">
 <summary>Directory</summary>
-<nav class="contents" aria-label="Specimen contents"><p>the face</p><ol role="list"><li><a href="#scale">1. The four sizes</a></li><li><a href="#samples">2. In use and in pairs</a></li><li><a href="#punctuation">3. Space and punctuation (33)</a></li><li><a href="#digits">4. Digits (10)</a></li><li><a href="#capitals">5. Capitals (26)</a></li><li><a href="#lowercase">6. Lowercase (26)</a></li><li><a href="#symbols">7. Signs, Greek, arrows and box drawing (45)</a></li></ol></nav>
+<nav class="contents" aria-label="Specimen contents"><p>the face</p><ol role="list"><li><a href="#scale"><span class="dir-num">1.</span><span>The four sizes</span></a></li><li><a href="#samples"><span class="dir-num">2.</span><span>In use and in pairs</span></a></li><li><a href="#punctuation"><span class="dir-num">3.</span><span>Space and punctuation (33)</span></a></li><li><a href="#digits"><span class="dir-num">4.</span><span>Digits (10)</span></a></li><li><a href="#capitals"><span class="dir-num">5.</span><span>Capitals (26)</span></a></li><li><a href="#lowercase"><span class="dir-num">6.</span><span>Lowercase (26)</span></a></li><li><a href="#symbols"><span class="dir-num">7.</span><span>Signs, Greek, arrows and box drawing (45)</span></a></li></ol></nav>
 <p class="directory-note">You are here.<br>Here is below.</p>
 </details>
 </aside>
 <div class="reading-pane">
 <div class="pane-title"><span>The face</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">Nether 8 &middot; Version 1.000 &middot; 8&times;8 cell &middot; 7-column mono advance &middot; 140 glyphs &middot; <a href="https://github.com/oddurs/nether-c/blob/main/site/font.py">edit the source</a></p><h1>The face</h1><p>Every page on this site is set in <strong>Nether 8</strong>, an 8&times;8 bitmap face drawn in <a href="https://github.com/oddurs/nether-c/blob/main/site/font.py">site/font.py</a> and packed into <a href="nether.woff">nether.woff</a> (regular, weight 400) and <a href="nether-bold.woff">nether-bold.woff</a> (bold, weight 700) without a font library. Six columns of ink (0..5) and one column of blank right bearing make a fixed seven-pixel (896-unit) advance; rows 0..6 sit above the baseline and row 7 below it.</p><p>Both weights are drawn by hand: 117 glyphs have a separate 700 drawing and 23 are named in <code>SAME</code> where six columns cannot hold a second pixel without closing a counter, or where box-drawing rules must join across weights. <code>font-synthesis</code> is <code>none</code>, and <a href="https://github.com/oddurs/nether-c/blob/main/tests/font/run">tests/font/run</a> fails if any glyph in either shipped file is missing from this page.</p><p class="center"><img class="specimen" src="gfx/specimen.gif" data-dark-src="gfx/specimen.gif" data-lit-src="gfx/specimen-lit.gif" width="435" height="246" alt="Every glyph in Nether 8, drawn at 3x across the nine stratum colours."></p><h2 id="scale"><a href="#scale">1. The four sizes</a></h2><p>A face drawn on an eight-pixel grid has four sizes at which one pixel of the drawing lands on a whole number of CSS pixels: <code>8px</code>, <code>16px</code>, <code>24px</code> and <code>32px</code>. Every rule on this site uses one of the four. Each pair below sets the regular (400) above the bold (700) at the same measure.</p><div class="specimen-scale"><div class="scale-row"><p class="c">8px &middot; 1&times; cell &middot; 7px advance</p><p class="scale-sample s8">NETHER C / DESK 00 · 0123456789 · U0 bury(Str p) @0 -&gt; #efed9b2a</p><p class="scale-sample s8"><strong>NETHER C / DESK 00 · 0123456789 · U0 bury(Str p) @0 -&gt; #efed9b2a</strong></p></div><div class="scale-row"><p class="c">16px &middot; 2&times; cell &middot; 14px advance</p><p class="scale-sample s16">Nothing runs. A program is buried; what ships is a trace and its holes.</p><p class="scale-sample s16"><strong>Nothing runs. A program is buried; what ships is a trace and its holes.</strong></p></div><div class="scale-row"><p class="c">24px &middot; 3&times; cell &middot; 21px advance</p><p class="scale-sample s24">■ Section 02 · Γ; δ ⊢ e : τ@d</p><p class="scale-sample s24"><strong>■ Section 02 · Γ; δ ⊢ e : τ@d</strong></p></div><div class="scale-row"><p class="c">32px &middot; 4&times; cell &middot; 28px advance</p><p class="scale-sample s32">██ NOTHING RUNS · @0..@8</p><p class="scale-sample s32"><strong>██ NOTHING RUNS · @0..@8</strong></p></div></div><h2 id="samples"><a href="#samples">2. In use and in pairs</a></h2><p>A synthetic bold widens every glyph and turns a monospace listing into a ragged one wherever a keyword or a depth annotation is coloured. Each pair of lines below puts 400 directly above 700 so any drift in advance or closed counter shows immediately.</p><figure class="listing"><figcaption>narrow, wide and lookalike pairs (400 above, 700 below)</figcaption><pre><code>400  |iiii|llll|1111||||||....|::::|;;;;|MMMM|WWWW|0000|8888|@@@@|####|%%%%|&&&&|
+<p class="c">Nether 8 &middot; Version 1.000 &middot; 8&times;8 cell &middot; 7-column mono advance &middot; 140 glyphs &middot; <a href="https://github.com/oddurs/nether-c/blob/main/site/font.py">edit the source</a></p><h1>The face</h1><p>Every page on this site is set in <strong>Nether 8</strong>, an 8&times;8 bitmap face drawn in <a href="https://github.com/oddurs/nether-c/blob/main/site/font.py">site/font.py</a> and packed into <a href="nether.woff">nether.woff</a> (regular, weight 400) and <a href="nether-bold.woff">nether-bold.woff</a> (bold, weight 700) without a font library. Six columns of ink (0..5) and one column of blank right bearing make a fixed seven-pixel (896-unit) advance; rows 0..6 sit above the baseline and row 7 below it.</p><p>Both weights are drawn by hand: 117 glyphs have a separate 700 drawing and 23 are named in <code>SAME</code> where six columns cannot hold a second pixel without closing a counter, or where box-drawing rules must join across weights. <code>font-synthesis</code> is <code>none</code>, and <a href="https://github.com/oddurs/nether-c/blob/main/tests/font/run">tests/font/run</a> fails if any glyph in either shipped file is missing from this page.</p><p class="center"><img class="specimen" src="gfx/specimen.gif" data-dark-src="gfx/specimen.gif" data-lit-src="gfx/specimen-lit.gif" width="435" height="246" alt="Every glyph in Nether 8, drawn at 3x across the nine stratum colours."></p><h2 id="scale"><a href="#scale">1. The four sizes</a></h2><p>A face drawn on an eight-pixel grid has four sizes at which one pixel of the drawing lands on a whole number of CSS pixels: <code>8px</code>, <code>16px</code>, <code>24px</code> and <code>32px</code>. Every rule on this site uses one of the four. Each pair below sets the regular (400) above the bold (700) at the same measure.</p><div class="specimen-scale"><div class="scale-row"><p class="c">8px &middot; 1&times; cell &middot; 7px advance</p><p class="scale-sample s8">NETHER C / DESK 00 · 0123456789 · U0 bury(Str p) @0 -&gt; #efed9b2a</p><p class="scale-sample s8"><strong>NETHER C / DESK 00 · 0123456789 · U0 bury(Str p) @0 -&gt; #efed9b2a</strong></p></div><div class="scale-row"><p class="c">16px &middot; 2&times; cell &middot; 14px advance</p><p class="scale-sample s16">Nothing runs. A program is buried; what ships is a trace.</p><p class="scale-sample s16"><strong>Nothing runs. A program is buried; what ships is a trace.</strong></p></div><div class="scale-row"><p class="c">24px &middot; 3&times; cell &middot; 21px advance</p><p class="scale-sample s24">■ Section 02 · Γ; δ ⊢ e : τ@d</p><p class="scale-sample s24"><strong>■ Section 02 · Γ; δ ⊢ e : τ@d</strong></p></div><div class="scale-row"><p class="c">32px &middot; 4&times; cell &middot; 28px advance</p><p class="scale-sample s32">██ NOTHING RUNS · @0..@8</p><p class="scale-sample s32"><strong>██ NOTHING RUNS · @0..@8</strong></p></div></div><h2 id="samples"><a href="#samples">2. In use and in pairs</a></h2><p>A synthetic bold widens every glyph and turns a monospace listing into a ragged one wherever a keyword or a depth annotation is coloured. Each pair of lines below puts 400 directly above 700 so any drift in advance or closed counter shows immediately.</p><figure class="listing"><figcaption>narrow, wide and lookalike pairs (400 above, 700 below)</figcaption><pre><code>400  |iiii|llll|1111||||||....|::::|;;;;|MMMM|WWWW|0000|8888|@@@@|####|%%%%|&&&&|
 700  <strong>|iiii|llll|1111||||||....|::::|;;;;|MMMM|WWWW|0000|8888|@@@@|####|%%%%|&&&&|</strong>
 
 400  |0O|1lI||2Z|5S|8B|aecugpq|bd|MWV|rn m|cl d|vv w|()[]{}|&lt;&gt;⟨⟩|!'.:&gt;|·ᵢ•|
@@ -78,7 +83,7 @@ buried   build.nc → <span class="h">76c4b655</span>   depth 3   holes 1   4 no
 
 <span class="p">$</span> nether <span class="k">lamp</span> --provenance bb9ed429
 <span class="h">bb9ed429</span>  trace · depth 3 · sealed
-└─ <span class="h">6940fecb</span>  witness ① · stratum 3 (disk) · read(&quot;main.nc&quot;) → 29 bytes</code></pre></figure><p>In running prose at <code>16px</code> on <code>22px</code> leading, <strong>bold weight</strong>, <em>underlined emphasis</em>, inline <code>code(0x1f)</code> and the nine stratum stains (<span class="d0">@0</span> <span class="d1">@1</span> <span class="d2">@2</span> <span class="d3">@3</span> <span class="d4">@4</span> <span class="d5">@5</span> <span class="d6">@6</span> <span class="d7">@7</span> <span class="d8">@8</span>) share the same seven-pixel advance.</p><h2 id="punctuation"><a href="#punctuation">3. Space and punctuation</a></h2><p class="small">33 glyph(s) in this range.</p><div class="glyph-catalogue"><article class="glyph-card" id="u-0020" data-codepoint="U+0020"><header class="glyph-head"><code>U+0020</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SPACE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
+└─ <span class="h">6940fecb</span>  witness ① · stratum 3 (disk) · read(&quot;main.nc&quot;) → 29 bytes</code></pre></figure><p>In running prose at <code>16px</code> on <code>22px</code> leading, <strong>bold weight</strong>, <em>tinted emphasis</em>, inline <code>code(0x1f)</code> and the nine stratum stains (<span class="d0">@0</span> <span class="d1">@1</span> <span class="d2">@2</span> <span class="d3">@3</span> <span class="d4">@4</span> <span class="d5">@5</span> <span class="d6">@6</span> <span class="d7">@7</span> <span class="d8">@8</span>) share the same seven-pixel advance.</p><h2 id="punctuation"><a href="#punctuation">3. Space and punctuation</a></h2><p class="small">33 glyph(s) in this range.</p><div class="glyph-catalogue"><article class="glyph-card" id="u-0020" data-codepoint="U+0020"><header class="glyph-head"><code>U+0020</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">SPACE</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
 ········
 ········
 ········
@@ -1789,15 +1794,15 @@ buried   build.nc → <span class="h">76c4b655</span>   depth 3   holes 1   4 no
 ········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">∈</span><strong class="s8">∈</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">∈</span><strong class="s16">∈</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">∈</span><strong class="s24">∈</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">∈</span><strong class="s32">∈</strong></div></div></article><article class="glyph-card" id="u-2212" data-codepoint="U+2212"><header class="glyph-head"><code>U+2212</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">MINUS SIGN</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
 ········
 ········
+█████···
 ········
-██████··
 ········
 ········
 ········</pre></figure><figure class="glyph-cell"><figcaption>700</figcaption><pre class="glyph-grid" data-weight="bold">········
 ········
+█████···
+█████···
 ········
-██████··
-██████··
 ········
 ········
 ········</pre></figure></div><div class="glyph-sizes"><div class="glyph-size"><span class="glyph-px">8</span><span class="s8">−</span><strong class="s8">−</strong></div><div class="glyph-size"><span class="glyph-px">16</span><span class="s16">−</span><strong class="s16">−</strong></div><div class="glyph-size"><span class="glyph-px">24</span><span class="s24">−</span><strong class="s24">−</strong></div><div class="glyph-size"><span class="glyph-px">32</span><span class="s32">−</span><strong class="s32">−</strong></div></div></article><article class="glyph-card" id="u-222a" data-codepoint="U+222A"><header class="glyph-head"><code>U+222A</code><span class="glyph-meta">400 + 700</span><span class="glyph-name">UNION</span></header><div class="glyph-grids"><figure class="glyph-cell"><figcaption>400</figcaption><pre class="glyph-grid" data-weight="regular">········
@@ -2049,17 +2054,17 @@ buried   build.nc → <span class="h">76c4b655</span>   depth 3   holes 1   4 no
 <p>Nether C is in the <strong>public domain</strong>.
 Take it. It was always there.</p>
 <div class="badges">
-<img src="gfx/badge-norun.gif" data-dark-src="gfx/badge-norun.gif" data-lit-src="gfx/badge-norun-lit.gif" width="88" height="31" alt="There is no run">
-<img src="gfx/badge-unlit.gif" data-dark-src="gfx/badge-unlit.gif" data-lit-src="gfx/badge-unlit-lit.gif" width="88" height="31" alt="Best viewed unlit">
-<img src="gfx/badge-handmade.gif" data-dark-src="gfx/badge-handmade.gif" data-lit-src="gfx/badge-handmade-lit.gif" width="88" height="31" alt="No libraries, written from scratch">
-<img src="gfx/badge-80col.gif" data-dark-src="gfx/badge-80col.gif" data-lit-src="gfx/badge-80col-lit.gif" width="88" height="31" alt="80 columns">
-<img src="gfx/badge-decay.gif" data-dark-src="gfx/badge-decay.gif" data-lit-src="gfx/badge-decay-lit.gif" width="88" height="31" alt="The core only decays">
-<img src="gfx/badge-public.gif" data-dark-src="gfx/badge-public.gif" data-lit-src="gfx/badge-public-lit.gif" width="88" height="31" alt="Public domain, take it">
+<img src="gfx/badge-norun.gif" data-dark-src="gfx/badge-norun.gif" data-lit-src="gfx/badge-norun-lit.gif" data-still width="88" height="31" alt="There is no run">
+<img src="gfx/badge-unlit.gif" data-dark-src="gfx/badge-unlit.gif" data-lit-src="gfx/badge-unlit-lit.gif" data-still width="88" height="31" alt="Best viewed unlit">
+<img src="gfx/badge-handmade.gif" data-dark-src="gfx/badge-handmade.gif" data-lit-src="gfx/badge-handmade-lit.gif" data-still width="88" height="31" alt="No libraries, written from scratch">
+<img src="gfx/badge-80col.gif" data-dark-src="gfx/badge-80col.gif" data-lit-src="gfx/badge-80col-lit.gif" data-still width="88" height="31" alt="80 columns">
+<img src="gfx/badge-decay.gif" data-dark-src="gfx/badge-decay.gif" data-lit-src="gfx/badge-decay-lit.gif" data-still width="88" height="31" alt="The core only decays">
+<img src="gfx/badge-public.gif" data-dark-src="gfx/badge-public.gif" data-lit-src="gfx/badge-public-lit.gif" data-still width="88" height="31" alt="Public domain, take it">
 </div>
 
 <div class="counter">
   <span>the world still owes</span>
-  <img src="gfx/counter.gif" data-dark-src="gfx/counter.gif" data-lit-src="gfx/counter-lit.gif" width="84" height="26" alt="Holes still owed, counted off the board">
+  <img src="gfx/counter.gif" data-dark-src="gfx/counter.gif" data-lit-src="gfx/counter-lit.gif" data-still width="84" height="26" alt="Holes still owed, counted off the board">
   <span>holes</span>
 </div>
 
@@ -2074,18 +2079,40 @@ There is no image library in this repository. There is not going to be one.</p>
 /* The whole of the site's JavaScript. */
 (function () {
   var directory = document.querySelector(".directory-drawer");
-  if (directory && window.matchMedia("(max-width: 1050px)").matches) directory.open = false;
+  var narrow = window.matchMedia("(max-width: 1050px)");
+  function syncDirectory() {
+    if (directory) directory.open = !narrow.matches;
+  }
+  syncDirectory();
+  narrow.addEventListener("change", syncDirectory);
+  if (directory) {
+    directory.addEventListener("click", function (ev) {
+      var link = ev.target && ev.target.closest ? ev.target.closest("a") : null;
+      if (link && narrow.matches) {
+        var href = link.getAttribute("href") || "";
+        if (href.indexOf("#") !== -1) directory.open = false;
+      }
+    });
+  }
   var root = document.documentElement;
   var btn = document.querySelector("[data-lamp-toggle]");
   var label = document.querySelector("[data-lamp-state]");
   var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   function paintImages() {
     var lit = root.getAttribute("data-lamp") === "lit";
-    document.querySelectorAll("img[data-dark-src]").forEach(function (img) {
-      var src = lit ? img.dataset.litSrc : img.dataset.darkSrc;
-      if (motion.matches && img.hasAttribute("data-still")) src = src.replace(".gif", "-still.gif");
+    document.querySelectorAll("img[data-dark-src], img[data-still]").forEach(function (img) {
+      var base = img.dataset.darkSrc || img.getAttribute("data-base-src") || img.getAttribute("src");
+      if (!img.dataset.darkSrc && !img.hasAttribute("data-base-src") && base) {
+        img.setAttribute("data-base-src", base);
+      }
+      var src = (lit && img.dataset.litSrc) ? img.dataset.litSrc : base;
+      if (!src) return;
+      if (motion.matches && img.hasAttribute("data-still")) {
+        src = src.replace(/(-still)?\.gif$/, "-still.gif");
+      }
       if (img.getAttribute("src") !== src) img.setAttribute("src", src);
     });
+    root.removeAttribute("data-img-pending");
   }
   function paint() {
     var lit = root.getAttribute("data-lamp") === "lit";

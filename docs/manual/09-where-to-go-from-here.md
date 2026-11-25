@@ -66,6 +66,13 @@ exit 64. It is the single frozen requirement in an otherwise entirely draft
 specification — [§8.0](../../spec/08-rites.md). Everything else here may change
 without a version bump. That one will not.
 
+## Inspecting a trace in the browser
+
+The repository includes the Necropolis, a local WebAssembly trace browser under
+`web/necropolis/` that buries source inside the browser with no server and no
+world capabilities. From a checkout, run `scripts/task wasm && scripts/task serve`
+and open `/web/necropolis/`.
+
 ## If you want to work on it
 
 [CONTRIBUTING.md](../../CONTRIBUTING.md) is the process and
@@ -80,7 +87,7 @@ something `spec/` does not describe, the section is the first pull request.
 ## One last thing
 
 Everything you read in this manual was executed to produce it. Every `$` line
-on these nine pages runs on every build of this project, in a scratch directory
+on these ten pages runs on every build of this project, in a scratch directory
 with these programs in it, and the output underneath is compared to what came
 back. Two bugs were found writing it, and they are 0273 and 0274.
 

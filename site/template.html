@@ -4,17 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{FULLTITLE}}</title>
-<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="description" content="{{DESCRIPTION}}">
 <meta name="color-scheme" content="dark light">
+<link rel="canonical" href="{{URL}}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="{{FULLTITLE}}">
-<meta property="og:description" content="A C dialect in which nothing runs. Programs are buried, not executed; what ships is the trace and the holes the world still owes an answer to.">
+<meta property="og:description" content="{{DESCRIPTION}}">
+<meta property="og:url" content="{{URL}}">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Nether C. A C dialect in which nothing runs. The program has already run; you read what is left of it.">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="{{UP}}nether.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="{{UP}}nether-bold.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="{{UP}}tokens.css">
 <link rel="stylesheet" href="{{UP}}nether.css">
 <link rel="icon" href="{{UP}}icon.svg" type="image/svg+xml">
@@ -22,9 +26,10 @@
 /* Before paint, so nothing flashes. The lamp is out by default: the nether is
    unlit, and seeing anything down here is something you choose to do. */
 try {
-  if (localStorage.getItem("nc-lamp") === "lit") {
-    document.documentElement.setAttribute("data-lamp", "lit");
-  }
+  var lit = localStorage.getItem("nc-lamp") === "lit";
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (lit) document.documentElement.setAttribute("data-lamp", "lit");
+  if (lit || reduced) document.documentElement.setAttribute("data-img-pending", "");
 } catch (e) {}
 </script>
 </head>
@@ -34,14 +39,14 @@ try {
 
 <div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
 <header class="terminal-header">
-<pre class="sign" aria-label="Nether C">
+<pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
 █ █ █ ████    █   █████ ████  ████    █
 █  ██ █       █   █   █ █     █  █    █
 █   █ █████   █   █   █ █████ █   █    ████
 </pre>
-<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor" aria-hidden="true">_</span></p>
 
 </header>
 
@@ -94,18 +99,40 @@ There is no image library in this repository. There is not going to be one.</p>
 /* The whole of the site's JavaScript. */
 (function () {
   var directory = document.querySelector(".directory-drawer");
-  if (directory && window.matchMedia("(max-width: 1050px)").matches) directory.open = false;
+  var narrow = window.matchMedia("(max-width: 1050px)");
+  function syncDirectory() {
+    if (directory) directory.open = !narrow.matches;
+  }
+  syncDirectory();
+  narrow.addEventListener("change", syncDirectory);
+  if (directory) {
+    directory.addEventListener("click", function (ev) {
+      var link = ev.target && ev.target.closest ? ev.target.closest("a") : null;
+      if (link && narrow.matches) {
+        var href = link.getAttribute("href") || "";
+        if (href.indexOf("#") !== -1) directory.open = false;
+      }
+    });
+  }
   var root = document.documentElement;
   var btn = document.querySelector("[data-lamp-toggle]");
   var label = document.querySelector("[data-lamp-state]");
   var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   function paintImages() {
     var lit = root.getAttribute("data-lamp") === "lit";
-    document.querySelectorAll("img[data-dark-src]").forEach(function (img) {
-      var src = lit ? img.dataset.litSrc : img.dataset.darkSrc;
-      if (motion.matches && img.hasAttribute("data-still")) src = src.replace(".gif", "-still.gif");
+    document.querySelectorAll("img[data-dark-src], img[data-still]").forEach(function (img) {
+      var base = img.dataset.darkSrc || img.getAttribute("data-base-src") || img.getAttribute("src");
+      if (!img.dataset.darkSrc && !img.hasAttribute("data-base-src") && base) {
+        img.setAttribute("data-base-src", base);
+      }
+      var src = (lit && img.dataset.litSrc) ? img.dataset.litSrc : base;
+      if (!src) return;
+      if (motion.matches && img.hasAttribute("data-still")) {
+        src = src.replace(/(-still)?\.gif$/, "-still.gif");
+      }
       if (img.getAttribute("src") !== src) img.setAttribute("src", src);
     });
+    root.removeAttribute("data-img-pending");
   }
   function paint() {
     var lit = root.getAttribute("data-lamp") === "lit";

@@ -25,6 +25,7 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[2]
 SITE = ROOT / "site"
+NECROPOLIS = ROOT / "web" / "necropolis"
 PAGES_YML = ROOT / ".github" / "workflows" / "pages.yml"
 
 REF = re.compile(r'(?:href|src|data-lit-src|data-dark-src)="([^"]+)"')
@@ -34,6 +35,10 @@ NUMBERED = re.compile(r'<h[1-6] id="[^"]*"><a [^>]*>(\d+(?:\.\d+)+)\s')
 
 def pages() -> list[Path]:
     return sorted(p for p in SITE.rglob("*.html") if "src" not in p.parts and p.name != "template.html")
+
+
+def necropolis_pages() -> list[Path]:
+    return sorted(NECROPOLIS.glob("*.html")) if NECROPOLIS.is_dir() else []
 
 
 def staged_patterns() -> list[str]:
@@ -62,16 +67,20 @@ def is_staged(rel_path: Path, patterns: list[str]) -> bool:
 
 
 def main() -> int:
+    repo_root = ROOT.resolve()
     site_root = SITE.resolve()
+    site_pages = pages()
+    web_pages = necropolis_pages()
+    all_pages = site_pages + web_pages
     anchors: dict[Path, set[str]] = {}
-    for page in pages():
+    for page in all_pages:
         anchors[page.resolve()] = set(ANCHOR.findall(page.read_text(encoding="utf-8")))
 
     broken: list[str] = []
     internal = external = 0
     staged = staged_patterns()
 
-    for page in pages():
+    for page in site_pages:
         rel = page.relative_to(SITE)
         text = page.read_text(encoding="utf-8")
         for raw in REF.findall(text):
@@ -99,10 +108,30 @@ def main() -> int:
                 broken.append(f"{rel}: §{number} heads two sections")
             seen.add(number)
 
+    for page in web_pages:
+        rel = page.relative_to(ROOT)
+        text = page.read_text(encoding="utf-8")
+        for raw in REF.findall(text):
+            if raw.startswith(("http://", "https://", "mailto:", "data:")):
+                external += 1
+                continue
+            internal += 1
+            path, _, fragment = raw.partition("#")
+            target = page.resolve() if not path else (page.parent / unquote(path)).resolve()
+            if not target.is_relative_to(repo_root):
+                broken.append(f"{rel} -> {raw}  (escapes repository)")
+                continue
+            if not target.exists():
+                broken.append(f"{rel} -> {raw}  (no such file)")
+                continue
+            if fragment and target.suffix == ".html":
+                if fragment not in anchors.get(target, set()):
+                    broken.append(f"{rel} -> {raw}  (no such anchor)")
+
     for b in broken:
         print(f"links: {b}", file=sys.stderr)
 
-    print(f"links: {len(pages())} page(s), {internal} internal reference(s) resolved, {external} external not checked")
+    print(f"links: {len(all_pages)} page(s), {internal} internal reference(s) resolved, {external} external not checked")
     if broken:
         print(f"links: {len(broken)} broken", file=sys.stderr)
         return 1

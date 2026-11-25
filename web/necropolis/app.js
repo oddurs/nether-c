@@ -13,7 +13,7 @@ const button = (text, action, className) => {
   b.addEventListener("click", action);
   return b;
 };
-let graph, navigation, worker, timer;
+let graph, navigation, worker, timer, copyTimer;
 let shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
 
 function visit(id) {
@@ -111,6 +111,7 @@ function render() {
   $("position").textContent = `${navigation.position + 1} / ${navigation.entries.length}`;
   $("back").disabled = navigation.position === 0;
   $("forward").disabled = navigation.position === navigation.entries.length - 1;
+  $("home").disabled = id === graph.root;
   relations("incoming", graph.incoming.get(id) || []);
   relations("outgoing", references(object));
   inspect(object);
@@ -197,19 +198,40 @@ function bury() {
   active.postMessage({ source: $("source").value });
 }
 
-$("bury").addEventListener("click", bury);
-$("cancel").addEventListener("click", () => { stop(); $("state").textContent = graph ? "Cancelled. The previous trace remains below." : "Cancelled. Bury source to try again."; });
-for (const [id, delta] of [["back", -1], ["forward", 1]]) $(id).addEventListener("click", () => {
+function move(delta) {
   if (!navigation) return;
+  const before = navigation.position;
   navigation.move(delta);
+  if (navigation.position === before) return;
   shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
   render();
   $("selected-title").focus({ preventScroll: true });
+}
+
+$("bury").addEventListener("click", bury);
+$("source").addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    bury();
+  }
+});
+$("cancel").addEventListener("click", () => { stop(); $("state").textContent = graph ? "Cancelled. The previous trace remains below." : "Cancelled. Bury source to try again."; });
+for (const [id, delta] of [["back", -1], ["forward", 1]]) $(id).addEventListener("click", () => move(delta));
+document.addEventListener("keydown", (event) => {
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (event.target === $("source") || event.target?.closest?.("textarea, input, [contenteditable]")) return;
+  if (event.key === "ArrowLeft") { event.preventDefault(); move(-1); }
+  else if (event.key === "ArrowRight") { event.preventDefault(); move(1); }
 });
 $("home").addEventListener("click", () => { if (graph) visit(graph.root); });
 $("copy").addEventListener("click", async () => {
   if (!navigation) return;
-  try { await navigator.clipboard.writeText(navigation.current); $("state").textContent = "Full cairn copied."; }
-  catch { $("state").textContent = "Clipboard unavailable. Select and copy the full cairn shown below."; }
+  try {
+    await navigator.clipboard.writeText(navigation.current);
+    $("state").textContent = "Full cairn copied.";
+    $("copy").textContent = "Copied";
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => { $("copy").textContent = "Copy full cairn"; }, 1500);
+  } catch { $("state").textContent = "Clipboard unavailable. Select and copy the full cairn shown below."; }
 });
 bury();
