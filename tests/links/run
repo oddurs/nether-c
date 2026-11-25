@@ -16,13 +16,16 @@ are placeholders rather than paths.
 
 from __future__ import annotations
 
+import fnmatch
 import re
+import shlex
 import sys
 from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[2]
 SITE = ROOT / "site"
+PAGES_YML = ROOT / ".github" / "workflows" / "pages.yml"
 
 REF = re.compile(r'(?:href|src|data-lit-src|data-dark-src)="([^"]+)"')
 ANCHOR = re.compile(r'\sid="([^"]+)"')
@@ -33,6 +36,31 @@ def pages() -> list[Path]:
     return sorted(p for p in SITE.rglob("*.html") if "src" not in p.parts and p.name != "template.html")
 
 
+def staged_patterns() -> list[str]:
+    """Parse `cp -R site/... _site/` entries from `.github/workflows/pages.yml`."""
+    if not PAGES_YML.is_file():
+        return []
+    for line in PAGES_YML.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if s.startswith("cp -R ") and "_site/" in s:
+            tokens = shlex.split(s)[2:-1]
+            return [t.removeprefix("site/") for t in tokens if t.startswith("site/")]
+    return []
+
+
+def is_staged(rel_path: Path, patterns: list[str]) -> bool:
+    if not patterns:
+        return True
+    rel_str = rel_path.as_posix()
+    top = rel_path.parts[0]
+    for pat in patterns:
+        if "/" not in pat and "*" not in pat and top == pat:
+            return True
+        if fnmatch.fnmatch(rel_str, pat):
+            return True
+    return False
+
+
 def main() -> int:
     site_root = SITE.resolve()
     anchors: dict[Path, set[str]] = {}
@@ -41,6 +69,7 @@ def main() -> int:
 
     broken: list[str] = []
     internal = external = 0
+    staged = staged_patterns()
 
     for page in pages():
         rel = page.relative_to(SITE)
@@ -57,6 +86,9 @@ def main() -> int:
                 continue
             if not target.exists():
                 broken.append(f"{rel} -> {raw}  (no such file)")
+                continue
+            if not is_staged(target.relative_to(site_root), staged):
+                broken.append(f"{rel} -> {raw}  (not staged by .github/workflows/pages.yml)")
                 continue
             if fragment and target.suffix == ".html":
                 if fragment not in anchors.get(target, set()):

@@ -20,8 +20,8 @@ use crate::{FAILED, code, json, usage_error};
 
 /// The budget a burial runs under when nobody says otherwise.
 ///
-/// §8.2 requires this to be finite and to be recorded, because a trace buried
-/// under a different budget is a different trace.
+/// §8.2 requires this to be finite; it is reported on request rather than
+/// recorded in the trace, because a budget that bound leaves no trace.
 const DEFAULT_FUEL: u64 = 1_000_000;
 
 /// `nether bury <file.nc> [--grant <cap>]... [--fuel <n>] [--json]`

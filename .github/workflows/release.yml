@@ -39,6 +39,10 @@ jobs:
         with:
           python-version: '3.12'
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
       # From the repository it is published from, pinned to a commit, and with no `||`.
       - name: Install cairn
         run: cargo install --locked --git https://github.com/oddurs/cairn --rev 68ac1549383870aa57548da65ed25119895bb201 cairn-md

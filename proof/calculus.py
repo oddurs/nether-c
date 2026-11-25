@@ -386,12 +386,14 @@ SUBST_DEPTH = InductiveRelation(
             "SubstSeal",
             (subst_depth(e, d, d_a, d_p),),
             subst_depth(app("Seal", e), ZERO, d_a, ZERO),
+            var_sorts={"d": "Depth", "d_p": "Depth"},
         ),
         # Shade produces a Shade at depth 0 (`[SHADE]`)
         Rule(
             "SubstShade",
             (subst_depth(e, d, d_a, d_p),),
             subst_depth(app("Shade", e), ZERO, d_a, ZERO),
+            var_sorts={"d": "Depth", "d_p": "Depth"},
         ),
         # Look combines the shade's type parameter `d` with the operand's depth `d1`
         Rule(
@@ -584,11 +586,13 @@ STEP_TYPED = InductiveRelation(
             "StepSealCong",
             (step_typed(e, e_p, d, d_p),),
             step_typed(app("Seal", e), app("Seal", e_p), ZERO, ZERO),
+            var_sorts={"d": "Depth", "d_p": "Depth"},
         ),
         Rule(
             "StepShadeCong",
             (step_typed(e, e_p, d, d_p),),
             step_typed(app("Shade", e), app("Shade", e_p), ZERO, ZERO),
+            var_sorts={"d": "Depth", "d_p": "Depth"},
         ),
         Rule(
             "StepLookCong",

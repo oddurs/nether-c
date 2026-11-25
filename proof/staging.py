@@ -9,9 +9,14 @@ Explicit assumptions modeled in this file:
    mutable world (`W_1 != W_2`) is outside the law.
 2. **Sufficient fuel:** Reductions reach normal form without exhausting the step
    budget (`fuel = ∞`).
-3. **Round-trip identity (`lower(parse(print(r))) = r`):** Verified inductively
-   over all 12 residual expression forms (`ROUND_TRIP`) and tested against the
-   implementation in `crates/nether-bury/tests/residue_is_source.rs`.
+3. **Symbolic structural models (`ROUND_TRIP`, `STAGED_EVAL`):** The inductive
+   relations in this module check structural congruence and set-algebraic laws
+   symbolically (modeling round-trip and staged vs direct agreement as single
+   structural relations over the core expression forms, without modeling
+   concrete surface printing/parsing or two-stage composition). End-to-end
+   `lower(parse(print(r)))` round-trip fidelity and staged-vs-direct execution
+   parity are tested directly against the Rust implementation in
+   `crates/nether-bury/tests/residue_is_source.rs` and `crates/nether-bury/tests/burial.rs`.
 4. **Capability monotonicity for dependent nested holes:** For flat holes (whose
    arguments are pure values), `(s_k ∈ A ∨ s_k ∈ B) ↔ s_k ∈ (A ∪ B)` holds for
    arbitrary capability sets `A, B`. For dependent nested holes (an outer hole

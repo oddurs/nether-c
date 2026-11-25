@@ -2,13 +2,13 @@
 """Mechanization of canonical encoding injectivity (`spec/07-ledger.md` §7.1–§7.3).
 
 Covers:
-1. Prefix-free stream round-trip (`DecodeStream(Concat(Encode(x), rest)) = Pair(x, rest)`)
-   inductively over all 11 `Value` tags (`0x00`..`0x08`, `0x10`, `0x11`) and all 6
-   `Node` kinds (`0x20` + `0x00`..`0x05`), including recursive unprefixed compounds
-   (`Struct`, `Array`, `Answer::Given`, `Node::Literal`). The inductive relation
-   uses a symbolic model of the stream codec; byte-level wire agreement with the
-   Rust `nether-ledger` codec is verified separately by the fixtures below and by
-   `nether-ledger`'s Rust test suite.
+1. Symbolic stream round-trip (`VAL_ROUNDTRIP`, `NODE_ROUNDTRIP`): inductive
+   structural models over all 11 `Value` tags (`0x00`..`0x08`, `0x10`, `0x11`)
+   and all 6 `Node` kinds (`0x20` + `0x00`..`0x05`), including recursive
+   unprefixed compounds (`Struct`, `Array`, `Answer::Given`, `Node::Literal`).
+   Concrete byte-level framing, big-endian length prefixes, and wire agreement
+   with `nether-ledger` are verified by the executable reference codec and
+   fixtures below alongside `nether-ledger`'s Rust test suite.
 2. Pure LCF equational proof (`prove_injectivity_from_left_inverse`) that any
    encoding with a left inverse `decode(encode(x)) = x` is injective:
    `(decode(encode(x)) = x) → ((decode(encode(y)) = y) → ((encode(x) = encode(y)) → (x = y)))`.

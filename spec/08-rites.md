@@ -54,11 +54,11 @@ those writes before it prints.
 ## 8.2 `bury`
 
 ```
-nether bury <file.nc> [--grant <cap>]... [--fuel <n>] [--json]
+nether bury <file.nc> [--fuel <n>] [--json]
 ```
 
-Evaluates as far as the granted capabilities allow; writes a trace; prints a
-summary of what was written.
+Evaluates the pure part of `<file.nc>` and writes a trace; prints a summary of
+what was written.
 
 ```console
 $ nether bury build.nc
@@ -66,20 +66,13 @@ buried   build.nc → 76c4b655   depth 3   holes 1   4 nodes
   hole ①  read("main.nc")                stratum 3  disk
 ```
 
-`--grant` names exactly one capability and MAY be given any number of times.
-One implies no other, in either direction: `--grant net` does not permit a
-`read` and does not permit a `post`. An operator who wants a burial to read
-files and fetch URLs writes both, which is the whole of the audit
-([§2.1](02-calculus.md#21-judgement-form)).
-
-With no `--grant`, burial holds no capabilities and every world-touching
-expression becomes a hole. This is the default because it is the only default
-that cannot surprise anyone.
-
-`bury` itself holds no capabilities; answering holes is [`exhume`](#83-exhume)'s
-work. Passing `--grant` to `bury` MUST be refused (exit code 64) rather than
-accepted and ignored: a flag that validates its argument and changes nothing
-looks like it worked, which is the failure §8.0 is about in a smaller place.
+`bury` holds no capabilities, so every world-touching expression becomes a hole.
+This is the only default that cannot surprise anyone. Answering holes is
+[`exhume`](#83-exhume)'s work, where `--grant` names one capability at a time
+and one capability implies no other ([§2.1](02-calculus.md#21-judgement-form)).
+Passing `--grant` to `bury` MUST be refused (exit code 64) rather than accepted
+and ignored: a flag that validates its argument and changes nothing looks like
+it worked, which is the failure §8.0 is about in a smaller place.
 
 `--fuel` sets the budget of [§6.4](06-evaluation.md#64-starvation-and-fuel).
 Its default MUST be finite, and the rite MUST report what it was when asked.
@@ -345,10 +338,11 @@ server.
    short cairns rather than guessing shifted offsets.
 2. **Absent objects and bounds.** `lamp` reads the `Bytes` value at
    `trace.source` from the store. If `trace.source` or any reachable trace node
-   covering `<byte>` is absent or corrupt, `lamp` MUST fail with exit code 1
-   reporting the store error. If `<byte>` is at or past the byte length of
-   `trace.source`, or falls outside every expression in the unit, `lamp` MUST
-   fail with exit code 1 rather than clamping the offset.
+   covering `<byte>` is absent or corrupt, `lamp` MUST fail reporting the store
+   error with [§8.8](#88-exit-codes)'s store exit codes (`66` absent, `65`
+   malformed). If `<byte>` is at or past the byte length of `trace.source`, or
+   falls outside every expression in the unit, `lamp` MUST fail with exit code
+   1 rather than clamping the offset.
 3. **Depth, origin and provenance from the compiler and ledger.** `lamp` runs
    the parser, lowerer and depth checker on `trace.source` and reports for
    `<byte>`:

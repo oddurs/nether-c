@@ -37,16 +37,19 @@ class Term:
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Term cannot be subclassed")
 
-    def __init__(self, op: str, args: Tuple["Term", ...] = ()) -> None:
+    def __new__(cls, op: str, args: Tuple["Term", ...] = ()) -> "Term":
+        _require(cls is Term, "Term cannot be subclassed")
         _require(type(op) is str and bool(op), f"Term op must be non-empty str, got {op!r}")
         _require(
             type(args) is tuple and all(_term_payload(a) is not None for a in args),
             f"Term args must be tuple[Term, ...], got {args!r}",
         )
+        self = object.__new__(cls)
         h = hash((op, args))
         oid = id(self)
         _TERM_DATA[oid] = (weakref.ref(self), op, args, h)
         weakref.finalize(self, _TERM_DATA.pop, oid, None)
+        return self
 
     @property
     def op(self) -> str:
@@ -170,14 +173,15 @@ class Formula:
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Formula cannot be subclassed")
 
-    def __init__(
-        self,
+    def __new__(
+        cls,
         kind: str,
         terms: Tuple[Term, ...] = (),
         subs: Tuple["Formula", ...] = (),
         binder: str = "",
         binder_sort: str = "",
-    ) -> None:
+    ) -> "Formula":
+        _require(cls is Formula, "Formula cannot be subclassed")
         _require(type(kind) is str, f"Formula kind must be str, got {kind!r}")
         _require(
             type(terms) is tuple and all(_term_payload(t) is not None for t in terms),
@@ -205,10 +209,12 @@ class Formula:
             _require_var_name(binder, "Formula")
         else:
             raise ProofFault(f"unknown Formula kind `{kind}`")
+        self = object.__new__(cls)
         h = hash((kind, terms, subs, binder, binder_sort))
         oid = id(self)
         _FORMULA_DATA[oid] = (weakref.ref(self), kind, terms, subs, binder, binder_sort, h)
         weakref.finalize(self, _FORMULA_DATA.pop, oid, None)
+        return self
 
     @property
     def kind(self) -> str:
@@ -452,6 +458,17 @@ def _merge_sorts(*sort_sets: Iterable[Tuple[str, str]]) -> frozenset[Tuple[str, 
     return frozenset(merged.items())
 
 
+# Kernel-registered uninterpreted function symbols whose codomain is fixed to
+# `Depth` or `Set` (op -> (arity, result_sort)). Unregistered compound terms
+# are rejected by `lattice_decide` and sort checkers so arbitrary constructors
+# (`VInt`, `encode`, `f`) cannot be silently axiomatized into `{0..8}` / `P({0..8})`.
+_LATTICE_FN_SORTS: Dict[str, Tuple[int, str]] = {
+    "g": (1, "Set"),
+    "g_var": (1, "Set"),
+    "g_body": (1, "Set"),
+}
+
+
 def _check_depth_term(t: Term, d_vars: Set[str], s_vars: Set[str], where: str) -> None:
     if not t.args:
         _require(t.op not in SET_CONSTS, f"{where}: set constant `{t}` used in Depth position")
@@ -471,6 +488,8 @@ def _check_depth_term(t: Term, d_vars: Set[str], s_vars: Set[str], where: str) -
     elif t.op == "max_set":
         _require(len(t.args) == 1, f"{where}: max_set expects 1 argument, got `{t}`")
         _check_set_term(t.args[0], d_vars, s_vars, where)
+    elif t.op in _LATTICE_FN_SORTS and _LATTICE_FN_SORTS[t.op] == (len(t.args), "Depth"):
+        pass
     else:
         raise ProofFault(f"{where}: non-depth term `{t}` cannot instantiate Depth quantifier")
 
@@ -494,6 +513,8 @@ def _check_set_term(t: Term, d_vars: Set[str], s_vars: Set[str], where: str) -> 
         _require(len(t.args) >= 1, f"{where}: ∪ requires at least one argument")
         for a in t.args:
             _check_set_term(a, d_vars, s_vars, where)
+    elif t.op in _LATTICE_FN_SORTS and _LATTICE_FN_SORTS[t.op] == (len(t.args), "Set"):
+        pass
     else:
         raise ProofFault(f"{where}: non-set term `{t}` cannot instantiate Set quantifier")
 
@@ -504,13 +525,14 @@ class Theorem:
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Theorem cannot be subclassed")
 
-    def __init__(
-        self,
+    def __new__(
+        cls,
         _token: object,
         assumptions: frozenset[Formula],
         conclusion: Formula,
         sorts: frozenset[Tuple[str, str]] = frozenset(),
-    ) -> None:
+    ) -> "Theorem":
+        _require(cls is Theorem, "Theorem cannot be subclassed")
         _require(_token is _SEAL, "Theorem constructed outside kernel")
         _require(
             type(assumptions) is frozenset and all(_formula_payload(a) is not None for a in assumptions),
@@ -518,9 +540,11 @@ class Theorem:
         )
         _require_formula(conclusion, "Theorem")
         _require(type(sorts) is frozenset, "Theorem sorts must be frozenset")
+        self = object.__new__(cls)
         oid = id(self)
         _THEOREM_DATA[oid] = (weakref.ref(self), assumptions, conclusion, sorts)
         weakref.finalize(self, _THEOREM_DATA.pop, oid, None)
+        return self
 
     @property
     def assumptions(self) -> frozenset[Formula]:
@@ -819,7 +843,11 @@ def _collect_lattice_vars(
             _require(len(t.args) == 1, f"max_set expects 1 argument, got {t}")
             scan_s(t.args[0], observed_full=False)
         else:
-            _require(t.op not in SET_OPS, f"set term `{t}` used in depth position")
+            sig = _LATTICE_FN_SORTS.get(t.op)
+            _require(
+                sig is not None and sig == (len(t.args), "Depth"),
+                f"unregistered non-depth compound term `{t}` in depth position",
+            )
             d_vars.add(t)
 
     def scan_s(t: Term, *, observed_full: bool) -> None:
@@ -843,7 +871,11 @@ def _collect_lattice_vars(
             for a in t.args:
                 scan_s(a, observed_full=observed_full)
         else:
-            _require(t.op not in DEPTH_OPS, f"depth term `{t}` used in set position")
+            sig = _LATTICE_FN_SORTS.get(t.op)
+            _require(
+                sig is not None and sig == (len(t.args), "Set"),
+                f"unregistered non-set compound term `{t}` in set position",
+            )
             s_vars.add(t)
             if observed_full:
                 full_s.add(t)
@@ -1173,16 +1205,75 @@ def _is_strictly_positive_premise(f: Formula) -> bool:
     return True
 
 
-_RULE_DATA: Dict[int, Tuple["weakref.ref[Rule]", str, Tuple[Formula, ...], Formula, int]] = {}
+def _infer_rule_var_sorts(
+    premises: Tuple[Formula, ...],
+    conclusion: Formula,
+    explicit: Optional[Dict[str, str]] = None,
+) -> frozenset[Tuple[str, str]]:
+    """Infer Depth/Set sorts for schematic variables appearing in lattice
+    operations or lattice relations in a `Rule`, merged with any explicit sorts."""
+    d_vars: Set[str] = set()
+    s_vars: Set[str] = set()
+
+    def scan_term_any(t: Term) -> None:
+        if t.op == "max":
+            for a in t.args:
+                _check_depth_term(a, d_vars, s_vars, "Rule")
+        elif t.op == "max_set" and len(t.args) == 1:
+            _check_set_term(t.args[0], d_vars, s_vars, "Rule")
+        elif t.op == "singleton" and len(t.args) == 1:
+            _check_depth_term(t.args[0], d_vars, s_vars, "Rule")
+        elif t.op == "∪":
+            for a in t.args:
+                _check_set_term(a, d_vars, s_vars, "Rule")
+        else:
+            for a in t.args:
+                scan_term_any(a)
+
+    def scan_formula(f: Formula) -> None:
+        if f.kind in {"<=", "<", "=_d", "!=_d"}:
+            _check_depth_term(f.terms[0], d_vars, s_vars, "Rule")
+            _check_depth_term(f.terms[1], d_vars, s_vars, "Rule")
+        elif f.kind in {"∈", "∉"}:
+            _check_depth_term(f.terms[0], d_vars, s_vars, "Rule")
+            _check_set_term(f.terms[1], d_vars, s_vars, "Rule")
+        elif f.kind in {"⊆", "⊈"}:
+            _check_set_term(f.terms[0], d_vars, s_vars, "Rule")
+            _check_set_term(f.terms[1], d_vars, s_vars, "Rule")
+        else:
+            for t in f.terms:
+                scan_term_any(t)
+            for s in f.subs:
+                scan_formula(s)
+
+    for p in premises:
+        scan_formula(p)
+    scan_formula(conclusion)
+    extra: List[Tuple[str, str]] = []
+    if explicit is not None:
+        _require(isinstance(explicit, dict), "Rule var_sorts must be a dict")
+        for k, v in dict.items(explicit):
+            _require_var_name(k, "Rule var_sorts")
+            _require(v in ("Depth", "Set"), f"Rule var_sorts: invalid sort `{v}` for `{k}`")
+            extra.append((k, v))
+    return _merge_sorts([(v, "Depth") for v in d_vars], [(v, "Set") for v in s_vars], extra)
 
 
-def _rule_payload(r: object) -> Optional[Tuple[str, Tuple[Formula, ...], Formula, int]]:
+_RULE_DATA: Dict[
+    int,
+    Tuple["weakref.ref[Rule]", str, Tuple[Formula, ...], Formula, frozenset[Tuple[str, str]], int],
+] = {}
+
+
+def _rule_payload(
+    r: object,
+) -> Optional[Tuple[str, Tuple[Formula, ...], Formula, frozenset[Tuple[str, str]], int]]:
     if type(r) is not Rule:
         return None
     entry = _RULE_DATA.get(id(r))
     if entry is None or entry[0]() is not r:
         return None
-    return entry[1], entry[2], entry[3], entry[4]
+    return entry[1], entry[2], entry[3], entry[4], entry[5]
 
 
 class Rule:
@@ -1191,17 +1282,27 @@ class Rule:
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Rule cannot be subclassed")
 
-    def __init__(self, name: str, premises: Tuple[Formula, ...], conclusion: Formula) -> None:
+    def __new__(
+        cls,
+        name: str,
+        premises: Tuple[Formula, ...],
+        conclusion: Formula,
+        var_sorts: Optional[Dict[str, str]] = None,
+    ) -> "Rule":
+        _require(cls is Rule, "Rule cannot be subclassed")
         _require(type(name) is str and bool(name), "Rule requires a non-empty name")
         _require(
             type(premises) is tuple and all(_formula_payload(p) is not None for p in premises),
             f"Rule `{name}` premises must be tuple[Formula, ...]",
         )
         _require_formula(conclusion, f"Rule `{name}`")
-        h = hash((name, premises, conclusion))
+        sorts = _infer_rule_var_sorts(premises, conclusion, var_sorts)
+        self = object.__new__(cls)
+        h = hash((name, premises, conclusion, sorts))
         oid = id(self)
-        _RULE_DATA[oid] = (weakref.ref(self), name, premises, conclusion, h)
+        _RULE_DATA[oid] = (weakref.ref(self), name, premises, conclusion, sorts, h)
         weakref.finalize(self, _RULE_DATA.pop, oid, None)
+        return self
 
     @property
     def name(self) -> str:
@@ -1224,18 +1325,25 @@ class Rule:
         assert payload is not None
         return payload[2]
 
+    @property
+    def var_sorts(self) -> frozenset[Tuple[str, str]]:
+        payload = _rule_payload(self)
+        _require(payload is not None, "unsealed Rule")
+        assert payload is not None
+        return payload[3]
+
     def __eq__(self, other: object) -> bool:
         if self is other:
             return True
         p1 = _rule_payload(self)
         p2 = _rule_payload(other)
-        return p1 is not None and p2 is not None and p1[3] == p2[3] and p1[:3] == p2[:3]
+        return p1 is not None and p2 is not None and p1[4] == p2[4] and p1[:4] == p2[:4]
 
     def __hash__(self) -> int:
         payload = _rule_payload(self)
         _require(payload is not None, "unsealed Rule")
         assert payload is not None
-        return payload[3]
+        return payload[4]
 
     def __repr__(self) -> str:
         return f"Rule({self.name!r}, {self.premises!r}, {self.conclusion!r})"
@@ -1260,7 +1368,8 @@ class InductiveRelation:
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("InductiveRelation cannot be subclassed")
 
-    def __init__(self, name: str, rules: Tuple[Rule, ...]) -> None:
+    def __new__(cls, name: str, rules: Tuple[Rule, ...]) -> "InductiveRelation":
+        _require(cls is InductiveRelation, "InductiveRelation cannot be subclassed")
         _require(type(name) is str and bool(name), "InductiveRelation requires a non-empty name")
         _require(
             type(rules) is tuple and bool(rules) and all(_rule_payload(r) is not None for r in rules),
@@ -1298,6 +1407,7 @@ class InductiveRelation:
                         not _mentions_pred(p, name),
                         f"non-positive occurrence of `{name}` in premise `{p}` of `{r.name}`",
                     )
+        self = object.__new__(cls)
         existing = _RELATIONS.get(name)
         if existing is not None:
             _require(
@@ -1309,6 +1419,7 @@ class InductiveRelation:
         oid = id(self)
         _REL_DATA[oid] = (weakref.ref(self), name, rules)
         weakref.finalize(self, _REL_DATA.pop, oid, None)
+        return self
 
     @property
     def name(self) -> str:
@@ -1367,6 +1478,18 @@ def apply_rule(
     )
     assumptions: Set[Formula] = set()
     all_sorts: List[frozenset[Tuple[str, str]]] = []
+    # Enforce declared/inferred Depth and Set sorts on every schematic variable
+    # instantiated by `subst` so unsorted terms cannot enter a sorted rule.
+    inst_d: Set[str] = set()
+    inst_s: Set[str] = set()
+    for vname, vsort in r.var_sorts:
+        term = clean.get(vname, var(vname))
+        if vsort == "Depth":
+            _check_depth_term(term, inst_d, inst_s, f"apply_rule `{rule_name}`")
+        else:
+            _check_set_term(term, inst_d, inst_s, f"apply_rule `{rule_name}`")
+    if inst_d or inst_s:
+        all_sorts.append(_merge_sorts([(v, "Depth") for v in inst_d], [(v, "Set") for v in inst_s]))
     for expected, given in zip(r.premises, premise_thms):
         ga, gc, gs = _require_thm(given, f"apply_rule `{rule_name}`")
         inst_expected = _subst_formula(expected, clean)
@@ -1466,6 +1589,7 @@ def rule_induction(
         for p in r.premises:
             rule_fvs |= free_vars_formula(p)
         clashes = rule_fvs & avoid
+        r_var_sorts = dict(r.var_sorts)
         if clashes:
             taken = avoid | rule_fvs | set(params_snap)
             rename: Dict[str, Term] = {}
@@ -1475,6 +1599,9 @@ def rule_induction(
                 rename[name] = var(fresh)
             r_premises = tuple(_subst_formula(p, rename) for p in r.premises)
             r_conclusion = _subst_formula(r.conclusion, rename)
+            r_var_sorts = {
+                (rename[k].op if k in rename else k): v for k, v in r_var_sorts.items()
+            }
         else:
             r_premises = r.premises
             r_conclusion = r.conclusion
@@ -1501,9 +1628,26 @@ def rule_induction(
             f"rule_induction case `{r.name}` left undischarged assumptions: {extra}",
         )
         case_sorts = dict(cs)
+        bare_concl_vars: Set[str] = {
+            arg.op for arg in r_conclusion.terms[0].args if not arg.args and not _is_constant_name(arg.op)
+        }
+        # Any sort assumption introduced inside a case proof (e.g. via `lattice_decide`)
+        # must either be on a free var of `prop` (propagated outward), on a bare
+        # conclusion argument (propagated onto the quantified parameter binder), or
+        # already declared/enforced on `r.var_sorts` (enforced by `apply_rule`).
+        # Silently dropping a sort on an unsorted premise-only rule variable is unsound.
         for var_name, sort in case_sorts.items():
             if var_name in avoid:
                 out_sorts_list.append((var_name, sort))
+            elif var_name in bare_concl_vars:
+                pass
+            else:
+                declared = r_var_sorts.get(var_name)
+                _require(
+                    declared == sort,
+                    f"rule_induction case `{r.name}` assumed sort `{sort}` on unsorted "
+                    f"rule-local variable `{var_name}` (declared: `{declared}`)",
+                )
         for i, arg in enumerate(r_conclusion.terms[0].args):
             inferred: Optional[str] = None
             if not arg.args and arg.op in case_sorts:
