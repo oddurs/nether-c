@@ -423,7 +423,7 @@ A durable, inspectable store with measured retention costs. Export and integrity
 
 ## warden — The Warden
 
-`##########` 93% · 14 of 15 done · due 2028-07-15
+`##########` 94% · 15 of 16 done · due 2028-07-15
 
 A stated trust model and tested defenses across current entrypoints, not just the decoder.
 
@@ -447,6 +447,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 - [x] [`0304`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0304-harden-foreign-symbol-isolation-capability-separation-http-framing-and-cli-rites.md) Harden foreign symbol isolation, capability separation, HTTP framing, and CLI rites <sup>feature · p2 · 4</sup>
 - [x] [`0308`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0308-pass-4-hardening-for-nether-bury-nether-ledger-and-nether-wasm.md) Pass-4 hardening for nether-bury, nether-ledger, and nether-wasm <sup>feature · p2 · 1</sup>
 - [x] [`0309`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0309-pass-4-hardening-for-nether-foreign-nether-world-and-nether-cli.md) Pass-4 hardening for nether-foreign, nether-world, and nether-cli <sup>feature · p2 · 1</sup>
+- [x] [`0310`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0310-harden-proof-kernel-decay-scanner-hooks-site-and-ci.md) harden proof kernel, decay scanner, hooks, site, and CI <sup>feature · p2 · 1</sup>
 
 ## assay — The Assay
 

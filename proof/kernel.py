@@ -6,7 +6,6 @@ private `_SEAL` token. Any file in `proof/` that mentions `admit`, `sorry`, or
 `unproved_axiom` is rejected by `proof/check.py` before checking begins.
 """
 from __future__ import annotations
-from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 import weakref
 
@@ -18,22 +17,63 @@ _VALID_FORMULA_KINDS = frozenset(
 )
 _BINARY_TERM_KINDS = frozenset({"=", "=_d", "!=_d", "<=", "<", "∈", "∉", "⊆", "⊈"})
 _BINARY_SUB_KINDS = frozenset({"∧", "∨", "→", "↔"})
+_VALID_SORTS = frozenset({"", "Depth", "Set"})
+
+_TERM_DATA: Dict[int, Tuple["weakref.ref[Term]", str, Tuple["Term", ...], int]] = {}
 
 
-@dataclass(frozen=True)
+def _term_payload(t: object) -> Optional[Tuple[str, Tuple["Term", ...], int]]:
+    if type(t) is not Term:
+        return None
+    entry = _TERM_DATA.get(id(t))
+    if entry is None or entry[0]() is not t:
+        return None
+    return entry[1], entry[2], entry[3]
+
+
 class Term:
-    op: str
-    args: Tuple["Term", ...] = ()
+    __slots__ = ("__weakref__",)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Term cannot be subclassed")
 
-    def __post_init__(self) -> None:
-        _require(type(self.op) is str and bool(self.op), f"Term op must be non-empty str, got {self.op!r}")
+    def __init__(self, op: str, args: Tuple["Term", ...] = ()) -> None:
+        _require(type(op) is str and bool(op), f"Term op must be non-empty str, got {op!r}")
         _require(
-            type(self.args) is tuple and all(type(a) is Term for a in self.args),
-            f"Term args must be tuple[Term, ...], got {self.args!r}",
+            type(args) is tuple and all(_term_payload(a) is not None for a in args),
+            f"Term args must be tuple[Term, ...], got {args!r}",
         )
+        h = hash((op, args))
+        oid = id(self)
+        _TERM_DATA[oid] = (weakref.ref(self), op, args, h)
+        weakref.finalize(self, _TERM_DATA.pop, oid, None)
+
+    @property
+    def op(self) -> str:
+        payload = _term_payload(self)
+        _require(payload is not None, "unsealed Term")
+        assert payload is not None
+        return payload[0]
+
+    @property
+    def args(self) -> Tuple["Term", ...]:
+        payload = _term_payload(self)
+        _require(payload is not None, "unsealed Term")
+        assert payload is not None
+        return payload[1]
+
+    def __eq__(self, other: object) -> bool:
+        if self is other:
+            return True
+        p1 = _term_payload(self)
+        p2 = _term_payload(other)
+        return p1 is not None and p2 is not None and p1[2] == p2[2] and p1[0] == p2[0] and p1[1] == p2[1]
+
+    def __hash__(self) -> int:
+        payload = _term_payload(self)
+        _require(payload is not None, "unsealed Term")
+        assert payload is not None
+        return payload[2]
 
     def __repr__(self) -> str:
         if not self.args:
@@ -42,7 +82,7 @@ class Term:
 
 
 def _require_term(t: Term, where: str) -> None:
-    _require(type(t) is Term, f"{where}: expected Term, got {type(t).__name__}")
+    _require(_term_payload(t) is not None, f"{where}: expected Term, got {type(t).__name__}")
 
 
 def var(name: str) -> Term:
@@ -107,40 +147,116 @@ def free_vars_term(t: Term) -> Set[str]:
     return out
 
 
-@dataclass(frozen=True)
+_FORMULA_DATA: Dict[
+    int,
+    Tuple["weakref.ref[Formula]", str, Tuple[Term, ...], Tuple["Formula", ...], str, str, int],
+] = {}
+
+
+def _formula_payload(
+    f: object,
+) -> Optional[Tuple[str, Tuple[Term, ...], Tuple["Formula", ...], str, str, int]]:
+    if type(f) is not Formula:
+        return None
+    entry = _FORMULA_DATA.get(id(f))
+    if entry is None or entry[0]() is not f:
+        return None
+    return entry[1], entry[2], entry[3], entry[4], entry[5], entry[6]
+
+
 class Formula:
-    kind: str
-    terms: Tuple[Term, ...] = ()
-    subs: Tuple["Formula", ...] = ()
-    binder: str = ""
+    __slots__ = ("__weakref__",)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Formula cannot be subclassed")
 
-    def __post_init__(self) -> None:
-        _require(type(self.kind) is str, f"Formula kind must be str, got {self.kind!r}")
+    def __init__(
+        self,
+        kind: str,
+        terms: Tuple[Term, ...] = (),
+        subs: Tuple["Formula", ...] = (),
+        binder: str = "",
+        binder_sort: str = "",
+    ) -> None:
+        _require(type(kind) is str, f"Formula kind must be str, got {kind!r}")
         _require(
-            type(self.terms) is tuple and all(type(t) is Term for t in self.terms),
-            f"Formula terms must be tuple[Term, ...], got {self.terms!r}",
+            type(terms) is tuple and all(_term_payload(t) is not None for t in terms),
+            f"Formula terms must be tuple[Term, ...], got {terms!r}",
         )
         _require(
-            type(self.subs) is tuple and all(type(s) is Formula for s in self.subs),
-            f"Formula subs must be tuple[Formula, ...], got {self.subs!r}",
+            type(subs) is tuple and all(_formula_payload(s) is not None for s in subs),
+            f"Formula subs must be tuple[Formula, ...], got {subs!r}",
         )
-        _require(type(self.binder) is str, f"Formula binder must be str, got {self.binder!r}")
-        if self.kind == "Pred":
-            _require(len(self.terms) == 1 and not self.subs and self.binder == "", f"malformed Pred: {self!r}")
-        elif self.kind in _BINARY_TERM_KINDS:
-            _require(len(self.terms) == 2 and not self.subs and self.binder == "", f"malformed {self.kind}: {self!r}")
-        elif self.kind == "¬":
-            _require(not self.terms and len(self.subs) == 1 and self.binder == "", f"malformed ¬: {self!r}")
-        elif self.kind in _BINARY_SUB_KINDS:
-            _require(not self.terms and len(self.subs) == 2 and self.binder == "", f"malformed {self.kind}: {self!r}")
-        elif self.kind in {"∀", "∃"}:
-            _require(not self.terms and len(self.subs) == 1, f"malformed quantifier: {self!r}")
-            _require_var_name(self.binder, "Formula")
+        _require(type(binder) is str, f"Formula binder must be str, got {binder!r}")
+        _require(
+            type(binder_sort) is str and binder_sort in _VALID_SORTS,
+            f"Formula binder_sort must be one of {_VALID_SORTS}, got {binder_sort!r}",
+        )
+        if kind == "Pred":
+            _require(len(terms) == 1 and not subs and binder == "" and binder_sort == "", f"malformed Pred")
+        elif kind in _BINARY_TERM_KINDS:
+            _require(len(terms) == 2 and not subs and binder == "" and binder_sort == "", f"malformed {kind}")
+        elif kind == "¬":
+            _require(not terms and len(subs) == 1 and binder == "" and binder_sort == "", "malformed ¬")
+        elif kind in _BINARY_SUB_KINDS:
+            _require(not terms and len(subs) == 2 and binder == "" and binder_sort == "", f"malformed {kind}")
+        elif kind in {"∀", "∃"}:
+            _require(not terms and len(subs) == 1, "malformed quantifier")
+            _require_var_name(binder, "Formula")
         else:
-            raise ProofFault(f"unknown Formula kind `{self.kind}`")
+            raise ProofFault(f"unknown Formula kind `{kind}`")
+        h = hash((kind, terms, subs, binder, binder_sort))
+        oid = id(self)
+        _FORMULA_DATA[oid] = (weakref.ref(self), kind, terms, subs, binder, binder_sort, h)
+        weakref.finalize(self, _FORMULA_DATA.pop, oid, None)
+
+    @property
+    def kind(self) -> str:
+        payload = _formula_payload(self)
+        _require(payload is not None, "unsealed Formula")
+        assert payload is not None
+        return payload[0]
+
+    @property
+    def terms(self) -> Tuple[Term, ...]:
+        payload = _formula_payload(self)
+        _require(payload is not None, "unsealed Formula")
+        assert payload is not None
+        return payload[1]
+
+    @property
+    def subs(self) -> Tuple["Formula", ...]:
+        payload = _formula_payload(self)
+        _require(payload is not None, "unsealed Formula")
+        assert payload is not None
+        return payload[2]
+
+    @property
+    def binder(self) -> str:
+        payload = _formula_payload(self)
+        _require(payload is not None, "unsealed Formula")
+        assert payload is not None
+        return payload[3]
+
+    @property
+    def binder_sort(self) -> str:
+        payload = _formula_payload(self)
+        _require(payload is not None, "unsealed Formula")
+        assert payload is not None
+        return payload[4]
+
+    def __eq__(self, other: object) -> bool:
+        if self is other:
+            return True
+        p1 = _formula_payload(self)
+        p2 = _formula_payload(other)
+        return p1 is not None and p2 is not None and p1[5] == p2[5] and p1[:5] == p2[:5]
+
+    def __hash__(self) -> int:
+        payload = _formula_payload(self)
+        _require(payload is not None, "unsealed Formula")
+        assert payload is not None
+        return payload[5]
 
     def __repr__(self) -> str:
         if self.kind == "Pred":
@@ -152,12 +268,14 @@ class Formula:
         if self.kind in _BINARY_SUB_KINDS:
             return f"({self.subs[0]} {self.kind} {self.subs[1]})"
         if self.kind in {"∀", "∃"}:
+            if self.binder_sort:
+                return f"({self.kind}{self.binder}:{self.binder_sort}. {self.subs[0]})"
             return f"({self.kind}{self.binder}. {self.subs[0]})"
         return f"{self.kind}({self.terms}, {self.subs})"
 
 
 def _require_formula(f: Formula, where: str) -> None:
-    _require(type(f) is Formula, f"{where}: expected Formula, got {type(f).__name__}")
+    _require(_formula_payload(f) is not None, f"{where}: expected Formula, got {type(f).__name__}")
 
 
 def pred(name: str, *args: Term) -> Formula:
@@ -228,9 +346,9 @@ def iff(a: Formula, b: Formula) -> Formula:
     return Formula("↔", (), (a, b))
 
 
-def forall(binder: str, body: Formula) -> Formula:
+def forall(binder: str, body: Formula, binder_sort: str = "") -> Formula:
     _require_var_name(binder, "forall")
-    return Formula("∀", (), (body,), binder)
+    return Formula("∀", (), (body,), binder, binder_sort)
 
 
 def free_vars_formula(f: Formula) -> Set[str]:
@@ -278,7 +396,7 @@ def _subst_formula(f: Formula, mapping: Dict[str, Term]) -> Formula:
             fresh = _fresh_var(binder, avoid)
             body = _subst_formula(body, {binder: var(fresh)})
             binder = fresh
-        return Formula(f.kind, (), (_subst_formula(body, active),), binder)
+        return Formula(f.kind, (), (_subst_formula(body, active),), binder, f.binder_sort)
     if f.kind == "Pred":
         return pred(f.terms[0].op, *(_subst_term(a, mapping) for a in f.terms[0].args))
     return Formula(
@@ -286,6 +404,7 @@ def _subst_formula(f: Formula, mapping: Dict[str, Term]) -> Formula:
         tuple(_subst_term(t, mapping) for t in f.terms),
         tuple(_subst_formula(s, mapping) for s in f.subs),
         f.binder,
+        f.binder_sort,
     )
 
 
@@ -302,16 +421,81 @@ def _require(cond: bool, msg: str) -> None:
         raise ProofFault(msg)
 
 
-_THEOREM_DATA: Dict[int, Tuple["weakref.ref[Theorem]", frozenset[Formula], Formula]] = {}
+_THEOREM_DATA: Dict[
+    int,
+    Tuple["weakref.ref[Theorem]", frozenset[Formula], Formula, frozenset[Tuple[str, str]]],
+] = {}
 
 
-def _thm_payload(thm: object) -> Optional[Tuple[frozenset[Formula], Formula]]:
+def _thm_payload(
+    thm: object,
+) -> Optional[Tuple[frozenset[Formula], Formula, frozenset[Tuple[str, str]]]]:
     if type(thm) is not Theorem:
         return None
     entry = _THEOREM_DATA.get(id(thm))
     if entry is None or entry[0]() is not thm:
         return None
-    return entry[1], entry[2]
+    return entry[1], entry[2], entry[3]
+
+
+def _merge_sorts(*sort_sets: Iterable[Tuple[str, str]]) -> frozenset[Tuple[str, str]]:
+    merged: Dict[str, str] = {}
+    for items in sort_sets:
+        for name, sort in items:
+            _require(sort in ("Depth", "Set"), f"invalid variable sort `{sort}` for `{name}`")
+            prev = merged.get(name)
+            _require(
+                prev is None or prev == sort,
+                f"conflicting sorts `{prev}` and `{sort}` for variable `{name}`",
+            )
+            merged[name] = sort
+    return frozenset(merged.items())
+
+
+def _check_depth_term(t: Term, d_vars: Set[str], s_vars: Set[str], where: str) -> None:
+    if not t.args:
+        _require(t.op not in SET_CONSTS, f"{where}: set constant `{t}` used in Depth position")
+        if _is_ascii_digits(t.op):
+            v = int(t.op)
+            _require(0 <= v <= 8, f"{where}: depth literal `{t}` out of range 0..8")
+        else:
+            _require(
+                t.op not in RESERVED_CONSTANTS and not t.op.isdigit(),
+                f"{where}: non-depth constant `{t}` used in Depth position",
+            )
+            d_vars.add(t.op)
+    elif t.op == "max":
+        _require(len(t.args) >= 1, f"{where}: max requires at least one argument")
+        for a in t.args:
+            _check_depth_term(a, d_vars, s_vars, where)
+    elif t.op == "max_set":
+        _require(len(t.args) == 1, f"{where}: max_set expects 1 argument, got `{t}`")
+        _check_set_term(t.args[0], d_vars, s_vars, where)
+    else:
+        raise ProofFault(f"{where}: non-depth term `{t}` cannot instantiate Depth quantifier")
+
+
+def _check_set_term(t: Term, d_vars: Set[str], s_vars: Set[str], where: str) -> None:
+    if not t.args:
+        _require(
+            not _is_ascii_digits(t.op) and not t.op.isdigit(),
+            f"{where}: depth literal `{t}` used in Set position",
+        )
+        if t.op not in SET_CONSTS:
+            _require(
+                t.op not in RESERVED_CONSTANTS,
+                f"{where}: non-set constant `{t}` used in Set position",
+            )
+            s_vars.add(t.op)
+    elif t.op == "singleton":
+        _require(len(t.args) == 1, f"{where}: singleton expects 1 argument, got `{t}`")
+        _check_depth_term(t.args[0], d_vars, s_vars, where)
+    elif t.op == "∪":
+        _require(len(t.args) >= 1, f"{where}: ∪ requires at least one argument")
+        for a in t.args:
+            _check_set_term(a, d_vars, s_vars, where)
+    else:
+        raise ProofFault(f"{where}: non-set term `{t}` cannot instantiate Set quantifier")
 
 
 class Theorem:
@@ -320,15 +504,22 @@ class Theorem:
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Theorem cannot be subclassed")
 
-    def __init__(self, _token: object, assumptions: frozenset[Formula], conclusion: Formula) -> None:
+    def __init__(
+        self,
+        _token: object,
+        assumptions: frozenset[Formula],
+        conclusion: Formula,
+        sorts: frozenset[Tuple[str, str]] = frozenset(),
+    ) -> None:
         _require(_token is _SEAL, "Theorem constructed outside kernel")
         _require(
-            type(assumptions) is frozenset and all(type(a) is Formula for a in assumptions),
+            type(assumptions) is frozenset and all(_formula_payload(a) is not None for a in assumptions),
             "Theorem assumptions must be frozenset[Formula]",
         )
         _require_formula(conclusion, "Theorem")
+        _require(type(sorts) is frozenset, "Theorem sorts must be frozenset")
         oid = id(self)
-        _THEOREM_DATA[oid] = (weakref.ref(self), assumptions, conclusion)
+        _THEOREM_DATA[oid] = (weakref.ref(self), assumptions, conclusion, sorts)
         weakref.finalize(self, _THEOREM_DATA.pop, oid, None)
 
     @property
@@ -360,12 +551,21 @@ class Theorem:
         return f"{hyps} ⊢ {self.conclusion}"
 
 
-def _require_thm(thm: Theorem, where: str) -> None:
-    _require(_thm_payload(thm) is not None, f"{where}: expected kernel Theorem")
+def _require_thm(
+    thm: Theorem, where: str
+) -> Tuple[frozenset[Formula], Formula, frozenset[Tuple[str, str]]]:
+    payload = _thm_payload(thm)
+    _require(payload is not None, f"{where}: expected kernel Theorem")
+    assert payload is not None
+    return payload
 
 
-def _thm(assumptions: Iterable[Formula], conclusion: Formula) -> Theorem:
-    return Theorem(_SEAL, frozenset(assumptions), conclusion)
+def _thm(
+    assumptions: Iterable[Formula],
+    conclusion: Formula,
+    sorts: Iterable[Tuple[str, str]] = (),
+) -> Theorem:
+    return Theorem(_SEAL, frozenset(assumptions), conclusion, _merge_sorts(sorts))
 
 
 # ── Primitive logical inference rules ────────────────────────────────────────
@@ -382,92 +582,105 @@ def refl(t: Term) -> Theorem:
 
 
 def sym(thm: Theorem) -> Theorem:
-    _require_thm(thm, "sym")
-    _require(thm.conclusion.kind == "=", f"sym expects equality, got {thm.conclusion}")
-    a, b = thm.conclusion.terms
-    return _thm(thm.assumptions, eq(b, a))
+    assumptions, conclusion, sorts = _require_thm(thm, "sym")
+    _require(conclusion.kind == "=", f"sym expects equality, got {conclusion}")
+    a, b = conclusion.terms
+    return _thm(assumptions, eq(b, a), sorts)
 
 
 def trans(t1: Theorem, t2: Theorem) -> Theorem:
-    _require_thm(t1, "trans")
-    _require_thm(t2, "trans")
-    _require(t1.conclusion.kind == "=" and t2.conclusion.kind == "=", "trans expects =")
-    _require(t1.conclusion.terms[1] == t2.conclusion.terms[0], "trans middle mismatch")
-    return _thm(
-        t1.assumptions | t2.assumptions,
-        eq(t1.conclusion.terms[0], t2.conclusion.terms[1]),
-    )
+    a1, c1, s1 = _require_thm(t1, "trans")
+    a2, c2, s2 = _require_thm(t2, "trans")
+    _require(c1.kind == "=" and c2.kind == "=", "trans expects =")
+    _require(c1.terms[1] == c2.terms[0], "trans middle mismatch")
+    return _thm(a1 | a2, eq(c1.terms[0], c2.terms[1]), _merge_sorts(s1, s2))
 
 
 def cong(op: str, eq_thms: Sequence[Theorem]) -> Theorem:
     _require(type(op) is str and bool(op), f"cong expects non-empty op, got {op!r}")
     assumptions: Set[Formula] = set()
+    all_sorts: List[frozenset[Tuple[str, str]]] = []
     lhs_args: List[Term] = []
     rhs_args: List[Term] = []
     for t in eq_thms:
-        _require_thm(t, "cong")
-        _require(t.conclusion.kind == "=", f"cong expects =, got {t.conclusion}")
-        assumptions |= t.assumptions
-        lhs_args.append(t.conclusion.terms[0])
-        rhs_args.append(t.conclusion.terms[1])
-    return _thm(assumptions, eq(Term(op, tuple(lhs_args)), Term(op, tuple(rhs_args))))
+        ta, tc, ts = _require_thm(t, "cong")
+        _require(tc.kind == "=", f"cong expects =, got {tc}")
+        assumptions |= ta
+        all_sorts.append(ts)
+        lhs_args.append(tc.terms[0])
+        rhs_args.append(tc.terms[1])
+    return _thm(assumptions, eq(Term(op, tuple(lhs_args)), Term(op, tuple(rhs_args))), _merge_sorts(*all_sorts))
 
 
 def mp(imp_thm: Theorem, ant_thm: Theorem) -> Theorem:
-    _require_thm(imp_thm, "mp")
-    _require_thm(ant_thm, "mp")
+    ia, ic, isorts = _require_thm(imp_thm, "mp")
+    aa, ac, asorts = _require_thm(ant_thm, "mp")
     _require(
-        imp_thm.conclusion.kind == "→",
-        f"mp expects implication, got {imp_thm.conclusion}",
+        ic.kind == "→",
+        f"mp expects implication, got {ic}",
     )
-    lhs, rhs = imp_thm.conclusion.subs
+    lhs, rhs = ic.subs
     _require(
-        lhs == ant_thm.conclusion,
-        f"mp antecedent mismatch:\n  expected: {lhs}\n  got:      {ant_thm.conclusion}",
+        lhs == ac,
+        f"mp antecedent mismatch:\n  expected: {lhs}\n  got:      {ac}",
     )
-    return _thm(imp_thm.assumptions | ant_thm.assumptions, rhs)
+    return _thm(ia | aa, rhs, _merge_sorts(isorts, asorts))
 
 
 def discharge(hyp: Formula, thm: Theorem) -> Theorem:
     _require_formula(hyp, "discharge")
-    _require_thm(thm, "discharge")
-    return _thm(thm.assumptions - {hyp}, imp(hyp, thm.conclusion))
+    assumptions, conclusion, sorts = _require_thm(thm, "discharge")
+    return _thm(assumptions - {hyp}, imp(hyp, conclusion), sorts)
 
 
 def conj_intro(t1: Theorem, t2: Theorem) -> Theorem:
-    _require_thm(t1, "conj_intro")
-    _require_thm(t2, "conj_intro")
-    return _thm(t1.assumptions | t2.assumptions, conj(t1.conclusion, t2.conclusion))
+    a1, c1, s1 = _require_thm(t1, "conj_intro")
+    a2, c2, s2 = _require_thm(t2, "conj_intro")
+    return _thm(a1 | a2, conj(c1, c2), _merge_sorts(s1, s2))
 
 
 def conj_elim_l(thm: Theorem) -> Theorem:
-    _require_thm(thm, "conj_elim_l")
-    _require(thm.conclusion.kind == "∧", f"conj_elim_l expects ∧, got {thm.conclusion}")
-    return _thm(thm.assumptions, thm.conclusion.subs[0])
+    assumptions, conclusion, sorts = _require_thm(thm, "conj_elim_l")
+    _require(conclusion.kind == "∧", f"conj_elim_l expects ∧, got {conclusion}")
+    return _thm(assumptions, conclusion.subs[0], sorts)
 
 
 def conj_elim_r(thm: Theorem) -> Theorem:
-    _require_thm(thm, "conj_elim_r")
-    _require(thm.conclusion.kind == "∧", f"conj_elim_r expects ∧, got {thm.conclusion}")
-    return _thm(thm.assumptions, thm.conclusion.subs[1])
+    assumptions, conclusion, sorts = _require_thm(thm, "conj_elim_r")
+    _require(conclusion.kind == "∧", f"conj_elim_r expects ∧, got {conclusion}")
+    return _thm(assumptions, conclusion.subs[1], sorts)
 
 
 def iff_intro(ab: Theorem, ba: Theorem) -> Theorem:
-    _require_thm(ab, "iff_intro")
-    _require_thm(ba, "iff_intro")
-    _require(ab.conclusion.kind == "→" and ba.conclusion.kind == "→", "iff_intro expects →")
-    a, b = ab.conclusion.subs
-    b2, a2 = ba.conclusion.subs
-    _require(a == a2 and b == b2, "iff_intro mismatch")
-    return _thm(ab.assumptions | ba.assumptions, iff(a, b))
+    a1, c1, s1 = _require_thm(ab, "iff_intro")
+    a2, c2, s2 = _require_thm(ba, "iff_intro")
+    _require(c1.kind == "→" and c2.kind == "→", "iff_intro expects →")
+    a, b = c1.subs
+    b2, a2_f = c2.subs
+    _require(a == a2_f and b == b2, "iff_intro mismatch")
+    return _thm(a1 | a2, iff(a, b), _merge_sorts(s1, s2))
 
 
 def inst(thm: Theorem, term: Term) -> Theorem:
-    _require_thm(thm, "inst")
+    assumptions, conclusion, sorts = _require_thm(thm, "inst")
     _require_term(term, "inst")
-    _require(thm.conclusion.kind == "∀", f"inst expects ∀, got {thm.conclusion}")
-    body = subst_formula(thm.conclusion.subs[0], {thm.conclusion.binder: term})
-    return _thm(thm.assumptions, body)
+    _require(conclusion.kind == "∀", f"inst expects ∀, got {conclusion}")
+    extra: List[Tuple[str, str]] = []
+    if conclusion.binder_sort == "Depth":
+        dv: Set[str] = set()
+        sv: Set[str] = set()
+        _check_depth_term(term, dv, sv, "inst")
+        extra.extend((v, "Depth") for v in dv)
+        extra.extend((v, "Set") for v in sv)
+    elif conclusion.binder_sort == "Set":
+        dv = set()
+        sv = set()
+        _check_set_term(term, dv, sv, "inst")
+        extra.extend((v, "Depth") for v in dv)
+        extra.extend((v, "Set") for v in sv)
+    new_sorts = _merge_sorts(sorts, extra)
+    body = subst_formula(conclusion.subs[0], {conclusion.binder: term})
+    return _thm(assumptions, body, new_sorts)
 
 
 def inst_all(thm: Theorem, terms: Sequence[Term]) -> Theorem:
@@ -479,20 +692,22 @@ def inst_all(thm: Theorem, terms: Sequence[Term]) -> Theorem:
 
 def gen(binder: str, thm: Theorem) -> Theorem:
     _require_var_name(binder, "gen")
-    _require_thm(thm, "gen")
-    for a in thm.assumptions:
+    assumptions, conclusion, sorts = _require_thm(thm, "gen")
+    for a in assumptions:
         _require(
             binder not in free_vars_formula(a),
             f"cannot generalize `{binder}` while free in assumption {a}",
         )
-    return _thm(thm.assumptions, forall(binder, thm.conclusion))
+    sorts_map = dict(sorts)
+    binder_sort = sorts_map.pop(binder, "")
+    return _thm(assumptions, forall(binder, conclusion, binder_sort), sorts_map.items())
 
 
 def rewrite(eq_thm: Theorem, target: Theorem) -> Theorem:
-    _require_thm(eq_thm, "rewrite")
-    _require_thm(target, "rewrite")
-    _require(eq_thm.conclusion.kind == "=", f"rewrite expects =, got {eq_thm.conclusion}")
-    src, dst = eq_thm.conclusion.terms
+    ea, ec, esorts = _require_thm(eq_thm, "rewrite")
+    ta, tc, tsorts = _require_thm(target, "rewrite")
+    _require(ec.kind == "=", f"rewrite expects =, got {ec}")
+    src, dst = ec.terms
     src_fv = free_vars_term(src)
     dst_fv = free_vars_term(dst)
 
@@ -514,7 +729,7 @@ def rewrite(eq_thm: Theorem, target: Theorem) -> Theorem:
                 fresh = _fresh_var(binder, avoid)
                 body = subst_formula(body, {binder: var(fresh)})
                 binder = fresh
-            return Formula(f.kind, (), (replace_f(body),), binder)
+            return Formula(f.kind, (), (replace_f(body),), binder, f.binder_sort)
         if f.kind == "Pred":
             return pred(f.terms[0].op, *(replace_t(a) for a in f.terms[0].args))
         return Formula(
@@ -522,9 +737,10 @@ def rewrite(eq_thm: Theorem, target: Theorem) -> Theorem:
             tuple(replace_t(t) for t in f.terms),
             tuple(replace_f(s) for s in f.subs),
             f.binder,
+            f.binder_sort,
         )
 
-    return _thm(eq_thm.assumptions | target.assumptions, replace_f(target.conclusion))
+    return _thm(ea | ta, replace_f(tc), _merge_sorts(esorts, tsorts))
 
 
 # ── Bounded lattice & capability-set decision procedure ──────────────────────
@@ -726,11 +942,13 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
     """
     _require_formula(goal, "lattice_decide")
     assumptions: Set[Formula] = set()
+    hyp_sorts: List[frozenset[Tuple[str, str]]] = []
     raw_antecedents: List[Formula] = []
     for h in hyps:
-        _require_thm(h, "lattice_decide")
-        assumptions |= h.assumptions
-        raw_antecedents.extend(_split_conj(h.conclusion))
+        ha, hc, hs = _require_thm(h, "lattice_decide")
+        assumptions |= ha
+        hyp_sorts.append(hs)
+        raw_antecedents.extend(_split_conj(hc))
 
     # Unpack top-level implications in `goal` for earlier antecedent pruning.
     check_goal = goal
@@ -919,7 +1137,12 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
 
         check_d(0)
 
-    return _thm(assumptions, goal)
+    out_sorts = _merge_sorts(
+        *hyp_sorts,
+        [(t.op, "Depth") for t in orig_d if not t.args],
+        [(t.op, "Set") for t in orig_s if not t.args],
+    )
+    return _thm(assumptions, goal, out_sorts)
 
 
 # ── Inductive relations & rule induction ─────────────────────────────────────
@@ -950,22 +1173,72 @@ def _is_strictly_positive_premise(f: Formula) -> bool:
     return True
 
 
-@dataclass(frozen=True)
+_RULE_DATA: Dict[int, Tuple["weakref.ref[Rule]", str, Tuple[Formula, ...], Formula, int]] = {}
+
+
+def _rule_payload(r: object) -> Optional[Tuple[str, Tuple[Formula, ...], Formula, int]]:
+    if type(r) is not Rule:
+        return None
+    entry = _RULE_DATA.get(id(r))
+    if entry is None or entry[0]() is not r:
+        return None
+    return entry[1], entry[2], entry[3], entry[4]
+
+
 class Rule:
-    name: str
-    premises: Tuple[Formula, ...]
-    conclusion: Formula
+    __slots__ = ("__weakref__",)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise ProofFault("Rule cannot be subclassed")
 
-    def __post_init__(self) -> None:
-        _require(type(self.name) is str and bool(self.name), "Rule requires a non-empty name")
+    def __init__(self, name: str, premises: Tuple[Formula, ...], conclusion: Formula) -> None:
+        _require(type(name) is str and bool(name), "Rule requires a non-empty name")
         _require(
-            type(self.premises) is tuple and all(type(p) is Formula for p in self.premises),
-            f"Rule `{self.name}` premises must be tuple[Formula, ...]",
+            type(premises) is tuple and all(_formula_payload(p) is not None for p in premises),
+            f"Rule `{name}` premises must be tuple[Formula, ...]",
         )
-        _require_formula(self.conclusion, f"Rule `{self.name}`")
+        _require_formula(conclusion, f"Rule `{name}`")
+        h = hash((name, premises, conclusion))
+        oid = id(self)
+        _RULE_DATA[oid] = (weakref.ref(self), name, premises, conclusion, h)
+        weakref.finalize(self, _RULE_DATA.pop, oid, None)
+
+    @property
+    def name(self) -> str:
+        payload = _rule_payload(self)
+        _require(payload is not None, "unsealed Rule")
+        assert payload is not None
+        return payload[0]
+
+    @property
+    def premises(self) -> Tuple[Formula, ...]:
+        payload = _rule_payload(self)
+        _require(payload is not None, "unsealed Rule")
+        assert payload is not None
+        return payload[1]
+
+    @property
+    def conclusion(self) -> Formula:
+        payload = _rule_payload(self)
+        _require(payload is not None, "unsealed Rule")
+        assert payload is not None
+        return payload[2]
+
+    def __eq__(self, other: object) -> bool:
+        if self is other:
+            return True
+        p1 = _rule_payload(self)
+        p2 = _rule_payload(other)
+        return p1 is not None and p2 is not None and p1[3] == p2[3] and p1[:3] == p2[:3]
+
+    def __hash__(self) -> int:
+        payload = _rule_payload(self)
+        _require(payload is not None, "unsealed Rule")
+        assert payload is not None
+        return payload[3]
+
+    def __repr__(self) -> str:
+        return f"Rule({self.name!r}, {self.premises!r}, {self.conclusion!r})"
 
 
 _RELATIONS: Dict[str, Tuple["InductiveRelation", Tuple[Rule, ...]]] = {}
@@ -990,7 +1263,7 @@ class InductiveRelation:
     def __init__(self, name: str, rules: Tuple[Rule, ...]) -> None:
         _require(type(name) is str and bool(name), "InductiveRelation requires a non-empty name")
         _require(
-            type(rules) is tuple and bool(rules) and all(type(r) is Rule for r in rules),
+            type(rules) is tuple and bool(rules) and all(_rule_payload(r) is not None for r in rules),
             f"InductiveRelation `{name}` requires non-empty tuple[Rule, ...]",
         )
         seen: Set[str] = set()
@@ -1093,15 +1366,17 @@ def apply_rule(
         f"rule `{rule_name}` expects {len(r.premises)} premises, got {len(premise_thms)}",
     )
     assumptions: Set[Formula] = set()
+    all_sorts: List[frozenset[Tuple[str, str]]] = []
     for expected, given in zip(r.premises, premise_thms):
-        _require_thm(given, f"apply_rule `{rule_name}`")
+        ga, gc, gs = _require_thm(given, f"apply_rule `{rule_name}`")
         inst_expected = _subst_formula(expected, clean)
         _require(
-            inst_expected == given.conclusion,
-            f"rule `{rule_name}` premise mismatch:\n  expected: {inst_expected}\n  got:      {given.conclusion}",
+            inst_expected == gc,
+            f"rule `{rule_name}` premise mismatch:\n  expected: {inst_expected}\n  got:      {gc}",
         )
-        assumptions |= given.assumptions
-    return _thm(assumptions, _subst_formula(r.conclusion, clean))
+        assumptions |= ga
+        all_sorts.append(gs)
+    return _thm(assumptions, _subst_formula(r.conclusion, clean), _merge_sorts(*all_sorts))
 
 
 def rule_induction(
@@ -1137,7 +1412,53 @@ def rule_induction(
     def _inst_prop(args: Tuple[Term, ...]) -> Formula:
         return _subst_formula(prop, dict(zip(params_snap, args)))
 
+    def _prop_param_sorts() -> Dict[int, str]:
+        p_idx = {name: i for i, name in enumerate(params_snap)}
+        found: Dict[int, str] = {}
+
+        def mark(i: int, sort: str) -> None:
+            prev = found.get(i)
+            _require(
+                prev is None or prev == sort,
+                f"rule_induction on `{rel_name}` parameter `{params_snap[i]}` used as both `{prev}` and `{sort}`",
+            )
+            found[i] = sort
+
+        def scan_t(t: Term, sort: str) -> None:
+            if not t.args:
+                if t.op in p_idx:
+                    mark(p_idx[t.op], sort)
+            elif t.op == "max":
+                for a in t.args:
+                    scan_t(a, "Depth")
+            elif t.op == "max_set" and len(t.args) == 1:
+                scan_t(t.args[0], "Set")
+            elif t.op == "singleton" and len(t.args) == 1:
+                scan_t(t.args[0], "Depth")
+            elif t.op == "∪":
+                for a in t.args:
+                    scan_t(a, "Set")
+
+        def scan_f(f: Formula) -> None:
+            if f.kind in {"<=", "<", "=_d", "!=_d"}:
+                scan_t(f.terms[0], "Depth")
+                scan_t(f.terms[1], "Depth")
+            elif f.kind in {"∈", "∉"}:
+                scan_t(f.terms[0], "Depth")
+                scan_t(f.terms[1], "Set")
+            elif f.kind in {"⊆", "⊈"}:
+                scan_t(f.terms[0], "Set")
+                scan_t(f.terms[1], "Set")
+            else:
+                for s in f.subs:
+                    scan_f(s)
+
+        scan_f(prop)
+        return found
+
     avoid = free_vars_formula(prop) - set(params_snap)
+    param_sorts: Dict[int, str] = _prop_param_sorts()
+    out_sorts_list: List[Tuple[str, str]] = []
     for r in rules:
         # Alpha-rename rule variables away from any free variables in `prop`
         # so schematic rule variables cannot accidentally unify with `prop`.
@@ -1166,19 +1487,38 @@ def rule_induction(
         ih_hyps = tuple(ih_hyps_list)
 
         case_thm = cases[r.name](prem_hyps, ih_hyps)
-        _require_thm(case_thm, f"rule_induction case `{r.name}`")
+        ca, cc, cs = _require_thm(case_thm, f"rule_induction case `{r.name}`")
         expected = _inst_prop(r_conclusion.terms[0].args)
         _require(
-            case_thm.conclusion == expected,
+            cc == expected,
             f"rule_induction case `{r.name}` proved wrong conclusion:\n"
-            f"  expected: {expected}\n  got:      {case_thm.conclusion}",
+            f"  expected: {expected}\n  got:      {cc}",
         )
         allowed = {h.conclusion for h in prem_hyps} | {h.conclusion for h in ih_hyps}
-        extra = case_thm.assumptions - allowed
+        extra = ca - allowed
         _require(
             not extra,
             f"rule_induction case `{r.name}` left undischarged assumptions: {extra}",
         )
+        case_sorts = dict(cs)
+        for var_name, sort in case_sorts.items():
+            if var_name in avoid:
+                out_sorts_list.append((var_name, sort))
+        for i, arg in enumerate(r_conclusion.terms[0].args):
+            inferred: Optional[str] = None
+            if not arg.args and arg.op in case_sorts:
+                inferred = case_sorts[arg.op]
+            elif arg.args and arg.op in DEPTH_OPS and (free_vars_term(arg) & case_sorts.keys()):
+                inferred = "Depth"
+            elif arg.args and arg.op in SET_OPS and (free_vars_term(arg) & case_sorts.keys()):
+                inferred = "Set"
+            if inferred is not None:
+                prev = param_sorts.get(i)
+                _require(
+                    prev is None or prev == inferred,
+                    f"rule_induction on `{rel_name}` parameter {i} has conflicting sorts `{prev}` and `{inferred}`",
+                )
+                param_sorts[i] = inferred
 
     generic_names: List[str] = []
     for i in range(rel_arity):
@@ -1188,6 +1528,6 @@ def rule_induction(
         generic_names.append(name)
     generic_args = tuple(var(n) for n in generic_names)
     goal = imp(pred(rel_name, *generic_args), _inst_prop(generic_args))
-    for v in reversed(generic_args):
-        goal = forall(v.op, goal)
-    return _thm([], goal)
+    for i in range(rel_arity - 1, -1, -1):
+        goal = forall(generic_args[i].op, goal, param_sorts.get(i, ""))
+    return _thm([], goal, _merge_sorts(out_sorts_list))

@@ -106,15 +106,38 @@ jobs:
           fi
           echo "$bin carries $want"
 
-      # One archive per target, named so a person can tell them apart in a
-      # directory of downloads.
+      # One deterministic archive per target, named so a person can tell them
+      # apart in a directory of downloads.
       - name: Archive it
         run: |
           name="nether-${GITHUB_REF_NAME}-${{ matrix.target }}"
           mkdir -p "dist/$name"
           cp "target/${{ matrix.target }}/release/nether" "dist/$name/"
           cp README.md LICENSE CHANGELOG.md "dist/$name/"
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          python3 - "$name" <<'PY'
+          import gzip, os, sys, tarfile
+          name = sys.argv[1]
+          root = os.path.join("dist", name)
+          out = os.path.join("dist", f"{name}.tar.gz")
+          with gzip.GzipFile(out, "wb", mtime=0) as gz:
+              with tarfile.open(fileobj=gz, mode="w", format=tarfile.GNU_FORMAT) as tf:
+                  for base, dirs, files in os.walk(root):
+                      dirs.sort()
+                      files.sort()
+                      rel_dir = os.path.relpath(base, "dist")
+                      info = tf.gettarinfo(base, arcname=rel_dir)
+                      info.uid = info.gid = info.mtime = 0
+                      info.uname = info.gname = ""
+                      tf.addfile(info)
+                      for fn in files:
+                          path = os.path.join(base, fn)
+                          rel = os.path.relpath(path, "dist")
+                          info = tf.gettarinfo(path, arcname=rel)
+                          info.uid = info.gid = info.mtime = 0
+                          info.uname = info.gname = ""
+                          with open(path, "rb") as fh:
+                              tf.addfile(info, fh)
+          PY
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -187,7 +210,8 @@ jobs:
           find incoming -name '*.tar.gz' -exec cp {} dist/ \;
           cp site/nether.woff "dist/nether-${GITHUB_REF_NAME}.woff"
           cp site/nether-bold.woff "dist/nether-bold-${GITHUB_REF_NAME}.woff"
-          tar -czf "dist/netherc-spec-${GITHUB_REF_NAME}.tar.gz" spec/
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - spec/ \
+            | gzip -n > "dist/netherc-spec-${GITHUB_REF_NAME}.tar.gz"
 
       # A project whose argument is that you can name what you were given
       # should not ship tarballs nobody can check.

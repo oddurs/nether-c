@@ -21,7 +21,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CFG_TEST = re.compile(r"#\[\s*cfg\s*\(\s*test\s*\)\s*\]")
-BLANK_OR_COMMENT = re.compile(r"^[ \t\r]*(?://.*)?$")
 
 
 def scan_rust(text: str) -> list[tuple[str, str]]:
@@ -136,6 +135,8 @@ def core_lines(path: Path) -> int:
     skip = False
     pending = False
     semi_item = False
+    saw_const = False
+    seen_eq = False
     head_tokens: list[str] = []
     depth = 0
     bracket_depth = 0
@@ -159,6 +160,8 @@ def core_lines(path: Path) -> int:
                 skip = True
                 pending = True
                 semi_item = False
+                saw_const = False
+                seen_eq = False
                 head_tokens = []
                 depth = 0
                 bracket_depth = 0
@@ -182,6 +185,14 @@ def core_lines(path: Path) -> int:
                         j += 1
                     word = bare[pos:j]
                     pos = j
+                    if saw_const:
+                        saw_const = False
+                        if word in ("fn", "unsafe"):
+                            head_tokens.append("fn")
+                        else:
+                            semi_item = True
+                            head_tokens.append("const")
+                        continue
                     if word in ("pub", "unsafe", "async", "default"):
                         continue
                     if word in ("use", "static", "type"):
@@ -189,18 +200,15 @@ def core_lines(path: Path) -> int:
                         head_tokens.append(word)
                         continue
                     if word == "const":
-                        rest = bare[pos:].lstrip()
-                        if rest.startswith("fn") and (len(rest) == 2 or not (rest[2].isalnum() or rest[2] == "_")):
-                            head_tokens.append("fn")
-                        elif rest.startswith("unsafe") and (len(rest) == 6 or not (rest[6].isalnum() or rest[6] == "_")):
-                            head_tokens.append("fn")
-                        else:
-                            semi_item = True
-                            head_tokens.append("const")
+                        saw_const = True
                         continue
                     if _ITEM_HEAD.fullmatch(word):
                         head_tokens.append(word)
                         continue
+                elif saw_const:
+                    saw_const = False
+                    semi_item = True
+                    head_tokens.append("const")
 
             ch = bare[pos]
             pos += 1
@@ -208,9 +216,11 @@ def core_lines(path: Path) -> int:
                 bracket_depth += 1
             elif ch in ")]" and bracket_depth > 0:
                 bracket_depth -= 1
-            elif pending and bracket_depth == 0 and ch == "<":
+            elif semi_item and depth == 0 and bracket_depth == 0 and angle_depth == 0 and ch == "=":
+                seen_eq = True
+            elif pending and bracket_depth == 0 and not seen_eq and ch == "<":
                 angle_depth += 1
-            elif pending and bracket_depth == 0 and angle_depth > 0 and ch == ">":
+            elif pending and bracket_depth == 0 and not seen_eq and angle_depth > 0 and ch == ">":
                 if pos < 2 or bare[pos - 2] != "-":
                     angle_depth -= 1
             elif ch == "{" and bracket_depth == 0 and angle_depth == 0:

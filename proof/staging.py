@@ -50,7 +50,7 @@ from kernel import (
     subset,
     var,
 )
-from calculus import EMPTY, s_union, singleton
+from calculus import EMPTY, EMPTY_RAW, s_union, singleton
 
 v = var("v")
 x = var("x")
@@ -307,13 +307,14 @@ STAGED_EVAL = InductiveRelation(
             ),
             staged_eval(app("Select", e1, e2, e3), A, B, r3, u3),
         ),
-        # Undecided branch: speculative reduction of both arms (§6.5)
+        # Undecided branch: speculative reduction of both arms (§6.5 rule 1:
+        # undecided arms hold no runtime capabilities and MUST NOT form holes).
         Rule(
             "SE_SelectSpeculative",
             (
                 staged_eval(e1, A, B, r1, u1),
-                staged_eval(e2, A, B, r2, u2),
-                staged_eval(e3, A, B, r3, u3),
+                staged_eval(e2, EMPTY_RAW, EMPTY_RAW, r2, u2),
+                staged_eval(e3, EMPTY_RAW, EMPTY_RAW, r3, u3),
             ),
             staged_eval(
                 app("Select", e1, e2, e3),
@@ -323,18 +324,11 @@ STAGED_EVAL = InductiveRelation(
                 app("Select", u1, u2, u3),
             ),
         ),
-        # Descent extends the ambient capability sets of both stages with `s_k`
+        # Descent is a static lexical permission (§6.1), NOT a runtime
+        # capability grant: runtime capability sets `A` and `B` are unchanged.
         Rule(
             "SE_Descend",
-            (
-                staged_eval(
-                    e1,
-                    s_union(A, singleton(s_k)),
-                    s_union(B, singleton(s_k)),
-                    r1,
-                    u1,
-                ),
-            ),
+            (staged_eval(e1, A, B, r1, u1),),
             staged_eval(app("Descend", s_k, e1), A, B, app("Descend", s_k, r1), app("Descend", s_k, u1)),
         ),
         # Seal

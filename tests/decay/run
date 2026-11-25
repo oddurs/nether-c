@@ -52,6 +52,15 @@ const CFG_OBJ: S = S {
     a: 1,
 };
 #[cfg(test)]
+const LIMIT: bool = 1 < 2;
+#[cfg(test)]
+const MASK: usize = 1 << 8;
+#[cfg(test)]
+const
+fn multiline_const_fn() -> i32 {
+    1
+}
+#[cfg(test)]
 fn const_generic() -> Arr<{ 1 }> {
     let x = 1;
     Arr

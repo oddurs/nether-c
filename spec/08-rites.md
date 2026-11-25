@@ -33,7 +33,7 @@ nether: there is no `run`.
 It is spelled out here, in the specification, so that it is a rule rather than
 a joke, and so that anyone proposing to add it has something to argue against.
 
-This is the only frozen requirement in this draft.
+This requirement is frozen alongside [§7.1](07-ledger.md#71-canonical-encoding) and [§7.3.1](07-ledger.md#731-node-encoding).
 
 ## 8.1 Common behaviour
 

@@ -258,10 +258,10 @@ it on. You may not look inside it.</p>
 
 <figure class="listing">
 <figcaption>nether c</figcaption>
-<pre><code><span class="t">Shade</span>&lt;<span class="t">Json</span>&gt; reply = <span class="k">descend</span> net { <span class="k">shade</span> get(<span class="s">"https://example.invalid/x.json"</span>) };
+<pre><code><span class="t">Shade</span>&lt;<span class="t">Bytes</span>@5&gt; reply = <span class="k">descend</span> net { <span class="k">shade</span> must(get(<span class="s">"https://example.invalid/x.json"</span>)) };
 
 <span class="t">Cairn</span> witness = <span class="k">seal</span> reply;      <span class="c">// fine. you carried its name up</span>
-<span class="t">I64</span>   n       = <span class="k">look</span>(reply).len; <span class="c">// not from up here you don't</span></code></pre>
+<span class="t">I64</span>   n       = len(<span class="k">look</span>(reply)); <span class="c">// not from up here you don't</span></code></pre>
 </figure>
 
 <figure class="listing">
@@ -345,8 +345,9 @@ meant.</p>
 
 <div class="box shout">
 <p class="center"><strong class="blink">THERE IS NO <code>NETHER RUN</code></strong></p>
-<p>It exits 64 and tells you what to use instead. This is the only frozen
-requirement in the entire draft. It is written into
+<p>It exits 64 and tells you what to use instead. It is frozen alongside
+<a href="spec/07-ledger.html#71-canonical-encoding">&sect;7.1</a> and
+<a href="spec/07-ledger.html#731-node-encoding">&sect;7.3.1</a>, and written into
 <a href="spec/08-rites.html#80-there-is-no-run">&sect;8.0</a> so that it is a
 rule and not a joke, and so that anybody proposing to add it has something to
 argue against.</p>
@@ -399,8 +400,8 @@ found two bugs.</p>
 
 <h2 id="specification">The specification</h2>
 
-<p>Written before the compiler. Deliberately. The compiler is not being started
-until the specification stops moving.</p>
+<p>Written before the compiler, and kept ahead of it. New behaviour goes into
+the specification first.</p>
 
 <p>It is Markdown in
 <a href="https://github.com/oddurs/nether-c/tree/main/spec">spec/</a> and it is
@@ -517,11 +518,11 @@ you can check every line of it:</p>
 <li>the markdown renderer that made this page</li>
 </ul>
 
-<p>Nothing here downloads anything at build time. There is exactly one
-dependency in the tree &mdash; a hash function, because a hash that is subtly
-wrong fails silently and years late &mdash; and that single exception is
-written down in <a href="spec/90-rationale.html">&sect;90.2</a> where it can be
-argued with.</p>
+<p>Nothing here downloads anything at build time. There are three small
+dependencies in the tree &mdash; a hash function (<code>blake3</code>) and the
+Unicode identifier/normalisation tables &mdash; and each exception is written
+down in <a href="spec/90-rationale.html">&sect;90.2</a> where it can be argued
+with.</p>
 
 <p class="small">That is a claim about what the code is made of, which is
 checkable. It is deliberately not a claim about how it came to be written,

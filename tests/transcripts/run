@@ -132,7 +132,7 @@ def collect() -> list[Sample]:
 # moves to CHECKED the moment the rite exists — which is what this list is:
 # add the rite here on the day it is built.
 RUNNABLE = re.compile(
-    r"^nether\s+(run|--version|-V|--help|-h|bury|cairn|lamp|strata|exhume)\b"
+    r"^nether\s+(run|--version|-V|--help|-h|bury|cairn|lamp|strata|exhume|graft)\b"
 )
 
 # What a transcript may refer to. Every checked sample runs in a scratch
@@ -241,7 +241,22 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
                     f"  $ {cmd}\n"
                     f"  expected exit code 64 for `nether run`, got {proc.returncode}"
                 ), skipped
-            actual = (proc.stdout + proc.stderr).rstrip("\n")
+            expects_err = expected.lstrip().startswith(("error:", "nether:"))
+            if expects_err:
+                if proc.returncode == 0:
+                    return False, (
+                        f"  $ {cmd}\n"
+                        f"  expected non-zero exit for diagnostic transcript, got 0"
+                    ), skipped
+                actual = proc.stderr.rstrip("\n")
+            else:
+                if proc.returncode != 0:
+                    return False, (
+                        f"  $ {cmd}\n"
+                        f"  expected exit code 0, got {proc.returncode}\n"
+                        f"  stderr: {proc.stderr}"
+                    ), skipped
+                actual = proc.stdout.rstrip("\n")
             if not matches(expected, actual):
                 return False, (
                     f"  $ {cmd}\n"

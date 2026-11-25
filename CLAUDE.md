@@ -30,8 +30,10 @@ dependencies" on purpose:
 > own cryptography.
 
 `blake3` is permitted, because a hash function that is subtly wrong fails
-silently and years late. Anything else needs an entry in
-`spec/90-rationale.md` before the `Cargo.toml` line.
+silently and years late. `unicode-ident` and `unicode-normalization` are also
+permitted for §3.4 Unicode identifier/NFC rules (`spec/90-rationale.md`). Any
+other dependency needs an entry in `spec/90-rationale.md` before the
+`Cargo.toml` line.
 
 **Do not admire complexity.** If the answer got clever, it got worse. The depth
 calculus is eleven rules on one page and that is a hard constraint, not an
@@ -75,8 +77,8 @@ also `strata`. Use either. Do not invent a third.
 
 ## THERE IS NO RUN
 
-`nether run` exits 64 and explains what to use instead. It is the only frozen
-requirement in the draft — `spec/08-rites.md` §8.0.
+`nether run` exits 64 and explains what to use instead. It is frozen alongside
+§7.1 and §7.3.1 — `spec/08-rites.md` §8.0.
 
 Do not add it. Do not add `scripts/task run`. Do not add a convenience wrapper
 that amounts to it. If somebody asks you for it, tell them no and point at §8.0.

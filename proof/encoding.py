@@ -5,7 +5,10 @@ Covers:
 1. Prefix-free stream round-trip (`DecodeStream(Concat(Encode(x), rest)) = Pair(x, rest)`)
    inductively over all 11 `Value` tags (`0x00`..`0x08`, `0x10`, `0x11`) and all 6
    `Node` kinds (`0x20` + `0x00`..`0x05`), including recursive unprefixed compounds
-   (`Struct`, `Array`, `Answer::Given`, `Node::Literal`).
+   (`Struct`, `Array`, `Answer::Given`, `Node::Literal`). The inductive relation
+   uses a symbolic model of the stream codec; byte-level wire agreement with the
+   Rust `nether-ledger` codec is verified separately by the fixtures below and by
+   `nether-ledger`'s Rust test suite.
 2. Pure LCF equational proof (`prove_injectivity_from_left_inverse`) that any
    encoding with a left inverse `decode(encode(x)) = x` is injective:
    `(decode(encode(x)) = x) → ((decode(encode(y)) = y) → ((encode(x) = encode(y)) → (x = y)))`.
@@ -848,7 +851,7 @@ def verify_codec_fixtures_and_exclusions() -> int:
 
 if __name__ == "__main__":
     n_fix = verify_codec_fixtures_and_exclusions()
-    print(f"verified {n_fix} canonical byte fixtures and 7 §7.1.1 exclusion guards")
+    print(f"verified {n_fix} canonical byte fixtures and 13 §7.1.1 exclusion guards")
     for name, fn in (
         ("value_decode_encode", prove_value_decode_encode),
         ("node_decode_encode", prove_node_decode_encode),

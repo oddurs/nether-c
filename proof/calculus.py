@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Mechanization of `spec/02-calculus.md`: the 11 typing rules and §2.4 metatheory."""
+"""Mechanization of `spec/02-calculus.md`: the 11 typing rules and §2.4 metatheory.
+
+The typing and small-step relations model the core functional fragment of the
+calculus (`Lit`, `Var`, `Prim`, `Select`, `Abs`, `App`, `Descend`, `Seal`,
+`Shade`, `Look`, `Opaque`, `Demand`). Imperative bindings, loops, and surface
+syntax lowering are tested directly against the Rust compiler and evaluator.
+"""
 from __future__ import annotations
 from typing import Dict, Tuple
 
@@ -171,14 +177,14 @@ HAS_TYPE = InductiveRelation(
             ),
             has_type(Γ, δ, app("Select", e1, e2, e3), τ, d_max(d1, d2, d3), s_union(g1, g2, g3)),
         ),
-        # [APP]: Γ ; δ ⊢ f : (τ₁ --df--> τ₂@d_r)@d_f, Γ ; δ ⊢ a : τ₁@d_a, df ⊆ δ
+        # [APP]: Γ ; δ ⊢ f : (τ₁ --df, g_b--> τ₂@d_r)@d_f, Γ ; δ ⊢ a : τ₁@d_a, df ⊆ δ
         Rule(
             "APP",
             (
-                has_type(Γ, δ, f, app("Fn", τ1, df_set, τ2, d_r), d_f, g_f),
+                has_type(Γ, δ, f, app("Fn", τ1, df_set, τ2, d_r, g_b), d_f, g_f),
                 has_type(Γ, δ, a, τ1, d_a, g_a),
                 subset(df_set, δ),
-                le(d_r, max_set(s_union(df_set, app("g_body", f)))),
+                le(d_r, max_set(s_union(df_set, g_b))),
             ),
             has_type(
                 Γ,
@@ -186,10 +192,10 @@ HAS_TYPE = InductiveRelation(
                 app("App", f, a),
                 τ2,
                 d_max(d_r, d_f, d_a),
-                s_union(g_f, g_a, app("g_body", f)),
+                s_union(g_f, g_a, g_b),
             ),
         ),
-        # [ABS]: Γ, x : τ₁@0 ; df ⊢ b : τ₂@d₂, df least -> Γ ; δ ⊢ λx.b : (τ₁ --df--> τ₂@d₂)@0
+        # [ABS]: Γ, x : τ₁@0 ; df ⊢ b : τ₂@d₂ [g_b], df least -> Γ ; δ ⊢ λx.b : (τ₁ --df, g_b--> τ₂@d₂)@0
         Rule(
             "ABS",
             (
@@ -200,7 +206,7 @@ HAS_TYPE = InductiveRelation(
                 Γ,
                 δ,
                 app("Abs", x, τ1, df_set, b),
-                app("Fn", τ1, df_set, τ2, d2),
+                app("Fn", τ1, df_set, τ2, d2, g_b),
                 ZERO,
                 EMPTY_RAW,
             ),
