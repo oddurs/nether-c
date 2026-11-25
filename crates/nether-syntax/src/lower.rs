@@ -32,6 +32,9 @@ type FuncSig = (Vec<(ir::Type, Asserted)>, (ir::Type, Asserted));
 /// Upper bound on loop fixpoint re-iterations per unit.
 const MAX_FIXPOINT_STEPS: usize = 4096;
 
+/// Upper bound on expanded type nesting depth (matching `parse::MAX_NESTING`).
+const MAX_TYPE_DEPTH: usize = 64;
+
 /// Control-flow exit depths propagated out of a statement or expression.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct ExitPc {
@@ -86,14 +89,18 @@ struct Lowering<'a> {
     structs: HashMap<&'a str, &'a [ast::Field]>,
     /// Active typedef names during expansion, for cycle detection.
     expanding: Vec<&'a str>,
-    /// Memoized clean typedef expansions to keep DAGs linear.
-    expanded_aliases: HashMap<&'a str, (ir::Type, Asserted, bool)>,
+    /// Memoized clean typedef expansions `(type, asserted, has_inferred, height)`.
+    expanded_aliases: HashMap<&'a str, (ir::Type, Asserted, bool, usize)>,
     /// Unit-level functions and bindings, by name.
     funcs: HashMap<&'a str, (ir::FuncId, ir::Type)>,
     globals: HashMap<&'a str, (ir::GlobalId, ir::Type, Depth)>,
     /// The locals of the function being lowered, innermost scope last.
     scopes: Vec<Vec<(String, ir::LocalId)>>,
     locals: Vec<ir::LocalDef>,
+    /// Names already used in the current local frame (for O(1) temp naming).
+    local_names: HashSet<String>,
+    /// Next candidate index for `_idx{n}` temporary locals.
+    next_temp: usize,
     /// The depth of every local bound so far, by position.
     depths: Vec<Depth>,
     /// The declared type of what is being lowered, while it is the whole of a
@@ -112,9 +119,9 @@ struct Lowering<'a> {
     in_loop: u32,
     /// Total loop fixpoint re-iterations used in this unit.
     fixpoint_steps: usize,
-    /// Unit-level code's locals and their depths, kept while a function's are
-    /// in their place.
-    unit_frame: (Vec<ir::LocalDef>, Vec<Depth>),
+    /// Unit-level code's locals, names, temp counter, and depths, kept while a
+    /// function's are in their place.
+    unit_frame: (Vec<ir::LocalDef>, HashSet<String>, usize, Vec<Depth>),
 }
 
 impl<'a> Lowering<'a> {
@@ -129,6 +136,8 @@ impl<'a> Lowering<'a> {
             globals: HashMap::new(),
             scopes: Vec::new(),
             locals: Vec::new(),
+            local_names: HashSet::new(),
+            next_temp: 0,
             depths: Vec::new(),
             landing: None,
             returning: None,
@@ -137,7 +146,7 @@ impl<'a> Lowering<'a> {
             last_exit: ExitPc::NONE,
             in_loop: 0,
             fixpoint_steps: 0,
-            unit_frame: (Vec::new(), Vec::new()),
+            unit_frame: (Vec::new(), HashSet::new(), 0, Vec::new()),
         };
         // Declarations are visible to each other regardless of order, so the
         // shapes are collected before anything is lowered.
@@ -180,8 +189,23 @@ impl<'a> Lowering<'a> {
     /// When `allow_inferred_shade` is true (initialized `let` bindings), direct
     /// `Shade<T>` annotations may omit `@d` and inherit the RHS origin.
     fn ty_in(&mut self, t: &ast::Type, allow_inferred_shade: bool) -> (ir::Type, Asserted, bool) {
-        let (mut inner, alias_asserted, has_inferred) = self.atom_in(t, allow_inferred_shade);
+        let (ty, asserted, has_inferred, _) = self.ty_depth(t, allow_inferred_shade);
+        (ty, asserted, has_inferred)
+    }
+
+    fn ty_depth(
+        &mut self,
+        t: &ast::Type,
+        allow_inferred_shade: bool,
+    ) -> (ir::Type, Asserted, bool, usize) {
+        let (mut inner, alias_asserted, has_inferred, mut height) =
+            self.atom_in(t, allow_inferred_shade);
         for len in t.arrays.iter().rev() {
+            height = height.saturating_add(1);
+            if height > MAX_TYPE_DEPTH {
+                self.fault(t.span, FaultKind::TooDeep);
+                return (ir::Type::Unit, None, false, MAX_TYPE_DEPTH);
+            }
             let len = match len {
                 Some(n) if *n < 0 => {
                     self.fault(t.span, FaultKind::Expected("a non-negative array length"));
@@ -198,10 +222,37 @@ impl<'a> Lowering<'a> {
         {
             self.fault(t.span, FaultKind::Expected("a matching depth annotation on typedef"));
         }
-        (inner, own.or(alias_asserted), has_inferred)
+        (inner, own.or(alias_asserted), has_inferred, height)
     }
 
-    fn atom_in(&mut self, t: &ast::Type, allow_inferred_shade: bool) -> (ir::Type, Asserted, bool) {
+    fn expand_alias(
+        &mut self,
+        key: &'a str,
+        alias: &'a ast::Type,
+        span: Span,
+    ) -> (ir::Type, Asserted, bool, usize) {
+        if let Some(cached) = self.expanded_aliases.get(key) {
+            return cached.clone();
+        }
+        if self.expanding.contains(&key) || self.expanding.len() > 16 {
+            self.fault(span, FaultKind::Expected("a non-cyclic typedef"));
+            return (ir::Type::Unit, None, false, 1);
+        }
+        let faults_before = self.faults.len();
+        self.expanding.push(key);
+        let expanded = self.ty_depth(alias, false);
+        self.expanding.pop();
+        if self.faults.len() == faults_before {
+            self.expanded_aliases.insert(key, expanded.clone());
+        }
+        expanded
+    }
+
+    fn atom_in(
+        &mut self,
+        t: &ast::Type,
+        allow_inferred_shade: bool,
+    ) -> (ir::Type, Asserted, bool, usize) {
         let name = t.name.text.as_str();
         let reject_args = |this: &mut Self, ok_len: usize| {
             if t.args.len() > ok_len {
@@ -211,27 +262,14 @@ impl<'a> Lowering<'a> {
         // §3.4: user-defined typedefs and structs shadow prelude type names.
         if let Some((&key, &alias)) = self.aliases.get_key_value(name) {
             reject_args(self, 0);
-            if let Some(cached) = self.expanded_aliases.get(key) {
-                return cached.clone();
-            }
-            if self.expanding.contains(&key) || self.expanding.len() > 16 {
-                self.fault(t.span, FaultKind::Expected("a non-cyclic typedef"));
-                return (ir::Type::Unit, None, false);
-            }
-            let faults_before = self.faults.len();
-            self.expanding.push(key);
-            let expanded = self.ty_in(alias, false);
-            self.expanding.pop();
-            if self.faults.len() == faults_before {
-                self.expanded_aliases.insert(key, expanded.clone());
-            }
-            return expanded;
+            return self.expand_alias(key, alias, t.span);
         }
         if self.structs.contains_key(name) {
             reject_args(self, 0);
-            return (ir::Type::Struct(name.to_string()), None, false);
+            return (ir::Type::Struct(name.to_string()), None, false, 1);
         }
         let mut has_inferred = false;
+        let mut height = 1usize;
         let ty = match name {
             "U0" | "Bool" | "I64" | "Bytes" | "Str" | "Cairn" | "Refusal" => {
                 reject_args(self, 0);
@@ -248,8 +286,14 @@ impl<'a> Lowering<'a> {
             "Answer" => {
                 reject_args(self, 1);
                 if let Some(arg_ast) = t.args.first() {
-                    let (a, arg_asserted, arg_inf) = self.ty_in(arg_ast, allow_inferred_shade);
+                    let (a, arg_asserted, arg_inf, arg_h) =
+                        self.ty_depth(arg_ast, allow_inferred_shade);
                     has_inferred = arg_inf;
+                    height = arg_h.saturating_add(1);
+                    if height > MAX_TYPE_DEPTH {
+                        self.fault(t.span, FaultKind::TooDeep);
+                        return (ir::Type::Unit, None, false, MAX_TYPE_DEPTH);
+                    }
                     if arg_asserted.is_some() {
                         self.fault(
                             arg_ast.span,
@@ -269,8 +313,14 @@ impl<'a> Lowering<'a> {
             "Shade" => {
                 reject_args(self, 1);
                 if let Some(arg_ast) = t.args.first() {
-                    let (arg_ir, arg_asserted, arg_inf) = self.ty_in(arg_ast, allow_inferred_shade);
+                    let (arg_ir, arg_asserted, arg_inf, arg_h) =
+                        self.ty_depth(arg_ast, allow_inferred_shade);
                     has_inferred = arg_inf;
+                    height = arg_h.saturating_add(1);
+                    if height > MAX_TYPE_DEPTH {
+                        self.fault(t.span, FaultKind::TooDeep);
+                        return (ir::Type::Unit, None, false, MAX_TYPE_DEPTH);
+                    }
                     let origin = if let Some(d) = arg_asserted {
                         d
                     } else {
@@ -295,7 +345,7 @@ impl<'a> Lowering<'a> {
                 ir::Type::Unit
             }
         };
-        (ty, None, has_inferred)
+        (ty, None, has_inferred, height)
     }
 
     fn asserted(t: &ast::Type) -> Asserted {
@@ -322,14 +372,20 @@ impl<'a> Lowering<'a> {
                 structs.push(ir::StructDef { name: name.text.clone(), fields, span: *span });
             }
         }
+        self.check_struct_cycles(&structs);
 
         // Validate every typedef declaration even if unreferenced.
         for item in &unit.items {
             if let ast::Item::Typedef { name, ty, .. } = item {
                 self.expanding.clear();
-                self.expanding.push(name.text.as_str());
-                let _ = self.ty(ty);
+                let key = name.text.as_str();
+                self.expanding.push(key);
+                let faults_before = self.faults.len();
+                let expanded = self.ty_depth(ty, false);
                 self.expanding.pop();
+                if self.faults.len() == faults_before {
+                    self.expanded_aliases.insert(key, expanded);
+                }
             }
         }
 
@@ -398,15 +454,65 @@ impl<'a> Lowering<'a> {
         }
         // The bindings' frame, set aside while the functions had theirs, is
         // the demands' frame too: unit-level code has one.
-        (self.locals, self.depths) = std::mem::take(&mut self.unit_frame);
+        (self.locals, self.local_names, self.next_temp, self.depths) =
+            std::mem::take(&mut self.unit_frame);
         let demands = self.demands(unit);
         let locals = std::mem::take(&mut self.locals);
         ir::Unit { structs, funcs, globals, demands, locals }
     }
 
+    fn check_struct_cycles(&mut self, structs: &[ir::StructDef]) {
+        fn collect_value_deps<'b>(ty: &'b ir::Type, out: &mut Vec<&'b str>) {
+            match ty {
+                ir::Type::Struct(name) => out.push(name.as_str()),
+                ir::Type::Array { elem, len: Some(n) } if *n > 0 => collect_value_deps(elem, out),
+                ir::Type::Shade { inner, .. } => collect_value_deps(inner, out),
+                _ => {}
+            }
+        }
+        fn dfs(idx: usize, adj: &[Vec<usize>], state: &mut [u8], cyclic: &mut [bool]) -> bool {
+            state[idx] = 1;
+            let mut found = false;
+            for &next in &adj[idx] {
+                if state[next] == 1 || (state[next] == 0 && dfs(next, adj, state, cyclic)) {
+                    cyclic[idx] = true;
+                    found = true;
+                }
+            }
+            state[idx] = 2;
+            found
+        }
+        let by_name: HashMap<&str, usize> =
+            structs.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
+        let adj: Vec<Vec<usize>> = structs
+            .iter()
+            .map(|s| {
+                let mut deps = Vec::new();
+                for f in &s.fields {
+                    collect_value_deps(&f.ty, &mut deps);
+                }
+                deps.into_iter().filter_map(|n| by_name.get(n).copied()).collect()
+            })
+            .collect();
+        let mut state = vec![0u8; structs.len()];
+        let mut cyclic = vec![false; structs.len()];
+        for i in 0..structs.len() {
+            if state[i] == 0 {
+                let _ = dfs(i, &adj, &mut state, &mut cyclic);
+            }
+        }
+        for (i, is_cyc) in cyclic.into_iter().enumerate() {
+            if is_cyc {
+                self.fault(structs[i].span, FaultKind::Expected("a non-cyclic struct"));
+            }
+        }
+    }
+
     fn unit_bindings(&mut self, unit: &'a ast::Unit) -> Vec<ir::GlobalDef> {
         self.globals.clear();
         self.locals = Vec::new();
+        self.local_names.clear();
+        self.next_temp = 0;
         self.depths = Vec::new();
         self.pc = Depth::PURE;
         self.in_loop = 0;
@@ -440,7 +546,12 @@ impl<'a> Lowering<'a> {
                 span: binding.span,
             });
         }
-        self.unit_frame = (std::mem::take(&mut self.locals), std::mem::take(&mut self.depths));
+        self.unit_frame = (
+            std::mem::take(&mut self.locals),
+            std::mem::take(&mut self.local_names),
+            self.next_temp,
+            std::mem::take(&mut self.depths),
+        );
         out
     }
 
@@ -520,18 +631,21 @@ impl<'a> Lowering<'a> {
     }
 
     fn has_explicit_depth(&self, mut t: &'a ast::Type) -> bool {
-        let mut hops = 0;
+        let mut seen: HashSet<&'a str> = HashSet::new();
         loop {
             if t.depth.is_some() {
                 return true;
             }
-            let Some(alias) = self.aliases.get(t.name.text.as_str()).copied() else {
-                return false;
-            };
-            hops += 1;
-            if hops > 16 {
+            let name = t.name.text.as_str();
+            if let Some((_, asserted, _, _)) = self.expanded_aliases.get(name) {
+                return asserted.is_some();
+            }
+            if !seen.insert(name) {
                 return false;
             }
+            let Some(alias) = self.aliases.get(name).copied() else {
+                return false;
+            };
             t = alias;
         }
     }
@@ -540,6 +654,8 @@ impl<'a> Lowering<'a> {
 
     fn func(&mut self, f: &'a ast::Func, sig: &FuncSig) -> ir::FuncDef {
         self.locals = Vec::new();
+        self.local_names.clear();
+        self.next_temp = 0;
         self.depths = Vec::new();
         self.scopes = vec![Vec::new()];
         self.pc = Depth::PURE;
@@ -617,6 +733,7 @@ impl<'a> Lowering<'a> {
         span: Span,
     ) -> ir::LocalId {
         let id = ir::LocalId(u32::try_from(self.locals.len()).unwrap_or(0));
+        self.local_names.insert(name.text.clone());
         self.locals.push(ir::LocalDef { name: name.text.clone(), ty, asserted, span });
         self.depths.push(depth);
         if let Some(scope) = self.scopes.last_mut() {
@@ -626,19 +743,19 @@ impl<'a> Lowering<'a> {
     }
 
     fn fresh_temp_local(&mut self, ty: ir::Type, depth: Depth, span: Span) -> ir::LocalId {
-        let mut n = 0usize;
         let name = loop {
-            let candidate = format!("_idx{n}");
-            let taken = self.locals.iter().any(|l| l.name == candidate)
+            let candidate = format!("_idx{}", self.next_temp);
+            self.next_temp += 1;
+            let taken = self.local_names.contains(&candidate)
                 || self.globals.contains_key(candidate.as_str())
                 || self.funcs.contains_key(candidate.as_str())
                 || Prim::from_name(&candidate).is_some();
             if !taken {
                 break candidate;
             }
-            n += 1;
         };
         let id = ir::LocalId(u32::try_from(self.locals.len()).unwrap_or(0));
+        self.local_names.insert(name.clone());
         self.locals.push(ir::LocalDef { name, ty, asserted: None, span });
         self.depths.push(depth);
         id

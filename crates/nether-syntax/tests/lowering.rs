@@ -936,3 +936,109 @@ fn pr_b_syntax_and_lowering_hardening_regressions() {
         "space before `!` in capability must fail to parse"
     );
 }
+
+#[test]
+fn round2_syntax_and_lowering_regressions() {
+    use nether_core::{
+        Block, Depth, Expr, ExprKind, FuncDef, Held, Literal, Span, Stmt, Type, Unit,
+    };
+    use std::fmt::Write as _;
+
+    // C4: Deep chained `Answer<T>` typedefs fail with TooDeep instead of overflowing the stack,
+    // and deep `Bytes@3` typedef chains inside `Shade<T>` preserve `@3`.
+    let mut deep_ans = String::from("typedef I64 T0;\n");
+    for i in 1..=66 {
+        let _ = writeln!(deep_ans, "typedef Answer<T{}> T{i};", i - 1);
+    }
+    deep_ans.push_str("U0 f(T66 x) {}\n");
+    let parsed_ans = parse(deep_ans.as_bytes()).expect("deep Answer typedefs parse");
+    assert!(lower(&parsed_ans).is_err(), "66 chained Answer typedefs must fail cleanly");
+
+    let mut deep_depth = String::from("typedef Bytes@3 D0;\n");
+    for i in 1..=19 {
+        let _ = writeln!(deep_depth, "typedef D{} D{i};", i - 1);
+    }
+    deep_depth.push_str("U0 f() { Shade<D19> s = shade b\"pure\"; }\n");
+    let deep_depth_unit = ir(&deep_depth);
+    assert!(
+        !check(&deep_depth_unit).is_empty(),
+        "19-deep Bytes@3 typedef chain inside Shade<D19> must preserve @3 origin"
+    );
+
+    // M2: Cyclic struct definitions (direct, mutual, fixed array) are rejected.
+    for cyclic in [
+        "struct A { A x; };\n",
+        "struct A { B b; };\nstruct B { A a; };\n",
+        "struct A { A[4] xs; };\n",
+    ] {
+        let parsed = parse(cyclic.as_bytes()).expect("cyclic struct parses");
+        assert!(lower(&parsed).is_err(), "cyclic struct must fail lowering: {cyclic}");
+    }
+    // Slice field `A[]` is indirection and remains legal (or acyclic structs remain legal).
+    clean(&ir("struct Node { I64 val; Node[] children; };\nU0 f(Node n) {}\n"));
+
+    // M3: Many compound index assignments lower quickly via O(1) temp naming.
+    let mut compound = String::from("U0 f() { I64[10] a; ");
+    for _ in 0..500 {
+        compound.push_str("a[0] += 1; ");
+    }
+    compound.push_str("}\n");
+    clean(&ir(&compound));
+
+    // M4: `a < b > c;` parses as a comparison expression, not a generic binding.
+    clean(&ir("U0 f(I64 a, I64 b, Bool c) { a < b > c; }\n"));
+
+    // H3: Printing `Stmt::Expr(Block { tail: Some(..) })` emits `;` and round-trips cleanly.
+    let sp = Span::default();
+    let tail_block_stmt = Unit {
+        funcs: vec![FuncDef {
+            name: "f".into(),
+            params: vec![],
+            ret: Type::Int,
+            ret_depth: Depth::PURE,
+            asserted_ret: None,
+            latent: Held::NONE,
+            asserted_latent: None,
+            locals: vec![],
+            body: Block {
+                stmts: vec![Stmt::Expr(Expr {
+                    kind: ExprKind::Block(Block {
+                        stmts: vec![],
+                        tail: Some(Box::new(Expr {
+                            kind: ExprKind::Literal(Literal::Int(1)),
+                            ty: Type::Int,
+                            depth: Depth::PURE,
+                            span: sp,
+                        })),
+                        span: sp,
+                    }),
+                    ty: Type::Int,
+                    depth: Depth::PURE,
+                    span: sp,
+                })],
+                tail: Some(Box::new(Expr {
+                    kind: ExprKind::Literal(Literal::Int(2)),
+                    ty: Type::Int,
+                    depth: Depth::PURE,
+                    span: sp,
+                })),
+                span: sp,
+            },
+            span: sp,
+        }],
+        ..Unit::default()
+    };
+    let printed = nether_syntax::print(&tail_block_stmt);
+    assert!(printed.contains("};"), "block statement with tail must print trailing `;`: {printed}");
+    let reparsed = parse(printed.as_bytes()).expect("printed tail-block stmt must parse");
+    clean(&lower(&reparsed).expect("printed tail-block stmt must lower"));
+
+    // L1: Escaped LF and CRLF inside string literals both report UnterminatedString.
+    let lf = parse(b"Str s = \"abc\\\ndef\";\n").unwrap_err();
+    let crlf = parse(b"Str s = \"abc\\\r\ndef\";\n").unwrap_err();
+    assert_eq!(
+        lf[0].to_string(),
+        crlf[0].to_string(),
+        "LF and CRLF escapes must give matching errors"
+    );
+}

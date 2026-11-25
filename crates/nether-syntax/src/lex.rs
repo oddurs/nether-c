@@ -457,6 +457,7 @@ impl Scanner<'_> {
                 }
                 return Err(self.fault(self.at - 1, FaultKind::StrayCarriageReturn));
             }
+            '\n' => return Err(self.fault(from, FaultKind::UnterminatedString)),
             _ => return Err(self.fault(here, FaultKind::UnknownEscape)),
         };
         out.extend_from_slice(scalar.encode_utf8(&mut [0; 4]).as_bytes());
