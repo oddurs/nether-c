@@ -77,6 +77,8 @@ html {
   background: var(--ground) url("gfx/bg.gif") repeat;
 }
 html[data-lamp="lit"] { background-image: url("gfx/bg-lit.gif"); }
+html[data-img-pending] img[data-dark-src],
+html[data-img-pending] img[data-still] { visibility: hidden; }
 
 /* One font, drawn in this repository, so the site reads the same on a machine
    with nothing installed. site/font.py makes it; there is no font library here
@@ -151,6 +153,11 @@ body {
 
 ::selection { background: var(--accent); color: var(--ground); }
 
+pre, .scale-row, .scroll, .directory-drawer, textarea {
+  scrollbar-color: var(--dim) var(--sunk);
+  scrollbar-width: thin;
+}
+
 /* The public terminal: directory and document, not a simulated shell. */
 body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
 .terminal-title, .pane-title, .terminal-status {
@@ -169,7 +176,7 @@ body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
 }
 .terminal-workspace {
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: 268px minmax(0, 1fr);
   border: 1px solid var(--dim);
   border-top: 0;
   background: var(--ground);
@@ -187,25 +194,34 @@ body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
 .directory nav.contents ol { display: block; }
 .directory nav.contents li { margin: 0; }
 .directory a, .directory li[aria-current] {
-  display: block;
-  padding: .5rem .25rem;
-  overflow-wrap: anywhere;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 1ch;
+  align-items: baseline;
+  padding: .45rem .35rem;
+  overflow-wrap: break-word;
   text-decoration: none;
+}
+.directory .dir-num {
+  color: var(--dim);
+  white-space: nowrap;
 }
 .directory a:hover, .directory a:focus-visible {
   background: var(--accent);
   color: var(--ground);
 }
+.directory a:hover .dir-num, .directory a:focus-visible .dir-num {
+  color: var(--ground);
+}
 .directory li[aria-current] { border-left: 3px solid var(--accent); background: var(--raised); }
-.desk-directory span { color: var(--dim); }
 .directory-note { margin: 2rem 0 0; color: var(--dim); }
 .reading-pane { min-width: 0; }
 .pane-title { border-bottom: 1px solid var(--dim); color: var(--dim); overflow-wrap: anywhere; }
 .terminal main { padding: 1.25rem; }
 .terminal main :is(h1, h2, h3, h4) { scroll-margin-top: 1rem; }
-.terminal nav.bar { border: 1px solid var(--dim); gap: .25rem; padding: .35rem; }
-.terminal nav.bar a { display: inline-block; padding: .5rem .75rem; text-decoration: none; }
-.terminal .lamp { min-height: 40px; }
+.terminal nav.bar { border: 1px solid var(--dim); border-top: 0; align-items: center; gap: .25rem; padding: .35rem; }
+.terminal nav.bar a { display: inline-block; padding: .45rem .6rem; text-decoration: none; }
+.terminal .lamp { min-height: 40px; margin-left: auto; }
 .terminal-status { border: 1px solid var(--dim); border-top: 0; color: var(--dim); }
 .arrival { border: 1px solid var(--dim); text-align: center; margin-bottom: 1rem; }
 .arrival .panel-label { padding: .5rem; background: var(--raised); color: var(--dim); text-align: left; }
@@ -227,12 +243,24 @@ summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); 
   .directory-note { display: none; }
   .desk-directory, .directory nav.contents ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 }
+@media (max-width: 640px) {
+  .terminal-title { font-size: var(--type-fine); padding: .4rem .5rem; }
+  .terminal-header { padding: .6rem .5rem; }
+  .terminal-header p.tagline { margin-top: .4rem; }
+  .terminal nav.bar { gap: .2rem; padding: .3rem; }
+  .terminal nav.bar a { padding: .35rem .45rem; }
+  .terminal .lamp { min-height: 36px; }
+  .directory { padding: .3rem .5rem; }
+  .directory summary { padding: .35rem 0; }
+  .pane-title { padding: .4rem .5rem; }
+  .arrival .panel-label { font-size: var(--type-fine); padding: .35rem .5rem; overflow-wrap: anywhere; }
+  .arrival h1 { margin: 0 0 .5rem; }
+  img.hero { margin: 0 auto .75rem; }
+}
 @media (max-width: 500px) {
   body.terminal { padding: .5rem; }
   .terminal main { padding: .75rem; }
-  .terminal nav.bar a { padding: .5rem; }
-  .terminal-title, .pane-title, .terminal-status { padding: .5rem; }
-  .arrival .panel-label { overflow-wrap: anywhere; }
+  .terminal-status { padding: .5rem; }
 }
 
 /* --- the sign over the door ---------------------------------------------- */
@@ -257,7 +285,6 @@ pre.sign {
   max-width: 100%;
   margin: 0 auto;
 }
-pre.sign b { color: var(--alt); font-weight: normal; }
 
 p.tagline {
   margin: .75rem 0 0;
@@ -339,17 +366,16 @@ nav.bar {
   display: flex;
   flex-wrap: wrap;
   gap: 0 .5ch;
-  align-items: baseline;
+  align-items: center;
   padding: .3rem .6rem;
   border: 2px solid;
   border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
   background: var(--ground);
 }
-nav.bar .sep { color: var(--dim); }
 nav.bar a { color: var(--ink); }
 nav.bar a:hover { background: var(--accent); color: var(--ground); }
-nav.bar a[aria-current] { background: var(--accent); color: var(--ground); }
-nav.bar .spacer { flex: 1 1 auto; }
+nav.bar a[aria-current], nav.bar a.current { background: var(--accent); color: var(--ground); }
+nav.bar button.lamp { margin-left: auto; }
 
 /* --- headings: DOS window title bars -------------------------------------- */
 
@@ -389,14 +415,17 @@ h4 {
   font-weight: bold;
 }
 
+h1.memorial { text-align: center; }
+h1.memorial::before { content: none; }
+
 h1 a, h2 a, h3 a, h4 a { color: inherit; text-decoration: none; }
-h2 a:hover, h3 a:hover, h4 a:hover { text-decoration: underline; }
+h1 a:hover, h2 a:hover, h3 a:hover, h4 a:hover { text-decoration: underline; background: none; color: inherit; }
 
 /* --- text ----------------------------------------------------------------- */
 
 p { margin: 0 0 .9rem; }
 strong { color: var(--accent); font-weight: bold; }
-em { color: var(--alt); font-style: normal; text-decoration: underline; }
+em { color: var(--quote); font-style: normal; }
 
 a { color: var(--alt); text-decoration: underline; }
 a:hover { background: var(--alt); color: var(--ground); text-decoration: none; }
@@ -405,7 +434,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 ul, ol { margin: 0 0 .9rem; padding-left: 3ch; }
 li { margin: 0 0 .2rem; }
 ul { list-style: none; }
-ul > li::before { content: "\2022 "; margin-left: -2ch; color: var(--accent); }
+ul > li::before { content: "\2022"; margin-left: -2ch; margin-right: 1ch; color: var(--accent); }
+li > ul, li > ol { margin: .35rem 0 .25rem; }
 ol { list-style-position: outside; }
 ol > li::marker { color: var(--accent); }
 
@@ -434,7 +464,7 @@ figure.listing {
   border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
 }
 figure.listing figcaption {
-  padding: .1rem .6rem;
+  padding: .25rem .6rem;
   background: var(--dim);
   color: var(--ground);
   font-size: 8px;
@@ -498,9 +528,12 @@ td {
   border: 1px solid var(--dim);
   vertical-align: top;
 }
+.align-left   { text-align: left; }
+.align-center { text-align: center; }
+.align-right  { text-align: right; }
 /* Full inversion on hover. Twenty-one to one, and period-appropriate. */
 tbody tr:hover td { background: var(--ink); color: var(--ground); }
-tbody tr:hover td a { color: var(--ground); }
+tbody tr:hover td :is(a, code, strong, em) { color: var(--ground); }
 
 /* --- boxes ---------------------------------------------------------------- */
 
@@ -512,10 +545,6 @@ div.box {
 }
 div.box > :last-child { margin-bottom: 0; }
 div.box.shout { border-color: var(--warn); color: var(--warn); }
-/* The one sentence everything else follows from. It gets the room. */
-div.box.covenant { border-color: var(--accent); color: var(--accent); margin: 1.5rem 0; }
-div.box.covenant strong { font-size: 24px; letter-spacing: .125em; }
-div.box.covenant p + p { color: var(--dim); margin-top: .5rem; }
 
 p.small { color: var(--dim); }
 div.box.shout strong { color: var(--warn); }
@@ -551,17 +580,9 @@ footer {
   margin-top: 2.5rem;
   color: var(--dim);
   font-size: 8px;
+  text-align: center;
 }
 footer a { color: var(--dim); }
-footer .badge {
-  display: inline-block;
-  margin: .5rem .4ch 0 0;
-  padding: 0 .5ch;
-  border: 1px solid var(--dim);
-  color: var(--dim);
-  font-size: 8px;
-  text-transform: uppercase;
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -588,34 +609,16 @@ img { image-rendering: pixelated; image-rendering: crisp-edges; }
 
 .center { text-align: center; }
 
-img.banner { width: 100%; max-width: 396px; margin: 0 auto; }
 /* The mark. Drawn at three times the cell and shown at exactly that, because
    a bitmap resampled to 1.4 pixels per pixel is an argument against itself. */
 img.mark { display: block; width: 96px; height: 120px; margin: 0 auto 1rem; image-rendering: pixelated; }
 img.descent { display: block; width: 320px; max-width: 100%; height: auto; margin: 1rem auto; }
 img.hero { display: block; width: 100%; max-width: 600px; height: auto; margin: 0 auto 1.25rem; image-rendering: pixelated; }
-img.rule   { width: 100%; max-width: 396px; margin: 1rem auto; }
+img.rule   { display: block; width: 100%; max-width: 396px; height: auto; margin: 1rem auto; }
 /* The specimen is drawn at three times the cell and must not be resampled to
    anything else: a bitmap face shown at 1.4 pixels per pixel is an argument
    against itself. */
-img.specimen { width: 100%; max-width: 435px; margin: 1rem auto; image-rendering: pixelated; }
-
-/* the marquee, which we are not sorry about */
-.marquee {
-  overflow: hidden;
-  margin: 0 0 1rem;
-  padding: .2rem 0;
-  border-top: 1px solid var(--dim);
-  border-bottom: 1px solid var(--dim);
-  white-space: nowrap;
-}
-.marquee > span {
-  display: inline-block;
-  padding-left: 100%;
-  color: var(--accent);
-  animation: crawl 24s linear infinite;
-}
-@keyframes crawl { to { transform: translateX(-100%); } }
+img.specimen { display: block; width: 100%; max-width: 435px; height: auto; margin: 1rem auto; image-rendering: pixelated; }
 
 .blink { animation: blink 1.2s step-end infinite; }
 
@@ -623,7 +626,7 @@ img.specimen { width: 100%; max-width: 435px; margin: 1rem auto; image-rendering
 .plaque { margin: 0 0 1.2rem; border: 2px solid; border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi); }
 .plaque > h3 {
   margin: 0;
-  padding: .15rem .6rem;
+  padding: .25rem .6rem;
   background: var(--dim);
   color: var(--ground);
   font-size: 8px;
@@ -665,8 +668,6 @@ ol.doctrine > li span { color: var(--dim); }
 
 .counter { display: flex; align-items: center; justify-content: center; gap: 1ch; margin: 1rem 0; color: var(--dim); font-size: 8px; }
 
-hr.gfx { height: 0; margin: 1.2rem 0; border: 0; }
-
 /* The necropolis: a neighbourhood of records, not a moving constellation.
    All controls remain ordinary HTML. The SVG only connects their boxes. */
 body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap); }
@@ -683,12 +684,34 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .necropolis pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; overflow-y: hidden; max-width: 100%; margin: var(--hair) 0; padding: var(--tight); background: var(--sunk); border: 1px solid var(--dimmer); }
 .necropolis code { background: transparent; padding: 0; }
 .nc-header { border-bottom: 1px solid var(--dimmer); padding-bottom: var(--tight); margin-bottom: var(--tight); }
+.nc-header-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--hair) var(--tight); margin-bottom: var(--hair); }
+.nc-header-bar .nc-eyebrow { margin: 0; }
+.necropolis button.nc-lamp {
+  min-height: 44px;
+  padding: 0 12px;
+  background: var(--ground);
+  border: 2px solid;
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+  color: var(--ink);
+  text-align: center;
+  white-space: nowrap;
+}
+.necropolis button.nc-lamp:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ground);
+}
+.necropolis button.nc-lamp:active {
+  border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
+}
 .nc-eyebrow, .nc-private, .nc-caption, .nc-footer { color: var(--dim); }
 .necropolis .nc-eyebrow { font-size: 16px; letter-spacing: .125em; }
 .nc-header h1 { color: var(--accent); }
 .nc-private { margin-top: var(--tight) !important; }
 .nc-source { border: 1px solid var(--dimmer); padding: var(--hair) var(--tight); background: var(--sunk); }
 .nc-source summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--code); }
+.nc-source summary::before { content: "\25B8"; display: inline-block; margin-right: 1ch; color: var(--accent); }
+.nc-source[open] summary::before { transform: rotate(90deg); }
 .nc-source label { display: block; margin-top: var(--hair); }
 .nc-source textarea { display: block; width: 100%; min-height: 240px; resize: vertical; margin: var(--hair) 0; padding: var(--hair); border: 1px solid var(--dimmer); background: var(--ground); color: var(--ink); font: inherit; line-height: 1.5; }
 .nc-state { display: flex; align-items: center; justify-content: space-between; gap: var(--hair); padding: var(--tight) 0; color: var(--dim); }
@@ -720,6 +743,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .nc-wire[data-kind="Hole"] { stroke: var(--accent); stroke-dasharray: 5 5; }
 .nc-wire[data-kind="Deposit"] { stroke: var(--code); }
 .nc-inspector { padding: var(--tight); border: 1px solid var(--dimmer); background: var(--raised); }
+.nc-inspector button { background: var(--ground); }
 .nc-inspector-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--hair); margin-bottom: var(--hair); }
 .nc-inspector-heading h2 { margin: 0; }
 .nc-inspector > code { display: block; color: var(--dim); overflow-wrap: anywhere; margin-bottom: var(--tight); user-select: all; }
@@ -744,14 +768,17 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 
 /* --- the manual's chapter list -------------------------------------------- */
 
-/* Nine doors, numbered, in the order they are meant to be opened. A grid
-   rather than a table because there is nothing to compare between rows: the
-   only fact about a chapter here is which one comes next. */
+/* Ten doors, numbered, in the order they are meant to be opened. A balanced
+   two-column grid rather than a table because there is nothing to compare
+   between rows: the only fact about a chapter here is which one comes next. */
 .chapters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: .4rem;
   margin: 1.5rem 0;
+}
+@media (max-width: 640px) {
+  .chapters { grid-template-columns: minmax(0, 1fr); }
 }
 a.chapter {
   display: flex;
@@ -763,7 +790,7 @@ a.chapter {
   text-decoration: none;
   color: var(--ink);
 }
-a.chapter .n { color: var(--dimmer); }
+a.chapter .n { color: var(--dim); }
 a.chapter:hover, a.chapter:focus-visible { background: var(--accent); color: var(--ground); }
 a.chapter:hover .n, a.chapter:focus-visible .n { color: var(--ground); }
 
@@ -866,4 +893,39 @@ pre.glyph-grid[data-weight="bold"] { color: var(--accent); }
   margin-right: .1rem;
   font-size: var(--type-fine);
   color: var(--dim);
+}
+
+@media (forced-colors: active) {
+  .gauge span { border: 1px solid CanvasText; }
+  .gauge span.lit { background: Highlight; border-color: Highlight; }
+  dl.swatches div::before { border: 1px solid CanvasText; forced-color-adjust: none; }
+  nav.bar a[aria-current="page"], nav.bar a.current {
+    border: 2px solid Highlight;
+    outline: 1px solid Highlight;
+  }
+  .directory li[aria-current] { border: 1px solid Highlight; border-left: 3px solid Highlight; }
+}
+
+@media print {
+  html, body, .terminal-header, .terminal-workspace, figure.listing, blockquote {
+    background: white !important;
+    color: black !important;
+  }
+  body, body.terminal { max-width: none; padding: 0; }
+  .terminal-title, .directory, nav.bar, .terminal-status, footer,
+  .complaints, a.skip, .gauge, img.rule { display: none !important; }
+  .terminal-workspace { display: block; border: 0; }
+  .terminal-header { border: 0; padding: 0 0 .5rem; }
+  .pane-title { border-bottom: 1px solid black; color: black; }
+  .terminal main { padding: .5rem 0; }
+  h1, h2, h3, h4, strong, em, a, code, p.small, .c { color: black !important; }
+  h2 { background: none !important; border-bottom: 2px solid black; padding-left: 0; }
+  figure.listing, table, th, td, div.box, .plaque { border-color: black !important; }
+  th, figure.listing figcaption, .plaque > h3 {
+    background: transparent !important;
+    color: black !important;
+    border-bottom: 1px solid black;
+  }
+  pre, figure.listing pre { overflow-x: visible; overflow-y: visible; white-space: pre-wrap; }
+  a { text-decoration: underline; }
 }

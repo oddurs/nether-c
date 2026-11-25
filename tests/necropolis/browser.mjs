@@ -26,7 +26,14 @@ const server = createServer(async (request, response) => {
     if (!path.startsWith(resolve(root) + sep)) throw Error("outside root");
     if (denyWasm && path.endsWith(".wasm")) { response.writeHead(503).end(); return; }
     const file = path.endsWith(sep) || url.pathname.endsWith("/") ? join(path, "index.html") : path;
-    const type = file.endsWith(".wasm") ? "application/wasm" : file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : file.endsWith(".html") ? "text/html" : "application/octet-stream";
+    const type = file.endsWith(".wasm") ? "application/wasm"
+      : file.endsWith(".js") ? "text/javascript"
+      : file.endsWith(".css") ? "text/css"
+      : file.endsWith(".html") ? "text/html"
+      : file.endsWith(".svg") ? "image/svg+xml"
+      : file.endsWith(".gif") ? "image/gif"
+      : file.endsWith(".woff") ? "font/woff"
+      : "application/octet-stream";
     const bytes = await readFile(file);
     response.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" });
     response.end(bytes);
@@ -98,6 +105,66 @@ async function screenshot(name, selector) {
     clip });
   await writeFile(join(process.env.NETHER_SCREENSHOTS, name + ".png"), Buffer.from(data, "base64"));
 }
+function gifFrameCount(bytes) {
+  if (bytes.length < 13 || bytes.subarray(0, 6).toString("ascii") !== "GIF89a") return 0;
+  let i = 13;
+  if (bytes[10] & 0x80) i += 3 * (1 << ((bytes[10] & 0x07) + 1));
+  let frames = 0;
+  const skipSubBlocks = () => { while (i < bytes.length && bytes[i] !== 0) i += 1 + bytes[i]; i++; };
+  while (i < bytes.length) {
+    const b = bytes[i++];
+    if (b === 0x3b) break;
+    if (b === 0x2c) {
+      frames++;
+      const packed = bytes[i + 8];
+      i += 9;
+      if (packed & 0x80) i += 3 * (1 << ((packed & 0x07) + 1));
+      i++;
+      skipSubBlocks();
+    } else if (b === 0x21) {
+      i++;
+      skipSubBlocks();
+    } else break;
+  }
+  return frames;
+}
+async function checkImageAspectRatios(context) {
+  assert.deepEqual(await evaluate(`(() => {
+    const bad = [];
+    for (const img of document.images) {
+      const r = img.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0 || img.naturalWidth === 0 || img.naturalHeight === 0) continue;
+      const rendered = r.width / r.height;
+      const natural = img.naturalWidth / img.naturalHeight;
+      if (Math.abs(rendered - natural) / natural >= 0.02) {
+        bad.push((img.getAttribute("src") || "") + ": rendered " + rendered.toFixed(3) + " vs natural " + natural.toFixed(3));
+      }
+    }
+    return bad;
+  })()`), [], "every image preserves its natural aspect ratio at " + context);
+}
+async function checkReducedMotionStills(context, lit) {
+  const imgs = await evaluate(`[...document.images].map(i => ({
+    src: i.getAttribute("src") || "",
+    resolved: new URL(i.getAttribute("src") || "", location.href).pathname,
+    darkResolved: i.dataset.darkSrc ? new URL(i.dataset.darkSrc, location.href).pathname : null
+  }))`);
+  const suffix = lit ? "-lit-still.gif" : "-still.gif";
+  const bad = [];
+  for (const img of imgs) {
+    if (!img.resolved.endsWith(".gif")) continue;
+    const currentBytes = await readFile(resolve(root, "." + decodeURIComponent(img.resolved)));
+    const currentFrames = gifFrameCount(currentBytes);
+    if (currentFrames > 1) bad.push(`${img.src} still has ${currentFrames} frames`);
+    if (img.darkResolved && img.darkResolved.endsWith(".gif")) {
+      const darkBytes = await readFile(resolve(root, "." + decodeURIComponent(img.darkResolved)));
+      if (gifFrameCount(darkBytes) > 1 && !img.src.endsWith(suffix)) {
+        bad.push(`${img.src} did not switch to ${suffix}`);
+      }
+    }
+  }
+  assert.deepEqual(bad, [], "all animated GIFs switch to still frames under prefers-reduced-motion at " + context);
+}
 async function checkTypeGrid(context) {
   assert.deepEqual(await evaluate(`(() => {
     const allowed = new Set(["8px", "16px", "24px", "32px"]);
@@ -123,13 +190,14 @@ try {
   await command("Emulation.setFocusEmulationEnabled", { enabled: true });
   for (const width of [1248, 768, 390, 320]) {
     await command("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width < 500 });
-    for (const path of ["/site/", "/site/spec/00-overview.html", "/site/specimen.html"]) {
+    for (const path of ["/site/", "/site/spec/00-overview.html", "/site/specimen.html", "/site/in-memoriam.html", "/site/manual/00-a-way-in.html"]) {
       await command("Page.navigate", { url: origin + path });
       await until("document.readyState === 'complete' && location.pathname === " + JSON.stringify(path));
       await evaluate("document.fonts.ready");
       assert.equal(await evaluate('document.fonts.check(\'16px "Nether 8"\')'), true);
       assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), path + " overflows at " + width);
       assert.ok(await evaluate("[...document.images].every(i => i.complete && i.naturalWidth > 0)"), "missing site graphic");
+      await checkImageAspectRatios(path + "@" + width + ":dark");
       assert.equal(await evaluate("document.querySelector('.directory-drawer').open"), width > 1050);
       await evaluate("document.querySelector('.directory-drawer summary').focus()");
       await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r" });
@@ -141,6 +209,7 @@ try {
       assert.equal(await evaluate("document.querySelector('[data-lamp-toggle]').getAttribute('aria-pressed')"), "true");
       await until("[...document.images].every(i => i.complete && i.naturalWidth > 0)");
       assert.ok(await evaluate("[...document.querySelectorAll('img[data-lit-src]')].every(i => i.getAttribute('src') === i.dataset.litSrc)"), "graphics follow the lamp");
+      await checkImageAspectRatios(path + "@" + width + ":lit");
       if (width === 1248 && path === "/site/") await screenshot("site-lamp-lit");
       await click("[data-lamp-toggle]");
       await until("[...document.images].every(i => i.complete && i.naturalWidth > 0)");
@@ -180,6 +249,10 @@ try {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents li').length"), 12);
         assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
         assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 11);
+      } else if (path.includes("/manual/")) {
+        assert.equal(await evaluate("document.querySelectorAll('nav.contents li').length"), 10);
+        assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
+        assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 9);
       } else if (path.endsWith("/specimen.html")) {
         assert.equal(await evaluate("document.querySelectorAll('.glyph-card').length"), 140);
         assert.equal(await evaluate("document.querySelectorAll('pre.glyph-grid').length"), 280);
@@ -259,7 +332,7 @@ try {
           }
           await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 1000, deviceScaleFactor: 1, mobile: true });
         }
-      } else {
+      } else if (path === "/site/") {
         assert.equal(await evaluate("document.querySelector('img.hero').naturalWidth"), 600);
         // 28px is `2rem` at the root size site/nether.css sets. The chip is
         // decoration and takes the air out with everything else; it is not on
@@ -268,9 +341,11 @@ try {
         await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
         await until("document.querySelector('img.hero').getAttribute('src').endsWith('-still.gif') && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
         assert.match(await evaluate("document.querySelector('img.descent').getAttribute('src')"), /-still.gif$/);
+        await checkReducedMotionStills(path + "@" + width + ":dark", false);
         if (width === 1248) await screenshot("strata-dark", "img.descent");
         await click("[data-lamp-toggle]");
         await until("document.querySelector('img.hero').getAttribute('src').endsWith('-lit-still.gif') && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
+        await checkReducedMotionStills(path + "@" + width + ":lit", true);
         if (width === 1248) {
           await screenshot("strata-light", "img.descent");
           await screenshot("palette-light", ".swatches");
@@ -284,7 +359,19 @@ try {
         assert.match(await evaluate("document.querySelector('.complaints').textContent"), /No complaint was sent/);
         await click(".complaints summary");
       }
-      await screenshot((path.includes("/spec/") ? "spec-" : path.endsWith("/specimen.html") ? "specimen-" : "site-") + width);
+      if (path !== "/site/" && width === 1248) {
+        await command("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+        await until("[...document.querySelectorAll('img[data-still]')].every(i => i.getAttribute('src').endsWith('-still.gif')) && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
+        await checkReducedMotionStills(path + "@" + width + ":dark", false);
+        await command("Emulation.setEmulatedMedia", { features: [] });
+        await until("[...document.querySelectorAll('img[data-still]')].every(i => !i.getAttribute('src').endsWith('-still.gif')) && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
+      }
+      const shotPrefix = path.includes("/spec/") ? "spec-"
+        : path.includes("/manual/") ? "manual-"
+        : path.endsWith("/specimen.html") ? "specimen-"
+        : path.endsWith("/in-memoriam.html") ? "in-memoriam-"
+        : "site-";
+      await screenshot(shotPrefix + width);
       if (path.includes("/spec/")) {
         await evaluate("document.querySelector('.directory-drawer').open = true");
         await click('nav.contents a[href="02-calculus.html"]');
@@ -295,7 +382,7 @@ try {
         await evaluate("document.querySelector('.directory-drawer').open = true");
         await click('nav.contents a[href="#symbols"]');
         assert.equal(await evaluate("location.hash"), "#symbols");
-      } else {
+      } else if (path === "/site/") {
         await click('.arrival-actions a[href="#first-program"]');
         assert.equal(await evaluate("location.hash"), "#first-program");
       }
@@ -307,26 +394,56 @@ try {
   assert.equal(await evaluate("document.querySelector('.directory-drawer').open"), true, "directory works without JavaScript");
   await command("Emulation.setScriptExecutionDisabled", { value: false });
   console.log("browser: site graphics, spec contents and fixed font metrics at desktop/mobile sizes");
+  await command("Browser.grantPermissions", { origin, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] }, false);
   await command("Emulation.setDeviceMetricsOverride", { width: 1248, height: 1000, deviceScaleFactor: 1, mobile: false });
   await command("Page.navigate", { url: origin + "/web/necropolis/" });
   await until("document.getElementById('state')?.textContent.startsWith('Buried.')");
   await evaluate("document.fonts.ready");
   assert.match(await text("summary"), /1 hole/);
   assert.equal(await text("selected-title"), "Trace");
+  assert.equal(await evaluate("document.getElementById('home').disabled"), true, "Return to trace is disabled at root");
+  assert.equal(await evaluate("document.documentElement.dataset.lamp"), "out");
+  assert.equal(await evaluate("document.querySelector('[data-lamp-toggle]').getAttribute('aria-pressed')"), "false");
+  await click("[data-lamp-toggle]");
+  assert.equal(await evaluate("document.documentElement.dataset.lamp"), "lit");
+  assert.equal(await evaluate("localStorage.getItem('nc-lamp')"), "lit");
+  assert.equal(await evaluate("document.querySelector('[data-lamp-toggle]').getAttribute('aria-pressed')"), "true");
+  assert.equal(await evaluate("document.querySelector('[data-lamp-state]').textContent"), "lit");
+  await command("Page.reload");
+  await until("document.readyState === 'complete' && document.getElementById('state')?.textContent.startsWith('Buried.')");
+  assert.equal(await evaluate("document.documentElement.dataset.lamp"), "lit", "lamp preference restores across reload");
+  assert.equal(await evaluate("document.querySelector('[data-lamp-toggle]').getAttribute('aria-pressed')"), "true");
+  assert.equal(await evaluate("document.querySelector('[data-lamp-state]').textContent"), "lit");
+  await click("[data-lamp-toggle]");
+  assert.equal(await evaluate("document.documentElement.dataset.lamp"), "out");
+  assert.equal(await evaluate("localStorage.getItem('nc-lamp')"), "out");
+  assert.equal(await evaluate("document.querySelector('[data-lamp-toggle]').getAttribute('aria-pressed')"), "false");
   await until("document.querySelectorAll('.nc-wire').length > 0");
   await checkTypeGrid("/web/necropolis/@1248");
   await screenshot("trace-desktop");
-  console.log("browser: real worker burial and desktop graph");
+  console.log("browser: real worker burial, lamp persistence and desktop graph");
 
   const rootId = await text("identity");
+  await click("#copy");
+  await until("document.getElementById('copy').textContent === 'Copied'");
+  assert.equal(await text("copy"), "Copied");
+  assert.equal(await text("state"), "Full cairn copied.");
   await click(".nc-root-hole");
   assert.equal(await text("selected-title"), "Hole");
+  assert.equal(await evaluate("document.getElementById('home').disabled"), false, "Return to trace is enabled away from root");
   assert.match(await text("detail"), /read\("main.nc"\)/);
   assert.match(await evaluate("document.querySelector('.nc-excerpt mark').textContent"), /read/);
   const holeId = await text("identity");
   await screenshot("hole-desktop");
   await click('#outgoing [data-kind="Str"]');
   assert.match(await text("detail"), /main.nc/);
+  await command("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowLeft", code: "ArrowLeft", modifiers: 1 });
+  await command("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowLeft", code: "ArrowLeft", modifiers: 1 });
+  await until(`document.getElementById('identity').textContent === ${JSON.stringify(holeId)}`);
+  assert.equal(await text("identity"), holeId);
+  await command("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight", modifiers: 1 });
+  await command("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight", modifiers: 1 });
+  await until("document.getElementById('selected-title').textContent === 'Str'");
   await evaluate("document.getElementById('back').focus()");
   assert.equal(await evaluate("document.activeElement.id"), "back");
   await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
@@ -335,6 +452,7 @@ try {
   assert.equal(await text("identity"), holeId);
   await click("#forward"); assert.equal(await text("selected-title"), "Str");
   await click("#home"); assert.equal(await text("identity"), rootId);
+  assert.equal(await evaluate("document.getElementById('home').disabled"), true, "Return to trace is disabled again at root");
   await click(".nc-root-deposit"); await click('#outgoing [data-kind="Bytes"]');
   assert.match(await text("detail"), /a deposit that happened/);
   assert.equal(await evaluate("[...document.querySelectorAll('#detail button')].find(b => b.textContent === 'Text').getAttribute('aria-pressed')"), "true");
@@ -389,6 +507,13 @@ try {
   assert.match(await text("diagnostic"), /Burial unavailable/);
   denyWasm = false;
   await bury("demand 3;");
+  const beforeShortcut = await text("trace-title");
+  await evaluate("document.querySelector('.nc-source').open = true; const s = document.getElementById('source'); s.value = 'demand 4;'; s.focus();");
+  await command("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", modifiers: 2, windowsVirtualKeyCode: 13 });
+  await command("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", modifiers: 2, windowsVirtualKeyCode: 13 });
+  await until(`document.getElementById('trace-title').textContent !== ${JSON.stringify(beforeShortcut)} && document.getElementById('state').textContent.startsWith('Buried.')`);
+  await click("#outgoing .nc-object");
+  assert.match(await text("detail"), /demand 4;/);
   assert.deepEqual(exceptions, [], "uncaught browser exceptions");
   assert.ok(requests.every((r) => r.url.startsWith(origin) || r.url.startsWith("data:")), "page made an external request");
   assert.ok(requests.every((r) => r.method === "GET"), "page sent data");

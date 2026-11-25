@@ -4,17 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>05 Types and the data model &mdash; Nether C</title>
-<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="description" content="I64 is the only integer type. There is no unsigned type, no char, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT...">
 <meta name="color-scheme" content="dark light">
+<link rel="canonical" href="https://netherc.org/spec/05-types.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="05 Types and the data model &mdash; Nether C">
-<meta property="og:description" content="A C dialect in which nothing runs. Programs are buried, not executed; what ships is the trace and the holes the world still owes an answer to.">
+<meta property="og:description" content="I64 is the only integer type. There is no unsigned type, no char, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT...">
+<meta property="og:url" content="https://netherc.org/spec/05-types.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Nether C. A C dialect in which nothing runs. The program has already run; you read what is left of it.">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="../nether.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="../nether-bold.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../nether.css">
 <link rel="icon" href="../icon.svg" type="image/svg+xml">
@@ -22,9 +26,10 @@
 /* Before paint, so nothing flashes. The lamp is out by default: the nether is
    unlit, and seeing anything down here is something you choose to do. */
 try {
-  if (localStorage.getItem("nc-lamp") === "lit") {
-    document.documentElement.setAttribute("data-lamp", "lit");
-  }
+  var lit = localStorage.getItem("nc-lamp") === "lit";
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (lit) document.documentElement.setAttribute("data-lamp", "lit");
+  if (lit || reduced) document.documentElement.setAttribute("data-img-pending", "");
 } catch (e) {}
 </script>
 </head>
@@ -34,31 +39,31 @@ try {
 
 <div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
 <header class="terminal-header">
-<pre class="sign" aria-label="Nether C">
+<pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
 █ █ █ ████    █   █████ ████  ████    █
 █  ██ █       █   █   █ █     █  █    █
 █   █ █████   █   █   █ █████ █   █    ████
 </pre>
-<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor" aria-hidden="true">_</span></p>
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html">manual</a><a href="../spec/index.html" aria-current="page">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html">manual</a><a href="../spec/index.html" class="current">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
 <details open class="directory-drawer">
 <summary>Directory</summary>
-<nav class="contents" aria-label="Specification contents"><p>spec/</p><ol role="list"><li><a href="00-overview.html">§00 Overview</a></li><li><a href="01-strata.html">§01 The strata</a></li><li><a href="02-calculus.html">§02 The calculus of depth</a></li><li><a href="03-lexical.html">§03 Lexical structure</a></li><li><a href="04-grammar.html">§04 Grammar</a></li><li aria-current="page">§05 Types and the data model</li><li><a href="06-evaluation.html">§06 Burial, holes and replay</a></li><li><a href="07-ledger.html">§07 The ledger</a></li><li><a href="08-rites.html">§08 The rites</a></li><li><a href="09-prelude.html">§09 The prelude</a></li><li><a href="10-glossary.html">§10 Glossary</a></li><li><a href="90-rationale.html">§90 Rationale</a></li></ol></nav>
+<nav class="contents" aria-label="Specification contents"><p>spec/</p><ol role="list"><li><a href="00-overview.html"><span class="dir-num">§00</span><span>Overview</span></a></li><li><a href="01-strata.html"><span class="dir-num">§01</span><span>The strata</span></a></li><li><a href="02-calculus.html"><span class="dir-num">§02</span><span>The calculus of depth</span></a></li><li><a href="03-lexical.html"><span class="dir-num">§03</span><span>Lexical structure</span></a></li><li><a href="04-grammar.html"><span class="dir-num">§04</span><span>Grammar</span></a></li><li aria-current="page"><span class="dir-num">§05</span><span>Types and the data model</span></li><li><a href="06-evaluation.html"><span class="dir-num">§06</span><span>Burial, holes and replay</span></a></li><li><a href="07-ledger.html"><span class="dir-num">§07</span><span>The ledger</span></a></li><li><a href="08-rites.html"><span class="dir-num">§08</span><span>The rites</span></a></li><li><a href="09-prelude.html"><span class="dir-num">§09</span><span>The prelude</span></a></li><li><a href="10-glossary.html"><span class="dir-num">§10</span><span>Glossary</span></a></li><li><a href="90-rationale.html"><span class="dir-num">§90</span><span>Rationale</span></a></li></ol></nav>
 <p class="directory-note">You are here.<br>Here is below.</p>
 </details>
 </aside>
 <div class="reading-pane">
 <div class="pane-title"><span>05 Types and the data model</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">&sect; 05 &middot; draft &middot; <span class="d0">depth 0</span> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/05-types.md">edit the source</a></p><div class="gauge" aria-hidden="true"><span class="d0 lit"></span><span class="d1"></span><span class="d2"></span><span class="d3"></span><span class="d4"></span><span class="d5"></span><span class="d6"></span><span class="d7"></span><span class="d8"></span></div><h1 id="types-and-the-data-model"><a href="#types-and-the-data-model">Types and the data model</a></h1><h2 id="51-base-types"><a href="#51-base-types">5.1 Base types</a></h2><div class="scroll"><table><thead><tr><th align="left">Type</th><th align="left">Values</th><th align="left">Canonical encoding</th></tr></thead><tbody><tr><td align="left"><code>U0</code></td><td align="left">exactly one, written <code>()</code></td><td align="left">the empty sequence</td></tr><tr><td align="left"><code>Bool</code></td><td align="left"><code>true</code>, <code>false</code></td><td align="left">one byte, <code>0x00</code> or <code>0x01</code></td></tr><tr><td align="left"><code>I64</code></td><td align="left">−2⁶³ … 2⁶³−1</td><td align="left">fixed 8 bytes, two&#x27;s complement, big-endian</td></tr><tr><td align="left"><code>Bytes</code></td><td align="left">any finite byte string</td><td align="left">length prefix, then the bytes</td></tr><tr><td align="left"><code>Str</code></td><td align="left">any well-formed UTF-8 string</td><td align="left">as <code>Bytes</code>, over the bytes as given</td></tr><tr><td align="left"><code>Cairn</code></td><td align="left">a content address</td><td align="left">32 bytes</td></tr><tr><td align="left"><code>Shadeᵈ⟨T⟩</code></td><td align="left">an opaque <code>T</code> from depth <code>d</code></td><td align="left">one byte origin stratum, then the 32-byte cairn of the value</td></tr><tr><td align="left"><code>Answer⟨T⟩</code></td><td align="left">what the world said: a <code>T</code>, or a refusal</td><td align="left"><code>0x07</code>: one discriminant byte, then the <code>T</code> or the <code>Refusal</code></td></tr><tr><td align="left"><code>Refusal</code></td><td align="left">one of six codes, and nothing else</td><td align="left"><code>0x08</code>: one byte, in the order §5.1.1 lists them</td></tr></tbody></table></div><p><code>I64</code> is the only integer type. There is no unsigned type, no <code>char</code>, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT make overflow undefined, because a canonical encoding cannot be built on top of behaviour that varies by compiler.</p><blockquote><p>One integer width does not mean one interchangeable type. Conversions must be explicit; the language does not silently reinterpret a value.</p></blockquote><h2 id="511-answers-and-refusals"><a href="#511-answers-and-refusals">5.1.1 Answers and refusals</a></h2><p>Nether C has no exceptions and no error type. It has <code>Answer⟨T⟩</code>, which is what a function returns when the world is entitled to say no.</p><figure class="listing"><pre><code>Answer⟨T⟩  ::=  Given T  |  Refused Refusal
+<p class="c">&sect; 05 &middot; draft &middot; <span class="d0">depth 0</span> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/05-types.md">edit the source</a></p><div class="gauge" aria-hidden="true"><span class="d0 lit"></span><span class="d1"></span><span class="d2"></span><span class="d3"></span><span class="d4"></span><span class="d5"></span><span class="d6"></span><span class="d7"></span><span class="d8"></span></div><h1 id="types-and-the-data-model"><a href="#types-and-the-data-model">Types and the data model</a></h1><h2 id="51-base-types"><a href="#51-base-types">5.1 Base types</a></h2><div class="scroll"><table><thead><tr><th class="align-left">Type</th><th class="align-left">Values</th><th class="align-left">Canonical encoding</th></tr></thead><tbody><tr><td class="align-left"><code>U0</code></td><td class="align-left">exactly one, written <code>()</code></td><td class="align-left">the empty sequence</td></tr><tr><td class="align-left"><code>Bool</code></td><td class="align-left"><code>true</code>, <code>false</code></td><td class="align-left">one byte, <code>0x00</code> or <code>0x01</code></td></tr><tr><td class="align-left"><code>I64</code></td><td class="align-left">−2⁶³ … 2⁶³−1</td><td class="align-left">fixed 8 bytes, two&#x27;s complement, big-endian</td></tr><tr><td class="align-left"><code>Bytes</code></td><td class="align-left">any finite byte string</td><td class="align-left">length prefix, then the bytes</td></tr><tr><td class="align-left"><code>Str</code></td><td class="align-left">any well-formed UTF-8 string</td><td class="align-left">as <code>Bytes</code>, over the bytes as given</td></tr><tr><td class="align-left"><code>Cairn</code></td><td class="align-left">a content address</td><td class="align-left">32 bytes</td></tr><tr><td class="align-left"><code>Shadeᵈ⟨T⟩</code></td><td class="align-left">an opaque <code>T</code> from depth <code>d</code></td><td class="align-left">one byte origin stratum, then the 32-byte cairn of the value</td></tr><tr><td class="align-left"><code>Answer⟨T⟩</code></td><td class="align-left">what the world said: a <code>T</code>, or a refusal</td><td class="align-left"><code>0x07</code>: one discriminant byte, then the <code>T</code> or the <code>Refusal</code></td></tr><tr><td class="align-left"><code>Refusal</code></td><td class="align-left">one of six codes, and nothing else</td><td class="align-left"><code>0x08</code>: one byte, in the order §5.1.1 lists them</td></tr></tbody></table></div><p><code>I64</code> is the only integer type. There is no unsigned type, no <code>char</code>, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT make overflow undefined, because a canonical encoding cannot be built on top of behaviour that varies by compiler.</p><blockquote><p>One integer width does not mean one interchangeable type. Conversions must be explicit; the language does not silently reinterpret a value.</p></blockquote><h2 id="511-answers-and-refusals"><a href="#511-answers-and-refusals">5.1.1 Answers and refusals</a></h2><p>Nether C has no exceptions and no error type. It has <code>Answer⟨T⟩</code>, which is what a function returns when the world is entitled to say no.</p><figure class="listing"><pre><code>Answer⟨T⟩  ::=  Given T  |  Refused Refusal
 
 Refusal    ::=  absent       the thing is not there
              |  denied       it is there and you may not have it
@@ -92,17 +97,17 @@ Refusal    ::=  absent       the thing is not there
 <p>Nether C is in the <strong>public domain</strong>.
 Take it. It was always there.</p>
 <div class="badges">
-<img src="../gfx/badge-norun.gif" data-dark-src="../gfx/badge-norun.gif" data-lit-src="../gfx/badge-norun-lit.gif" width="88" height="31" alt="There is no run">
-<img src="../gfx/badge-unlit.gif" data-dark-src="../gfx/badge-unlit.gif" data-lit-src="../gfx/badge-unlit-lit.gif" width="88" height="31" alt="Best viewed unlit">
-<img src="../gfx/badge-handmade.gif" data-dark-src="../gfx/badge-handmade.gif" data-lit-src="../gfx/badge-handmade-lit.gif" width="88" height="31" alt="No libraries, written from scratch">
-<img src="../gfx/badge-80col.gif" data-dark-src="../gfx/badge-80col.gif" data-lit-src="../gfx/badge-80col-lit.gif" width="88" height="31" alt="80 columns">
-<img src="../gfx/badge-decay.gif" data-dark-src="../gfx/badge-decay.gif" data-lit-src="../gfx/badge-decay-lit.gif" width="88" height="31" alt="The core only decays">
-<img src="../gfx/badge-public.gif" data-dark-src="../gfx/badge-public.gif" data-lit-src="../gfx/badge-public-lit.gif" width="88" height="31" alt="Public domain, take it">
+<img src="../gfx/badge-norun.gif" data-dark-src="../gfx/badge-norun.gif" data-lit-src="../gfx/badge-norun-lit.gif" data-still width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" data-dark-src="../gfx/badge-unlit.gif" data-lit-src="../gfx/badge-unlit-lit.gif" data-still width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" data-dark-src="../gfx/badge-handmade.gif" data-lit-src="../gfx/badge-handmade-lit.gif" data-still width="88" height="31" alt="No libraries, written from scratch">
+<img src="../gfx/badge-80col.gif" data-dark-src="../gfx/badge-80col.gif" data-lit-src="../gfx/badge-80col-lit.gif" data-still width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" data-dark-src="../gfx/badge-decay.gif" data-lit-src="../gfx/badge-decay-lit.gif" data-still width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" data-dark-src="../gfx/badge-public.gif" data-lit-src="../gfx/badge-public-lit.gif" data-still width="88" height="31" alt="Public domain, take it">
 </div>
 
 <div class="counter">
   <span>the world still owes</span>
-  <img src="../gfx/counter.gif" data-dark-src="../gfx/counter.gif" data-lit-src="../gfx/counter-lit.gif" width="84" height="26" alt="Holes still owed, counted off the board">
+  <img src="../gfx/counter.gif" data-dark-src="../gfx/counter.gif" data-lit-src="../gfx/counter-lit.gif" data-still width="84" height="26" alt="Holes still owed, counted off the board">
   <span>holes</span>
 </div>
 
@@ -117,18 +122,40 @@ There is no image library in this repository. There is not going to be one.</p>
 /* The whole of the site's JavaScript. */
 (function () {
   var directory = document.querySelector(".directory-drawer");
-  if (directory && window.matchMedia("(max-width: 1050px)").matches) directory.open = false;
+  var narrow = window.matchMedia("(max-width: 1050px)");
+  function syncDirectory() {
+    if (directory) directory.open = !narrow.matches;
+  }
+  syncDirectory();
+  narrow.addEventListener("change", syncDirectory);
+  if (directory) {
+    directory.addEventListener("click", function (ev) {
+      var link = ev.target && ev.target.closest ? ev.target.closest("a") : null;
+      if (link && narrow.matches) {
+        var href = link.getAttribute("href") || "";
+        if (href.indexOf("#") !== -1) directory.open = false;
+      }
+    });
+  }
   var root = document.documentElement;
   var btn = document.querySelector("[data-lamp-toggle]");
   var label = document.querySelector("[data-lamp-state]");
   var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   function paintImages() {
     var lit = root.getAttribute("data-lamp") === "lit";
-    document.querySelectorAll("img[data-dark-src]").forEach(function (img) {
-      var src = lit ? img.dataset.litSrc : img.dataset.darkSrc;
-      if (motion.matches && img.hasAttribute("data-still")) src = src.replace(".gif", "-still.gif");
+    document.querySelectorAll("img[data-dark-src], img[data-still]").forEach(function (img) {
+      var base = img.dataset.darkSrc || img.getAttribute("data-base-src") || img.getAttribute("src");
+      if (!img.dataset.darkSrc && !img.hasAttribute("data-base-src") && base) {
+        img.setAttribute("data-base-src", base);
+      }
+      var src = (lit && img.dataset.litSrc) ? img.dataset.litSrc : base;
+      if (!src) return;
+      if (motion.matches && img.hasAttribute("data-still")) {
+        src = src.replace(/(-still)?\.gif$/, "-still.gif");
+      }
       if (img.getAttribute("src") !== src) img.setAttribute("src", src);
     });
+    root.removeAttribute("data-img-pending");
   }
   function paint() {
     var lit = root.getAttribute("data-lamp") === "lit";

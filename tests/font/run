@@ -34,10 +34,150 @@ FACES = {
 IGNORED = set("\n\r\t ﻿")
 
 
+def _decode_js_escape(src: str, pos: int) -> tuple[str, int]:
+    """Decode one JS escape starting at the character after `\\`."""
+    if pos >= len(src):
+        return "", pos
+    ch = src[pos]
+    simple = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "\\": "\\",
+              "'": "'", '"': '"', "`": "`", "$": "$"}
+    if ch in simple:
+        return simple[ch], pos + 1
+    if ch == "x" and pos + 3 <= len(src):
+        try:
+            return chr(int(src[pos + 1:pos + 3], 16)), pos + 3
+        except ValueError:
+            return ch, pos + 1
+    if ch == "u":
+        if pos + 1 < len(src) and src[pos + 1] == "{":
+            end = src.find("}", pos + 2)
+            if end != -1:
+                try:
+                    return chr(int(src[pos + 2:end], 16)), end + 1
+                except ValueError:
+                    pass
+        elif pos + 5 <= len(src):
+            try:
+                return chr(int(src[pos + 1:pos + 5], 16)), pos + 5
+            except ValueError:
+                pass
+    return ch, pos + 1
+
+
+def js_strings(src: str) -> str:
+    """Extract rendered string and template text chunks from JS, ignoring comments and regexes."""
+    out: list[str] = []
+    i = 0
+    n = len(src)
+    # Track nested template `${ ... }` brace depths so we resume the enclosing template on `}`.
+    template_braces: list[int] = []
+    # Previous non-whitespace token kind to disambiguate `/` regex vs division.
+    prev = "op"
+
+    def read_template_chunk(idx: int) -> int:
+        while idx < n:
+            c = src[idx]
+            if c == "`":
+                return idx + 1
+            if c == "\\" and idx + 1 < n:
+                ch, idx = _decode_js_escape(src, idx + 1)
+                if ord(ch) >= 0x20:
+                    out.append(ch)
+                continue
+            if c == "$" and idx + 1 < n and src[idx + 1] == "{":
+                template_braces.append(0)
+                return idx + 2
+            out.append(c)
+            idx += 1
+        return idx
+
+    while i < n:
+        c = src[i]
+        if c.isspace():
+            i += 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            nl = src.find("\n", i + 2)
+            i = n if nl == -1 else nl + 1
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            end = src.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            continue
+        if c in ("'", '"'):
+            quote = c
+            i += 1
+            while i < n and src[i] != quote:
+                if src[i] == "\\" and i + 1 < n:
+                    ch, i = _decode_js_escape(src, i + 1)
+                    if ord(ch) >= 0x20:
+                        out.append(ch)
+                else:
+                    out.append(src[i])
+                    i += 1
+            i += 1
+            prev = "val"
+            continue
+        if c == "`":
+            i = read_template_chunk(i + 1)
+            prev = "op" if template_braces else "val"
+            continue
+        if c == "/" and prev == "op":
+            i += 1
+            in_class = False
+            while i < n:
+                rc = src[i]
+                if rc == "\\":
+                    i += 2
+                    continue
+                if rc == "[":
+                    in_class = True
+                elif rc == "]":
+                    in_class = False
+                elif rc == "/" and not in_class:
+                    i += 1
+                    break
+                i += 1
+            while i < n and src[i].isalpha():
+                i += 1
+            prev = "val"
+            continue
+        if c == "{" and template_braces:
+            template_braces[-1] += 1
+            i += 1
+            prev = "op"
+            continue
+        if c == "}" and template_braces:
+            if template_braces[-1] == 0:
+                template_braces.pop()
+                i = read_template_chunk(i + 1)
+                prev = "op" if template_braces else "val"
+                continue
+            template_braces[-1] -= 1
+            i += 1
+            prev = "op"
+            continue
+        if c.isalnum() or c in ("_", "$"):
+            start = i
+            while i < n and (src[i].isalnum() or src[i] in ("_", "$")):
+                i += 1
+            word = src[start:i]
+            prev = "op" if word in ("return", "throw", "case", "typeof", "void", "delete", "in", "of", "new") else "val"
+            continue
+        prev = "val" if c in (")", "]") else "op"
+        i += 1
+    return "".join(out)
+
+
 def rendered(*, exclude_specimen: bool = False) -> set[str]:
-    """Every character the pages and CSS-generated labels ask the face for."""
+    """Every character the pages, Necropolis UI, and CSS-generated labels ask the face for."""
     seen: set[str] = set()
-    for page in sorted(ROOT.glob("site/**/*.html")) + sorted(ROOT.glob("spec/*.md")):
+    pages = (
+        sorted(ROOT.glob("site/**/*.html"))
+        + sorted(ROOT.glob("web/necropolis/*.html"))
+        + sorted(ROOT.glob("spec/*.md"))
+    )
+    for page in pages:
         if exclude_specimen and page == SPECIMEN:
             continue
         text = page.read_text(encoding="utf-8")
@@ -45,6 +185,8 @@ def rendered(*, exclude_specimen: bool = False) -> set[str]:
             text = re.sub(r"<(script|style)\b.*?</\1>", " ", text, flags=re.S | re.I)
             text = html.unescape(re.sub(r"<[^>]+>", " ", text))
         seen |= set(text)
+    for script in sorted(ROOT.glob("web/necropolis/*.js")):
+        seen |= set(js_strings(script.read_text(encoding="utf-8")))
     for sheet in ROOT.glob("site/**/*.css"):
         # CSS consumes the following whitespace as part of a hexadecimal escape.
         # The heading prefixes are text just as surely as a letter in a page is.

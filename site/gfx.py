@@ -33,7 +33,7 @@ OUT = ROOT / "site" / "gfx"
 # colours. The names are the roles they were always playing; what each one
 # resolves to now comes out of Oklch rather than out of a 1980s text mode.
 
-from design import NETHER, LIT, RAMPS  # noqa: E402 -- a sibling, not a dependency
+from design import GROUND_HUE, LIT, NETHER, RAMPS, srgb  # noqa: E402 -- a sibling, not a dependency
 
 
 def _rgb(value: str) -> tuple[int, int, int]:
@@ -45,11 +45,22 @@ def palette(mode: str = "nether") -> list[tuple[int, int, int]]:
     """The same role indices in both modes; geometry never depends on colour."""
     theme = NETHER if mode == "nether" else LIT
     ramp = RAMPS[mode]
+    if mode == "nether":
+        stone = [theme["ink"], theme["dim"], theme["dimmer"], theme["raised"], theme["ground"]]
+    else:
+        # Light still falls from top-left in daylight: sunlit lavender stone down to plum shadow.
+        stone = [
+            srgb(0.88, 0.036, GROUND_HUE),
+            srgb(0.77, 0.046, GROUND_HUE),
+            srgb(0.64, 0.054, GROUND_HUE),
+            theme["dim"],
+            theme["ink"],
+        ]
     colours = [
         theme["ground"], theme["ink"], theme["accent"], theme["alt"],
         theme["warn"], ramp[4], theme["good"], theme["dimmer"],
         theme["dim"], theme["quote"], ramp[0], ramp[2],
-        theme["raised"], theme["code"], ramp[6], ramp[1], *ramp,
+        theme["raised"], theme["code"], ramp[6], ramp[1], *ramp, *stone,
     ]
     return [_rgb(c) for c in colours + [theme["ground"]] * (32 - len(colours))]
 
@@ -59,6 +70,7 @@ DEPTH = list(range(16, 25))
 
 VOID, BONE, SULPHUR, LILAC, SALMON, ICE, LIME, ASH = range(8)
 SMOKE, PLUM, BLOOD, MOSS, DEEP, TEAL, ROT, BILE = range(8, 16)
+STONE_HI, STONE_LIT, STONE_MID, STONE_SHADE, STONE_DARK = range(25, 30)
 
 # The depth ramp: indigo through violet to rose, in both modes.
 
@@ -224,7 +236,7 @@ COURSE = 1
 
 #: What each mark in a stone is made of. The lamp is the only thing in the
 #: language that carries light downwards, so the lit faces take sulphur.
-QUARRY = {"+": BONE, "#": SMOKE, "-": ASH, ".": None}
+QUARRY = {"+": STONE_HI, "#": STONE_LIT, "-": STONE_MID, ".": None}
 
 
 def cairn() -> tuple[list[Frame], list[int]]:
@@ -240,15 +252,15 @@ def cairn() -> tuple[list[Frame], list[int]]:
     # The ground, and the dark it opens into. The rim catches the light and
     # the inside does not, which is the whole of what a shaft is.
     floor = 30
-    small.rect(1, floor, 30, 1, ASH)
-    small.rect(4, floor + 1, 24, 1, SMOKE)
+    small.rect(1, floor, 30, 1, STONE_MID)
+    small.rect(4, floor + 1, 24, 1, STONE_LIT)
     for n in range(2, 10):
         inset = 4 + n
         if inset * 2 < 32:
             # The rim catches what the lamp gives it and nothing below does.
             # A colour down there would be something to see, and the whole
             # point of a shaft is that there is not.
-            small.rect(inset, floor + n, 32 - inset * 2, 1, ASH if n == 2 else VOID)
+            small.rect(inset, floor + n, 32 - inset * 2, 1, STONE_MID if n == 2 else VOID)
 
     y = floor
     for lean, rows in STONES:
@@ -326,17 +338,17 @@ def hero() -> tuple[list[Frame], list[int]]:
                     f.set(xx, y, DEEP)
         for y in (45, 50, 56, 62):
             f.rect(20 + (y - 43) * 2, y, 160 - (y - 43) * 4, 1, ASH)
-        f.rect(76, 51, 48, 2, ASH)
-        f.rect(81, 53, 38, 1, SMOKE)
-        f.rect(87, 54, 26, 1, DEEP)
-        f.rect(94, 55, 12, 1, SMOKE)
-        block(f, 82, 43, 36, 5, 5, ASH, DEEP, VOID)
-        block(f, 88, 35, 24, 6, 4, SMOKE, ASH, DEEP)
-        block(f, 94, 28, 13, 5, 3, ASH, SMOKE, DEEP)
+        f.rect(76, 51, 48, 2, STONE_MID)
+        f.rect(81, 53, 38, 1, STONE_LIT)
+        f.rect(87, 54, 26, 1, STONE_SHADE)
+        f.rect(94, 55, 12, 1, STONE_LIT)
+        block(f, 82, 43, 36, 5, 5, STONE_MID, STONE_SHADE, STONE_DARK)
+        block(f, 88, 35, 24, 6, 4, STONE_LIT, STONE_MID, STONE_SHADE)
+        block(f, 94, 28, 13, 5, 3, STONE_LIT, STONE_MID, STONE_SHADE)
         f.rect(89, 39, 18, 1, SULPHUR)
         pulse = phase % 6
         f.rect(98, 32, 5, 4, PLUM)
-        f.rect(99, 33, 3, 2, VOID)
+        f.rect(99, 33, 3, 2, STONE_DARK)
         if pulse in (0, 1):
             f.rect(97, 31, 7, 1, LILAC)
             f.set(96, 33, LILAC)
@@ -517,32 +529,6 @@ def bg_tile() -> tuple[list[Frame], list[int]]:
     return [f], [0]
 
 
-def lamp() -> tuple[list[Frame], list[int]]:
-    """A lamp, guttering. Carry it down or see nothing."""
-    frames = []
-    shapes = [
-        ("..##..", ".####.", "######", ".####.", "..##.."),
-        ("...#..", "..###.", ".####.", "..###.", "...#.."),
-        ("..#...", ".###..", "#####.", ".###..", "..#..."),
-        ("..#...", "..##..", ".####.", "..##..", "...#.."),
-    ]
-    palette = [SULPHUR, BILE, ROT, SALMON]
-    for i in range(8):
-        f = Frame(24, 24, VOID)
-        f.rect(9, 16, 6, 6, SMOKE)          # the vessel
-        f.rect(10, 17, 4, 4, ASH)
-        f.rect(11, 14, 2, 2, BILE)          # the wick
-        rows = shapes[i % 4] if i % 4 else shapes[0]
-        colour = palette[i % len(palette)]
-        for r, row in enumerate(rows):
-            for c, on in enumerate(row):
-                if on == "#":
-                    f.set(9 + c, 6 + r, colour)
-        f.set(12, 4, SULPHUR if i % 2 else VOID)
-        frames.append(f)
-    return frames, [11] * 8
-
-
 def badge(top: str, bottom: str, ink: int, glow: int) -> tuple[list[Frame], list[int]]:
     """88x31. The only standard the web ever really agreed on."""
     frames = []
@@ -614,8 +600,8 @@ def descent_animated() -> tuple[list[Frame], list[int]]:
         f = Frame(160, 172, VOID)
         f.text(5, 4, "DEPTH / STRATA", SMOKE)
         # A quiet vertical shaft behind the floating slabs.
-        f.rect(49, 17, 1, 145, ASH)
-        f.rect(151, 17, 1, 145, DEEP)
+        f.rect(49, 17, 1, 141, ASH)
+        f.rect(151, 17, 1, 141, DEEP)
         here = tick // 4
         for depth, label in enumerate(labels):
             y = 18 + depth * 16
@@ -756,7 +742,7 @@ def rule_variant(kind: str) -> tuple[list[Frame], list[int]]:
             f = Frame(w, h, VOID)
             for x in range((step * 2) % 16, w, 16):
                 for k in range(4):
-                    f.rect(x + 3 - k, 2 + k, 1 + k * 2, 1, DEPTH[(x // 16) % 9])
+                    f.rect(x + k, 2 + k, 7 - k * 2, 1, DEPTH[(x // 16) % 9])
             frames.append(f)
         return frames, [90] * 8
 
@@ -785,7 +771,9 @@ def og_card() -> Frame:
 
     f.rect(0, 0, W, 3, SULPHUR)
     for d in range(9):
-        f.rect(d * (W // 9), H - 4, (W // 9) + 1, 4, DEPTH[d])
+        x0 = d * (W // 9)
+        w = W - x0 if d == 8 else (W // 9) + 1
+        f.rect(x0, H - 4, w, 4, DEPTH[d])
 
     # sediment, only in the margins, so it never sits behind a letter
     for y in range(8, H - 8, 6):
@@ -798,13 +786,12 @@ def og_card() -> Frame:
 
     f.rect(12, 74, W - 24, 1, ASH)
     big_text(f, 12, 81, "THE PROGRAM HAS ALREADY RUN.", SMOKE, 1)
-    big_text(f, 12, 90, "YOU READ WHAT IS LEFT OF IT.", ASH, 1)
+    big_text(f, 12, 90, "YOU READ WHAT IS LEFT OF IT.", SMOKE, 1)
     return f
 
 
 GRAPHICS = {
     "bg.gif": bg_tile,
-    "lamp.gif": lamp,
     "counter.gif": lambda: counter(f"{owed():06d}"),
     "cairn.gif": cairn,
     "hero.gif": hero,
@@ -836,10 +823,11 @@ def main() -> int:
             filename = name.replace(".gif", suffix + ".gif")
             work.append((filename, write_gif(OUT / filename, frames, delays, mode=mode),
                          f"{len(frames)} frame(s)"))
-            if name in ("hero.gif", "descending.gif"):
+            if len(frames) > 1:
                 still = filename.replace(".gif", "-still.gif")
-                work.append((still, write_gif(OUT / still, [frames[-1]], [0],
-                                             loop=False, mode=mode), "still"))
+                settled = frames[0] if name.startswith("badge-") else frames[-1]
+                work.append((still, write_gif(OUT / still, [settled], [0],
+                                              loop=False, mode=mode), "still"))
     work.append(("card.png", write_png(og_card(), scale=6), "1200x630"))
 
     for name, data, note in work:

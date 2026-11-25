@@ -4,17 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>90 Rationale &mdash; Nether C</title>
-<meta name="description" content="Nether C is a C dialect in which nothing runs. A program is buried, not executed; what ships is the record of how far it got and the holes the world still owes an answer to.">
+<meta name="description" content="Non-normative throughout. Nothing here constrains an implementation.">
 <meta name="color-scheme" content="dark light">
+<link rel="canonical" href="https://netherc.org/spec/90-rationale.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="90 Rationale &mdash; Nether C">
-<meta property="og:description" content="A C dialect in which nothing runs. Programs are buried, not executed; what ships is the trace and the holes the world still owes an answer to.">
+<meta property="og:description" content="Non-normative throughout. Nothing here constrains an implementation.">
+<meta property="og:url" content="https://netherc.org/spec/90-rationale.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Nether C. A C dialect in which nothing runs. The program has already run; you read what is left of it.">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="../nether.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="../nether-bold.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../nether.css">
 <link rel="icon" href="../icon.svg" type="image/svg+xml">
@@ -22,9 +26,10 @@
 /* Before paint, so nothing flashes. The lamp is out by default: the nether is
    unlit, and seeing anything down here is something you choose to do. */
 try {
-  if (localStorage.getItem("nc-lamp") === "lit") {
-    document.documentElement.setAttribute("data-lamp", "lit");
-  }
+  var lit = localStorage.getItem("nc-lamp") === "lit";
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (lit) document.documentElement.setAttribute("data-lamp", "lit");
+  if (lit || reduced) document.documentElement.setAttribute("data-img-pending", "");
 } catch (e) {}
 </script>
 </head>
@@ -34,24 +39,24 @@ try {
 
 <div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
 <header class="terminal-header">
-<pre class="sign" aria-label="Nether C">
+<pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
 ██  █ █       █   █   █ █     █   █   █
 █ █ █ ████    █   █████ ████  ████    █
 █  ██ █       █   █   █ █     █  █    █
 █   █ █████   █   █   █ █████ █   █    ████
 </pre>
-<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor">_</span></p>
+<p class="tagline">a C dialect in which <em>nothing runs</em><span class="cursor" aria-hidden="true">_</span></p>
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html">manual</a><a href="../spec/index.html" aria-current="page">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><span class="spacer"></span><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html">manual</a><a href="../spec/index.html" class="current">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
 <details open class="directory-drawer">
 <summary>Directory</summary>
-<nav class="contents" aria-label="Specification contents"><p>spec/</p><ol role="list"><li><a href="00-overview.html">§00 Overview</a></li><li><a href="01-strata.html">§01 The strata</a></li><li><a href="02-calculus.html">§02 The calculus of depth</a></li><li><a href="03-lexical.html">§03 Lexical structure</a></li><li><a href="04-grammar.html">§04 Grammar</a></li><li><a href="05-types.html">§05 Types and the data model</a></li><li><a href="06-evaluation.html">§06 Burial, holes and replay</a></li><li><a href="07-ledger.html">§07 The ledger</a></li><li><a href="08-rites.html">§08 The rites</a></li><li><a href="09-prelude.html">§09 The prelude</a></li><li><a href="10-glossary.html">§10 Glossary</a></li><li aria-current="page">§90 Rationale</li></ol></nav>
+<nav class="contents" aria-label="Specification contents"><p>spec/</p><ol role="list"><li><a href="00-overview.html"><span class="dir-num">§00</span><span>Overview</span></a></li><li><a href="01-strata.html"><span class="dir-num">§01</span><span>The strata</span></a></li><li><a href="02-calculus.html"><span class="dir-num">§02</span><span>The calculus of depth</span></a></li><li><a href="03-lexical.html"><span class="dir-num">§03</span><span>Lexical structure</span></a></li><li><a href="04-grammar.html"><span class="dir-num">§04</span><span>Grammar</span></a></li><li><a href="05-types.html"><span class="dir-num">§05</span><span>Types and the data model</span></a></li><li><a href="06-evaluation.html"><span class="dir-num">§06</span><span>Burial, holes and replay</span></a></li><li><a href="07-ledger.html"><span class="dir-num">§07</span><span>The ledger</span></a></li><li><a href="08-rites.html"><span class="dir-num">§08</span><span>The rites</span></a></li><li><a href="09-prelude.html"><span class="dir-num">§09</span><span>The prelude</span></a></li><li><a href="10-glossary.html"><span class="dir-num">§10</span><span>Glossary</span></a></li><li aria-current="page"><span class="dir-num">§90</span><span>Rationale</span></li></ol></nav>
 <p class="directory-note">You are here.<br>Here is below.</p>
 </details>
 </aside>
@@ -71,17 +76,17 @@ try {
 <p>Nether C is in the <strong>public domain</strong>.
 Take it. It was always there.</p>
 <div class="badges">
-<img src="../gfx/badge-norun.gif" data-dark-src="../gfx/badge-norun.gif" data-lit-src="../gfx/badge-norun-lit.gif" width="88" height="31" alt="There is no run">
-<img src="../gfx/badge-unlit.gif" data-dark-src="../gfx/badge-unlit.gif" data-lit-src="../gfx/badge-unlit-lit.gif" width="88" height="31" alt="Best viewed unlit">
-<img src="../gfx/badge-handmade.gif" data-dark-src="../gfx/badge-handmade.gif" data-lit-src="../gfx/badge-handmade-lit.gif" width="88" height="31" alt="No libraries, written from scratch">
-<img src="../gfx/badge-80col.gif" data-dark-src="../gfx/badge-80col.gif" data-lit-src="../gfx/badge-80col-lit.gif" width="88" height="31" alt="80 columns">
-<img src="../gfx/badge-decay.gif" data-dark-src="../gfx/badge-decay.gif" data-lit-src="../gfx/badge-decay-lit.gif" width="88" height="31" alt="The core only decays">
-<img src="../gfx/badge-public.gif" data-dark-src="../gfx/badge-public.gif" data-lit-src="../gfx/badge-public-lit.gif" width="88" height="31" alt="Public domain, take it">
+<img src="../gfx/badge-norun.gif" data-dark-src="../gfx/badge-norun.gif" data-lit-src="../gfx/badge-norun-lit.gif" data-still width="88" height="31" alt="There is no run">
+<img src="../gfx/badge-unlit.gif" data-dark-src="../gfx/badge-unlit.gif" data-lit-src="../gfx/badge-unlit-lit.gif" data-still width="88" height="31" alt="Best viewed unlit">
+<img src="../gfx/badge-handmade.gif" data-dark-src="../gfx/badge-handmade.gif" data-lit-src="../gfx/badge-handmade-lit.gif" data-still width="88" height="31" alt="No libraries, written from scratch">
+<img src="../gfx/badge-80col.gif" data-dark-src="../gfx/badge-80col.gif" data-lit-src="../gfx/badge-80col-lit.gif" data-still width="88" height="31" alt="80 columns">
+<img src="../gfx/badge-decay.gif" data-dark-src="../gfx/badge-decay.gif" data-lit-src="../gfx/badge-decay-lit.gif" data-still width="88" height="31" alt="The core only decays">
+<img src="../gfx/badge-public.gif" data-dark-src="../gfx/badge-public.gif" data-lit-src="../gfx/badge-public-lit.gif" data-still width="88" height="31" alt="Public domain, take it">
 </div>
 
 <div class="counter">
   <span>the world still owes</span>
-  <img src="../gfx/counter.gif" data-dark-src="../gfx/counter.gif" data-lit-src="../gfx/counter-lit.gif" width="84" height="26" alt="Holes still owed, counted off the board">
+  <img src="../gfx/counter.gif" data-dark-src="../gfx/counter.gif" data-lit-src="../gfx/counter-lit.gif" data-still width="84" height="26" alt="Holes still owed, counted off the board">
   <span>holes</span>
 </div>
 
@@ -96,18 +101,40 @@ There is no image library in this repository. There is not going to be one.</p>
 /* The whole of the site's JavaScript. */
 (function () {
   var directory = document.querySelector(".directory-drawer");
-  if (directory && window.matchMedia("(max-width: 1050px)").matches) directory.open = false;
+  var narrow = window.matchMedia("(max-width: 1050px)");
+  function syncDirectory() {
+    if (directory) directory.open = !narrow.matches;
+  }
+  syncDirectory();
+  narrow.addEventListener("change", syncDirectory);
+  if (directory) {
+    directory.addEventListener("click", function (ev) {
+      var link = ev.target && ev.target.closest ? ev.target.closest("a") : null;
+      if (link && narrow.matches) {
+        var href = link.getAttribute("href") || "";
+        if (href.indexOf("#") !== -1) directory.open = false;
+      }
+    });
+  }
   var root = document.documentElement;
   var btn = document.querySelector("[data-lamp-toggle]");
   var label = document.querySelector("[data-lamp-state]");
   var motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   function paintImages() {
     var lit = root.getAttribute("data-lamp") === "lit";
-    document.querySelectorAll("img[data-dark-src]").forEach(function (img) {
-      var src = lit ? img.dataset.litSrc : img.dataset.darkSrc;
-      if (motion.matches && img.hasAttribute("data-still")) src = src.replace(".gif", "-still.gif");
+    document.querySelectorAll("img[data-dark-src], img[data-still]").forEach(function (img) {
+      var base = img.dataset.darkSrc || img.getAttribute("data-base-src") || img.getAttribute("src");
+      if (!img.dataset.darkSrc && !img.hasAttribute("data-base-src") && base) {
+        img.setAttribute("data-base-src", base);
+      }
+      var src = (lit && img.dataset.litSrc) ? img.dataset.litSrc : base;
+      if (!src) return;
+      if (motion.matches && img.hasAttribute("data-still")) {
+        src = src.replace(/(-still)?\.gif$/, "-still.gif");
+      }
       if (img.getAttribute("src") !== src) img.setAttribute("src", src);
     });
+    root.removeAttribute("data-img-pending");
   }
   function paint() {
     var lit = root.getAttribute("data-lamp") === "lit";

@@ -39,11 +39,16 @@ PAIRS = [
     ("h2 title bar",       "ground",  "accent", 4.5),
     ("h3",                 "alt",     "ground", 4.5),
     ("h4",                 "quote",   "ground", 4.5),
+    ("emphasis",           "quote",   "ground", 4.5),
+    ("emphasis on raised", "quote",   "raised", 4.5),
     ("inline code",        "code",    "ground", 4.5),
     ("errors",             "warn",    "ground", 4.5),
     ("table header",       "ground",  "dim",    4.5),
     ("table row hover",    "ground",  "ink",    4.5),
+    ("table hover inline", "ground",  "ink",    4.5),
     ("listing caption",    "ground",  "dim",    4.5),
+    ("manual chapter n",   "dim",     "ground", 4.5),
+    ("social card footer", "dim",     "ground", 4.5),
     ("footer",             "dim",     "ground", 4.5),
     ("footer badge text",  "dim",     "ground", 4.5),
     ("nav bar",            "ink",     "ground", 4.5),
@@ -53,13 +58,18 @@ PAIRS = [
     ("marquee",            "accent",  "ground", 4.5),
     ("cursor",             "accent",  "ground", 3.0),
     ("rules and borders",  "dim",     "ground", 3.0),
+    ("excerpt highlight",  "sunk",    "accent", 4.5),
 ]
 
-# Every depth label and raised panel uses the same readable semantic tokens.
+# Every depth label and raised or sunk panel uses the same readable semantic tokens.
 PAIRS += [(f"stratum {n} on {bg}", f"d{n}", bg, 4.5)
           for n in range(9) for bg in ("ground", "raised")]
+PAIRS += [(f"ground on stratum {n}", "ground", f"d{n}", 4.5)
+          for n in range(9)]
 PAIRS += [(f"{fg} on raised", fg, "raised", 4.5)
           for fg in ("ink", "dim", "accent", "alt", "warn", "good", "code", "quote")]
+PAIRS += [(f"{fg} on sunk", fg, "sunk", 4.5)
+          for fg in ("ink", "dim", "code", "accent")]
 PAIRS += [("focus and control edges", "dimmer", "ground", 3.0)]
 
 
@@ -112,7 +122,11 @@ def main() -> int:
     failures += check_palette("surface (lamp lit)", SURFACE)
     # Compare the actual colour tables that browsers receive, not just imports.
     import gfx
-    names = list(gfx.GRAPHICS) + ["specimen.gif", "hero-still.gif", "descending-still.gif"]
+    stills = sorted(
+        p.name for p in (ROOT / "site" / "gfx").glob("*-still.gif")
+        if not p.name.endswith("-lit-still.gif")
+    )
+    names = list(gfx.GRAPHICS) + ["specimen.gif"] + stills
     for name in names:
         lit = (name.replace("-still.gif", "-lit-still.gif") if "-still.gif" in name
                else name.replace(".gif", "-lit.gif"))
