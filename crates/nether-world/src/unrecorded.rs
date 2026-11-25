@@ -13,7 +13,7 @@ use std::path::Path;
 
 use nether_core::{Capability, Depth};
 use nether_foreign::Object;
-use nether_ledger::{Call, Refusal, Span, Stored, Value};
+use nether_ledger::{Call, Refusal, Span, Value};
 
 use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
@@ -52,17 +52,6 @@ impl Unrecorded {
     }
 }
 
-/// The two `Str`, `Bytes` arguments §9.8 gives `call_foreign`.
-fn asked(into: &Recorder, call: &Call) -> Option<(String, Vec<u8>)> {
-    let Ok(Stored::Value(Value::Str(symbol))) = into.store().get(*call.args.first()?) else {
-        return None;
-    };
-    let Ok(Stored::Value(Value::Bytes(args))) = into.store().get(*call.args.get(1)?) else {
-        return None;
-    };
-    Some((symbol, args))
-}
-
 /// §9.8.1's return table. `0` is the answer, `1` never reaches here, and
 /// `2..=7` are §5.1.1's six in the order it lists them.
 const fn meant(code: i32) -> Option<Refusal> {
@@ -87,7 +76,10 @@ impl Provider for Unrecorded {
     }
 
     fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
-        let Some((symbol, args)) = asked(into, call) else {
+        let Some(symbol) = into.arg_str(call, 0)? else {
+            return into.record(call, Depth::UNRECORDED, span, &refused(Refusal::Malformed));
+        };
+        let Some(args) = into.arg_bytes(call, 1)? else {
             return into.record(call, Depth::UNRECORDED, span, &refused(Refusal::Malformed));
         };
         // §8.3.3: a symbol found in nothing named is denied. Before the call,

@@ -25,7 +25,7 @@ pub(crate) mod kind {
 /// The source is named by cairn rather than by path. A path is a fact about
 /// one machine at one moment, and a trace has to mean the same thing on a
 /// machine that has never seen that filesystem.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
     /// The cairn of the source bytes.
     pub source: Cairn,

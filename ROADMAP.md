@@ -423,7 +423,7 @@ A durable, inspectable store with measured retention costs. Export and integrity
 
 ## warden — The Warden
 
-`##########` 94% · 17 of 18 done · due 2028-07-15
+`##########` 95% · 18 of 19 done · due 2028-07-15
 
 A stated trust model and tested defenses across current entrypoints, not just the decoder.
 
@@ -450,6 +450,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 - [x] [`0310`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0310-harden-proof-kernel-decay-scanner-hooks-site-and-ci.md) harden proof kernel, decay scanner, hooks, site, and CI <sup>feature · p2 · 1</sup>
 - [x] [`0311`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0311-harden-core-checker-and-syntax-parser-lowering.md) harden core checker and syntax parser/lowering <sup>feature · p2 · 1</sup>
 - [x] [`0312`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0312-harden-bury-soundness-and-self-hosted-interpreter.md) Harden bury soundness and self-hosted interpreter <sup>bug · p2 · 1</sup>
+- [x] [`0313`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0313-harden-ledger-store-foreign-loader-and-world-providers.md) Harden ledger store, foreign loader, and world providers <sup>bug · p2 · 1</sup>
 
 ## assay — The Assay
 

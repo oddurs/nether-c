@@ -1,5 +1,6 @@
 //! Who answers what, and what a grant is.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, PoisonError};
 
@@ -117,10 +118,16 @@ impl World {
         Self::default()
     }
 
-    /// Grant one capability, by handing over the thing that answers for it.
+    /// Grant one capability, replacing any prior provider for the same
+    /// capability so duplicate grants cannot silently shadow one another.
     #[must_use]
     pub fn granting(mut self, provider: Box<dyn Provider>) -> Self {
-        self.granted.push(provider);
+        let cap = provider.capability();
+        if let Some(pos) = self.granted.iter().position(|p| p.capability() == cap) {
+            self.granted[pos] = provider;
+        } else {
+            self.granted.push(provider);
+        }
         self
     }
 
@@ -191,31 +198,50 @@ impl World {
                 i += 1;
                 continue;
             }
-            let (run, next, cutoff) =
-                (&asked[i..end], AtomicUsize::new(0), AtomicUsize::new(end - i));
+            let run = &asked[i..end];
+            // Deduplicate identical read-stratum `(call, span)` holes within
+            // the batch so duplicate entries contact the world once.
+            let mut leaders: Vec<usize> = Vec::with_capacity(run.len());
+            let mut first_of: HashMap<(&Call, Span), usize> = HashMap::new();
+            let mut leader_for: Vec<usize> = Vec::with_capacity(run.len());
+            for (idx, (call, span)) in run.iter().enumerate() {
+                let leader = *first_of.entry((call, *span)).or_insert_with(|| {
+                    leaders.push(idx);
+                    idx
+                });
+                leader_for.push(leader);
+            }
+            let (next, cutoff) = (AtomicUsize::new(0), AtomicUsize::new(leaders.len()));
             let slots: Vec<Mutex<Option<Result<Recorded, Unanswered>>>> =
-                (0..run.len()).map(|_| Mutex::new(None)).collect();
+                (0..leaders.len()).map(|_| Mutex::new(None)).collect();
             std::thread::scope(|s| {
-                for _ in 0..run.len().min(MOST_IN_FLIGHT) {
+                for _ in 0..leaders.len().min(MOST_IN_FLIGHT) {
                     s.spawn(|| {
                         loop {
-                            let idx = next.fetch_add(1, Ordering::Relaxed);
-                            if idx >= cutoff.load(Ordering::Acquire) {
+                            let li = next.fetch_add(1, Ordering::Relaxed);
+                            if li >= cutoff.load(Ordering::Acquire) {
                                 break;
                             }
+                            let idx = leaders[li];
                             let res = self.ask(&run[idx].0, run[idx].1, into);
                             if Self::fatal(&res) {
-                                cutoff.fetch_min(idx, Ordering::AcqRel);
+                                cutoff.fetch_min(li, Ordering::AcqRel);
                             }
-                            *slots[idx].lock().unwrap_or_else(PoisonError::into_inner) = Some(res);
+                            *slots[li].lock().unwrap_or_else(PoisonError::into_inner) = Some(res);
                         }
                     });
                 }
             });
-            for res in slots
-                .into_iter()
-                .map_while(|s| s.into_inner().unwrap_or_else(PoisonError::into_inner))
-            {
+            let mut leader_results: HashMap<usize, Result<Recorded, Unanswered>> = HashMap::new();
+            for (li, slot) in slots.into_iter().enumerate() {
+                if let Some(res) = slot.into_inner().unwrap_or_else(PoisonError::into_inner) {
+                    leader_results.insert(leaders[li], res);
+                }
+            }
+            for &leader in &leader_for {
+                let Some(res) = leader_results.get(&leader).cloned() else {
+                    break;
+                };
                 let stop = Self::fatal(&res);
                 out.push(res);
                 if stop {
@@ -234,8 +260,9 @@ impl World {
     /// # Errors
     ///
     /// Returns [`Unanswered`] if a slot index is out of range, if a referenced
-    /// hole is missing or not a `Node::Hole` in the store, or if a provider
-    /// fails with a collapse, unavailable source or store write error.
+    /// hole is missing or not a `Node::Hole` in the store, if its `stratum`
+    /// disagrees with the prelude function, or if a provider fails with a
+    /// collapse, unavailable source or store write error.
     pub fn ask_slots(
         &self,
         holes: &[Cairn],
@@ -251,7 +278,15 @@ impl World {
                 return Err(Unanswered::NotRecorded(format!("hole slot {slot} out of range")));
             };
             match into.store().get(hole) {
-                Ok(Stored::Node(Node::Hole { call, span, .. })) => asked.push((call, span)),
+                Ok(Stored::Node(Node::Hole { call, stratum, span })) => {
+                    if Prim::from_name(&call.function).is_none_or(|p| p.latent().get() != stratum) {
+                        return Err(Unanswered::NotRecorded(format!(
+                            "hole {hole} claims stratum {stratum} for `{}`",
+                            call.function
+                        )));
+                    }
+                    asked.push((call, span));
+                }
                 Ok(_) => return Err(Unanswered::NotRecorded(format!("{hole} is not a hole"))),
                 Err(e) => return Err(Unanswered::NotRecorded(e.to_string())),
             }

@@ -2,8 +2,12 @@
 
 use std::collections::HashMap;
 
-use nether_core::Depth;
+use nether_core::{Depth, Prim};
 use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
+
+fn valid_call_stratum(call: &Call, stratum: u8) -> bool {
+    Prim::from_name(&call.function).is_some_and(|p| p.latent().get() == stratum)
+}
 
 /// Why worker deliveries could not be merged into one trace (`spec/06-evaluation.md` §6.6).
 #[derive(Debug)]
@@ -48,6 +52,9 @@ impl From<StoreError> for MergeError {
 #[derive(Debug, Clone, Default)]
 pub struct Replay {
     said: HashMap<Call, Vec<Value>>,
+    /// Distinct calls in first-seen insertion order so [`Replay::all`] is
+    /// deterministic across runs rather than dependent on `HashMap` seed.
+    order: Vec<Call>,
 }
 
 impl Replay {
@@ -58,10 +65,14 @@ impl Replay {
     #[must_use]
     pub fn of(answers: &[(Call, Value)]) -> Self {
         let mut said: HashMap<Call, Vec<Value>> = HashMap::new();
+        let mut order: Vec<Call> = Vec::new();
         for (call, value) in answers {
+            if !said.contains_key(call) {
+                order.push(call.clone());
+            }
             said.entry(call.clone()).or_default().push(value.clone());
         }
-        Self { said }
+        Self { said, order }
     }
 
     /// Every witness a trace names, read out of the ledger.
@@ -78,6 +89,7 @@ impl Replay {
         // at a read stratum: one call can have been asked more than once, and
         // then the answers to it are told apart by nothing but their order.
         let mut said: HashMap<Call, Vec<Value>> = HashMap::new();
+        let mut order: Vec<Call> = Vec::new();
         for w in witnesses {
             let Stored::Node(Node::Witness { call, answer, .. }) = store.get(*w)? else {
                 return Err(StoreError::Corrupt { asked: *w, found: None, why: None });
@@ -85,9 +97,12 @@ impl Replay {
             let Stored::Value(v) = store.get(answer)? else {
                 return Err(StoreError::Corrupt { asked: answer, found: None, why: None });
             };
+            if !said.contains_key(&call) {
+                order.push(call.clone());
+            }
             said.entry(call).or_default().push(v);
         }
-        Ok(Self { said })
+        Ok(Self { said, order })
     }
 
     /// What was recorded for that question, if anything was.
@@ -102,10 +117,9 @@ impl Replay {
 
     /// Everything it was told, for handing to a burial.
     ///
-    /// Each call once per answer recorded for it, in the order they were
-    /// recorded. A burial takes them the same way (§6.3).
+    /// Each call once per answer recorded for it, in deterministic order.
     pub fn all(&self) -> impl Iterator<Item = (&Call, &Value)> {
-        self.said.iter().flat_map(|(call, values)| values.iter().map(move |v| (call, v)))
+        self.order.iter().flat_map(|call| self.said[call].iter().map(move |v| (call, v)))
     }
 
     /// How many answers it holds.
@@ -141,6 +155,9 @@ impl Replay {
             let Stored::Node(Node::Witness { stratum, call, answer, .. }) = store.get(w)? else {
                 return Err(MergeError::BaseWitness(w));
             };
+            if !valid_call_stratum(&call, stratum) {
+                return Err(MergeError::BaseWitness(w));
+            }
             let Stored::Value(_) = store.get(answer)? else {
                 return Err(MergeError::BaseWitness(w));
             };
@@ -159,6 +176,9 @@ impl Replay {
             let Stored::Node(Node::Hole { call, stratum, span }) = store.get(h)? else {
                 return Err(MergeError::Mismatched(slot, h, h));
             };
+            if !valid_call_stratum(&call, stratum) {
+                return Err(MergeError::Mismatched(slot, h, h));
+            }
             open.push((call, stratum, span));
         }
         let mut chosen: Vec<Option<(Cairn, Cairn, Value)>> = vec![None; holes.len()];
@@ -177,7 +197,9 @@ impl Replay {
             let Stored::Value(val) = store.get(answer)? else {
                 return Err(MergeError::Mismatched(slot, hole, answer));
             };
-            if (stratum, &call, span) != (*h_stratum, h_call, *h_span) {
+            if !valid_call_stratum(&call, stratum)
+                || (stratum, &call, span) != (*h_stratum, h_call, *h_span)
+            {
                 return Err(MergeError::Mismatched(slot, hole, witness));
             }
             if let Some((first, _, _)) = chosen[slot] {
@@ -204,8 +226,11 @@ impl Replay {
             }
             chosen[slot] = Some((witness, answer, val));
         }
-        let (mut witnesses, mut said): (Vec<Cairn>, HashMap<Call, Vec<Value>>) =
-            (base_witnesses.to_vec(), HashMap::new());
+        let (mut witnesses, mut said, mut order): (
+            Vec<Cairn>,
+            HashMap<Call, Vec<Value>>,
+            Vec<Call>,
+        ) = (base_witnesses.to_vec(), HashMap::new(), Vec::new());
         // How many slots before this one asked the same thing. Every one of
         // them has to be answered before this one can be.
         let mut earlier: HashMap<&Call, usize> = HashMap::new();
@@ -220,10 +245,13 @@ impl Replay {
                 }
                 *seen += 1;
                 witnesses.push(witness);
+                if !said.contains_key(call) {
+                    order.push(call.clone());
+                }
                 said.entry(call.clone()).or_default().push(val);
             }
             *asked += 1;
         }
-        Ok((witnesses, Self { said }))
+        Ok((witnesses, Self { said, order }))
     }
 }

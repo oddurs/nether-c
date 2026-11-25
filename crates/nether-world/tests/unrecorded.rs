@@ -183,3 +183,26 @@ fn calls_into_one_object_take_turns_across_threads() {
     });
     assert_eq!(overlapped.into_inner(), 0, "two calls were inside the object at once");
 }
+
+#[test]
+fn duplicate_open_handles_still_serialize_concurrent_calls() {
+    let Some(path) = object("turns-dup") else { return };
+    let first = nether_foreign::Object::open(std::path::Path::new(&path)).expect("loads first");
+    let second = nether_foreign::Object::open(std::path::Path::new(&path)).expect("loads second");
+    let overlapped = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|s| {
+        for handle in [&first, &second] {
+            for _ in 0..4 {
+                s.spawn(|| {
+                    for _ in 0..25 {
+                        let (code, _) = handle.call("alone", b"").expect("has alone");
+                        if code != 0 {
+                            overlapped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                });
+            }
+        }
+    });
+    assert_eq!(overlapped.into_inner(), 0, "two handles to the same shared object overlapped");
+}

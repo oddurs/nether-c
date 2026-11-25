@@ -10,21 +10,13 @@
 //! ledger it does not write to would be two ledgers wearing one name.
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Call, Refusal, Span, StoreError, Stored, Value};
+use nether_ledger::{Call, Refusal, Span, StoreError, Value};
 
 use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
 
 /// The ledger, read by cairn.
 pub struct Ledger;
-
-/// The one `Cairn` argument both §9.3 functions take.
-fn named(into: &Recorder, call: &Call) -> Option<nether_ledger::Cairn> {
-    match into.store().get(*call.args.first()?) {
-        Ok(Stored::Value(Value::Cairn(c))) => Some(c),
-        _ => None,
-    }
-}
 
 impl Provider for Ledger {
     fn capability(&self) -> Capability {
@@ -39,7 +31,7 @@ impl Provider for Ledger {
         // §6.3: a world-call whose argument is not finished cannot have become
         // a hole, and §04 types this one as a `Cairn`, so getting here means a
         // program the checker should have rejected.
-        let Some(name) = named(into, call) else {
+        let Some(name) = into.arg_cairn(call, 0)? else {
             if call.function == "has_node" {
                 return Err(Refuse::Collapse("`has_node` was not given a cairn".into()));
             }
@@ -49,24 +41,15 @@ impl Provider for Ledger {
             // §7.2: the encoding is the node. Handing back the bytes rather
             // than a decoded value is what makes `fetch_node` the inverse of
             // `seal` — and `Store::get` has already checked that they hash to
-            // the name that asked for them.
+            // the name that asked for them. Only `Absent` is a valid §9.3
+            // refusal; corruption and I/O errors abort via `NotRecorded`.
             "fetch_node" => match into.store().get(name) {
                 Ok(stored) => given(&call.function, Value::Bytes(stored.encode())),
-                Err(e) => refused(why(&e)),
+                Err(StoreError::Absent(_)) => refused(Refusal::Absent),
+                Err(e) => return Err(Refuse::NotRecorded(e)),
             },
             _ => given(&call.function, Value::Bool(into.store().has(name))),
         };
         into.record(call, Depth::STORE, span, &said)
-    }
-}
-
-/// The refusal a [`StoreError`] is. §9.3 gives `fetch_node` only `absent`,
-/// which is the one a ledger without it gives; the rest are this machine
-/// failing rather than the ledger saying no, and `unreachable` is that.
-const fn why(e: &StoreError) -> Refusal {
-    match e {
-        StoreError::Absent(_) => Refusal::Absent,
-        StoreError::Corrupt { .. } | StoreError::Ragged { .. } => Refusal::Malformed,
-        _ => Refusal::Unreachable,
     }
 }
