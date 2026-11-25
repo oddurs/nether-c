@@ -370,7 +370,7 @@ to $\{r \in R \mid \neg\text{has}(r)\}$:
 3. **Bounded response.** For each requested cairn $c$ in batch order, the peer
    checks its own copy via `get(c)` and replies with either:
    - `object(c, bytes)`, where `len(bytes)` does not exceed `MAX_OBJECT_BYTES`
-     (16 MiB), or
+     (`64 MiB + 64 KiB`, [§7.5.4](#754-moving-a-store)), or
    - `absent(c)` if the peer does not hold $c$. A peer whose local copy of $c$
      fails verification MUST NOT transmit the corrupt bytes; it MUST treat $c$
      as locally corrupt and refuse to serve it.

@@ -74,7 +74,7 @@ class Sample:
 
 # ── extraction ──────────────────────────────────────────────────────────────
 
-FENCE = re.compile(r"^```(\w*)\s*$")
+FENCE = re.compile(r"^```([^\n]*)$")
 LISTING = re.compile(
     r'<figure class="listing">\s*(?:<figcaption>([^<]*)</figcaption>\s*)?<pre><code>(.*?)</code></pre>',
     re.S,
@@ -91,7 +91,8 @@ def from_markdown(rel: str) -> list[Sample]:
                 heading = lines[i].lstrip("#").strip()
             i += 1
             continue
-        kind, body = m.group(1) or "text", []
+        info = m.group(1).strip()
+        kind, body = (info.split()[0] if info else "text"), []
         i += 1
         while i < len(lines) and not lines[i].startswith("```"):
             body.append(lines[i])
@@ -209,12 +210,19 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
         work = Path(work)
         for fixture in FIXTURES:
             shutil.copy(fixture, work / fixture.name)
-        env = dict(os.environ, NETHER_STORE=str(work / ".nether"))
+        env = {
+            k: os.environ[k]
+            for k in ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL")
+            if k in os.environ
+        }
+        env["NETHER_STORE"] = str(work / ".nether")
         for program in PROGRAMS:
-            subprocess.run(
+            pre = subprocess.run(
                 [str(exe), "bury", program.name],
                 capture_output=True, text=True, cwd=work, env=env,
             )
+            if pre.returncode == 101:
+                return False, f"  setup `nether bury {program.name}` panicked:\n{pre.stderr}", skipped
         # The documents show a reader's first burial, so what those burials
         # remembered goes. §8.2.1: losing the memo loses time and nothing else.
         shutil.rmtree(work / ".nether" / "memo", ignore_errors=True)
@@ -222,10 +230,12 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
         for earlier in before:
             for cmd, _ in parse_transcript(earlier.body):
                 if RUNNABLE.match(cmd):
-                    subprocess.run(
+                    prev = subprocess.run(
                         [str(exe)] + shlex.split(cmd)[1:],
                         capture_output=True, text=True, cwd=work, env=env,
                     )
+                    if prev.returncode == 101:
+                        return False, f"  setup `{cmd}` panicked:\n{prev.stderr}", skipped
 
         for cmd, expected in parse_transcript(sample.body):
             if not RUNNABLE.match(cmd):
@@ -236,6 +246,8 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
             proc = subprocess.run(
                 argv, capture_output=True, text=True, cwd=work, env=env
             )
+            if proc.returncode == 101:
+                return False, f"  $ {cmd}\n  panicked (exit 101):\n{proc.stderr}", skipped
             if args[:1] == ["run"] and proc.returncode != 64:
                 return False, (
                     f"  $ {cmd}\n"
@@ -248,6 +260,11 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
                         f"  $ {cmd}\n"
                         f"  expected non-zero exit for diagnostic transcript, got 0"
                     ), skipped
+                if proc.stdout.strip():
+                    return False, (
+                        f"  $ {cmd}\n"
+                        f"  expected empty stdout on diagnostic error, got:\n{proc.stdout}"
+                    ), skipped
                 actual = proc.stderr.rstrip("\n")
             else:
                 if proc.returncode != 0:
@@ -255,6 +272,11 @@ def check(sample: Sample, exe: Path, before: list[Sample]) -> tuple[bool, str, i
                         f"  $ {cmd}\n"
                         f"  expected exit code 0, got {proc.returncode}\n"
                         f"  stderr: {proc.stderr}"
+                    ), skipped
+                if proc.stderr.strip():
+                    return False, (
+                        f"  $ {cmd}\n"
+                        f"  expected empty stderr on success, got:\n{proc.stderr}"
                     ), skipped
                 actual = proc.stdout.rstrip("\n")
             if not matches(expected, actual):
@@ -280,15 +302,19 @@ def quoted(samples: list[Sample]) -> list[str]:
     by_name = {f.name: f for f in FIXTURES}
     wrong = []
     for s in samples:
-        if s.kind != "c":
+        target_name: str | None = None
+        if s.kind in by_name and s.kind.endswith(".nc"):
+            target_name = s.kind
+        elif s.kind == "c":
+            first = s.body.split("\n", 1)[0].strip()
+            m = re.match(r"^//\s*(\S+\.nc)\s+—", first)
+            if m and m.group(1) in by_name:
+                target_name = m.group(1)
+        if target_name is None:
             continue
-        first = s.body.split("\n", 1)[0].strip()
-        m = re.match(r"^//\s*(\S+\.nc)\s+—", first)
-        if not m or m.group(1) not in by_name:
-            continue
-        want = by_name[m.group(1)].read_text(encoding="utf-8").rstrip("\n")
+        want = by_name[target_name].read_text(encoding="utf-8").rstrip("\n")
         if s.body.rstrip("\n") != want:
-            wrong.append(f"  {s.ref}\n    does not match tests/programs/{m.group(1)}")
+            wrong.append(f"  {s.ref}\n    does not match tests/programs/{target_name}")
     return wrong
 
 

@@ -20,27 +20,57 @@ from pathlib import Path
 CHANGELOG = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
 
 
+def _fence_open(stripped: str) -> tuple[str, int] | None:
+    for ch in ("`", "~"):
+        if stripped.startswith(ch * 3):
+            n = len(stripped) - len(stripped.lstrip(ch))
+            rest = stripped[n:]
+            # CommonMark: backtick fence info strings may not contain backticks.
+            if ch == "`" and "`" in rest:
+                return None
+            return (ch, n)
+    return None
+
+
+def _fence_close(stripped: str, fence: tuple[str, int]) -> bool:
+    ch, n = fence
+    if not stripped.startswith(ch * n):
+        return False
+    return stripped.lstrip(ch).strip() == ""
+
+
 def notes(text: str, version: str) -> str | None:
     """Everything under `## [version]`, up to the next `## ` outside code fences."""
     want = version.removeprefix("v")
     # `## [1.2.3] - 2027-01-01` and `## [1.2.3]` both count, and nothing else
     # does: `## [Unreleased]` is not a release and must not be published as one.
-    # The match runs to the end of the heading *line*, so the date in it does
-    # not become the first line of the notes.
-    head = re.compile(r"^##\s+\[" + re.escape(want) + r"\][^\n]*\n?", re.M)
-    found = head.search(text)
-    if not found:
-        return None
-    rest = text[found.end():]
+    head = re.compile(r"^##\s+\[" + re.escape(want) + r"\](?:\s|$)")
+    fence: tuple[str, int] | None = None
+    capturing = False
     out: list[str] = []
-    in_fence = False
-    for line in rest.splitlines(keepends=True):
+    for line in text.splitlines(keepends=True):
         stripped = line.lstrip()
-        if stripped.startswith("```") or stripped.startswith("~~~"):
-            in_fence = not in_fence
-        elif not in_fence and re.match(r"^##\s", line):
+        if fence is not None:
+            if _fence_close(stripped, fence):
+                fence = None
+            if capturing:
+                out.append(line)
+            continue
+        opened = _fence_open(stripped)
+        if opened is not None:
+            fence = opened
+            if capturing:
+                out.append(line)
+            continue
+        if not capturing:
+            if head.match(line):
+                capturing = True
+            continue
+        if re.match(r"^##\s", line):
             break
         out.append(line)
+    if not capturing:
+        return None
     return "".join(out).strip()
 
 

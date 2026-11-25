@@ -73,6 +73,7 @@ KERNEL_PRIVATE = frozenset(
         "_THEOREM_DATA",
         "_REL_DATA",
         "_RELATIONS",
+        "_LATTICE_FN_SORTS",
         "_term_payload",
         "_formula_payload",
         "_rule_payload",
@@ -506,6 +507,45 @@ def verify_kernel_soundness_guards() -> None:
         pass
     else:
         raise AssertionError("rule_induction lost Depth sort on inductive parameter")
+
+    # 30. Re-calling __init__ must never mutate sealed kernel objects in place (C1)
+    sealed_thm = refl(var("0"))
+    try:
+        sealed_thm.conclusion.__init__("=", (var("0"), var("1")))  # type: ignore[misc]
+    except (TypeError, ProofFault):
+        pass
+    if sealed_thm.conclusion != eq(var("0"), var("0")):
+        raise AssertionError(f"re-calling __init__ mutated sealed Theorem: {sealed_thm.conclusion}")
+
+    # 31. rule_induction must reject assumed sorts on unsorted premise-only rule vars (C2)
+    boom = InductiveRelation(
+        "BoomUnsorted",
+        (Rule("Mk", (eq(var("d"), var("9")),), pred("BoomUnsorted", var("0"))),),
+    )
+    try:
+        rule_induction(
+            boom,
+            ("_a",),
+            le(var("9"), var("8")),
+            {"Mk": lambda prems, _ihs: rewrite(prems[0], lattice_decide(le(var("d"), var("8"))))},
+        )
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("rule_induction erased Depth sort on unsorted premise-only variable")
+
+    # 32. lattice_decide must reject unregistered compound terms (C3)
+    for bad_compound in (
+        le(app("VInt", var("999")), var("8")),
+        le(app("f", var("x")), var("8")),
+        subset(app("foo", var("0")), app("foo", var("0"))),
+    ):
+        try:
+            lattice_decide(bad_compound)
+        except ProofFault:
+            pass
+        else:
+            raise AssertionError(f"lattice_decide accepted unregistered compound term `{bad_compound}`")
 
 
 def verify_closed_theorem(name: str, thm: Theorem, expected_conclusion: str) -> None:

@@ -77,7 +77,10 @@ def inline(text: str) -> str:
         return re.sub(r"\x00C(\d+)\x00", lambda m: code_spans[int(m.group(1))], s)
 
     def stash_code(m: re.Match[str]) -> str:
-        code_spans.append(f"<code>{esc(m.group(1))}</code>")
+        inner = m.group(2)
+        if len(inner) >= 2 and inner.startswith(" ") and inner.endswith(" ") and inner.strip():
+            inner = inner[1:-1]
+        code_spans.append(f"<code>{esc(inner)}</code>")
         return f"\x00C{len(code_spans) - 1}\x00"
 
     def stash_link(m: re.Match[str]) -> str:
@@ -89,12 +92,13 @@ def inline(text: str) -> str:
         cleaned = re.sub(r"[\x00-\x20]+", "", raw_href)
         lower = cleaned.lower()
         has_scheme = bool(re.match(r"^[a-z][a-z0-9+.-]*:", lower))
+        first_seg = cleaned.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
         allowed = (
             "\x00" not in raw_href
-            and not cleaned.startswith("//")
+            and not cleaned.startswith(("//", "\\\\", "/\\", "\\/"))
             and (
                 lower.startswith(("http://", "https://", "mailto:"))
-                or (not has_scheme and ":" not in cleaned.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0])
+                or (not has_scheme and ":" not in first_seg and "\\" not in first_seg)
             )
         )
         if not allowed:
@@ -108,7 +112,7 @@ def inline(text: str) -> str:
         link_spans.append(f'<a href="{esc(raw_href)}"{ext}>{label}</a>')
         return f"\x00L{len(link_spans) - 1}\x00"
 
-    text = re.sub(r"`([^`]+)`", stash_code, text)
+    text = re.sub(r"(`+)((?:(?!\1).)+?)\1", stash_code, text)
     text = re.sub(r"\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)", stash_link, text)
     text = esc(text)
     text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
@@ -212,11 +216,14 @@ def render(md: str, seen_anchors: dict[str, int] | None = None) -> str:
         line = lines[i]
 
         # fenced code
-        if line.startswith("```"):
-            lang = line[3:].strip()
+        fm = re.match(r"^(`{3,})(.*)$", line)
+        if fm and "`" not in fm.group(2):
+            fence_len = len(fm.group(1))
+            lang = fm.group(2).strip()
+            close_re = re.compile(r"^`{" + str(fence_len) + r",}\s*$")
             i += 1
             body: list[str] = []
-            while i < len(lines) and not lines[i].startswith("```"):
+            while i < len(lines) and not close_re.match(lines[i]):
                 body.append(lines[i])
                 i += 1
             i += 1
@@ -386,9 +393,14 @@ def split_front_matter(raw: str) -> tuple[dict[str, str], str]:
         body = raw[end + 5:]
     meta = {}
     for line in raw[4:end].split("\n"):
+        if not line or line[0].isspace() or line.startswith("-"):
+            continue
         if ":" in line:
             k, v = line.split(":", 1)
-            meta[k.strip()] = v.strip().strip('"')
+            val = v.strip()
+            if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+                val = val[1:-1]
+            meta[k.strip()] = val
     return meta, body
 
 
@@ -840,9 +852,12 @@ def build() -> dict[Path, str]:
         for s in sections
     )
     milestones, owed = load_board()
-    body = body.replace("{{TOC}}", toc)
-    body = body.replace("{{DESCENT}}", descent_block(milestones, owed))
-    body = body.replace("{{HOLES}}", holes_block(owed))
+    slots = {
+        "TOC": toc,
+        "DESCENT": descent_block(milestones, owed),
+        "HOLES": holes_block(owed),
+    }
+    body = re.sub(r"\{\{(TOC|DESCENT|HOLES)\}\}", lambda m: slots[m.group(1)], body)
     files[SITE / "index.html"] = page("Nether C", body, current="index", depth=0)
 
     # One page for the memorial, off the path, linked once from the footer.

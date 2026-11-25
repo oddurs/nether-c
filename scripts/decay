@@ -141,6 +141,7 @@ def core_lines(path: Path) -> int:
     depth = 0
     bracket_depth = 0
     angle_depth = 0
+    angle_brace_depth = 0
     count = 0
 
     for _raw, bare in scan_rust(text):
@@ -166,11 +167,12 @@ def core_lines(path: Path) -> int:
                 depth = 0
                 bracket_depth = 0
                 angle_depth = 0
+                angle_brace_depth = 0
                 pos = m.end()
                 continue
 
-            # Identify whether the skipped item terminates at `;` (use/static/type/const value)
-            # or at a matching `}` (fn/mod/struct/enum/union/trait/impl/extern/macro_rules).
+            # Identify whether the skipped item terminates at `;` (use/static/type/const value/let)
+            # or at a matching `}` (fn/mod/struct/enum/union/trait/impl/extern/macro_rules/if/match/loop).
             if pending and depth == 0 and bracket_depth == 0 and angle_depth == 0 and not semi_item and not head_tokens:
                 if bare[pos].isspace():
                     pos += 1
@@ -195,8 +197,12 @@ def core_lines(path: Path) -> int:
                         continue
                     if word in ("pub", "unsafe", "async", "default"):
                         continue
-                    if word in ("use", "static", "type"):
+                    if word in ("use", "static", "type", "let"):
                         semi_item = True
+                        head_tokens.append(word)
+                        continue
+                    if word in ("if", "match", "while", "for", "loop"):
+                        seen_eq = True
                         head_tokens.append(word)
                         continue
                     if word == "const":
@@ -216,22 +222,30 @@ def core_lines(path: Path) -> int:
                 bracket_depth += 1
             elif ch in ")]" and bracket_depth > 0:
                 bracket_depth -= 1
-            elif semi_item and depth == 0 and bracket_depth == 0 and angle_depth == 0 and ch == "=":
+            elif angle_depth > 0 and bracket_depth == 0:
+                if ch == "{":
+                    angle_brace_depth += 1
+                elif ch == "}" and angle_brace_depth > 0:
+                    angle_brace_depth -= 1
+                elif angle_brace_depth == 0:
+                    if ch == "<":
+                        angle_depth += 1
+                    elif ch == ">" and (pos < 2 or bare[pos - 2] != "-"):
+                        angle_depth -= 1
+            elif semi_item and depth == 0 and bracket_depth == 0 and ch == "=":
                 seen_eq = True
             elif pending and bracket_depth == 0 and not seen_eq and ch == "<":
                 angle_depth += 1
-            elif pending and bracket_depth == 0 and not seen_eq and angle_depth > 0 and ch == ">":
-                if pos < 2 or bare[pos - 2] != "-":
-                    angle_depth -= 1
-            elif ch == "{" and bracket_depth == 0 and angle_depth == 0:
+                angle_brace_depth = 0
+            elif ch == "{" and bracket_depth == 0:
                 if not semi_item:
                     pending = False
                 depth += 1
-            elif ch == "}" and bracket_depth == 0 and angle_depth == 0:
+            elif ch == "}" and bracket_depth == 0:
                 depth -= 1
                 if depth <= 0 and not pending and not semi_item:
                     skip = False
-            elif ch == ";" and depth == 0 and bracket_depth == 0 and angle_depth == 0 and (pending or semi_item):
+            elif ch == ";" and depth == 0 and bracket_depth == 0 and (pending or semi_item):
                 skip = False
 
         if has_core:
@@ -254,9 +268,19 @@ def main(argv: list[str]) -> int:
         print(f"decay: source directory does not exist: {source_dir}", file=sys.stderr)
         return 1
 
+    def is_excluded(rel: Path) -> bool:
+        parts = rel.parts
+        if not parts:
+            return False
+        if parts[0] in ("target", "tests", "benches"):
+            return True
+        if parts[0] == "src":
+            return False
+        return len(parts) >= 2 and parts[1] in ("target", "tests", "benches")
+
     rs_files = sorted(
         p for p in source_dir.rglob("*.rs")
-        if not any(part in ("target", "tests", "benches") for part in p.relative_to(source_dir).parts)
+        if not is_excluded(p.relative_to(source_dir))
     )
     if not rs_files:
         print(f"decay: no Rust source files found under {source_dir}", file=sys.stderr)

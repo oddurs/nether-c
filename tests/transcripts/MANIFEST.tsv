@@ -5,9 +5,9 @@ README.md § WHAT IS TRUE TODAY #1	console	checked	d838eaf97e53718b
 README.md § DEVELOPMENT #1	sh	pinned	7b99770b16361486
 README.md § DEVELOPMENT #2	sh	pinned	20c2f6f56c3455a4
 README.md § DEVELOPMENT #3	sh	pinned	fb434d19d5a7b7b8
-site/src/index.html § The first program #1	hello.nc	pinned	11d370eae3fd608a
+site/src/index.html § The first program #1	hello.nc	pinned	d92d2096e7e25092
 site/src/index.html § The first program #2	console	checked	7f9a7bf849a83e2b
-site/src/index.html § The Orpheus rule #1	c	pinned	865ccb1ffe1ff399
+site/src/index.html § The Orpheus rule #1	c	pinned	3f2527ff515ba79e
 site/src/index.html § The Orpheus rule #2	console	checked	b95c9f3eb611ad61
 site/src/index.html § What a hole is #1	console	checked	a4ba4858ca078d1e
 site/src/index.html § Where it actually is #1	console	checked	d838eaf97e53718b
@@ -61,7 +61,7 @@ spec/07-ledger.md § Exchange transcripts #3	text	pinned	2b1c1a1e148af292
 spec/07-ledger.md § Exchange transcripts #4	text	pinned	9cfc88c6ed5e59c8
 spec/07-ledger.md § 7.5.4 Moving a store #1	text	pinned	34dd77ed43a3522c
 spec/08-rites.md § 8.0 There is no `run` #1	console	checked	eb5d09b394458e0f
-spec/08-rites.md § 8.2 `bury` #1	text	pinned	cad6f8fefca65ca5
+spec/08-rites.md § 8.2 `bury` #1	text	pinned	5840b9ffc3247ec6
 spec/08-rites.md § 8.2 `bury` #2	console	checked	50d0f77ea2722fdb
 spec/08-rites.md § 8.2.1 Burying what is already buried #1	console	checked	c0de0a75143fd0f9
 spec/08-rites.md § 8.3 `exhume` #1	text	pinned	08c22655fc9eb98b

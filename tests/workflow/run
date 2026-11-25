@@ -259,6 +259,34 @@ class Workflow(unittest.TestCase):
         self.agent("done", ok=False)
         self.assertTrue((self.tree / ".nether/value").exists())
 
+    def test_commit_msg_ignores_verbose_diff_after_scissors(self):
+        msg = self.base / "verbose_msg"
+        msg.write_text(
+            "fix(hooks): stop scanning at scissors line\n"
+            "\n"
+            "# ------------------------ >8 ------------------------\n"
+            "diff --git a/a b/a\n"
+            "+" + "generated " + "with something in a diff\n",
+            encoding="utf-8",
+        )
+        r = subprocess.run(
+            [str(ROOT / ".githooks" / "commit-msg"), str(msg)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_site_bake_blocks_backslash_protocol_relative_urls(self):
+        import importlib.machinery, importlib.util
+        loader = importlib.machinery.SourceFileLoader("bake", str(ROOT / "site" / "bake"))
+        spec = importlib.util.spec_from_loader("bake", loader)
+        bake = importlib.util.module_from_spec(spec)
+        loader.exec_module(bake)
+        for bad in (r"[x](\\evil.com)", r"[x](/\evil.com)", r"[x](\/evil.com)"):
+            rendered = bake.inline(bad)
+            self.assertNotIn("<a ", rendered, f"allowed unsafe link {bad}: {rendered}")
+        self.assertEqual(bake.inline("`` `foo` ``"), "<code>`foo`</code>")
+
 
 if __name__ == "__main__":
     unittest.main(argv=["workflow"], verbosity=2)

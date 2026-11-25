@@ -32,6 +32,10 @@ Preamble that is not a release.
 
 - Something still descending.
 
+```markdown
+## [0.2.0] - fenced example must be ignored
+```
+
 ## [0.2.0] - 2027-01-02
 
 ### Added
@@ -42,9 +46,13 @@ Preamble that is not a release.
 
 - A thing that was wrong.
 
-```markdown
-## Not a release heading
+````markdown
 ```
+## Still inside 4-backtick fence
+```
+~~~
+## Still inside 4-backtick fence after tilde
+````
 
 ## [0.1.0] - 2026-12-01
 
@@ -68,7 +76,8 @@ CASES = [
     ("a version with no section is refused",
      "v9.9.9", lambda r: r is None),
     ("fenced headings inside notes do not truncate the section",
-     "v0.2.0", lambda r: r is not None and "## Not a release heading" in r),
+     "v0.2.0", lambda r: r is not None and "## Still inside 4-backtick fence after tilde" in r
+     and "fenced example must be ignored" not in r),
     ("repeated leading v is not stripped",
      "vv0.2.0", lambda r: r is None),
 ]
