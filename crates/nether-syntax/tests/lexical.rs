@@ -368,4 +368,12 @@ fn multi_digit_depths_uppercase_prefixes_and_bad_escapes_are_rejected() {
     let f = lex(br#""\q""#).unwrap_err();
     assert_eq!(f.kind, FaultKind::UnknownEscape);
     assert_eq!(f.span, Span { start: 1, end: 3 });
+
+    // L5: escaped bare CR reports StrayCarriageReturn, and sizeof note mentions raw(s).
+    assert_eq!(fault("\"a\\\r\""), FaultKind::StrayCarriageReturn);
+    let sizeof_note = Fault { span: Span::default(), kind: FaultKind::Reserved("sizeof") }
+        .diagnostic()
+        .note
+        .expect("sizeof note");
+    assert!(sizeof_note.contains("len(raw(s))"), "{sizeof_note}");
 }

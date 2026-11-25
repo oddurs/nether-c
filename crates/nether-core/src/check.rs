@@ -29,7 +29,7 @@
 use core::fmt;
 
 use crate::depth::{Capability, Depth, Held};
-use crate::ir::{Block, Expr, ExprKind, GlobalId, LocalId, Proj, Rite, Span, Stmt};
+use crate::ir::{BinOp, Block, Expr, ExprKind, GlobalId, LocalId, Proj, Rite, Span, Stmt};
 use crate::prim::Prim;
 use crate::report::{Cause, Diagnostic};
 use crate::ty::Type;
@@ -162,6 +162,9 @@ impl Fault {
     /// expression; an annotation is about a number that came from somewhere
     /// else, which is the whole reason it is hard to phrase.
     fn cause(&self) -> Option<Cause> {
+        if let FaultKind::Frozen { named } = self.kind {
+            return Some(Cause { span: named, label: "named here".to_string() });
+        }
         let blame = self.blame.as_ref()?;
         let label = match self.kind {
             FaultKind::Asserted { derived, .. } => {
@@ -251,6 +254,7 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
         unit,
         faults: Vec::new(),
         globals: Vec::new(),
+        func_sigs: vec![(Depth::PURE, Held::NONE); unit.funcs.len()],
         locals: Vec::new(),
         named: Vec::new(),
         deferred_asserts: Vec::new(),
@@ -260,11 +264,39 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
         fixpoint_steps: 0,
         in_loop: 0,
     };
+    // Derive least `(ret_depth, latent)` signatures from lattice bottom so
+    // recursive functions cannot self-justify inflated depths. [ABS].
+    if !unit.funcs.is_empty() {
+        for _ in 0..=unit.funcs.len() + unit.globals.len() {
+            c.faults.clear();
+            c.globals.clear();
+            c.fixpoint_steps = 0;
+            let mut moved = false;
+            for g in &unit.globals {
+                c.unit_frame();
+                let (derived, _) = c.expr(&g.value, Held::NONE, Depth::PURE);
+                c.globals.push(derived);
+            }
+            for (i, f) in unit.funcs.iter().enumerate() {
+                let sig = c.func_signature(f);
+                if c.func_sigs[i] != sig {
+                    c.func_sigs[i] = sig;
+                    moved = true;
+                }
+            }
+            if !moved {
+                break;
+            }
+        }
+        c.faults.clear();
+        c.globals.clear();
+        c.fixpoint_steps = 0;
+    }
     // A unit-level binding may name one declared before it and not one
-    // declared after, so declaration order is checking order. Unit-level code
-    // binds into the unit's frame, as a body binds into its function's.
-    c.unit_frame();
+    // declared after, so declaration order is checking order. Each global and
+    // demand gets an isolated local frame.
     for g in &unit.globals {
+        c.unit_frame();
         let (derived, _) = c.expr(&g.value, Held::NONE, Depth::PURE);
         if !c.depth_types_agree(&g.value.ty, &g.ty) {
             c.malformed(g.span, "shade origin does not match binding type");
@@ -277,8 +309,8 @@ pub fn check(unit: &Unit) -> Vec<Fault> {
         c.func(f);
     }
     // [DEMAND] keeps the depth and throws the value away: `demand e : U0@d`.
-    c.unit_frame();
     for d in &unit.demands {
+        c.unit_frame();
         c.expr(&d.value, Held::NONE, Depth::PURE);
         c.check_deferred_asserts();
     }
@@ -321,6 +353,8 @@ struct Checker<'a> {
     unit: &'a Unit,
     faults: Vec<Fault>,
     globals: Vec<Depth>,
+    /// Least `(ret_depth, latent)` derived per function by fixpoint iteration.
+    func_sigs: Vec<(Depth, Held)>,
     /// The current function's bindings. `None` until bound.
     locals: Vec<Option<Depth>>,
     /// Where each local's value was named, once it has been.
@@ -393,6 +427,9 @@ impl<'a> Checker<'a> {
         seen_locals: &mut Vec<LocalId>,
         seen_globals: &mut Vec<GlobalId>,
     ) -> Option<Blame> {
+        if matches!(&x.kind, ExprKind::Rite { rite: Rite::Seal, .. }) {
+            return None;
+        }
         if let ExprKind::Call { callee, .. } = &x.kind {
             if let Type::Fn { latent, result_depth, .. } = callee.ty {
                 if depth != Depth::PURE && (latent.holds(depth) || result_depth == depth) {
@@ -537,8 +574,15 @@ impl<'a> Checker<'a> {
 
     fn bind(&mut self, id: LocalId, depth: Depth, span: Span) {
         match self.locals.get_mut(id.0 as usize) {
+            Some(slot) if slot.is_some() => {
+                self.malformed(span, "this local is already bound here");
+                return;
+            }
             Some(slot) => *slot = Some(depth),
-            None => self.malformed(span, "this binding names no local"),
+            None => {
+                self.malformed(span, "this binding names no local");
+                return;
+            }
         }
         if let Some(slot) = self.named.get_mut(id.0 as usize) {
             *slot = None;
@@ -557,8 +601,15 @@ impl<'a> Checker<'a> {
             .map_or_else(|| self.unit.local(id), |f| f.local(id))
             .map_or_else(Span::default, |l| l.span);
         match self.locals.get_mut(id.0 as usize) {
+            Some(slot) if slot.is_some() => {
+                self.malformed(span, "this local is already bound here");
+                return;
+            }
             Some(slot) => *slot = Some(Depth::PURE),
-            None => self.malformed(span, "this binding names no local"),
+            None => {
+                self.malformed(span, "this binding names no local");
+                return;
+            }
         }
         if let Some(slot) = self.named.get_mut(id.0 as usize) {
             *slot = None;
@@ -571,19 +622,23 @@ impl<'a> Checker<'a> {
     fn check_deferred_asserts(&mut self) {
         let deferred = core::mem::take(&mut self.deferred_asserts);
         for id in deferred {
-            let Some(derived) = self.locals.get(id.0 as usize).copied().flatten() else {
-                continue;
-            };
-            let Some(l) = self.func.map_or_else(|| self.unit.local(id), |f| f.local(id)) else {
-                continue;
-            };
-            let (span, asserted) = (l.span, l.asserted);
-            self.asserted_lazy(span, derived, asserted, |this| {
-                this.find_binding(id)
-                    .and_then(|e| this.blame(e, derived))
-                    .or_else(|| this.func.and_then(|f| this.blame_block(&f.body, derived)))
-            });
+            self.check_deferred_local(id);
         }
+    }
+
+    fn check_deferred_local(&mut self, id: LocalId) {
+        let Some(derived) = self.locals.get(id.0 as usize).copied().flatten() else {
+            return;
+        };
+        let Some(l) = self.func.map_or_else(|| self.unit.local(id), |f| f.local(id)) else {
+            return;
+        };
+        let (span, asserted) = (l.span, l.asserted);
+        self.asserted_lazy(span, derived, asserted, |this| {
+            this.find_binding(id)
+                .and_then(|e| this.blame(e, derived))
+                .or_else(|| this.func.and_then(|f| this.blame_block(&f.body, derived)))
+        });
     }
 
     fn local_ty(&self, id: LocalId) -> Option<&'a Type> {
@@ -600,15 +655,16 @@ impl<'a> Checker<'a> {
         self.field_def(base_ty, index).map(|f| &f.ty)
     }
 
-    fn place_ty_and_asserts(&self, place: &crate::Place) -> Option<(&'a Type, Vec<(Span, Depth)>)> {
+    fn place_ty_and_asserts(&self, place: &crate::Place) -> Option<(&'a Type, Vec<(Depth, bool)>)> {
         let mut cur = self.local_ty(place.local)?;
         let mut asserts = Vec::new();
-        for proj in &place.path {
+        let last = place.path.len().saturating_sub(1);
+        for (i, proj) in place.path.iter().enumerate() {
             cur = match proj {
                 Proj::Field(idx) => {
                     let field = self.field_def(cur, *idx)?;
                     if let Some(d) = field.asserted {
-                        asserts.push((field.span, d));
+                        asserts.push((d, i == last));
                     }
                     &field.ty
                 }
@@ -629,7 +685,7 @@ impl<'a> Checker<'a> {
         self.in_loop = 0;
     }
 
-    fn func(&mut self, f: &'a FuncDef) {
+    fn func_signature(&mut self, f: &'a FuncDef) -> (Depth, Held) {
         self.func = Some(f);
         self.locals = vec![None; f.locals.len()];
         self.named = vec![None; f.locals.len()];
@@ -658,8 +714,14 @@ impl<'a> Checker<'a> {
         }
         let ret_depth = body_depth.join(self.returns);
         let latent = self.needs.take().unwrap_or(Held::NONE);
-
         self.check_deferred_asserts();
+        self.func = None;
+        (ret_depth, latent)
+    }
+
+    fn func(&mut self, f: &'a FuncDef) {
+        let (ret_depth, latent) = self.func_signature(f);
+        self.func = Some(f);
         self.against_lazy(f.span, ret_depth, f.ret_depth, f.asserted_ret, |this| {
             this.blame_block(&f.body, ret_depth)
         });
@@ -672,6 +734,7 @@ impl<'a> Checker<'a> {
     fn block(&mut self, block: &Block, ambient: Held, pc: Depth) -> (Depth, ExitPc) {
         let mut block_pc = pc;
         let mut exit = ExitPc::NONE;
+        let mut block_locals: Vec<LocalId> = Vec::new();
         for s in &block.stmts {
             match s {
                 Stmt::Let { local, value } => {
@@ -681,7 +744,12 @@ impl<'a> Checker<'a> {
                     {
                         self.malformed(value.span, "shade origin does not match binding type");
                     }
+                    let was_unbound =
+                        self.locals.get(local.0 as usize).is_some_and(Option::is_none);
                     self.bind(*local, d, value.span);
+                    if was_unbound {
+                        block_locals.push(*local);
+                    }
                     exit = exit.join(ex);
                     if let Some(ex_d) = ex.deepest() {
                         block_pc = block_pc.join(ex_d);
@@ -698,13 +766,32 @@ impl<'a> Checker<'a> {
                 }
                 // A local with no value is pure until something is written to
                 // it, and `Assign` joins the depth of what it writes. §5.4.
-                Stmt::Declare { local } => self.declare(*local),
+                Stmt::Declare { local } => {
+                    let was_unbound =
+                        self.locals.get(local.0 as usize).is_some_and(Option::is_none);
+                    self.declare(*local);
+                    if was_unbound {
+                        block_locals.push(*local);
+                    }
+                }
             }
         }
         let tail = block
             .tail
             .as_ref()
             .map_or((Depth::PURE, ExitPc::NONE), |t| self.expr(t, ambient, block_pc));
+        for id in block_locals {
+            if let Some(pos) = self.deferred_asserts.iter().position(|d| *d == id) {
+                self.deferred_asserts.swap_remove(pos);
+                self.check_deferred_local(id);
+            }
+            if let Some(slot) = self.locals.get_mut(id.0 as usize) {
+                *slot = None;
+            }
+            if let Some(slot) = self.named.get_mut(id.0 as usize) {
+                *slot = None;
+            }
+        }
         (tail.0, exit.join(tail.1))
     }
 
@@ -831,7 +918,14 @@ impl<'a> Checker<'a> {
                         if !self.depth_types_agree(&x.ty, result) {
                             self.malformed(x.span, "shade origin does not match call result type");
                         }
-                        (*latent, *result_depth)
+                        if let ExprKind::Func(id) = callee.kind
+                            && let Some(&(derived_ret, derived_latent)) =
+                                self.func_sigs.get(id.0 as usize)
+                        {
+                            (derived_latent, derived_ret)
+                        } else {
+                            (*latent, *result_depth)
+                        }
                     } else {
                         self.malformed(callee.span, "this is applied and is not a function");
                         (Held::NONE, Depth::PURE)
@@ -885,12 +979,27 @@ impl<'a> Checker<'a> {
                 }
                 res
             }
-            ExprKind::Binary { lhs, rhs, .. } => {
+            ExprKind::Binary { op, lhs, rhs } => {
                 if self.carries_depth_type(&x.ty) {
                     self.malformed(
                         x.span,
                         "binary operation cannot fabricate a shaded or function type",
                     );
+                }
+                match op {
+                    BinOp::Eq | BinOp::Ne => {
+                        if !self.depth_types_agree(&lhs.ty, &rhs.ty) {
+                            self.malformed(x.span, "shade origin does not match across comparison");
+                        }
+                    }
+                    _ => {
+                        if self.carries_depth_type(&lhs.ty) || self.carries_depth_type(&rhs.ty) {
+                            self.malformed(
+                                x.span,
+                                "binary operation cannot take a shaded or function operand",
+                            );
+                        }
+                    }
                 }
                 let (dl, el) = self.expr(lhs, ambient, pc);
                 let rhs_pc = el.deepest().map_or(pc, |e| pc.join(e));
@@ -1069,10 +1178,19 @@ impl<'a> Checker<'a> {
                     self.fault(x.span, FaultKind::Frozen { named });
                 }
                 let written = d_value.join(d_path).join(cur_pc);
-                for (_, asserted) in field_asserts {
-                    self.asserted_lazy(x.span, written, Some(asserted), |this| {
-                        this.blame(value, written)
-                    });
+                for (asserted, is_leaf) in field_asserts {
+                    if is_leaf {
+                        self.asserted_lazy(x.span, written, Some(asserted), |this| {
+                            this.blame(value, written)
+                        });
+                    } else if written > asserted {
+                        let blame = self.blame(value, written);
+                        self.fault_blaming(
+                            x.span,
+                            FaultKind::Asserted { derived: written, asserted },
+                            blame,
+                        );
+                    }
                 }
                 match self.locals.get_mut(place.local.0 as usize) {
                     Some(Some(was)) => {

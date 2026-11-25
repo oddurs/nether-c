@@ -27,6 +27,8 @@ use nether_core::{self as ir, Asserted, Capability, Depth, Held, Prim, Refusal, 
 use crate::ast;
 use crate::lex::{Fault, FaultKind};
 
+type FuncSig = (Vec<(ir::Type, Asserted)>, (ir::Type, Asserted));
+
 /// Upper bound on loop fixpoint re-iterations per unit.
 const MAX_FIXPOINT_STEPS: usize = 4096;
 
@@ -84,6 +86,8 @@ struct Lowering<'a> {
     structs: HashMap<&'a str, &'a [ast::Field]>,
     /// Active typedef names during expansion, for cycle detection.
     expanding: Vec<&'a str>,
+    /// Memoized clean typedef expansions to keep DAGs linear.
+    expanded_aliases: HashMap<&'a str, (ir::Type, Asserted, bool)>,
     /// Unit-level functions and bindings, by name.
     funcs: HashMap<&'a str, (ir::FuncId, ir::Type)>,
     globals: HashMap<&'a str, (ir::GlobalId, ir::Type, Depth)>,
@@ -120,6 +124,7 @@ impl<'a> Lowering<'a> {
             aliases: HashMap::new(),
             structs: HashMap::new(),
             expanding: Vec::new(),
+            expanded_aliases: HashMap::new(),
             funcs: HashMap::new(),
             globals: HashMap::new(),
             scopes: Vec::new(),
@@ -206,54 +211,53 @@ impl<'a> Lowering<'a> {
         // §3.4: user-defined typedefs and structs shadow prelude type names.
         if let Some((&key, &alias)) = self.aliases.get_key_value(name) {
             reject_args(self, 0);
+            if let Some(cached) = self.expanded_aliases.get(key) {
+                return cached.clone();
+            }
             if self.expanding.contains(&key) || self.expanding.len() > 16 {
                 self.fault(t.span, FaultKind::Expected("a non-cyclic typedef"));
                 return (ir::Type::Unit, None, false);
             }
+            let faults_before = self.faults.len();
             self.expanding.push(key);
             let expanded = self.ty_in(alias, false);
             self.expanding.pop();
+            if self.faults.len() == faults_before {
+                self.expanded_aliases.insert(key, expanded.clone());
+            }
             return expanded;
         }
         if self.structs.contains_key(name) {
             reject_args(self, 0);
             return (ir::Type::Struct(name.to_string()), None, false);
         }
-        let args: Vec<(ir::Type, Asserted, bool)> =
-            t.args.iter().map(|a| self.ty_in(a, allow_inferred_shade)).collect();
-        let mut has_inferred = args.iter().any(|(_, _, inf)| *inf);
+        let mut has_inferred = false;
         let ty = match name {
-            "U0" => {
+            "U0" | "Bool" | "I64" | "Bytes" | "Str" | "Cairn" | "Refusal" => {
                 reject_args(self, 0);
-                ir::Type::Unit
-            }
-            "Bool" => {
-                reject_args(self, 0);
-                ir::Type::Bool
-            }
-            "I64" => {
-                reject_args(self, 0);
-                ir::Type::Int
-            }
-            "Bytes" => {
-                reject_args(self, 0);
-                ir::Type::Bytes
-            }
-            "Str" => {
-                reject_args(self, 0);
-                ir::Type::Str
-            }
-            "Cairn" => {
-                reject_args(self, 0);
-                ir::Type::Cairn
-            }
-            "Refusal" => {
-                reject_args(self, 0);
-                ir::Type::Refusal
+                match name {
+                    "U0" => ir::Type::Unit,
+                    "Bool" => ir::Type::Bool,
+                    "I64" => ir::Type::Int,
+                    "Bytes" => ir::Type::Bytes,
+                    "Str" => ir::Type::Str,
+                    "Cairn" => ir::Type::Cairn,
+                    _ => ir::Type::Refusal,
+                }
             }
             "Answer" => {
                 reject_args(self, 1);
-                if let Some((a, _, _)) = args.into_iter().next() {
+                if let Some(arg_ast) = t.args.first() {
+                    let (a, arg_asserted, arg_inf) = self.ty_in(arg_ast, allow_inferred_shade);
+                    has_inferred = arg_inf;
+                    if arg_asserted.is_some() {
+                        self.fault(
+                            arg_ast.span,
+                            FaultKind::Expected(
+                                "no depth annotation inside `Answer<T>` (write `Answer<T>@d` instead)",
+                            ),
+                        );
+                    }
                     ir::Type::Answer(Box::new(a))
                 } else {
                     self.fault(t.span, FaultKind::Expected("`Answer<T>` to say what it answers"));
@@ -264,7 +268,9 @@ impl<'a> Lowering<'a> {
             // An initialized binding may omit it (`Shade<Bytes>`) and inherit it from the value.
             "Shade" => {
                 reject_args(self, 1);
-                if let Some((arg_ir, arg_asserted, _)) = args.into_iter().next() {
+                if let Some(arg_ast) = t.args.first() {
+                    let (arg_ir, arg_asserted, arg_inf) = self.ty_in(arg_ast, allow_inferred_shade);
+                    has_inferred = arg_inf;
                     let origin = if let Some(d) = arg_asserted {
                         d
                     } else {
@@ -336,19 +342,29 @@ impl<'a> Lowering<'a> {
                 _ => None,
             })
             .collect();
+        let mut sigs: Vec<FuncSig> = Vec::with_capacity(declarations.len());
         for (i, f) in declarations.iter().enumerate() {
-            let params = f.params.iter().map(|p| self.ty(&p.ty)).collect();
-            let ret = self.ty(&f.ret);
+            let param_sigs: Vec<(ir::Type, Asserted)> = f
+                .params
+                .iter()
+                .map(|p| {
+                    let (ty, asserted, _) = self.ty_in(&p.ty, false);
+                    (ty, asserted)
+                })
+                .collect();
+            let (ret, asserted_ret, _) = self.ty_in(&f.ret, false);
+            let params = param_sigs.iter().map(|(ty, _)| ty.clone()).collect();
             // Start from lattice bottom (`Held::NONE`) so a recursive function's
             // written `@d` annotation cannot self-fulfill its own latent depth.
             let arrow = ir::Type::Fn {
                 params,
                 latent: Held::NONE,
-                result: Box::new(ret),
+                result: Box::new(ret.clone()),
                 // What a function hands back is its body's depth, and the body
                 // has not been lowered yet. Filled in below.
                 result_depth: Depth::PURE,
             };
+            sigs.push((param_sigs, (ret, asserted_ret)));
             let id = ir::FuncId(u32::try_from(i).unwrap_or(0));
             if self.funcs.insert(f.name.text.as_str(), (id, arrow)).is_some() {
                 self.fault(f.name.span, FaultKind::Expected("a unique function name"));
@@ -365,7 +381,7 @@ impl<'a> Lowering<'a> {
             self.faults.truncate(pre_loop_faults);
             self.fixpoint_steps = 0;
             globals = self.unit_bindings(unit);
-            funcs = declarations.iter().map(|f| self.func(f)).collect();
+            funcs = declarations.iter().enumerate().map(|(i, f)| self.func(f, &sigs[i])).collect();
             let mut moved = false;
             for (i, f) in declarations.iter().enumerate() {
                 let Some(entry) = self.funcs.get_mut(f.name.text.as_str()) else { continue };
@@ -522,7 +538,7 @@ impl<'a> Lowering<'a> {
 
     // ── functions ───────────────────────────────────────────────────────────
 
-    fn func(&mut self, f: &'a ast::Func) -> ir::FuncDef {
+    fn func(&mut self, f: &'a ast::Func, sig: &FuncSig) -> ir::FuncDef {
         self.locals = Vec::new();
         self.depths = Vec::new();
         self.scopes = vec![Vec::new()];
@@ -534,18 +550,18 @@ impl<'a> Lowering<'a> {
         let params: Vec<ir::LocalId> = f
             .params
             .iter()
-            .map(|p| {
+            .zip(&sig.0)
+            .map(|(p, (ty, asserted))| {
                 if !seen_params.insert(p.name.text.as_str()) {
                     self.fault(p.name.span, FaultKind::Expected("a unique parameter name"));
                 }
-                let (ty, asserted, _) = self.ty_in(&p.ty, false);
                 // [ABS]: a parameter is bound at depth 0, and its real depth
                 // arrives at the call site.
-                self.bind(&p.name, ty, asserted, Depth::PURE, p.span)
+                self.bind(&p.name, ty.clone(), *asserted, Depth::PURE, p.span)
             })
             .collect();
 
-        let (ret_ty, asserted_ret, _) = self.ty_in(&f.ret, false);
+        let (ret_ty, asserted_ret) = (sig.1.0.clone(), sig.1.1);
         self.returning = Some(ret_ty.clone());
         let body = self.block_landed(&f.body, Some(ret_ty));
         let ret = self.returning.take().unwrap_or(ir::Type::Unit);
@@ -1244,14 +1260,20 @@ impl Lowering<'_> {
                         write_path.push(ir::Proj::Field(idx));
                     }
                     ir::Proj::Index(idx) => {
-                        let idx_span = idx.span;
-                        let idx_ty = idx.ty.clone();
-                        let idx_depth = idx.depth;
-                        let tmp = self.fresh_temp_local(idx_ty.clone(), idx_depth, idx_span);
-                        stmts.push(ir::Stmt::Let { local: tmp, value: *idx });
-                        let load = Self::at(ir::ExprKind::Local(tmp), idx_ty, idx_depth, idx_span);
-                        read_path.push(ir::Proj::Index(Box::new(load.clone())));
-                        write_path.push(ir::Proj::Index(Box::new(load)));
+                        if matches!(idx.kind, ir::ExprKind::Literal(_)) {
+                            read_path.push(ir::Proj::Index(idx.clone()));
+                            write_path.push(ir::Proj::Index(idx));
+                        } else {
+                            let idx_span = idx.span;
+                            let idx_ty = idx.ty.clone();
+                            let idx_depth = idx.depth;
+                            let tmp = self.fresh_temp_local(idx_ty.clone(), idx_depth, idx_span);
+                            stmts.push(ir::Stmt::Let { local: tmp, value: *idx });
+                            let load =
+                                Self::at(ir::ExprKind::Local(tmp), idx_ty, idx_depth, idx_span);
+                            read_path.push(ir::Proj::Index(Box::new(load.clone())));
+                            write_path.push(ir::Proj::Index(Box::new(load)));
+                        }
                     }
                 }
             }

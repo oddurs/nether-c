@@ -79,7 +79,7 @@ impl fmt::Display for Type {
             Self::Bytes => f.write_str("Bytes"),
             Self::Str => f.write_str("Str"),
             Self::Cairn => f.write_str("Cairn"),
-            Self::Shade { inner, .. } => write!(f, "Shade<{inner}>"),
+            Self::Shade { origin, inner } => write!(f, "Shade<{inner}@{origin}>"),
             Self::Answer(inner) => write!(f, "Answer<{inner}>"),
             Self::Refusal => f.write_str("Refusal"),
             Self::Struct(name) => f.write_str(name),
@@ -186,11 +186,9 @@ mod tests {
     }
 
     #[test]
-    fn a_shade_does_not_print_where_it_came_from() {
-        // The origin is part of the type and is not part of the syntax, so it
-        // is not part of how a type is written back to a person either.
-        let s = Type::Shade { origin: Depth::NET, inner: Box::new(Type::Struct("Json".into())) };
-        assert_eq!(s.to_string(), "Shade<Json>");
+    fn a_shade_prints_where_it_came_from() {
+        let s = Type::Shade { origin: Depth::NET, inner: Box::new(Type::Bytes) };
+        assert_eq!(s.to_string(), "Shade<Bytes@5>");
     }
 
     #[test]

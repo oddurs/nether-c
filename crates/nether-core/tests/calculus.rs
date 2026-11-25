@@ -813,6 +813,7 @@ fn model_check(unit: &Unit) -> Vec<FaultKind> {
         unit,
         faults: Vec::new(),
         gamma_global: Vec::new(),
+        func_sigs: vec![(Depth::PURE, Held::NONE); unit.funcs.len()],
         gamma_local: Vec::new(),
         named: Vec::new(),
         deferred: Vec::new(),
@@ -820,8 +821,32 @@ fn model_check(unit: &Unit) -> Vec<FaultKind> {
         d_returns: Depth::PURE,
         d_latent: None,
     };
-    m.reset_unit_frame();
+    if !unit.funcs.is_empty() {
+        for _ in 0..=unit.funcs.len() + unit.globals.len() {
+            m.faults.clear();
+            m.gamma_global.clear();
+            let mut moved = false;
+            for g in &unit.globals {
+                m.reset_unit_frame();
+                let (d, _) = m.eval_expr(&g.value, Held::NONE, Depth::PURE);
+                m.gamma_global.push(d);
+            }
+            for (i, f) in unit.funcs.iter().enumerate() {
+                let sig = m.eval_func_sig(f);
+                if m.func_sigs[i] != sig {
+                    m.func_sigs[i] = sig;
+                    moved = true;
+                }
+            }
+            if !moved {
+                break;
+            }
+        }
+        m.faults.clear();
+        m.gamma_global.clear();
+    }
     for g in &unit.globals {
+        m.reset_unit_frame();
         let (d, _) = m.eval_expr(&g.value, Held::NONE, Depth::PURE);
         m.gamma_global.push(d);
         m.check_asserted(d, g.asserted);
@@ -830,8 +855,8 @@ fn model_check(unit: &Unit) -> Vec<FaultKind> {
     for f in &unit.funcs {
         m.eval_func(f);
     }
-    m.reset_unit_frame();
     for d in &unit.demands {
+        m.reset_unit_frame();
         // [DEMAND]: `Γ ; ∅ ⊢ e : τ@d  ==>  Γ ⊢ demand e : U0@d`
         m.eval_expr(&d.value, Held::NONE, Depth::PURE);
         m.check_deferred();
@@ -869,6 +894,7 @@ struct Model<'a> {
     unit: &'a Unit,
     faults: Vec<FaultKind>,
     gamma_global: Vec<Depth>,
+    func_sigs: Vec<(Depth, Held)>,
     gamma_local: Vec<Option<Depth>>,
     named: Vec<Option<Span>>,
     deferred: Vec<LocalId>,
@@ -966,10 +992,7 @@ impl<'a> Model<'a> {
         }
     }
 
-    /// [ABS] on a function declaration: parameters bound at depth 0, body
-    /// evaluated under `δ = {0}`, accumulating unmet call strata into `dƒ` and
-    /// return depths into `d_r`.
-    fn eval_func(&mut self, f: &'a FuncDef) {
+    fn eval_func_sig(&mut self, f: &'a FuncDef) -> (Depth, Held) {
         self.in_func = Some(f);
         self.gamma_local = vec![None; f.locals.len()];
         self.named = vec![None; f.locals.len()];
@@ -982,8 +1005,16 @@ impl<'a> Model<'a> {
         let (d_body, _) = self.eval_block(&f.body, Held::NONE, Depth::PURE);
         let d_r = d_body.join(self.d_returns);
         let d_f = self.d_latent.take().unwrap_or(Held::NONE);
-
         self.check_deferred();
+        self.in_func = None;
+        (d_r, d_f)
+    }
+
+    /// [ABS] on a function declaration: parameters bound at depth 0, body
+    /// evaluated under `δ = {0}`, accumulating unmet call strata into `dƒ` and
+    /// return depths into `d_r`.
+    fn eval_func(&mut self, f: &'a FuncDef) {
+        let (d_r, d_f) = self.eval_func_sig(f);
         self.check_stated(d_r, f.ret_depth);
         self.check_asserted(d_r, f.asserted_ret);
         if d_f != f.latent {
@@ -994,7 +1025,6 @@ impl<'a> Model<'a> {
                 self.faults.push(FaultKind::AssertedLatent { derived: d_f, asserted });
             }
         }
-        self.in_func = None;
     }
 
     fn eval_block(&mut self, b: &Block, delta: Held, pc: Depth) -> (Depth, ModelExit) {
@@ -1115,7 +1145,14 @@ impl<'a> Model<'a> {
                     self.mark_named(a);
                 }
                 let (d_fn_latent, d_r) = if let Type::Fn { latent, result_depth, .. } = &callee.ty {
-                    (*latent, *result_depth)
+                    if let ExprKind::Func(id) = callee.kind
+                        && let Some(&(derived_ret, derived_latent)) =
+                            self.func_sigs.get(id.0 as usize)
+                    {
+                        (derived_latent, derived_ret)
+                    } else {
+                        (*latent, *result_depth)
+                    }
                 } else {
                     self.faults.push(FaultKind::Malformed("this is applied and is not a function"));
                     (Held::NONE, Depth::PURE)
@@ -2448,4 +2485,244 @@ fn look_verifies_result_type_and_assign_rejects_unbound_local() {
     };
     assert_eq!(kinds(&unbound_assign), vec![FaultKind::Malformed("this local is not bound here")]);
     assert_eq!(kinds(&unbound_assign), model_check(&unbound_assign));
+}
+
+#[test]
+fn pr_b_core_fixpoint_hardening() {
+    // H1: Hand-built recursive function cannot self-justify inflated ret_depth / latent.
+    let fake_arrow = Type::Fn {
+        params: Vec::new(),
+        latent: Held::of(Depth::NET),
+        result: Box::new(Type::Int),
+        result_depth: Depth::NET,
+    };
+    let inflated_rec = Unit {
+        funcs: vec![FuncDef {
+            name: "spin".into(),
+            params: Vec::new(),
+            ret: Type::Int,
+            ret_depth: Depth::NET,
+            asserted_ret: None,
+            latent: Held::of(Depth::NET),
+            asserted_latent: None,
+            locals: Vec::new(),
+            body: Block {
+                stmts: Vec::new(),
+                tail: Some(Box::new(Expr {
+                    kind: ExprKind::Call {
+                        callee: Box::new(Expr {
+                            kind: ExprKind::Func(FuncId(0)),
+                            ty: fake_arrow,
+                            depth: Depth::PURE,
+                            span: Span::default(),
+                        }),
+                        args: Vec::new(),
+                    },
+                    ty: Type::Int,
+                    depth: Depth::NET,
+                    span: Span::default(),
+                })),
+                span: Span::default(),
+            },
+            span: Span::default(),
+        }],
+        ..Unit::default()
+    };
+    let h1_kinds = kinds(&inflated_rec);
+    assert!(
+        h1_kinds.contains(&FaultKind::Stated { derived: Depth::PURE, stated: Depth::NET })
+            && h1_kinds.contains(&FaultKind::StatedLatent {
+                derived: Held::NONE,
+                stated: Held::of(Depth::NET)
+            }),
+        "inflated recursive signature must fail least-fixpoint check: {h1_kinds:?}"
+    );
+}
+
+#[test]
+fn pr_b_core_binary_shade_hardening() {
+    // M4: Comparing shades of different origins or using shades in arithmetic is rejected.
+    let shade3 = Expr {
+        kind: ExprKind::Rite {
+            rite: Rite::Shade,
+            operand: Box::new(descend(Capability::Disk, must(read("a")))),
+        },
+        ty: Type::Shade { origin: Depth::DISK, inner: Box::new(Type::Bytes) },
+        depth: Depth::PURE,
+        span: Span::default(),
+    };
+    let net_get = Expr {
+        kind: ExprKind::Call {
+            callee: Box::new(Expr {
+                kind: ExprKind::Prim(Prim::Get),
+                ty: Type::Fn {
+                    params: vec![Type::Str],
+                    latent: Held::of(Depth::NET),
+                    result: Box::new(Type::Answer(Box::new(Type::Bytes))),
+                    result_depth: Depth::NET,
+                },
+                depth: Depth::PURE,
+                span: Span::default(),
+            }),
+            args: vec![Expr {
+                kind: ExprKind::Literal(Literal::Str("u".into())),
+                ty: Type::Str,
+                depth: Depth::PURE,
+                span: Span::default(),
+            }],
+        },
+        ty: Type::Answer(Box::new(Type::Bytes)),
+        depth: Depth::NET,
+        span: Span::default(),
+    };
+    let shade5 = Expr {
+        kind: ExprKind::Rite {
+            rite: Rite::Shade,
+            operand: Box::new(descend(Capability::Net, must(net_get))),
+        },
+        ty: Type::Shade { origin: Depth::NET, inner: Box::new(Type::Bytes) },
+        depth: Depth::PURE,
+        span: Span::default(),
+    };
+    let bad_cmp = Unit {
+        demands: vec![Demand {
+            value: Expr {
+                kind: ExprKind::Binary {
+                    op: BinOp::Eq,
+                    lhs: Box::new(shade3.clone()),
+                    rhs: Box::new(shade5),
+                },
+                ty: Type::Bool,
+                depth: Depth::PURE,
+                span: Span::default(),
+            },
+            span: Span::default(),
+        }],
+        ..Unit::default()
+    };
+    assert!(
+        kinds(&bad_cmp)
+            .contains(&FaultKind::Malformed("shade origin does not match across comparison")),
+        "mismatched shade comparison must be rejected"
+    );
+    let bad_arith = Unit {
+        demands: vec![Demand {
+            value: Expr {
+                kind: ExprKind::Binary {
+                    op: BinOp::Add,
+                    lhs: Box::new(shade3),
+                    rhs: Box::new(int(1)),
+                },
+                ty: Type::Int,
+                depth: Depth::PURE,
+                span: Span::default(),
+            },
+            span: Span::default(),
+        }],
+        ..Unit::default()
+    };
+    assert!(
+        kinds(&bad_arith).contains(&FaultKind::Malformed(
+            "binary operation cannot take a shaded or function operand"
+        )),
+        "shaded operand in arithmetic must be rejected"
+    );
+}
+
+#[test]
+fn pr_b_core_scope_and_diagnostic_hardening() {
+    // M6: Re-binding an active LocalId and leaking unit locals across globals/demands are rejected.
+    let rebind = Unit {
+        funcs: vec![FuncDef {
+            name: "r".into(),
+            params: vec![LocalId(0)],
+            ret: Type::Unit,
+            ret_depth: Depth::PURE,
+            asserted_ret: None,
+            latent: Held::NONE,
+            asserted_latent: None,
+            locals: vec![binding("p", Type::Int)],
+            body: Block {
+                stmts: vec![Stmt::Let { local: LocalId(0), value: int(1) }],
+                tail: None,
+                span: Span::default(),
+            },
+            span: Span::default(),
+        }],
+        ..Unit::default()
+    };
+    assert!(
+        kinds(&rebind).contains(&FaultKind::Malformed("this local is already bound here")),
+        "re-binding an active local must be rejected"
+    );
+    let cross_demand = Unit {
+        locals: vec![binding("u", Type::Int)],
+        demands: vec![
+            Demand {
+                value: Expr {
+                    kind: ExprKind::Block(Block {
+                        stmts: vec![Stmt::Let { local: LocalId(0), value: int(1) }],
+                        tail: Some(Box::new(Expr {
+                            kind: ExprKind::Local(LocalId(0)),
+                            ty: Type::Int,
+                            depth: Depth::PURE,
+                            span: Span::default(),
+                        })),
+                        span: Span::default(),
+                    }),
+                    ty: Type::Int,
+                    depth: Depth::PURE,
+                    span: Span::default(),
+                },
+                span: Span::default(),
+            },
+            Demand {
+                value: Expr {
+                    kind: ExprKind::Local(LocalId(0)),
+                    ty: Type::Int,
+                    depth: Depth::PURE,
+                    span: Span::default(),
+                },
+                span: Span::default(),
+            },
+        ],
+        ..Unit::default()
+    };
+    assert!(
+        kinds(&cross_demand).contains(&FaultKind::Malformed("this local is not bound here")),
+        "unit local must not leak across demands"
+    );
+
+    // L1: Frozen diagnostic renders its `named` cause span.
+    let frozen_fault = Fault {
+        span: Span { start: 20, end: 25 },
+        kind: FaultKind::Frozen { named: Span { start: 5, end: 10 } },
+        blame: None,
+    };
+    let diag = frozen_fault.diagnostic();
+    assert_eq!(diag.cause.as_ref().map(|c| c.span), Some(Span { start: 5, end: 10 }));
+
+    // L4: Blame must not descend into depth-0 `seal`.
+    let seal_call = Expr {
+        kind: ExprKind::Rite {
+            rite: Rite::Seal,
+            operand: Box::new(descend(Capability::Disk, must(read("secret")))),
+        },
+        ty: Type::Cairn,
+        depth: Depth::PURE,
+        span: Span { start: 1, end: 2 },
+    };
+    let asserted_bad = Unit {
+        globals: vec![GlobalDef {
+            name: "g".into(),
+            ty: Type::Cairn,
+            asserted: Some(Depth::DISK),
+            value: seal_call,
+            span: Span { start: 0, end: 3 },
+        }],
+        ..Unit::default()
+    };
+    let faults = check(&asserted_bad);
+    assert_eq!(faults.len(), 1);
+    assert!(faults[0].blame.is_none(), "seal must not be blamed for inner depth: {:?}", faults[0]);
 }
