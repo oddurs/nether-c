@@ -78,9 +78,14 @@ pub fn residue_unit(
     Ok((text, unit))
 }
 
-/// Whether `stratum` matches the prelude primitive named by `call`.
+/// Whether `stratum` and argument count match the world-touching prelude
+/// primitive named by `call`.
 pub(crate) fn valid_stratum(call: &nether_ledger::Call, stratum: u8) -> bool {
-    nether_core::Prim::from_name(&call.function).is_some_and(|p| p.latent().get() == stratum)
+    nether_core::Prim::from_name(&call.function).is_some_and(|p| {
+        p.latent() > nether_core::Depth::PURE
+            && p.latent().get() == stratum
+            && call.args.len() == p.arity()
+    })
 }
 
 /// The stratum a hole would reach, or an error if unreadable, wrong node kind,

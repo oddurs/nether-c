@@ -6,7 +6,9 @@ use nether_core::{Depth, Prim};
 use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
 
 fn valid_call_stratum(call: &Call, stratum: u8) -> bool {
-    Prim::from_name(&call.function).is_some_and(|p| p.latent().get() == stratum)
+    Prim::from_name(&call.function).is_some_and(|p| {
+        p.latent() > Depth::PURE && p.latent().get() == stratum && call.args.len() == p.arity()
+    })
 }
 
 /// Why worker deliveries could not be merged into one trace (`spec/06-evaluation.md` §6.6).
@@ -89,14 +91,27 @@ impl Replay {
         // at a read stratum: one call can have been asked more than once, and
         // then the answers to it are told apart by nothing but their order.
         let mut said: HashMap<Call, Vec<Value>> = HashMap::new();
+        let mut seen_reads: HashMap<Call, Cairn> = HashMap::new();
         let mut order: Vec<Call> = Vec::new();
         for w in witnesses {
-            let Stored::Node(Node::Witness { call, answer, .. }) = store.get(*w)? else {
+            let Stored::Node(Node::Witness { stratum, call, answer, .. }) = store.get(*w)? else {
                 return Err(StoreError::Corrupt { asked: *w, found: None, why: None });
             };
+            if !valid_call_stratum(&call, stratum) {
+                return Err(StoreError::Corrupt { asked: *w, found: None, why: None });
+            }
             let Stored::Value(v) = store.get(answer)? else {
                 return Err(StoreError::Corrupt { asked: answer, found: None, why: None });
             };
+            if Depth::new(stratum).is_some_and(Depth::reads) {
+                if let Some(&prev) = seen_reads.get(&call) {
+                    if prev != answer {
+                        return Err(StoreError::Corrupt { asked: *w, found: None, why: None });
+                    }
+                } else {
+                    seen_reads.insert(call.clone(), answer);
+                }
+            }
             if !said.contains_key(&call) {
                 order.push(call.clone());
             }

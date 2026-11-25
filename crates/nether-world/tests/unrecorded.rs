@@ -91,12 +91,11 @@ fn foreign_code_is_called_and_what_it_said_is_recorded() {
 }
 
 #[test]
-fn the_attempt_is_written_before_the_call() {
-    // §9.8.1: "MUST record the witness before the call, so that a callee which
-    // does not return leaves a trace saying what was attempted." A callee that
-    // does not return cannot be tested from inside this process, so what is
-    // checked is the thing that makes it true — that two witnesses exist for
-    // one call, and the first of them says nothing came back.
+fn the_attempt_is_written_before_the_call_without_polluting_objects() {
+    // §9.8.1: an attempt record is written in `tmp/` before entering foreign
+    // code so a crash leaves an auditable record, and removed on clean return
+    // so successful calls never pollute `objects/` or `refs/` with a phantom
+    // `Refused(Unreachable)` witness (M12).
     let Some(path) = object("attempt") else { return };
     let a = Asked::loading("attempt", &[path]);
     a.call("said", b"x").expect("granted");
@@ -106,16 +105,26 @@ fn the_attempt_is_written_before_the_call() {
         args: vec![a.arg(Value::Str("said".into())), a.arg(Value::Bytes(b"x".to_vec()))],
     };
     let span = Span { source: a.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
-    let attempt = Cairn::of_encoded(
+    let phantom = Cairn::of_encoded(
         &Stored::Node(Node::Witness {
             stratum: Depth::UNRECORDED.get(),
-            call,
+            call: call.clone(),
             answer: a.arg(Value::Answer(Box::new(AnswerOf::Refused(Refusal::Unreachable)))),
             span,
         })
         .encode(),
     );
-    assert!(a.store.has(attempt), "the attempt was not written before the call");
+    assert!(
+        !a.store.has(phantom),
+        "successful foreign call must not leave a phantom Refused(Unreachable) witness in objects/"
+    );
+
+    // Direct `begin_attempt` verification: file exists on disk until guard drop.
+    let guard = a.store.begin_attempt(b"attempt-record").expect("attempt file");
+    let attempt_path = guard.path().to_path_buf();
+    assert!(attempt_path.is_file(), "attempt record missing before drop");
+    drop(guard);
+    assert!(!attempt_path.exists(), "attempt record not cleaned up after drop");
 }
 
 #[test]
@@ -205,4 +214,25 @@ fn duplicate_open_handles_still_serialize_concurrent_calls() {
         }
     });
     assert_eq!(overlapped.into_inner(), 0, "two handles to the same shared object overlapped");
+}
+
+#[test]
+fn atomic_replacement_of_loaded_object_preserves_symbol_ownership() {
+    let Some(built) = object("replace") else { return };
+    let dir = std::env::temp_dir().join(format!("nether-foreign-replace-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let live = dir.join("liblive.so");
+    let replacement = dir.join("liblive.so.new");
+    std::fs::copy(&built, &live).unwrap();
+
+    let loaded = nether_foreign::Object::open(&live).expect("opens initial copy");
+    // Atomically replace the on-disk file with a fresh inode.
+    std::fs::copy(&built, &replacement).unwrap();
+    std::fs::rename(&replacement, &live).unwrap();
+
+    assert!(loaded.has("said"), "symbol ownership must survive atomic .so replacement");
+    assert!(!loaded.has("system"), "DT_NEEDED symbol must remain quarantined");
+    let (code, out) = loaded.call("said", b"ok").expect("call succeeds after replacement");
+    assert_eq!((code, out), (0, b"OK".to_vec()));
+    let _ = std::fs::remove_dir_all(&dir);
 }

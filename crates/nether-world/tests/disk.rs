@@ -362,6 +362,46 @@ fn corrupt_argument_propagates_not_recorded_and_write_leaves_no_temps() {
         let status = std::process::Command::new("mkfifo").arg(&fifo).status();
         if status.is_ok_and(|s| s.success()) {
             assert_eq!(a.reading("pipe"), AnswerOf::Refused(Refusal::Denied));
+            assert_eq!(
+                a.ask("list", vec![a.arg(Value::Str("pipe".into()))]),
+                AnswerOf::Refused(Refusal::Unreachable)
+            );
         }
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn symlinked_root_ancestor_allows_in_root_absolute_symlink_and_denies_escapes() {
+    let base = scratch("symlink-ancestor");
+    let real_parent = base.join("real");
+    let root = real_parent.join("work");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("inside.txt"), b"ok-inside").unwrap();
+    std::fs::write(real_parent.join("outside.txt"), b"secret-outside").unwrap();
+
+    let alias_parent = base.join("alias");
+    std::os::unix::fs::symlink(&real_parent, &alias_parent).unwrap();
+    let alias_root = alias_parent.join("work");
+
+    // In-root absolute symlink pointing via the symlinked ancestor path.
+    std::os::unix::fs::symlink(alias_root.join("inside.txt"), root.join("abs_in.txt")).unwrap();
+    // Out-of-root absolute symlink via the same symlinked ancestor path.
+    std::os::unix::fs::symlink(alias_parent.join("outside.txt"), root.join("abs_out.txt")).unwrap();
+
+    let store = Store::open(base.join("ledger")).unwrap();
+    let world = World::sealed().granting(Box::new(Disk::reading(&alias_root)));
+    let src = store.put(&Stored::Value(Value::Bytes(b"x.nc".to_vec()))).unwrap();
+    let span = Span { source: src, start: 0, end: 1 };
+    let ask_read = |name: &str| {
+        let arg = store.put(&Stored::Value(Value::Str(name.into()))).unwrap();
+        let call = Call { function: "read".into(), args: vec![arg] };
+        let rec = world.ask(&call, span, &Recorder::new(&store)).unwrap();
+        match store.get(rec.answer()).unwrap() {
+            Stored::Value(Value::Answer(a)) => *a,
+            other => panic!("unexpected {other:?}"),
+        }
+    };
+    assert_eq!(ask_read("abs_in.txt"), AnswerOf::Given(Value::Bytes(b"ok-inside".to_vec())));
+    assert_eq!(ask_read("abs_out.txt"), AnswerOf::Refused(Refusal::Denied));
 }

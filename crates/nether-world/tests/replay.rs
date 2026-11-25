@@ -139,7 +139,8 @@ fn conflicting_and_mismatched_worker_witnesses_are_rejected() {
     let store = Store::open(root.join("store")).unwrap();
     let src = store.put(&Stored::Value(Value::Bytes(b"main.nc".to_vec()))).unwrap();
     let arg = store.put(&Stored::Value(Value::Str("http://127.0.0.1/in".into()))).unwrap();
-    let call = Call { function: "post".into(), args: vec![arg] };
+    let body = store.put(&Stored::Value(Value::Bytes(b"payload".to_vec()))).unwrap();
+    let call = Call { function: "post".into(), args: vec![arg, body] };
     let span0 = Span { source: src, start: 0, end: 10 };
     let span1 = Span { source: src, start: 12, end: 22 };
 
@@ -291,4 +292,45 @@ fn forged_stratum_is_rejected_and_replay_order_and_dedup_hold() {
             b"second".to_vec()
         )))))
     );
+
+    // M9 & L3: Replay::of_trace rejects forged stratum, pure prims, wrong arity,
+    // and contradictory read witnesses.
+    assert!(matches!(Replay::of_trace(&store, &[forged_wit]), Err(StoreError::Corrupt { .. })));
+
+    let pure_call = Call { function: "concat".into(), args: vec![arg, arg2] };
+    let pure_wit = store
+        .put(&Stored::Node(Node::Witness { stratum: 0, call: pure_call, answer: forged_ans, span }))
+        .unwrap();
+    assert!(matches!(Replay::of_trace(&store, &[pure_wit]), Err(StoreError::Corrupt { .. })));
+
+    let bad_arity_call = Call { function: "read".into(), args: vec![arg, arg2] };
+    let bad_arity_wit = store
+        .put(&Stored::Node(Node::Witness {
+            stratum: 3,
+            call: bad_arity_call,
+            answer: forged_ans,
+            span,
+        }))
+        .unwrap();
+    assert!(matches!(Replay::of_trace(&store, &[bad_arity_wit]), Err(StoreError::Corrupt { .. })));
+
+    let ans1 = store.put(&Stored::Value(Value::Bytes(b"one".to_vec()))).unwrap();
+    let ans2 = store.put(&Stored::Value(Value::Bytes(b"two".to_vec()))).unwrap();
+    let w1 = store
+        .put(&Stored::Node(Node::Witness {
+            stratum: 3,
+            call: read_call.clone(),
+            answer: ans1,
+            span,
+        }))
+        .unwrap();
+    let w2 = store
+        .put(&Stored::Node(Node::Witness {
+            stratum: 3,
+            call: read_call,
+            answer: ans2,
+            span: Span { source: src, start: 6, end: 10 },
+        }))
+        .unwrap();
+    assert!(matches!(Replay::of_trace(&store, &[w1, w2]), Err(StoreError::Corrupt { .. })));
 }

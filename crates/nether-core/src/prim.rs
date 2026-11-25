@@ -171,6 +171,44 @@ impl Prim {
         self.signature().1
     }
 
+    /// Fixed argument count of this prelude function (`spec/09-prelude.md`).
+    #[must_use]
+    pub const fn arity(self) -> usize {
+        match self {
+            Self::Clock | Self::Target => 0,
+            Self::Abs
+            | Self::Len
+            | Self::Utf8
+            | Self::Raw
+            | Self::CairnOf
+            | Self::Hex
+            | Self::Given
+            | Self::Refusal
+            | Self::Must
+            | Self::Answered
+            | Self::Refused
+            | Self::FetchNode
+            | Self::HasNode
+            | Self::Env
+            | Self::Read
+            | Self::List
+            | Self::Exists
+            | Self::Remove
+            | Self::Get
+            | Self::Draw => 1,
+            Self::Min
+            | Self::Max
+            | Self::Concat
+            | Self::StartsWith
+            | Self::Join
+            | Self::Split
+            | Self::Write
+            | Self::Post
+            | Self::CallForeign => 2,
+            Self::Slice => 3,
+        }
+    }
+
     /// Whether §09 types this one's result as an `Answer<T>`.
     ///
     /// A primitive whose signature returns `Answer<T>` wraps its value in an
@@ -270,6 +308,27 @@ mod tests {
                     | Prim::CallForeign
             );
             assert_eq!(p.refusable(), expected, "{p}");
+        }
+    }
+
+    #[test]
+    fn arity_matches_section_09_signatures() {
+        for p in Prim::ALL {
+            let expected = match p {
+                Prim::Clock | Prim::Target => 0,
+                Prim::Min
+                | Prim::Max
+                | Prim::Concat
+                | Prim::StartsWith
+                | Prim::Join
+                | Prim::Split
+                | Prim::Write
+                | Prim::Post
+                | Prim::CallForeign => 2,
+                Prim::Slice => 3,
+                _ => 1,
+            };
+            assert_eq!(p.arity(), expected, "{p}");
         }
     }
 }

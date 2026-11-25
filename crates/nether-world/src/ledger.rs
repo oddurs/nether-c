@@ -44,12 +44,54 @@ impl Provider for Ledger {
             // the name that asked for them. Only `Absent` is a valid §9.3
             // refusal; corruption and I/O errors abort via `NotRecorded`.
             "fetch_node" => match into.store().get(name) {
-                Ok(stored) => given(&call.function, Value::Bytes(stored.encode())),
+                Ok(stored) => {
+                    let encoded = stored.encode();
+                    // `Answer::Given(Value::Bytes(..))` adds 11 bytes of framing
+                    // (`tag::ANSWER`, `0x00`, `tag::BYTES`, 8-byte length).
+                    if encoded.len().saturating_add(11) > nether_ledger::MAX_OBJECT_BYTES {
+                        refused(Refusal::Exhausted)
+                    } else {
+                        given(&call.function, Value::Bytes(encoded))
+                    }
+                }
                 Err(StoreError::Absent(_)) => refused(Refusal::Absent),
                 Err(e) => return Err(Refuse::NotRecorded(e)),
             },
             _ => given(&call.function, Value::Bool(into.store().has(name))),
         };
         into.record(call, Depth::STORE, span, &said)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Ledger;
+    use crate::{Recorder, World};
+    use nether_ledger::{AnswerOf, Call, MAX_OBJECT_BYTES, Refusal, Span, Store, Stored, Value};
+
+    #[test]
+    fn fetch_node_within_eleven_bytes_of_limit_refuses_exhausted() {
+        let dir =
+            std::env::temp_dir().join(format!("nether-ledger-fetch-bound-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        // `Value::Bytes(b)` encodes as 1 + 8 + b.len(); setting b.len() = MAX_OBJECT_BYTES - 9
+        // produces an encoded object of exact size MAX_OBJECT_BYTES, so wrapping it in
+        // `Answer::Given(Value::Bytes(..))` (+11 bytes) would exceed MAX_OBJECT_BYTES.
+        let big = Stored::Value(Value::Bytes(vec![0u8; MAX_OBJECT_BYTES - 9]));
+        let cairn = store.put(&big).expect("fits at exact MAX_OBJECT_BYTES");
+        let arg = store.put(&Stored::Value(Value::Cairn(cairn))).unwrap();
+        let src = store.put(&Stored::Value(Value::Bytes(b"x.nc".to_vec()))).unwrap();
+        let call = Call { function: "fetch_node".into(), args: vec![arg] };
+        let span = Span { source: src, start: 0, end: 1 };
+        let world = World::sealed().granting(Box::new(Ledger));
+        let rec = world
+            .ask(&call, span, &Recorder::new(&store))
+            .expect("must record Refusal::Exhausted instead of aborting NotRecorded");
+        assert_eq!(
+            store.get(rec.answer()).unwrap(),
+            Stored::Value(Value::Answer(Box::new(AnswerOf::Refused(Refusal::Exhausted))))
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

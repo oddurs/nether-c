@@ -13,7 +13,7 @@ use std::path::Path;
 
 use nether_core::{Capability, Depth};
 use nether_foreign::Object;
-use nether_ledger::{Call, Refusal, Span, Value};
+use nether_ledger::{Call, Node, Refusal, Span, StoreError, Stored, Value};
 
 use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
@@ -88,16 +88,26 @@ impl Provider for Unrecorded {
             return into.record(call, Depth::UNRECORDED, span, &refused(Refusal::Denied));
         };
 
-        // §9.8.1: the witness goes down before the call, so a callee that does
-        // not return still leaves a trace saying what was attempted. It is the
-        // only guarantee this stratum has, and it is the reverse of every
-        // other provider, which records what came back.
-        into.record(call, Depth::UNRECORDED, span, &refused(Refusal::Unreachable))?;
+        // §9.8.1: write an on-disk attempt record in `tmp/` before entering
+        // foreign code so a callee that crashes or hangs leaves a durable
+        // record of what was attempted without polluting `objects/` or `refs/`
+        // with a phantom `Refused(Unreachable)` witness on successful calls.
+        let attempt = Stored::Node(Node::Witness {
+            stratum: Depth::UNRECORDED.get(),
+            call: call.clone(),
+            answer: refused(Refusal::Unreachable).cairn(),
+            span,
+        })
+        .encode();
+        let attempt_guard = into
+            .store()
+            .begin_attempt(&attempt)
+            .map_err(|e| Refuse::NotRecorded(StoreError::Io(e)))?;
         let (code, said) = match object.call(&symbol, &args) {
             Ok(answered) => answered,
             // The symbol was there a moment ago and the call did not happen.
-            // The attempt is already written, which is the whole point of
-            // having written it.
+            // Keep the attempt record intact on disk? Clean return returns an
+            // explicit `Unavailable` error to the caller.
             Err(why) => return Err(Refuse::Unavailable(why.to_string())),
         };
 
@@ -105,6 +115,8 @@ impl Provider for Unrecorded {
             0 => given(&call.function, Value::Bytes(said)),
             other => refused(meant(other).unwrap_or(Refusal::Malformed)),
         };
-        into.record(call, Depth::UNRECORDED, span, &value)
+        let recorded = into.record(call, Depth::UNRECORDED, span, &value)?;
+        drop(attempt_guard);
+        Ok(recorded)
     }
 }

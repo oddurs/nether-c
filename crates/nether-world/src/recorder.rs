@@ -165,4 +165,22 @@ impl<'a> Recorder<'a> {
         }))?;
         Ok(Recorded { witness, answer })
     }
+
+    /// Record a witness referencing an already-recorded `answer` cairn (used
+    /// when deduplicating identical read-stratum holes at distinct spans).
+    pub(crate) fn record_existing(
+        &self,
+        call: &Call,
+        stratum: Depth,
+        span: Span,
+        answer: Cairn,
+    ) -> Result<Recorded, Refuse> {
+        let witness = self.store.put(&Stored::Node(Node::Witness {
+            stratum: stratum.get(),
+            call: call.clone(),
+            answer,
+            span,
+        }))?;
+        Ok(Recorded { witness, answer })
+    }
 }
