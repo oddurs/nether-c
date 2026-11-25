@@ -16,7 +16,7 @@ status: draft
 | `Bytes` | any finite byte string | length prefix, then the bytes |
 | `Str` | any well-formed UTF-8 string | as `Bytes`, over the bytes as given |
 | `Cairn` | a content address | 32 bytes |
-| `Shadeᵈ⟨T⟩` | an opaque `T` from depth `d` | the cairn of the underlying value |
+| `Shadeᵈ⟨T⟩` | an opaque `T` from depth `d` | one byte origin stratum, then the 32-byte cairn of the value |
 | `Answer⟨T⟩` | what the world said: a `T`, or a refusal | `0x07`: one discriminant byte, then the `T` or the `Refusal` |
 | `Refusal` | one of six codes, and nothing else | `0x08`: one byte, in the order §5.1.1 lists them |
 

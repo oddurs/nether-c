@@ -140,8 +140,17 @@ case "${1:-}" in
     # A fixed name for that, and for this checkout, is the whole recipe.
     target="${2:-}"
     [ -n "$target" ] || { echo "usage: scripts/task release:build <target>" >&2; exit 2; }
-    remap="--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=$root=/nether"
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }$remap" \
+    cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+    sep=$(printf '\037')
+    encoded_flags="--remap-path-prefix=${cargo_home}=/cargo${sep}--remap-path-prefix=${root}=/nether"
+    if [ -n "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
+      encoded_flags="${CARGO_ENCODED_RUSTFLAGS}${sep}${encoded_flags}"
+    elif [ -n "${RUSTFLAGS:-}" ]; then
+      # Split existing space-separated RUSTFLAGS into \x1f-delimited args.
+      existing=$(printf '%s' "$RUSTFLAGS" | tr ' ' '\037')
+      encoded_flags="${existing}${sep}${encoded_flags}"
+    fi
+    env -u RUSTFLAGS CARGO_ENCODED_RUSTFLAGS="$encoded_flags" \
       cargo build --release --locked --bin nether --target "$target"
     if command -v sha256sum >/dev/null 2>&1; then
       sha256sum "target/$target/release/nether"

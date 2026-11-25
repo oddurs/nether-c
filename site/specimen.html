@@ -66,7 +66,7 @@ try {
 
 400  Γ; δ ⊢ e : τ@d   dƒ ⊆ δ   d₁ ∪ d₂   d′ ≤ d ≥ 0   e ⟶ e′   ⟨v, s⟩ ∈ ℓ³ × 2⁶   «hole ① ②»
 700  <strong>Γ; δ ⊢ e : τ@d   dƒ ⊆ δ   d₁ ∪ d₂   d′ ≤ d ≥ 0   e ⟶ e′   ⟨v, s⟩ ∈ ℓ³ × 2⁶   «hole ① ②»</strong></code></pre></figure><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// Every keyword and @n below is set in the 700 face.</span>
-<span class="t">Shade</span>&lt;<span class="t">Bytes</span>&gt;<span class="d3">@3</span> load(<span class="t">Str</span> p) @{<span class="n">3</span>}
+<span class="t">Shade</span>&lt;<span class="t">Bytes</span><span class="d3">@3</span>&gt; load(<span class="t">Str</span> p) <span class="d0">@0</span>
 {
   <span class="k">return</span> <span class="k">descend</span> disk { <span class="k">shade</span> must(read(p)) };
 }

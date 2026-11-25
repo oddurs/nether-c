@@ -63,7 +63,22 @@ FORBIDDEN_IDENTIFIERS = frozenset(
 # theorem without an inference rule. Only the kernel may name it. A string
 # passed to `getattr` still gets past this scan, which a reviewer must catch.
 KERNEL_PRIVATE = frozenset(
-    {"_SEAL", "_thm", "_token", "_THEOREM_DATA", "_REL_DATA", "_RELATIONS", "_thm_payload", "_rel_payload"}
+    {
+        "_SEAL",
+        "_thm",
+        "_token",
+        "_TERM_DATA",
+        "_FORMULA_DATA",
+        "_RULE_DATA",
+        "_THEOREM_DATA",
+        "_REL_DATA",
+        "_RELATIONS",
+        "_term_payload",
+        "_formula_payload",
+        "_rule_payload",
+        "_thm_payload",
+        "_rel_payload",
+    }
 )
 
 
@@ -440,14 +455,68 @@ def verify_kernel_soundness_guards() -> None:
         else:
             raise AssertionError(f"lattice_decide accepted invalid goal `{bad_goal}`")
 
+    # 28. Term, Formula, and Rule must not expose __dict__ or allow object.__setattr__ mutation
+    term_0 = var("0")
+    form_0 = eq(term_0, term_0)
+    rule_0 = Rule("R0", (), pred("P0", term_0))
+    for obj, attr, bad_val in (
+        (term_0, "op", "1"),
+        (form_0, "terms", (var("0"), var("1"))),
+        (rule_0, "conclusion", eq(var("0"), var("1"))),
+    ):
+        try:
+            vars(obj)
+        except TypeError:
+            pass
+        else:
+            raise AssertionError(f"{type(obj).__name__} exposed __dict__ via vars()")
+        try:
+            object.__setattr__(obj, attr, bad_val)
+        except AttributeError:
+            pass
+        else:
+            raise AssertionError(f"{type(obj).__name__} allowed object.__setattr__ mutation")
 
-def verify_closed_theorem(name: str, thm: Theorem, expected_head: str = "") -> None:
+    # 29. Quantifiers over lattice_decide variables must preserve Depth/Set sorts across gen/inst
+    d_le_8 = gen("d", lattice_decide(le(var("d"), var("8"))))
+    for bad_term in (var("9"), var("∅"), app("VUnit")):
+        try:
+            inst(d_le_8, bad_term)
+        except ProofFault:
+            pass
+        else:
+            raise AssertionError(f"inst allowed non-Depth term `{bad_term}` for Depth quantifier")
+    x_le_8 = gen("x", inst(d_le_8, var("x")))
+    try:
+        inst(x_le_8, var("9"))
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("inst lost Depth sort after re-generalization")
+    bad_ind = InductiveRelation("BadDepthRel", (Rule("R", (), pred("BadDepthRel", var("d"))),))
+    bad_ind_thm = rule_induction(
+        bad_ind,
+        ("_d",),
+        le(var("_d"), var("8")),
+        {"R": lambda _p, _ih: lattice_decide(le(var("d"), var("8")))},
+    )
+    try:
+        inst(bad_ind_thm, var("9"))
+    except ProofFault:
+        pass
+    else:
+        raise AssertionError("rule_induction lost Depth sort on inductive parameter")
+
+
+def verify_closed_theorem(name: str, thm: Theorem, expected_conclusion: str) -> None:
     if not isinstance(thm, Theorem):
         raise ProofFault(f"`{name}` did not return a kernel Theorem")
     if thm.assumptions:
         raise ProofFault(f"`{name}` has undischarged assumptions: {thm.assumptions}")
-    if expected_head and expected_head not in repr(thm.conclusion):
-        raise ProofFault(f"`{name}` conclusion {thm.conclusion} does not match expected `{expected_head}`")
+    if repr(thm.conclusion) != expected_conclusion:
+        raise ProofFault(
+            f"`{name}` conclusion mismatch:\n  expected: {expected_conclusion}\n  got:      {thm.conclusion}"
+        )
 
 
 def main(argv: Sequence[str] = ()) -> int:
@@ -456,46 +525,126 @@ def main(argv: Sequence[str] = ()) -> int:
     verify_kernel_soundness_guards()
 
     t_amb = calculus.prove_ambient_soundness()
-    verify_closed_theorem("ambient_soundness", t_amb, "HasType(_a0, _a1, _a2, _a3, _a4, _a5) → (_a4 <= max_set(∪(_a1, _a5)))")
+    verify_closed_theorem(
+        "ambient_soundness",
+        t_amb,
+        "(∀_a0. (∀_a1:Set. (∀_a2. (∀_a3. (∀_a4:Depth. (∀_a5:Set. (HasType(_a0, _a1, _a2, _a3, _a4, _a5) → (_a4 <= max_set(∪(_a1, _a5))))))))))",
+    )
 
     t_sub = calculus.prove_substitution_monotonicity()
-    verify_closed_theorem("substitution_monotonicity", t_sub, "SubstDepth(_a0, _a1, _a2, _a3) → (_a3 <= max(_a1, _a2))")
+    verify_closed_theorem(
+        "substitution_monotonicity",
+        t_sub,
+        "(∀_a0. (∀_a1:Depth. (∀_a2:Depth. (∀_a3:Depth. (SubstDepth(_a0, _a1, _a2, _a3) → (_a3 <= max(_a1, _a2)))))))",
+    )
 
     t_mon = calculus.prove_soundness_of_bound()
-    verify_closed_theorem("soundness_of_bound", t_mon, "StepTyped(_a0, _a1, _a2, _a3) → (_a3 <= _a2)")
+    verify_closed_theorem(
+        "soundness_of_bound",
+        t_mon,
+        "(∀_a0. (∀_a1. (∀_a2:Depth. (∀_a3:Depth. (StepTyped(_a0, _a1, _a2, _a3) → (_a3 <= _a2))))))",
+    )
 
     orpheus_thms = [
-        ("look_sufficiency_ambient", orpheus.prove_look_sufficiency_ambient(), "max(d, d_p) <= max_set(∪(δ, g(s)))"),
-        ("look_sufficiency_confinement", orpheus.prove_look_sufficiency_confinement(), "singleton(d) ⊆ ∪(δ, g(s))"),
-        ("look_necessity_confinement", orpheus.prove_look_necessity_confinement(), "(singleton(d) ⊆ ∪(δ, ∅_raw)) ↔ (d ∈ δ)"),
-        ("look_necessity_numeric", orpheus.prove_look_necessity_numeric(), "(max(d, 0) <= max_set(∪(δ, ∅_raw))) ↔ (d <= max_set(δ))"),
-        ("numeric_vs_membership_counterexample", orpheus.prove_numeric_vs_membership_counterexample(), "singleton(3) ⊈ ∪(∅, singleton(5))"),
-        ("binding_taint_violates_ambient", orpheus.prove_binding_taint_violates_ambient(), "¬(max(3, 0) <= max_set(∪(∅, ∅_raw)))"),
-        ("scope_restain_shifts_obligation_to_caller", orpheus.prove_scope_restain_shifts_obligation_to_caller(), "d ∈ δ_caller"),
+        (
+            "look_sufficiency_ambient",
+            orpheus.prove_look_sufficiency_ambient(),
+            "(∀d:Depth. (∀d_p:Depth. (∀δ:Set. (∀s. (((d_p <= max_set(∪(δ, g(s)))) ∧ (d ∈ δ)) → (max(d, d_p) <= max_set(∪(δ, g(s)))))))))",
+        ),
+        (
+            "look_sufficiency_confinement",
+            orpheus.prove_look_sufficiency_confinement(),
+            "(∀d:Depth. (∀δ:Set. (∀s. ((d ∈ δ) → (singleton(d) ⊆ ∪(δ, g(s)))))))",
+        ),
+        (
+            "look_necessity_confinement",
+            orpheus.prove_look_necessity_confinement(),
+            "(∀d:Depth. (∀δ:Set. ((singleton(d) ⊆ ∪(δ, ∅_raw)) ↔ (d ∈ δ))))",
+        ),
+        (
+            "look_necessity_numeric",
+            orpheus.prove_look_necessity_numeric(),
+            "(∀d:Depth. (∀δ:Set. ((max(d, 0) <= max_set(∪(δ, ∅_raw))) ↔ (d <= max_set(δ)))))",
+        ),
+        (
+            "numeric_vs_membership_counterexample",
+            orpheus.prove_numeric_vs_membership_counterexample(),
+            "((3 <= max_set(∪(∅, singleton(5)))) ∧ ((3 ∉ ∪(∅, singleton(5))) ∧ (singleton(3) ⊈ ∪(∅, singleton(5)))))",
+        ),
+        (
+            "binding_taint_violates_ambient",
+            orpheus.prove_binding_taint_violates_ambient(),
+            "¬(max(3, 0) <= max_set(∪(∅, ∅_raw)))",
+        ),
+        (
+            "scope_restain_shifts_obligation_to_caller",
+            orpheus.prove_scope_restain_shifts_obligation_to_caller(),
+            "(∀d:Depth. (∀δ_f:Set. (∀δ_caller:Set. (((singleton(d) ⊆ δ_f) ∧ (δ_f ⊆ δ_caller)) → (d ∈ δ_caller)))))",
+        ),
     ]
-    for name, thm, head in orpheus_thms:
-        verify_closed_theorem(name, thm, head)
+    for name, thm, expected in orpheus_thms:
+        verify_closed_theorem(name, thm, expected)
 
     staging_thms = [
-        ("roundtrip_identity", staging.prove_roundtrip_identity(), "RoundTrip(_a0, _a1) → (_a1 = _a0)"),
-        ("hole_set_union_law", staging.prove_hole_set_union_law(), "s_k ∈ ∪(δ_A, δ_B)"),
-        ("staging_idempotence_set", staging.prove_staging_idempotence_set(), "s_k ∈ δ_A"),
-        ("staging_law", staging.prove_staging_law(), "StagedEval(_a0, _a1, _a2, _a3, _a4) → (_a3 = _a4)"),
-        ("dependent_hole_non_monotone_counterexample", staging.prove_dependent_hole_non_monotone_counterexample(), "3 ∉ ∪(∅, singleton(5))"),
-        ("cumulative_dependent_hole_law", staging.prove_cumulative_dependent_hole_law(), "δ_A ⊆ δ_B"),
+        (
+            "roundtrip_identity",
+            staging.prove_roundtrip_identity(),
+            "(∀_a0. (∀_a1. (RoundTrip(_a0, _a1) → (_a1 = _a0))))",
+        ),
+        (
+            "hole_set_union_law",
+            staging.prove_hole_set_union_law(),
+            "(∀s_k:Depth. (∀δ_A:Set. (∀δ_B:Set. (((s_k ∈ δ_A) ∨ (s_k ∈ δ_B)) ↔ (s_k ∈ ∪(δ_A, δ_B))))))",
+        ),
+        (
+            "staging_idempotence_set",
+            staging.prove_staging_idempotence_set(),
+            "(∀s_k:Depth. (∀δ_A:Set. (((s_k ∈ δ_A) ∨ (s_k ∈ δ_A)) ↔ (s_k ∈ δ_A))))",
+        ),
+        (
+            "staging_law",
+            staging.prove_staging_law(),
+            "(∀_a0. (∀_a1. (∀_a2. (∀_a3. (∀_a4. (StagedEval(_a0, _a1, _a2, _a3, _a4) → (_a3 = _a4)))))))",
+        ),
+        (
+            "dependent_hole_non_monotone_counterexample",
+            staging.prove_dependent_hole_non_monotone_counterexample(),
+            "((5 ∉ ∪(∅, singleton(3))) ∧ (((5 ∈ ∪(∅, singleton(5))) ∧ (3 ∉ ∪(∅, singleton(5)))) ∧ ((5 ∈ ∪(∪(∅, singleton(3)), ∪(∅, singleton(5)))) ∧ (3 ∈ ∪(∪(∅, singleton(3)), ∪(∅, singleton(5)))))))",
+        ),
+        (
+            "cumulative_dependent_hole_law",
+            staging.prove_cumulative_dependent_hole_law(),
+            "(∀d_in:Depth. (∀d_out:Depth. (∀δ_A:Set. (∀δ_B:Set. ((δ_A ⊆ δ_B) → ((((d_in ∈ δ_A) ∧ (d_out ∈ δ_A)) ∨ ((d_in ∈ δ_B) ∧ (d_out ∈ δ_B))) ↔ ((d_in ∈ ∪(δ_A, δ_B)) ∧ (d_out ∈ ∪(δ_A, δ_B)))))))))",
+        ),
     ]
-    for name, thm, head in staging_thms:
-        verify_closed_theorem(name, thm, head)
+    for name, thm, expected in staging_thms:
+        verify_closed_theorem(name, thm, expected)
 
     n_fixtures = encoding.verify_codec_fixtures_and_exclusions()
     encoding_thms = [
-        ("value_decode_encode", encoding.prove_value_decode_encode(), "ValRoundTrip(_a0, _a1, _a2, _a3) → ((_a2 = _a0) ∧ (_a3 = _a1))"),
-        ("node_decode_encode", encoding.prove_node_decode_encode(), "NodeRoundTrip(_a0, _a1, _a2) → (_a2 = Pair(_a0, _a1))"),
-        ("injectivity_from_left_inverse", encoding.prove_injectivity_from_left_inverse(), "(encode(x) = encode(y)) → (x = y)"),
-        ("cairn_preimage_injectivity", encoding.prove_cairn_preimage_injectivity(), "(domain_prefix(encode(x)) = domain_prefix(encode(y))) → (x = y)"),
+        (
+            "value_decode_encode",
+            encoding.prove_value_decode_encode(),
+            "(∀_a0. (∀_a1. (∀_a2. (∀_a3. (ValRoundTrip(_a0, _a1, _a2, _a3) → ((_a2 = _a0) ∧ (_a3 = _a1)))))))",
+        ),
+        (
+            "node_decode_encode",
+            encoding.prove_node_decode_encode(),
+            "(∀_a0. (∀_a1. (∀_a2. (NodeRoundTrip(_a0, _a1, _a2) → (_a2 = Pair(_a0, _a1))))))",
+        ),
+        (
+            "injectivity_from_left_inverse",
+            encoding.prove_injectivity_from_left_inverse(),
+            "(∀x. (∀y. ((decode(encode(x)) = x) → ((decode(encode(y)) = y) → ((encode(x) = encode(y)) → (x = y))))))",
+        ),
+        (
+            "cairn_preimage_injectivity",
+            encoding.prove_cairn_preimage_injectivity(),
+            "(∀x. (∀y. ((strip_domain(domain_prefix(encode(x))) = encode(x)) → ((strip_domain(domain_prefix(encode(y))) = encode(y)) → ((decode(encode(x)) = x) → ((decode(encode(y)) = y) → ((domain_prefix(encode(x)) = domain_prefix(encode(y))) → (x = y))))))))",
+        ),
     ]
-    for name, thm, head in encoding_thms:
-        verify_closed_theorem(name, thm, head)
+    for name, thm, expected in encoding_thms:
+        verify_closed_theorem(name, thm, expected)
 
     print(
         f"checked {scanned} proof modules (0 admitted obligations, kernel guards verified, {n_fixtures} codec fixtures verified)"
