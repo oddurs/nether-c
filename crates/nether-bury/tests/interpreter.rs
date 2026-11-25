@@ -708,3 +708,91 @@ demand f();
     assert!(long_res.holes.is_empty());
     assert_eq!(results(&long_res), vec![("Bytes".into(), 0, long_str.into_bytes())]);
 }
+
+#[test]
+fn round2_self_hosted_interpreter_soundness_and_parity() {
+    // H12, H13, H14, H15, M6, M7 rejection cases.
+    for (program, expected) in [
+        // H12: semantic error inside `(...)` inside a block must not host-collapse.
+        ("Bytes f() { (missing()) } demand f();", "unknown call"),
+        // H13: shading a parameter rejects deep callers (`Orpheus` / `binding type mismatch`).
+        (
+            "Shade<Bytes@0> hide(Bytes x) { shade x } demand hide(must(descend disk { read(\"s\") }));",
+            "binding type mismatch",
+        ),
+        (
+            "Bytes leak(Bytes x) { look shade x } demand leak(must(descend disk { read(\"s\") }));",
+            "Orpheus:",
+        ),
+        // H14: unreachable return type and depth mismatches are caught.
+        (
+            "Bytes@0 f() { return b\"ok\"; return \"NOT_BYTES\"; } demand f();",
+            "unreachable return type mismatch",
+        ),
+        (
+            "Bytes@0 f() { return b\"ok\"; return must(descend disk { read(\"a.txt\") }); } demand f();",
+            "depth assertion mismatch",
+        ),
+        // H15: `return` outside a function is rejected.
+        ("demand descend disk { return b\"hi\"; };", "return outside function"),
+        // M7: unannotated Shade<T> parameter, overstated latent @d, len("str"), duplicate local.
+        ("U0 f(Shade<Bytes> s) {}", "shade parameter requires explicit origin depth"),
+        (
+            "Bytes f() @3 { b\"pure\" } demand descend disk { f() };",
+            "latent depth assertion mismatch",
+        ),
+        ("demand len(\"str\");", "len requires Bytes"),
+        ("Bytes f() { Bytes x = b\"a\"; Bytes x = b\"b\"; x } demand f();", "duplicate local"),
+    ] {
+        let residue = guest(program, &Answers::none());
+        assert!(residue.holes.is_empty(), "{program}");
+        assert!(residue.deposits.is_empty(), "{program}");
+        let values = results(&residue);
+        assert_eq!(values[0].0, "Error", "{program}: {values:?}");
+        assert!(
+            String::from_utf8_lossy(&values[0].2).contains(expected),
+            "{program}: expected {expected:?}, got {values:?}"
+        );
+    }
+
+    // H13: `Bytes@0 id(Bytes x) { x }` called with depth-3 argument succeeds and returns depth 3.
+    let id_prog = "Bytes@0 id(Bytes x) { x } demand id(must(descend disk { read(\"a.txt\") }));";
+    let read_a = Answers::none().and(
+        nether_ledger::Call {
+            function: "read".into(),
+            args: vec![Value::Str("a.txt".into()).cairn()],
+        },
+        Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(b"hi".to_vec())))),
+    );
+    let id_res = guest(id_prog, &read_a);
+    assert!(id_res.holes.is_empty());
+    assert_eq!(results(&id_res), vec![("Bytes".into(), 3, b"hi".to_vec())]);
+
+    // H15: `return` propagates cleanly through `let`, call arguments, and `(...)`.
+    for prog in [
+        "Bytes f() { Bytes x = descend disk { return b\"early\"; }; x } demand f();",
+        "Bytes f() { concat(descend disk { return b\"early\"; }, b\"x\") } demand f();",
+        "Bytes f() { (descend disk { return b\"early\"; }) } demand f();",
+    ] {
+        let r = guest(prog, &Answers::none());
+        assert!(r.holes.is_empty(), "{prog}");
+        assert_eq!(results(&r), vec![("Bytes".into(), 0, b"early".to_vec())], "{prog}");
+    }
+
+    // M6 & M7 syntax errors: `@{3}` on binding and `<...>` on non-generic collapse cleanly as malformed.
+    for bad_syntax in ["Bytes@{3} x = b\"a\"; demand x;", "Bytes<I64> x = b\"a\"; demand x;"] {
+        let source = format!("{INTERPRETER}\ndemand interpret(b{bad_syntax:?});\n");
+        let unit = lower(&parse(source.as_bytes()).unwrap()).unwrap();
+        assert!(
+            bury(&unit, Cairn::of_encoded(source.as_bytes()), 1_000_000).is_err(),
+            "malformed syntax must collapse cleanly: {bad_syntax}"
+        );
+    }
+
+    // M7: 200 escapes in one literal stay within bounded divide-and-conquer stack depth.
+    let escapes = "\\n".repeat(200);
+    let esc_prog = format!("demand b\"{escapes}\";");
+    let esc_res = guest(&esc_prog, &Answers::none());
+    assert!(esc_res.holes.is_empty());
+    assert_eq!(results(&esc_res), vec![("Bytes".into(), 0, vec![b'\n'; 200])]);
+}
