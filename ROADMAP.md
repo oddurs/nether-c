@@ -486,7 +486,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 13 of 13 done
+`##########` 100% · 14 of 14 done
 
 ### buried
 
@@ -503,4 +503,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0318`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0318-ledger-foreign-loader-and-world-provider-hardening.md) Ledger, foreign loader, and world provider hardening <sup>bug · p2</sup>
 - [x] [`0319`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0319-cli-rites-wasm-necropolis-and-vim-hardening.md) CLI rites, WASM, Necropolis, and Vim hardening <sup>bug · p2</sup>
 - [x] [`0320`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0320-website-and-necropolis-visual-a11y-and-ux-polish.md) Website and Necropolis visual, a11y, and UX polish <sup>bug · p2</sup>
+- [x] [`0321`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0321-split-pages-build-deploy-jobs-and-omit-template-html.md) Split Pages build/deploy jobs and omit template.html <sup>bug · p2</sup>
 
