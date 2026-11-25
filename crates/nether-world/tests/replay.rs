@@ -223,3 +223,72 @@ fn of_trace_rejects_missing_witnesses_and_merge_keeps_base_answers() {
         "{bad_base:?}"
     );
 }
+
+#[test]
+fn forged_stratum_is_rejected_and_replay_order_and_dedup_hold() {
+    let root = temp_dir("replay-hardening");
+    let store = Store::open(root.join("store")).unwrap();
+    let src = store.put(&Stored::Value(Value::Bytes(b"m.nc".to_vec()))).unwrap();
+    let arg = store.put(&Stored::Value(Value::Str("sym".into()))).unwrap();
+    let span = Span { source: src, start: 0, end: 4 };
+
+    // H20: forged `call_foreign` claiming stratum 1 is rejected by both ask_slots and merge.
+    let forged_call = Call { function: "call_foreign".into(), args: vec![arg] };
+    let forged_hole = store
+        .put(&Stored::Node(Node::Hole { call: forged_call.clone(), stratum: 1, span }))
+        .unwrap();
+    let forged_ans = store.put(&Stored::Value(Value::Bytes(b"ok".to_vec()))).unwrap();
+    let forged_wit = store
+        .put(&Stored::Node(Node::Witness {
+            stratum: 1,
+            call: forged_call,
+            answer: forged_ans,
+            span,
+        }))
+        .unwrap();
+    let world = World::sealed();
+    assert!(matches!(
+        world.ask_slots(&[forged_hole], &[0], &Recorder::new(&store)),
+        Err(nether_world::Unanswered::NotRecorded(_))
+    ));
+    assert!(matches!(
+        Replay::merge(&store, &[], &[forged_hole], &[&[(0, forged_wit)]]),
+        Err(MergeError::Mismatched(0, ..))
+    ));
+    assert!(matches!(
+        Replay::merge(&store, &[forged_wit], &[], &[]),
+        Err(MergeError::BaseWitness(w)) if w == forged_wit
+    ));
+
+    // L9: Replay::all() preserves deterministic insertion order.
+    let c1 = Call { function: "read".into(), args: vec![arg] };
+    let arg2 = store.put(&Stored::Value(Value::Str("other".into()))).unwrap();
+    let c2 = Call { function: "read".into(), args: vec![arg2] };
+    let r = Replay::of(&[
+        (c2.clone(), Value::Int(2)),
+        (c1.clone(), Value::Int(1)),
+        (c2.clone(), Value::Int(3)),
+    ]);
+    let got: Vec<_> = r.all().map(|(c, v)| (c.clone(), v.clone())).collect();
+    assert_eq!(got, vec![(c2.clone(), Value::Int(2)), (c2, Value::Int(3)), (c1, Value::Int(1))]);
+
+    // M18: World::granting replaces duplicate capability providers cleanly.
+    let d1 = root.join("d1");
+    let d2 = root.join("d2");
+    std::fs::create_dir_all(&d1).unwrap();
+    std::fs::create_dir_all(&d2).unwrap();
+    std::fs::write(d1.join("f.txt"), b"first").unwrap();
+    std::fs::write(d2.join("f.txt"), b"second").unwrap();
+    let replaced = World::sealed()
+        .granting(Box::new(nether_world::Disk::reading(&d1)))
+        .granting(Box::new(nether_world::Disk::reading(&d2)));
+    let f_arg = store.put(&Stored::Value(Value::Str("f.txt".into()))).unwrap();
+    let read_call = Call { function: "read".into(), args: vec![f_arg] };
+    let rec = replaced.ask(&read_call, span, &Recorder::new(&store)).unwrap();
+    assert_eq!(
+        store.get(rec.answer()).unwrap(),
+        Stored::Value(Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(
+            b"second".to_vec()
+        )))))
+    );
+}

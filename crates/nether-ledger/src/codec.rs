@@ -21,6 +21,56 @@ pub const MAX_DEPTH: usize = 128;
 // ── encoding ────────────────────────────────────────────────────────────────
 
 impl Value {
+    /// Checks every invariant `decode` enforces without allocating bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError`] if any nested value exceeds [`MAX_DEPTH`], has
+    /// an out-of-range shade origin, or has an empty struct name.
+    pub fn validate(&self) -> Result<(), DecodeError> {
+        let mut stack = vec![(self, 0usize)];
+        while let Some((cur, depth)) = stack.pop() {
+            if depth >= MAX_DEPTH {
+                return Err(DecodeError::TooDeep);
+            }
+            match cur {
+                Self::Shade { origin, .. } if *origin > MAX_STRATUM => {
+                    return Err(DecodeError::NoSuchStratum(*origin));
+                }
+                Self::Struct { name, .. } if name.is_empty() => {
+                    return Err(DecodeError::EmptyStructName);
+                }
+                Self::Struct { fields, .. } => {
+                    for field in fields.iter().rev() {
+                        stack.push((field, depth + 1));
+                    }
+                }
+                Self::Array(items) => {
+                    for item in items.iter().rev() {
+                        stack.push((item, depth + 1));
+                    }
+                }
+                Self::Answer(answer) => {
+                    if let AnswerOf::Given(inner) = answer.as_ref() {
+                        stack.push((inner, depth + 1));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Validates invariants and returns the canonical encoding.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError`] if [`Self::validate`] rejects this value.
+    pub fn try_encode(&self) -> Result<Vec<u8>, DecodeError> {
+        self.validate()?;
+        Ok(self.encode())
+    }
+
     /// The canonical encoding of this value.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
@@ -121,6 +171,49 @@ fn put_len(out: &mut impl Sink, n: usize) {
 // ── nodes ───────────────────────────────────────────────────────────────────
 
 impl Node {
+    /// Checks every invariant `decode_node` enforces without allocating bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError`] if any field violates §7.3.1 (empty call name,
+    /// backwards span, stratum past `MAX_STRATUM`, or invalid literal value).
+    pub fn validate(&self) -> Result<(), DecodeError> {
+        let check_span = |span: &Span| {
+            if span.end < span.start {
+                Err(DecodeError::BackwardsSpan { start: span.start, end: span.end })
+            } else {
+                Ok(())
+            }
+        };
+        let check_call = |call: &Call| {
+            if call.function.is_empty() { Err(DecodeError::EmptyCallName) } else { Ok(()) }
+        };
+        let check_stratum = |s: u8| {
+            if s > MAX_STRATUM { Err(DecodeError::NoSuchStratum(s)) } else { Ok(()) }
+        };
+        match self {
+            Self::Literal(v) => v.validate(),
+            Self::Apply { .. } => Ok(()),
+            Self::Hole { call, stratum, span } | Self::Witness { stratum, call, span, .. } => {
+                check_stratum(*stratum)?;
+                check_call(call)?;
+                check_span(span)
+            }
+            Self::Deposit { span, .. } => check_span(span),
+            Self::Trace { depth, .. } => check_stratum(*depth),
+        }
+    }
+
+    /// Validates invariants and returns the canonical encoding.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError`] if [`Self::validate`] rejects this node.
+    pub fn try_encode(&self) -> Result<Vec<u8>, DecodeError> {
+        self.validate()?;
+        Ok(self.encode())
+    }
+
     /// The canonical encoding of this node.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
@@ -240,6 +333,13 @@ pub enum DecodeError {
     BadAnswer(u8),
     /// A refusal code outside the closed set of six.
     NoSuchRefusal(u8),
+    /// An encoded object exceeding `MAX_OBJECT_BYTES`.
+    TooLarge {
+        /// Encoded byte length of the object.
+        bytes: usize,
+        /// Maximum permitted encoded byte length.
+        limit: usize,
+    },
 }
 
 impl fmt::Display for DecodeError {
@@ -269,6 +369,9 @@ impl fmt::Display for DecodeError {
                 write!(f, "an Answer is given (0x00) or refused (0x01), this is {b:#04x}")
             }
             Self::NoSuchRefusal(c) => write!(f, "no refusal {c}; the highest is {MAX_REFUSAL}"),
+            Self::TooLarge { bytes, limit } => {
+                write!(f, "object is {bytes} bytes, past the {limit}-byte bound")
+            }
         }
     }
 }
@@ -288,6 +391,18 @@ pub enum Stored {
 }
 
 impl Stored {
+    /// Validates invariants and returns the canonical encoding.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError`] if the value or node violates canonical encoding rules.
+    pub fn try_encode(&self) -> Result<Vec<u8>, DecodeError> {
+        match self {
+            Self::Value(v) => v.try_encode(),
+            Self::Node(n) => n.try_encode(),
+        }
+    }
+
     /// The canonical encoding.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {

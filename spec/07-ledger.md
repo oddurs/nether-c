@@ -502,24 +502,28 @@ ENTRY  = cairn (32 bytes)
 - **Import (`import`).** Checks the 24-byte header, refusing an unknown magic or
   a mismatched domain version ([§7.7](#77-versioning)) before reading entries.
   For each of the `count` entries, `import` enforces `len <= MAX_OBJECT_BYTES`
-  (16 MiB) before allocating, rejects duplicate cairns within the bundle,
-  verifies canonical decoding and `cairn(payload) == cairn` before touching the
-  destination store, and then commits the object:
+  (64 MiB + 64 KiB framing) before allocating, rejects duplicate cairns and
+  out-of-order forward references within the bundle, verifies canonical decoding
+  and `cairn(payload) == cairn`, and stages raw verified entries in `tmp/`
+  without retaining decoded ASTs in RAM. After all `count` entries are read,
+  `import` verifies the 32-byte `blake3` trailer over the entire stream and
+  requires end-of-stream with no trailing bytes before committing any object to
+  the destination store:
   - if the destination store does not yet hold `cairn`, via `put`
-    ([§7.5](#75-the-store)), which writes reverse edges to `refs/` first and
-    atomically renames the object into `objects/`;
+    ([§7.5](#75-the-store)), which writes deduplicated reverse edges to `refs/`
+    first and atomically renames the object into `objects/`;
   - if the destination store already holds `cairn`, by verifying the existing
-    on-disk object via `get(cairn)` without overwriting it, and ensuring all of
-    its reverse edges are present in `refs/`.
-  After all `count` entries are read, `import` verifies the 32-byte `blake3`
-  trailer over the stream and requires end-of-stream with no trailing bytes.
-- **Interrupted or truncated import.** Because entries are ordered
-  leaves-before-referrers and each entry is verified before it is committed, an
-  import interrupted or truncated at any byte offset leaves the destination
-  store clean ([§7.5.2](#752-what-a-damaged-store-can-still-tell-you)) with a
-  verified, dependency-closed prefix of the bundle. Re-running `import` with the
-  complete bundle verifies the already-present prefix in place without
-  overwriting it and commits the remainder.
+    on-disk object directly without overwriting it, and ensuring all of its
+    reverse edges are present in `refs/`.
+- **Interrupted or truncated import.** Because raw verified entries are staged
+  in `tmp/` and committed only after the whole-stream trailer checks, an import
+  that is truncated, tampered with, or has trailing bytes commits nothing and
+  removes its staging file, leaving the destination store unchanged and clean
+  ([§7.5.2](#752-what-a-damaged-store-can-still-tell-you)). Because committed
+  entries are emitted in leaves-before-referrers order, a crash mid-commit still
+  leaves a verified, dependency-closed prefix; re-running `import` verifies the
+  already-present prefix in place without overwriting it and commits the
+  remainder.
 
 ### 7.5.5 Packages
 
@@ -567,7 +571,9 @@ An implementation that writes or resolves a package MUST enforce five rules:
    post-order (every dependency before the packages that depend on it, ending
    with the root package). The resolved source unit is the concatenation of
    each package's verified `entrypoint` bytes in that topological order,
-   addressed by the cairn of the resulting `Bytes` value.
+   inserting a single `\n` byte between consecutive non-empty entrypoints when
+   the preceding bytes do not already end with `\n`, addressed by the cairn of
+   the resulting `Bytes` value.
 5. **Explicit failure on missing, corrupt or malformed objects.** A cairn
    establishes byte identity, not availability. If the root package, any
    transitive dependency package, or any `entrypoint` `Bytes` object is absent

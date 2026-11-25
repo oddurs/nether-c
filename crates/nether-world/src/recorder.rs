@@ -1,7 +1,7 @@
 //! Writing an answer down, and the proof that it was written.
 
 use nether_core::Depth;
-use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
 
 use crate::provider::Refuse;
 
@@ -70,6 +70,71 @@ impl<'a> Recorder<'a> {
     #[must_use]
     pub const fn store(&self) -> &Store {
         self.store
+    }
+
+    /// Reads argument `index` of `call` from the ledger, propagating any
+    /// [`StoreError`] rather than disguising store corruption or missing
+    /// argument objects as malformed program inputs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] if the argument cairn cannot be read or verified.
+    pub fn arg(&self, call: &Call, index: usize) -> Result<Option<Value>, StoreError> {
+        let Some(&cairn) = call.args.get(index) else {
+            return Ok(None);
+        };
+        match self.store.get(cairn)? {
+            Stored::Value(v) => Ok(Some(v)),
+            Stored::Node(_) => Ok(None),
+        }
+    }
+
+    /// Reads a `Str` argument from `call` at `index`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`StoreError`] from [`Self::arg`].
+    pub fn arg_str(&self, call: &Call, index: usize) -> Result<Option<String>, StoreError> {
+        Ok(match self.arg(call, index)? {
+            Some(Value::Str(s)) => Some(s),
+            _ => None,
+        })
+    }
+
+    /// Reads a `Bytes` argument from `call` at `index`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`StoreError`] from [`Self::arg`].
+    pub fn arg_bytes(&self, call: &Call, index: usize) -> Result<Option<Vec<u8>>, StoreError> {
+        Ok(match self.arg(call, index)? {
+            Some(Value::Bytes(b)) => Some(b),
+            _ => None,
+        })
+    }
+
+    /// Reads a `Cairn` argument from `call` at `index`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`StoreError`] from [`Self::arg`].
+    pub fn arg_cairn(&self, call: &Call, index: usize) -> Result<Option<Cairn>, StoreError> {
+        Ok(match self.arg(call, index)? {
+            Some(Value::Cairn(c)) => Some(c),
+            _ => None,
+        })
+    }
+
+    /// Reads an `I64` argument from `call` at `index`.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`StoreError`] from [`Self::arg`].
+    pub fn arg_int(&self, call: &Call, index: usize) -> Result<Option<i64>, StoreError> {
+        Ok(match self.arg(call, index)? {
+            Some(Value::Int(n)) => Some(n),
+            _ => None,
+        })
     }
 
     /// Write down what the world said, and hand back the proof.

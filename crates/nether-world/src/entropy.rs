@@ -17,7 +17,7 @@ use std::fs::File;
 use std::io::Read;
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Call, Span, Stored, Value};
+use nether_ledger::{Call, Span, Value};
 
 use crate::provider::{Provider, Refuse, given};
 use crate::recorder::{Recorded, Recorder};
@@ -55,14 +55,6 @@ impl Entropy {
     }
 }
 
-/// How many bytes the call asked for, if it asked for a number at all.
-fn many(into: &Recorder, call: &Call) -> Option<i64> {
-    match into.store().get(*call.args.first()?) {
-        Ok(Stored::Value(Value::Int(n))) => Some(n),
-        _ => None,
-    }
-}
-
 impl Provider for Entropy {
     fn capability(&self) -> Capability {
         Capability::Entropy
@@ -75,7 +67,7 @@ impl Provider for Entropy {
     fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
         // §9.7 types `draw` as `Bytes` and not `Answer<Bytes>`: there is no no
         // to say. So every way of asking wrongly is §9.9's other failure.
-        let Some(n) = many(into, call) else {
+        let Some(n) = into.arg_int(call, 0)? else {
             return Err(Refuse::Collapse("`draw` was not asked for a number of bytes".into()));
         };
         if n < 0 {

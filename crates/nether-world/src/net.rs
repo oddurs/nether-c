@@ -18,11 +18,11 @@
 
 use core::fmt::Write as _;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Call, Refusal, Span, Store, Stored, Value};
+use nether_ledger::{Call, Refusal, Span, Value};
 
 use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
@@ -35,12 +35,11 @@ const PATIENCE: Duration = Duration::from_secs(30);
 /// which is a refusal the program can see rather than a machine that stops.
 const MOST: u64 = 64 * 1024 * 1024;
 
-/// How much of one may be the status line and the headers.
-///
-/// The body has had a bound since this was written and nothing above it did,
-/// so a server that sent one line and never a newline grew a `String` until
-/// the timeout. Sixty-four kilobytes is more than any real response uses.
+/// How much of one may be the status line, headers, or chunked trailers.
 const MOST_HEAD: u64 = 64 * 1024;
+
+/// Maximum length of a single chunk-size or chunk-terminator line.
+const MAX_CHUNK_LINE: u64 = 8 * 1024;
 
 /// The network, reaching only where the invocation said. §8.3.2.
 pub struct Net {
@@ -67,14 +66,41 @@ impl Net {
 
     /// Whether §8.3.2 declared this authority.
     ///
-    /// A bare host matches any port, because the port is a detail of the
-    /// service and the host is the party being trusted. It matches that host
-    /// exactly: a subdomain is a different party, and a reach that spread to
-    /// one would be a reach nobody declared.
+    /// Supports hostnames, IPv4, bare IPv6 (`::1`), and RFC 3986 bracketed
+    /// IPv6 (`[::1]` or `[::1]:8080`). A bare host matches any port; host
+    /// comparison is exact so subdomains never inherit a parent's reach.
     fn reaches(&self, host: &str, port: u16) -> bool {
-        self.reach.iter().any(|named| match named.rsplit_once(':') {
-            Some((h, p)) => h.eq_ignore_ascii_case(host) && p.parse() == Ok(port),
-            None => named.eq_ignore_ascii_case(host),
+        let host_v6 = host.parse::<Ipv6Addr>().ok();
+        self.reach.iter().any(|named| {
+            let (entry_host, entry_port) = if let Some(rest) = named.strip_prefix('[') {
+                let Some((inner, after)) = rest.split_once(']') else {
+                    return false;
+                };
+                if after.is_empty() {
+                    (inner, None)
+                } else if let Some(p) = after.strip_prefix(':') {
+                    let Ok(parsed) = p.parse::<u16>() else { return false };
+                    (inner, Some(parsed))
+                } else {
+                    return false;
+                }
+            } else if named.parse::<Ipv6Addr>().is_ok() {
+                (named.as_str(), None)
+            } else if let Some((h, p)) = named.rsplit_once(':') {
+                let Ok(parsed) = p.parse::<u16>() else { return false };
+                (h, Some(parsed))
+            } else {
+                (named.as_str(), None)
+            };
+            if let Some(p) = entry_port
+                && p != port
+            {
+                return false;
+            }
+            if let (Some(a), Ok(b)) = (host_v6, entry_host.parse::<Ipv6Addr>()) {
+                return a == b;
+            }
+            entry_host.eq_ignore_ascii_case(host)
         })
     }
 }
@@ -97,6 +123,13 @@ fn printable(text: &str) -> bool {
     text.chars().all(|c| ('\u{21}'..='\u{7e}').contains(&c))
 }
 
+/// RFC 3986 §3.1: `scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`.
+fn valid_scheme(scheme: &str) -> bool {
+    let mut bytes = scheme.bytes();
+    bytes.next().is_some_and(|b| b.is_ascii_alphabetic())
+        && bytes.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
+}
+
 /// Whether that is a host and not something wearing one.
 ///
 /// Letters, digits, `-` and `.`. No `@`, because `a@b` is a host with another
@@ -113,6 +146,14 @@ fn hostlike(host: &str) -> bool {
         })
 }
 
+fn parse_port(p: &str) -> Result<u16, Refusal> {
+    if p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(Refusal::Malformed);
+    }
+    let port: u16 = p.parse().map_err(|_| Refusal::Malformed)?;
+    if port == 0 { Err(Refusal::Malformed) } else { Ok(port) }
+}
+
 /// Split a URL, or say which no it is.
 ///
 /// Hand-written, like everything else here. What §9.6 needs is the scheme, the
@@ -126,6 +167,9 @@ fn split(url: &str) -> Result<Asked, Refusal> {
     let Some((scheme, rest)) = url.split_once("://") else {
         return Err(Refusal::Malformed);
     };
+    if !valid_scheme(scheme) {
+        return Err(Refusal::Malformed);
+    }
     if !scheme.eq_ignore_ascii_case("http") {
         return Err(Refusal::Denied);
     }
@@ -137,18 +181,29 @@ fn split(url: &str) -> Result<Asked, Refusal> {
     if authority.is_empty() {
         return Err(Refusal::Malformed);
     }
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) => {
-            if p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()) {
-                return Err(Refusal::Malformed);
-            }
-            (h, p.parse().map_err(|_| Refusal::Malformed)?)
+    let (host, port) = if let Some(after_open) = authority.strip_prefix('[') {
+        let Some((inner, after_close)) = after_open.split_once(']') else {
+            return Err(Refusal::Malformed);
+        };
+        inner.parse::<Ipv6Addr>().map_err(|_| Refusal::Malformed)?;
+        let port = if after_close.is_empty() {
+            80u16
+        } else if let Some(p) = after_close.strip_prefix(':') {
+            parse_port(p)?
+        } else {
+            return Err(Refusal::Malformed);
+        };
+        (inner, port)
+    } else {
+        let (h, p) = match authority.rsplit_once(':') {
+            Some((h, p)) => (h, parse_port(p)?),
+            None => (authority, 80u16),
+        };
+        if !hostlike(h) {
+            return Err(Refusal::Malformed);
         }
-        None => (authority, 80u16),
+        (h, p)
     };
-    if port == 0 || !hostlike(host) {
-        return Err(Refusal::Malformed);
-    }
     Ok(Asked { host: host.to_owned(), port, path })
 }
 
@@ -160,14 +215,6 @@ fn why(e: &std::io::Error) -> Refusal {
         // Everything a socket does wrong is the remote party not answering,
         // which is what `unreachable` means. §9.6 gives `get` that one.
         _ => Refusal::Unreachable,
-    }
-}
-
-/// The `Str` first argument both §9.6 functions take.
-fn url_of(store: &Store, call: &Call) -> Option<String> {
-    match store.get(*call.args.first()?) {
-        Ok(Stored::Value(Value::Str(s))) => Some(s),
-        _ => None,
     }
 }
 
@@ -188,7 +235,7 @@ impl Provider for Net {
         let stratum = if call.function == "post" { Depth::NET_WRITE } else { Depth::NET };
         // §6.3: a world-call whose argument is not finished cannot have become
         // a hole, and §04 types this one as a `Str`.
-        let Some(url) = url_of(into.store(), call) else {
+        let Some(url) = into.arg_str(call, 0)? else {
             return into.record(call, stratum, span, &refused(Refusal::Malformed));
         };
         let said = match split(&url) {
@@ -197,7 +244,7 @@ impl Provider for Net {
             // after: a reach that is checked by whether the connection failed
             // is not a reach.
             Ok(at) if !self.reaches(&at.host, at.port) => refused(Refusal::Denied),
-            Ok(at) => Self::speak(&call.function, &at, call, into),
+            Ok(at) => Self::speak(&call.function, &at, call, into)?,
         };
         into.record(call, stratum, span, &said)
     }
@@ -205,19 +252,19 @@ impl Provider for Net {
 
 impl Net {
     /// One request, one response, and what it said.
-    fn speak(function: &str, at: &Asked, call: &Call, into: &Recorder) -> Value {
+    fn speak(function: &str, at: &Asked, call: &Call, into: &Recorder) -> Result<Value, Refuse> {
         let body = if function == "post" {
-            match call.args.get(1).map(|c| into.store().get(*c)) {
-                Some(Ok(Stored::Value(Value::Bytes(b)))) => b,
-                _ => return refused(Refusal::Malformed),
-            }
+            let Some(b) = into.arg_bytes(call, 1)? else {
+                return Ok(refused(Refusal::Malformed));
+            };
+            b
         } else {
             Vec::new()
         };
-        match fetch(function, at, &body) {
+        Ok(match fetch(function, at, &body) {
             Ok(bytes) => given(function, Value::Bytes(bytes)),
             Err(no) => refused(no),
-        }
+        })
     }
 }
 
@@ -228,12 +275,35 @@ fn remaining(deadline: Instant) -> Result<Duration, Refusal> {
         .ok_or(Refusal::Unreachable)
 }
 
+fn resolve_with_deadline(
+    host: &str,
+    port: u16,
+    deadline: Instant,
+) -> Result<Vec<SocketAddr>, Refusal> {
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return Ok(vec![SocketAddr::new(ip, port)]);
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let owned = host.to_owned();
+    std::thread::spawn(move || {
+        let res = (owned.as_str(), port).to_socket_addrs().map(Iterator::collect::<Vec<_>>);
+        let _ = tx.send(res);
+    });
+    match rx.recv_timeout(remaining(deadline)?) {
+        Ok(Ok(addrs)) => Ok(addrs),
+        Ok(Err(e)) => Err(why(&e)),
+        Err(_) => Err(Refusal::Unreachable),
+    }
+}
+
 fn connect_with_deadline(host: &str, port: u16, deadline: Instant) -> Result<TcpStream, Refusal> {
-    let addrs = (host, port).to_socket_addrs().map_err(|e| why(&e))?;
+    let addrs = resolve_with_deadline(host, port, deadline)?;
     let mut last = Refusal::Unreachable;
-    for addr in addrs {
+    for (idx, addr) in addrs.iter().enumerate() {
         let left = remaining(deadline)?;
-        match TcpStream::connect_timeout(&addr, left) {
+        let rem_addrs = u32::try_from(addrs.len() - idx).unwrap_or(1);
+        let slice = (left / rem_addrs).max(Duration::from_millis(500)).min(left);
+        match TcpStream::connect_timeout(addr, slice) {
             Ok(sock) => return Ok(sock),
             Err(e) => last = why(&e),
         }
@@ -261,8 +331,8 @@ fn write_all_with_deadline(
 /// HTTP/1.1, by hand, over one connection that is closed when it is done.
 fn fetch(function: &str, at: &Asked, body: &[u8]) -> Result<Vec<u8>, Refusal> {
     let verb = if function == "post" { "POST" } else { "GET" };
-    let host_header =
-        if at.port == 80 { at.host.clone() } else { format!("{}:{}", at.host, at.port) };
+    let bracketed = if at.host.contains(':') { format!("[{}]", at.host) } else { at.host.clone() };
+    let host_header = if at.port == 80 { bracketed } else { format!("{bracketed}:{}", at.port) };
     let mut request = format!(
         "{verb} {} HTTP/1.1\r\nHost: {host_header}\r\nConnection: close\r\nAccept: */*\r\n",
         at.path
@@ -271,12 +341,13 @@ fn fetch(function: &str, at: &Asked, body: &[u8]) -> Result<Vec<u8>, Refusal> {
         let _ = write!(request, "Content-Length: {}\r\n", body.len());
     }
     request.push_str("\r\n");
-    let mut sending = request.into_bytes();
-    sending.extend_from_slice(body);
 
     let deadline = Instant::now() + PATIENCE;
     let mut socket = connect_with_deadline(&at.host, at.port, deadline)?;
-    write_all_with_deadline(&mut socket, &sending, deadline)?;
+    write_all_with_deadline(&mut socket, request.as_bytes(), deadline)?;
+    if !body.is_empty() {
+        write_all_with_deadline(&mut socket, body, deadline)?;
+    }
 
     let mut reading = BufReader::new(socket);
     let head = head_of(&mut reading, deadline)?;
@@ -312,7 +383,9 @@ fn read_line_bytes(
         if *budget == 0 {
             return Err(Refusal::Exhausted);
         }
-        reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
+        if reading.buffer().is_empty() {
+            reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
+        }
         let avail = match reading.fill_buf() {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
@@ -458,7 +531,9 @@ fn read_plain(
         {
             break;
         }
-        reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
+        if reading.buffer().is_empty() {
+            reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
+        }
         let want = match expected {
             Some(len) => {
                 usize::try_from(len - said.len() as u64).unwrap_or(buf.len()).min(buf.len())
@@ -488,9 +563,12 @@ fn read_plain(
 
 fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<Vec<u8>, Refusal> {
     let mut said = Vec::new();
-    let mut framing_budget = MOST_HEAD;
+    let mut wire_framing = MOST;
     loop {
-        let size_line = read_line_bytes(reading, &mut framing_budget, deadline)?;
+        let mut line_budget = MAX_CHUNK_LINE.min(wire_framing);
+        let size_line = read_line_bytes(reading, &mut line_budget, deadline)?;
+        wire_framing =
+            wire_framing.checked_sub(size_line.len() as u64).ok_or(Refusal::Exhausted)?;
         let text = core::str::from_utf8(&size_line).map_err(|_| Refusal::Unreachable)?;
         let line = strip_http_eol(text)?;
         let hex = line.split(';').next().unwrap_or("").trim_end_matches([' ', '\t']);
@@ -499,8 +577,9 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
         }
         let size = u64::from_str_radix(hex, 16).map_err(|_| Refusal::Unreachable)?;
         if size == 0 {
+            let mut trailer_budget = MOST_HEAD.min(wire_framing);
             loop {
-                let trailer = read_line_bytes(reading, &mut framing_budget, deadline)?;
+                let trailer = read_line_bytes(reading, &mut trailer_budget, deadline)?;
                 if trailer == b"\r\n" || trailer == b"\n" {
                     return Ok(said);
                 }
@@ -512,7 +591,12 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
         let mut left = usize::try_from(size).map_err(|_| Refusal::Exhausted)?;
         let mut buf = [0u8; 8192];
         while left > 0 {
-            reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
+            if reading.buffer().is_empty() {
+                reading
+                    .get_ref()
+                    .set_read_timeout(Some(remaining(deadline)?))
+                    .map_err(|e| why(&e))?;
+            }
             let want = left.min(buf.len());
             let n = match reading.read(&mut buf[..want]) {
                 Ok(n) => n,
@@ -525,7 +609,9 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
             said.extend_from_slice(&buf[..n]);
             left -= n;
         }
-        let crlf = read_line_bytes(reading, &mut framing_budget, deadline)?;
+        let mut crlf_budget = MAX_CHUNK_LINE.min(wire_framing);
+        let crlf = read_line_bytes(reading, &mut crlf_budget, deadline)?;
+        wire_framing = wire_framing.checked_sub(crlf.len() as u64).ok_or(Refusal::Exhausted)?;
         if crlf != b"\r\n" && crlf != b"\n" {
             return Err(Refusal::Unreachable);
         }

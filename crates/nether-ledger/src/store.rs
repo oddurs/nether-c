@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
-use std::io::{self, Read as _, Write as _};
+use std::io::{self, Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -144,12 +144,90 @@ struct Seen {
     reads: u64,
 }
 
-/// How many encoded bytes `Seen` holds before it starts again. Starting again
-/// is the whole eviction policy: a burial reads its working set, and a bound
-/// that is simple to state is one that is simple to trust.
+/// How many estimated heap bytes `Seen` holds before it starts again.
 const SEEN_BYTES: usize = 64 << 20;
 const BUNDLE_MAGIC: &[u8] = b"netherc/cairn/v4\x00bundle\x00";
-const MAX_BUNDLE_OBJECT: usize = 16 << 20;
+
+/// Maximum encoded size of a single stored or bundled object (64 MiB payload +
+/// 64 KiB framing). Shared across `Store::put`, `Store::export`, `Store::import`,
+/// and all world providers so every provider output round-trips through bundles.
+pub const MAX_OBJECT_BYTES: usize = 64 * 1024 * 1024 + 65_536;
+
+/// Estimate the in-memory footprint of a decoded `Stored` object so dense
+/// `Value::Array` trees (e.g. millions of 1-byte `Value::Unit` elements) cannot
+/// pin gigabytes inside `Seen` under a raw encoded-byte budget.
+fn stored_weight(stored: &Stored, encoded_len: usize) -> usize {
+    let mut weight = core::mem::size_of::<Stored>();
+    let mut stack: Vec<&Value> = Vec::new();
+    match stored {
+        Stored::Value(v) => stack.push(v),
+        Stored::Node(n) => match n {
+            Node::Literal(v) => stack.push(v),
+            Node::Apply { args, .. } => {
+                weight = weight.saturating_add(args.len().saturating_mul(32));
+            }
+            Node::Hole { call, .. } | Node::Witness { call, .. } => {
+                weight = weight
+                    .saturating_add(call.function.len())
+                    .saturating_add(call.args.len().saturating_mul(32));
+            }
+            Node::Deposit { .. } => {}
+            Node::Trace { holes, witnesses, deposits, .. } => {
+                let n_refs =
+                    holes.len().saturating_add(witnesses.len()).saturating_add(deposits.len());
+                weight = weight.saturating_add(n_refs.saturating_mul(32));
+            }
+        },
+    }
+    let val_sz = core::mem::size_of::<Value>();
+    while let Some(v) = stack.pop() {
+        weight = weight.saturating_add(val_sz);
+        match v {
+            Value::Bytes(b) => weight = weight.saturating_add(b.len()),
+            Value::Str(s) => weight = weight.saturating_add(s.len()),
+            Value::Struct { name, fields } => {
+                weight = weight.saturating_add(name.len());
+                stack.extend(fields);
+            }
+            Value::Array(items) => stack.extend(items),
+            Value::Answer(ans) => {
+                if let crate::AnswerOf::Given(inner) = ans.as_ref() {
+                    stack.push(inner);
+                }
+            }
+            Value::Unit
+            | Value::Bool(_)
+            | Value::Int(_)
+            | Value::Cairn(_)
+            | Value::Shade { .. }
+            | Value::Refusal(_) => {}
+        }
+    }
+    weight.max(encoded_len)
+}
+
+/// Removes a temporary staging file in `tmp/` when dropped.
+struct TempFileGuard(PathBuf);
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+fn read_bounded_object(path: &Path) -> Result<Vec<u8>, StoreError> {
+    let meta = fs::metadata(path)?;
+    if meta.len() > MAX_OBJECT_BYTES as u64 {
+        return Err(StoreError::Bundle("bundle object exceeds size bound"));
+    }
+    let file = fs::File::open(path)?;
+    let mut bytes = Vec::with_capacity(usize::try_from(meta.len()).unwrap_or(0).min(64 * 1024));
+    file.take(MAX_OBJECT_BYTES as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > MAX_OBJECT_BYTES {
+        return Err(StoreError::Bundle("bundle object exceeds size bound"));
+    }
+    Ok(bytes)
+}
 
 fn verify_bytes(asked: Cairn, bytes: &[u8]) -> Result<Stored, StoreError> {
     let stored = decode_stored(bytes).map_err(|why| StoreError::Corrupt {
@@ -178,6 +256,12 @@ impl Store {
         Ok(Self { root, seen: Arc::default() })
     }
 
+    /// Opens an existing store without creating any directories on disk.
+    #[must_use]
+    pub fn open_readonly(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into(), seen: Arc::default() }
+    }
+
     fn fanned(&self, area: &str, cairn: Cairn) -> PathBuf {
         let hex = cairn.to_string();
         self.root.join(area).join(&hex[..2]).join(&hex[2..])
@@ -186,7 +270,7 @@ impl Store {
     /// Whether this store holds that name.
     #[must_use]
     pub fn has(&self, cairn: Cairn) -> bool {
-        self.fanned("objects", cairn).exists()
+        self.fanned("objects", cairn).is_file()
     }
 
     /// Writes a value or a node, and returns its name.
@@ -196,11 +280,17 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// [`StoreError::Invalid`] if the bytes would not decode — the store will
-    /// not write something it could never read back — or [`StoreError::Io`] if
-    /// they cannot be written.
+    /// [`StoreError::Invalid`] if the bytes would not decode or exceed
+    /// [`MAX_OBJECT_BYTES`] — the store will not write something it could never
+    /// read back or export — or [`StoreError::Io`] if they cannot be written.
     pub fn put(&self, stored: &Stored) -> Result<Cairn, StoreError> {
-        let bytes = stored.encode();
+        let bytes = stored.try_encode().map_err(StoreError::Invalid)?;
+        if bytes.len() > MAX_OBJECT_BYTES {
+            return Err(StoreError::Invalid(DecodeError::TooLarge {
+                bytes: bytes.len(),
+                limit: MAX_OBJECT_BYTES,
+            }));
+        }
 
         // The round trip, before anything reaches disk. It costs a decode per
         // put, which is the same work `get` does anyway, and it is the only
@@ -212,6 +302,19 @@ impl Store {
         self.put_verified(cairn, stored, &bytes)
     }
 
+    fn has_raw_ref(&self, target: Cairn, referrer: Cairn) -> Result<bool, StoreError> {
+        let path = self.fanned("refs", target);
+        let bytes = match fs::read(&path) {
+            Ok(b) => b,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(e) => return Err(StoreError::Io(e)),
+        };
+        if bytes.len() % 32 != 0 {
+            return Err(StoreError::Ragged { of: target, bytes: bytes.len() });
+        }
+        Ok(bytes.chunks_exact(32).any(|chunk| chunk == referrer.as_bytes()))
+    }
+
     fn put_verified(
         &self,
         cairn: Cairn,
@@ -221,6 +324,14 @@ impl Store {
         if let Ok(existing) = fs::read(self.fanned("objects", cairn))
             && verify_bytes(cairn, &existing).is_ok()
         {
+            if let Stored::Node(node) = stored {
+                let mut targets = BTreeSet::new();
+                for target in node.references() {
+                    if targets.insert(target) && !self.has_raw_ref(target, cairn)? {
+                        self.add_ref(target, cairn)?;
+                    }
+                }
+            }
             return Ok(cairn);
         }
 
@@ -232,8 +343,11 @@ impl Store {
         // nothing afterwards can tell that provenance is now incomplete. A
         // visible inconsistency beats a silent one.
         if let Stored::Node(node) = stored {
+            let mut targets = BTreeSet::new();
             for target in node.references() {
-                self.add_ref(target, cairn)?;
+                if targets.insert(target) {
+                    self.add_ref(target, cairn)?;
+                }
             }
         }
 
@@ -339,13 +453,14 @@ impl Store {
             Err(e) => return Err(StoreError::Io(e)),
         };
         let stored = verify_bytes(cairn, &bytes)?;
-        if bytes.len() <= SEEN_BYTES {
+        let weight = stored_weight(&stored, bytes.len());
+        if weight <= SEEN_BYTES {
             let mut seen = self.seen();
-            if seen.bytes.saturating_add(bytes.len()) > SEEN_BYTES {
+            if seen.bytes.saturating_add(weight) > SEEN_BYTES {
                 *seen = Seen { reads: seen.reads, ..Seen::default() };
             }
             if seen.held.insert(cairn, stored.clone()).is_none() {
-                seen.bytes = seen.bytes.saturating_add(bytes.len());
+                seen.bytes = seen.bytes.saturating_add(weight);
             }
         }
         Ok(stored)
@@ -447,7 +562,7 @@ impl Store {
                 let path = entry.path();
                 if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
                     n.len() == 2
-                        && n.bytes().all(|b| b.is_ascii_hexdigit())
+                        && n.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
                         && n.starts_with(prefix)
                 }) {
                     list.push(path);
@@ -554,7 +669,7 @@ impl Store {
             let Stored::Node(node @ Node::Trace { .. }) = stored else { continue };
             let (mut bad_c, mut bad_m, mut unknowable) = (BTreeSet::new(), BTreeSet::new(), false);
             let mut seen_r = BTreeSet::new();
-            let nodes = node.nodes();
+            let nodes: HashSet<Cairn> = node.nodes().into_iter().collect();
             let mut todo: Vec<(Cairn, bool)> =
                 node.references().into_iter().map(|r| (r, nodes.contains(&r))).collect();
             while let Some((r, is_node)) = todo.pop() {
@@ -563,7 +678,7 @@ impl Store {
                 }
                 match verified.get(&r) {
                     Some(Stored::Node(child)) => {
-                        let cn = child.nodes();
+                        let cn: HashSet<Cairn> = child.nodes().into_iter().collect();
                         todo.extend(
                             child.references().into_iter().map(|cr| (cr, cn.contains(&cr))),
                         );
@@ -652,10 +767,7 @@ impl Store {
         let mut found: BTreeMap<Cairn, (Vec<Cairn>, PathBuf)> = BTreeMap::new();
         let mut total_bytes: usize = 0;
         for (cairn, path) in files {
-            let bytes = fs::read(&path)?;
-            if bytes.len() > MAX_BUNDLE_OBJECT {
-                return Err(StoreError::Bundle("bundle object exceeds size bound"));
-            }
+            let bytes = read_bounded_object(&path)?;
             total_bytes = total_bytes
                 .checked_add(bytes.len())
                 .filter(|&t| t <= MAX_BUNDLE_BYTES)
@@ -711,7 +823,7 @@ impl Store {
         send(BUNDLE_MAGIC)?;
         send(&(entries.len() as u64).to_be_bytes())?;
         for (cairn, path) in &entries {
-            let bytes = fs::read(path)?;
+            let bytes = read_bounded_object(path)?;
             verify_bytes(*cairn, &bytes)?;
             send(cairn.as_bytes())?;
             send(&(bytes.len() as u64).to_be_bytes())?;
@@ -721,8 +833,21 @@ impl Store {
         Ok(entries.len())
     }
 
-    /// Imports a portable bundle (`spec/07-ledger.md` §7.5.4), verifying each
-    /// object before committing it and rebuilding `refs/`, returning the count.
+    fn create_staging_file(&self) -> io::Result<(TempFileGuard, fs::File)> {
+        fs::create_dir_all(self.root.join("tmp"))?;
+        loop {
+            let candidate = self.temp_path("import");
+            match fs::OpenOptions::new().read(true).write(true).create_new(true).open(&candidate) {
+                Ok(f) => return Ok((TempFileGuard(candidate), f)),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Imports a portable bundle (`spec/07-ledger.md` §7.5.4), staging verified
+    /// raw entries in `tmp/` until the whole-stream trailer passes before
+    /// committing objects and rebuilding `refs/`, returning the count.
     ///
     /// # Errors
     ///
@@ -751,20 +876,21 @@ impl Store {
             .ok()
             .filter(|&n| n <= MAX_BUNDLE_OBJECTS)
             .ok_or(StoreError::Bundle("bundle count exceeds bound"))?;
+        let (_guard, stage_file) = self.create_staging_file()?;
+        let mut stage_out = io::BufWriter::new(stage_file);
         let mut seen = BTreeSet::new();
         let mut expected_before = BTreeSet::new();
         let mut total_bytes: usize = 0;
-        let mut staged: Vec<(Cairn, Stored, Vec<u8>)> = Vec::with_capacity(count.min(4096));
         for _ in 0..count {
-            let entry = Self::read_bundle_entry(
+            Self::stage_bundle_entry(
                 src,
                 &mut hasher,
+                &mut stage_out,
                 MAX_BUNDLE_BYTES,
                 &mut total_bytes,
                 &mut seen,
                 &mut expected_before,
             )?;
-            staged.push(entry);
         }
         let mut trailer = [0u8; 32];
         src.read_exact(&mut trailer).map_err(|e| {
@@ -777,11 +903,38 @@ impl Store {
         if trailer != *hasher.finalize().as_bytes() {
             return Err(StoreError::Bundle("bundle trailer mismatch"));
         }
-        if src.read(&mut [0u8; 1])? != 0 {
-            return Err(StoreError::Bundle("trailing bytes after bundle"));
+        loop {
+            match src.read(&mut [0u8; 1]) {
+                Ok(0) => break,
+                Ok(_) => return Err(StoreError::Bundle("trailing bytes after bundle")),
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(StoreError::Io(e)),
+            }
         }
+        stage_out.flush()?;
+        let mut stage_file = stage_out.into_inner().map_err(io::IntoInnerError::into_error)?;
+        stage_file.seek(SeekFrom::Start(0))?;
+        self.commit_staged_bundle(&mut io::BufReader::new(stage_file), count)?;
+        Ok(count)
+    }
+
+    fn commit_staged_bundle(
+        &self,
+        staged: &mut impl io::Read,
+        count: usize,
+    ) -> Result<(), StoreError> {
         let mut ref_cache: HashMap<Cairn, HashSet<Cairn>> = HashMap::new();
-        for (cairn, stored, bytes) in staged {
+        for _ in 0..count {
+            let mut raw = [0u8; 32];
+            staged.read_exact(&mut raw)?;
+            let cairn = Cairn::from_bytes(raw);
+            let mut len_buf = [0u8; 8];
+            staged.read_exact(&mut len_buf)?;
+            let len = usize::try_from(u64::from_be_bytes(len_buf))
+                .map_err(|_| StoreError::Bundle("bundle object exceeds size bound"))?;
+            let mut bytes = vec![0u8; len];
+            staged.read_exact(&mut bytes)?;
+            let stored = verify_bytes(cairn, &bytes)?;
             if self.has(cairn) {
                 // §7.5.4: verify the on-disk object directly rather than relying
                 // on the in-memory `self.seen` cache.
@@ -804,17 +957,18 @@ impl Store {
                 self.put_verified(cairn, &stored, &bytes)?;
             }
         }
-        Ok(count)
+        Ok(())
     }
 
-    fn read_bundle_entry(
+    fn stage_bundle_entry(
         src: &mut impl io::Read,
         hasher: &mut blake3::Hasher,
+        stage_out: &mut impl io::Write,
         max_bundle_bytes: usize,
         total_bytes: &mut usize,
         seen: &mut BTreeSet<Cairn>,
         expected_before: &mut BTreeSet<Cairn>,
-    ) -> Result<(Cairn, Stored, Vec<u8>), StoreError> {
+    ) -> Result<(), StoreError> {
         let mut raw = [0u8; 32];
         read_hashed(src, hasher, &mut raw)?;
         let cairn = Cairn::from_bytes(raw);
@@ -828,13 +982,13 @@ impl Store {
         read_hashed(src, hasher, &mut u8s)?;
         let len = usize::try_from(u64::from_be_bytes(u8s))
             .ok()
-            .filter(|&n| n <= MAX_BUNDLE_OBJECT)
+            .filter(|&n| n <= MAX_OBJECT_BYTES)
             .ok_or(StoreError::Bundle("bundle object exceeds size bound"))?;
         *total_bytes = total_bytes
             .checked_add(len)
             .filter(|&t| t <= max_bundle_bytes)
             .ok_or(StoreError::Bundle("bundle exceeds total size bound"))?;
-        // Read incrementally so a truncated stream cannot force a 16 MiB
+        // Read incrementally so a truncated stream cannot force a 64 MiB
         // pre-allocation before hitting EOF.
         let mut bytes = Vec::with_capacity(len.min(64 * 1024));
         src.by_ref().take(len as u64).read_to_end(&mut bytes)?;
@@ -850,7 +1004,11 @@ impl Store {
                 }
             }
         }
-        Ok((cairn, stored, bytes))
+        drop(stored);
+        stage_out.write_all(cairn.as_bytes())?;
+        stage_out.write_all(&(len as u64).to_be_bytes())?;
+        stage_out.write_all(&bytes)?;
+        Ok(())
     }
 }
 
@@ -1148,7 +1306,10 @@ impl Package {
                 visiting.remove(&done.pkg);
                 if visited.insert(done.pkg) {
                     closure.push(done.pkg);
-                    if !unit_source.is_empty() && !unit_source.ends_with(b"\n") {
+                    if !done.bytes.is_empty()
+                        && !unit_source.is_empty()
+                        && !unit_source.ends_with(b"\n")
+                    {
                         unit_source.push(b'\n');
                     }
                     unit_source.extend_from_slice(&done.bytes);
@@ -2142,8 +2303,91 @@ mod tests {
         let huge_path = big.fanned("objects", huge);
         std::fs::create_dir_all(huge_path.parent().unwrap()).unwrap();
         let f = std::fs::File::create(&huge_path).unwrap();
-        f.set_len(16 * 1024 * 1024 + 1).unwrap();
+        f.set_len(super::MAX_OBJECT_BYTES as u64 + 1).unwrap();
         let mut sink = Vec::new();
         assert!(matches!(big.export(&mut sink), Err(StoreError::Bundle(_))));
+    }
+
+    #[test]
+    fn ledger_hardening_c8_h11_h25_m13_m15_and_l8() {
+        // H25: try_encode rejects invalid states before encoding.
+        assert!(matches!(
+            Value::Shade { origin: 9, value: Cairn::of_encoded(b"x") }.try_encode(),
+            Err(crate::DecodeError::NoSuchStratum(9))
+        ));
+        assert!(matches!(
+            Value::Struct { name: String::new(), fields: vec![] }.try_encode(),
+            Err(crate::DecodeError::EmptyStructName)
+        ));
+        assert!(matches!(
+            Node::Deposit {
+                value: Cairn::of_encoded(b"x"),
+                span: Span { source: Cairn::of_encoded(b"x"), start: 5, end: 2 }
+            }
+            .try_encode(),
+            Err(crate::DecodeError::BackwardsSpan { start: 5, end: 2 })
+        ));
+
+        // H11: objects > 16 MiB (e.g. 17 MiB) round-trip cleanly through export/import,
+        // while objects > MAX_OBJECT_BYTES are refused by Store::put.
+        let src_dir = Scratch::new();
+        let src = src_dir.store();
+        let big_val = Stored::Value(Value::Bytes(vec![0xAB; 17 * 1024 * 1024]));
+        let big_c = src.put(&big_val).unwrap();
+        let mut bundle = Vec::new();
+        assert_eq!(src.export(&mut bundle).unwrap(), 1);
+        let dst_dir = Scratch::new();
+        let dst = dst_dir.store();
+        assert_eq!(dst.import(&mut &bundle[..]).unwrap(), 1);
+        assert!(dst.has(big_c));
+        // C8: tmp/ staging file is removed after import.
+        assert_eq!(std::fs::read_dir(dst.root.join("tmp")).unwrap().count(), 0);
+
+        let too_big = Stored::Value(Value::Bytes(vec![0u8; super::MAX_OBJECT_BYTES]));
+        assert!(matches!(
+            src.put(&too_big),
+            Err(StoreError::Invalid(crate::DecodeError::TooLarge { .. }))
+        ));
+
+        // M13: Package::resolve does not insert a stray `\n` before an empty entrypoint.
+        let pkg_dir = Scratch::new();
+        let pkg_store = pkg_dir.store();
+        let dep = Package::put(&pkg_store, b"I64 a = 1;", &[]).unwrap();
+        let root = Package::put(&pkg_store, b"", &[("dep", dep)]).unwrap();
+        let resolved = Package::resolve(&pkg_store, root).unwrap();
+        assert_eq!(resolved.unit_source, b"I64 a = 1;");
+
+        // M15: Store::put deduplicates repeated references and repairs missing refs/.
+        let ref_dir = Scratch::new();
+        let ref_store = ref_dir.store();
+        let v = ref_store.put(&Stored::Value(Value::Int(1))).unwrap();
+        let trace_node = Stored::Node(Node::Trace {
+            residue: v,
+            holes: vec![],
+            witnesses: vec![],
+            deposits: vec![],
+            source: v,
+            depth: 0,
+            unrecorded: false,
+        });
+        let tc = ref_store.put(&trace_node).unwrap();
+        // `v` appears as both `residue` and `source` — should write only one 32-byte ref record.
+        assert_eq!(std::fs::metadata(ref_store.fanned("refs", v)).unwrap().len(), 32);
+        std::fs::remove_file(ref_store.fanned("refs", v)).unwrap();
+        assert_eq!(ref_store.put(&trace_node).unwrap(), tc);
+        assert_eq!(ref_store.referrers(v).unwrap(), vec![tc]);
+
+        // L8: Store::has returns false for a directory; resolve ignores uppercase buckets.
+        let fake_c = Cairn::of_encoded(b"dir-not-file");
+        std::fs::create_dir_all(ref_store.fanned("objects", fake_c)).unwrap();
+        assert!(!ref_store.has(fake_c));
+        let upper_dir = ref_store.root.join("objects").join("AB");
+        std::fs::create_dir_all(&upper_dir).unwrap();
+        std::fs::write(upper_dir.join("0".repeat(62)), b"x").unwrap();
+        assert!(matches!(ref_store.resolve("a"), Err(StoreError::NoMatch(_)) | Ok(_)));
+        // Ensure the fake AB000... file is never returned for prefix "a".
+        if let Ok(found) = ref_store.resolve("a") {
+            assert_ne!(found.to_string(), format!("ab{}", "0".repeat(62)));
+        }
     }
 }

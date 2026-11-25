@@ -415,3 +415,73 @@ fn http_101_does_not_stall_and_strict_ows_framing_is_enforced() {
         );
     }
 }
+
+#[test]
+fn chunked_many_chunks_ipv6_urls_and_invalid_scheme_syntax() {
+    // M19: syntactically invalid schemes are Malformed, not Denied.
+    let client = Asked::reaching("bad-schemes", vec!["127.0.0.1".into()], false);
+    assert_eq!(client.get("://127.0.0.1/"), AnswerOf::Refused(Refusal::Malformed));
+    assert_eq!(client.get("1http://127.0.0.1/"), AnswerOf::Refused(Refusal::Malformed));
+    assert_eq!(client.get("ht_tp://127.0.0.1/"), AnswerOf::Refused(Refusal::Malformed));
+
+    // H17: valid multi-chunk response with >64 KiB of total chunk framing succeeds.
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("port");
+    let port = listener.local_addr().expect("addr").port();
+    let chunks = 12_000usize;
+    let server = std::thread::spawn(move || {
+        let Ok((mut sock, _)) = listener.accept() else { return };
+        let mut req = [0u8; 512];
+        let _ = sock.read(&mut req);
+        let _ = sock.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+        let chunk = b"1\r\nx\r\n";
+        let mut batch = Vec::with_capacity(chunk.len() * 256);
+        for _ in 0..256 {
+            batch.extend_from_slice(chunk);
+        }
+        let mut remaining = chunks;
+        while remaining >= 256 {
+            let _ = sock.write_all(&batch);
+            remaining -= 256;
+        }
+        for _ in 0..remaining {
+            let _ = sock.write_all(chunk);
+        }
+        let _ = sock.write_all(b"0\r\n\r\n");
+    });
+    let chunk_client = Asked::reaching("many-chunks", vec![format!("127.0.0.1:{port}")], false);
+    assert_eq!(
+        chunk_client.get(&format!("http://127.0.0.1:{port}/")),
+        AnswerOf::Given(Value::Bytes(vec![b'x'; chunks]))
+    );
+    let _ = server.join();
+
+    // H18: RFC 3986 IPv6 literal URLs and --reach entries (bracketed and bare).
+    if let Ok(v6_listener) = TcpListener::bind(("::1", 0)) {
+        let v6_port = v6_listener.local_addr().expect("v6 addr").port();
+        let v6_srv = std::thread::spawn(move || {
+            for _ in 0..2 {
+                let Ok((mut sock, _)) = v6_listener.accept() else { return };
+                let mut req = [0u8; 512];
+                let n = sock.read(&mut req).unwrap_or(0);
+                let text = String::from_utf8_lossy(&req[..n]);
+                assert!(
+                    text.contains(&format!("Host: [::1]:{v6_port}\r\n")),
+                    "missing bracketed IPv6 Host header: {text}"
+                );
+                let _ = sock.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nv6");
+            }
+        });
+        let bracket_client =
+            Asked::reaching("ipv6-bracket", vec![format!("[::1]:{v6_port}")], false);
+        assert_eq!(
+            bracket_client.get(&format!("http://[::1]:{v6_port}/")),
+            AnswerOf::Given(Value::Bytes(b"v6".to_vec()))
+        );
+        let bare_client = Asked::reaching("ipv6-bare", vec!["::1".into()], false);
+        assert_eq!(
+            bare_client.get(&format!("http://[::1]:{v6_port}/")),
+            AnswerOf::Given(Value::Bytes(b"v6".to_vec()))
+        );
+        let _ = v6_srv.join();
+    }
+}

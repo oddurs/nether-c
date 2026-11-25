@@ -10,18 +10,34 @@
 //! stratum 4 the path and the cairn of what was written. Recording the call
 //! and the answer covers both, because the call holds the path.
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Call, Refusal, Span, Store, Stored, Value};
+use nether_ledger::{Call, Refusal, Span, Value};
 
 use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
 
-/// How much of a file is read. Matches `net::MOST`, so a huge file or FIFO
-/// cannot exhaust memory or block a burial forever (§6.4).
+/// How much of a file is read. Matches `net::MOST` and stays inside
+/// `nether_ledger::MAX_OBJECT_BYTES` (64 MiB + 64 KiB framing).
 const MOST: u64 = 64 * 1024 * 1024;
+
+/// Maximum entries returned by `list` so a huge directory cannot OOM or exceed
+/// `nether_ledger::MAX_OBJECT_BYTES`.
+const MAX_LIST_ENTRIES: usize = 65_536;
+
+/// `O_NOFOLLOW | O_NONBLOCK` for TOCTOU-safe, FIFO-safe `Disk::read`.
+#[cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "arm")))]
+const OPEN_NOFOLLOW_NONBLOCK: i32 = 0x10000 | 0x800;
+#[cfg(all(target_os = "linux", not(any(target_arch = "aarch64", target_arch = "arm"))))]
+const OPEN_NOFOLLOW_NONBLOCK: i32 = 0x20000 | 0x800;
+#[cfg(target_os = "macos")]
+const OPEN_NOFOLLOW_NONBLOCK: i32 = 0x0100 | 0x0004;
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
+const OPEN_NOFOLLOW_NONBLOCK: i32 = 0;
 
 /// The disk, under a root nothing may reach out of.
 ///
@@ -110,9 +126,11 @@ impl Disk {
 /// symlink — whose target escapes `root`, bounding total expansions across the
 /// whole `resolve` call so cyclic or DAG symlinks cannot cause exponential work.
 fn step_within(root: &Path, cur: &mut PathBuf, hops: &mut u8) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(&*cur) else {
+    let meta = match std::fs::symlink_metadata(&*cur) {
+        Ok(m) => m,
         // Not present yet (e.g. a new file or directory for `write`).
-        return true;
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return true,
+        Err(_) => return false,
     };
     if !meta.file_type().is_symlink() {
         return true;
@@ -170,19 +188,11 @@ fn within(root: &Path, at: &Path) -> bool {
 fn why(e: &std::io::Error) -> Refusal {
     match e.kind() {
         std::io::ErrorKind::NotFound => Refusal::Absent,
-        std::io::ErrorKind::PermissionDenied => Refusal::Denied,
+        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::IsADirectory => Refusal::Denied,
         std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded => Refusal::Exhausted,
         // Everything else is the machine being unable to say, which is what
         // `unreachable` means for a thing that is supposed to be here.
         _ => Refusal::Unreachable,
-    }
-}
-
-/// The one `Str` argument every §9.5 function starts with.
-fn path_of(store: &Store, call: &Call) -> Option<String> {
-    match store.get(*call.args.first()?) {
-        Ok(Stored::Value(Value::Str(s))) => Some(s),
-        _ => None,
     }
 }
 
@@ -209,7 +219,7 @@ impl Provider for Disk {
         // here at all means a program the checker should have rejected. The
         // refusal is wrapped even for `exists`, because there is no plain
         // `Bool` that is not also an answer to a question nobody asked.
-        let Some(path) = path_of(into.store(), call) else {
+        let Some(path) = into.arg_str(call, 0)? else {
             if call.function == "exists" {
                 return Err(Refuse::Collapse("`exists` was not given a path".into()));
             }
@@ -219,7 +229,7 @@ impl Provider for Disk {
         let said = match self.resolve(&path, follow_final) {
             Err(_) if call.function == "exists" => given(&call.function, Value::Bool(false)),
             Err(no) => refused(no),
-            Ok(at) => Self::act(&call.function, &at, call, into),
+            Ok(at) => Self::act(&call.function, &at, call, into)?,
         };
         into.record(call, stratum, span, &said)
     }
@@ -227,38 +237,58 @@ impl Provider for Disk {
 
 impl Disk {
     /// Touch the world, once, and say what it said.
-    fn act(function: &str, at: &Path, call: &Call, into: &Recorder) -> Value {
-        match function {
+    fn act(function: &str, at: &Path, call: &Call, into: &Recorder) -> Result<Value, Refuse> {
+        Ok(match function {
             "read" => Self::read(at),
             "exists" => given(function, Value::Bool(at.try_exists().unwrap_or(false))),
-            "list" => match std::fs::read_dir(at) {
-                Err(e) => refused(why(&e)),
-                Ok(entries) => {
-                    // Sorted, because a directory has no order and a trace
-                    // that depended on the filesystem's would not replay.
-                    let mut names = Vec::new();
-                    for entry in entries {
-                        let Ok(entry) = entry else {
-                            return refused(Refusal::Unreachable);
-                        };
-                        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
-                            return refused(Refusal::Malformed);
-                        };
-                        names.push(name);
-                    }
-                    names.sort();
-                    given(function, Value::Array(names.into_iter().map(Value::Str).collect()))
-                }
-            },
+            "list" => Self::list(at),
             "remove" => std::fs::remove_file(at)
                 .map_or_else(|e| refused(why(&e)), |()| given(function, Value::Unit)),
-            "write" => Self::write(at, call, into),
+            "write" => Self::write(at, call, into)?,
             _ => refused(Refusal::Malformed),
+        })
+    }
+
+    fn list(at: &Path) -> Value {
+        let entries = match std::fs::read_dir(at) {
+            Err(e) => return refused(why(&e)),
+            Ok(entries) => entries,
+        };
+        // Sorted, because a directory has no order and a trace that depended
+        // on the filesystem's would not replay. Bounded by count and encoded
+        // size so huge directories stay within `MAX_OBJECT_BYTES`.
+        let mut names = Vec::new();
+        let mut encoded: usize = 9;
+        for entry in entries {
+            let Ok(entry) = entry else {
+                return refused(Refusal::Unreachable);
+            };
+            let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+                return refused(Refusal::Malformed);
+            };
+            encoded = encoded.saturating_add(9).saturating_add(name.len());
+            if names.len() >= MAX_LIST_ENTRIES || encoded as u64 > MOST {
+                return refused(Refusal::Exhausted);
+            }
+            names.push(name);
         }
+        names.sort();
+        given("list", Value::Array(names.into_iter().map(Value::Str).collect()))
     }
 
     fn read(at: &Path) -> Value {
-        let meta = match std::fs::metadata(at) {
+        let mut opts = std::fs::OpenOptions::new();
+        opts.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            opts.custom_flags(OPEN_NOFOLLOW_NONBLOCK);
+        }
+        let file = match opts.open(at) {
+            Ok(f) => f,
+            Err(e) => return refused(why(&e)),
+        };
+        let meta = match file.metadata() {
             Ok(m) => m,
             Err(e) => return refused(why(&e)),
         };
@@ -268,10 +298,6 @@ impl Disk {
         if meta.len() > MOST {
             return refused(Refusal::Exhausted);
         }
-        let file = match std::fs::File::open(at) {
-            Ok(f) => f,
-            Err(e) => return refused(why(&e)),
-        };
         let mut bytes = Vec::new();
         if let Err(e) = file.take(MOST + 1).read_to_end(&mut bytes) {
             return refused(why(&e));
@@ -283,24 +309,45 @@ impl Disk {
     }
 
     /// §9.5: the only prelude function whose witness records something the
-    /// ledger cannot later reproduce on its own.
-    fn write(at: &Path, call: &Call, into: &Recorder) -> Value {
-        let Some(Ok(Stored::Value(Value::Bytes(bytes)))) =
-            call.args.get(1).map(|c| into.store().get(*c))
-        else {
-            return refused(Refusal::Malformed);
+    /// ledger cannot later reproduce on its own. Writes via a same-directory
+    /// temporary file and atomic `rename` so `ENOSPC` or a crash never
+    /// truncates an existing file while recording `Refused(Exhausted)`.
+    fn write(at: &Path, call: &Call, into: &Recorder) -> Result<Value, Refuse> {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let Some(bytes) = into.arg_bytes(call, 1)? else {
+            return Ok(refused(Refusal::Malformed));
         };
         if let Ok(meta) = std::fs::symlink_metadata(at)
             && !meta.is_file()
         {
-            return refused(Refusal::Denied);
+            return Ok(refused(Refusal::Denied));
         }
-        if let Some(parent) = at.parent() {
-            if let Err(e) = std::fs::create_dir_all(parent) {
-                return refused(why(&e));
+        let Some(parent) = at.parent() else {
+            return Ok(refused(Refusal::Denied));
+        };
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return Ok(refused(why(&e)));
+        }
+        let (temp, mut file) = loop {
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+            let candidate = parent.join(format!(".nether-write.{}.{ts}.{n}", std::process::id()));
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+                Ok(f) => break (candidate, f),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Ok(refused(why(&e))),
             }
+        };
+        if let Err(e) = file.write_all(&bytes) {
+            drop(file);
+            let _ = std::fs::remove_file(&temp);
+            return Ok(refused(why(&e)));
         }
-        std::fs::write(at, &bytes)
-            .map_or_else(|e| refused(why(&e)), |()| given("write", Value::Unit))
+        drop(file);
+        if let Err(e) = std::fs::rename(&temp, at) {
+            let _ = std::fs::remove_file(&temp);
+            return Ok(refused(why(&e)));
+        }
+        Ok(given("write", Value::Unit))
     }
 }

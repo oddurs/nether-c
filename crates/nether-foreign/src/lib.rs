@@ -16,9 +16,8 @@
 
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::os::unix::ffi::OsStrExt as _;
-use std::path::Path;
-#[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
-use std::path::PathBuf;
+use std::os::unix::fs::MetadataExt as _;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 #[repr(C)]
@@ -29,7 +28,7 @@ struct DlInfo {
     saddr: *mut c_void,
 }
 
-#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 #[repr(C)]
 struct LinkMap {
     addr: usize,
@@ -39,29 +38,41 @@ struct LinkMap {
     prev: *mut LinkMap,
 }
 
-#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 const RTLD_DI_LINKMAP: c_int = 2;
 
 // `dlopen`, `dlsym`, `dlclose`, `dlerror`, `dladdr` (and glibc Linux `dlinfo`).
 // Minimal POSIX dynamic-loader declarations without an external binding crate.
+#[cfg_attr(target_os = "linux", link(name = "dl"))]
 unsafe extern "C" {
     fn dlopen(file: *const c_char, mode: c_int) -> *mut c_void;
     fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
     fn dlclose(handle: *mut c_void) -> c_int;
     fn dlerror() -> *const c_char;
     fn dladdr(addr: *const c_void, info: *mut DlInfo) -> c_int;
-    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn dlinfo(handle: *mut c_void, request: c_int, info: *mut c_void) -> c_int;
 }
 
 /// `RTLD_NOW | RTLD_LOCAL`. Now, so a missing symbol is an error at load
 /// rather than a crash at the call; local, so one object's symbols cannot
 /// answer for another's by accident. On macOS `RTLD_LOCAL` is `0x4` and
-/// omitting it defaults to `RTLD_GLOBAL`.
+/// omitting it defaults to `RTLD_GLOBAL`; on 32-bit Android `RTLD_NOW` and
+/// `RTLD_LOCAL` are both `0x0` (`0x2` is `RTLD_GLOBAL`).
 #[cfg(target_os = "macos")]
 const NOW_AND_LOCAL: c_int = 0x2 | 0x4;
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(target_os = "android", target_pointer_width = "32"))]
+const NOW_AND_LOCAL: c_int = 0x0;
+#[cfg(not(any(target_os = "macos", all(target_os = "android", target_pointer_width = "32"))))]
 const NOW_AND_LOCAL: c_int = 0x2;
+
+/// Process-global serialization for stratum-8 calls so duplicate `--load`
+/// paths or symlink aliases to the same shared object cannot race.
+static CALL_LOCK: Mutex<()> = Mutex::new(());
+
+/// Valid non-dangling address passed when `args` is empty, avoiding Rust's
+/// `NonNull::dangling()` (`0x1`) which triggers UB in C `memcpy`/`memcmp`.
+static EMPTY_ARG: u8 = 0;
 
 /// §9.8.1's signature, as Rust spells it.
 type Foreign = unsafe extern "C" fn(*const u8, usize, *mut u8, usize, *mut usize) -> i32;
@@ -72,8 +83,10 @@ type Foreign = unsafe extern "C" fn(*const u8, usize, *mut u8, usize, *mut usize
 /// so two at once would be a race in code nobody here can see.
 pub struct Object {
     handle: Mutex<Handle>,
-    #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
     canonical: PathBuf,
+    /// `(dev, ino)` of the canonical file at load time, used to verify symbol
+    /// ownership even across symlink aliases and non-zero-base shared objects.
+    file_id: (u64, u64),
     /// What it was loaded from, for saying which object answered.
     pub path: String,
 }
@@ -83,8 +96,7 @@ struct Handle(*mut c_void);
 
 // SAFETY: a `dlopen` handle names the object for the whole process, and
 // `dlsym` and `dlclose` may be called on it from any thread. Calling into the
-// object from two threads at once is what is not safe, and the `Mutex` in
-// `Object` is held for every use of the handle, so that cannot happen.
+// object from two threads at once is serialized by `CALL_LOCK` and `handle`.
 unsafe impl Send for Handle {}
 
 /// What went wrong, in the words `dlerror` used.
@@ -114,6 +126,10 @@ fn last_error() -> String {
 impl Object {
     /// Open one shared object. §8.3.3: the invocation said which.
     ///
+    /// Canonicalizes `path` on every platform before `dlopen` so bare system
+    /// library names (such as `libc.so.6`) cannot resolve via ambient loader
+    /// search paths.
+    ///
     /// # Errors
     ///
     /// [`Failed`] with whatever the loader said, which is the only account of
@@ -123,13 +139,13 @@ impl Object {
             return Err(Failed("shared object path is empty".to_owned()));
         }
         let shown = path.display().to_string();
-        #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
         let canonical = path.canonicalize().map_err(|e| Failed(format!("{shown}: {e}")))?;
-        #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
-        let load_path = canonical.as_path();
-        #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-        let load_path = path;
-        let Ok(name) = CString::new(load_path.as_os_str().as_bytes()) else {
+        let meta = std::fs::metadata(&canonical).map_err(|e| Failed(format!("{shown}: {e}")))?;
+        if !meta.is_file() {
+            return Err(Failed(format!("{shown} is not a regular file")));
+        }
+        let file_id = (meta.dev(), meta.ino());
+        let Ok(name) = CString::new(canonical.as_os_str().as_bytes()) else {
             return Err(Failed(format!("{shown} has a NUL in it")));
         };
         // SAFETY: `name` is a valid NUL-terminated string that outlives the
@@ -139,33 +155,21 @@ impl Object {
         if handle.is_null() {
             Err(Failed(last_error()))
         } else {
-            Ok(Self {
-                handle: Mutex::new(Handle(handle)),
-                #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
-                canonical,
-                path: shown,
-            })
+            Ok(Self { handle: Mutex::new(Handle(handle)), canonical, file_id, path: shown })
         }
     }
 
     /// Whether this object has that symbol.
     #[must_use]
     pub fn has(&self, symbol: &str) -> bool {
+        let _turn = CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
         self.find(&handle, symbol).is_some()
     }
 
     /// Verify that `found` is defined in the opened shared object itself, not
     /// resolved transitively through `DT_NEEDED` dependencies such as `libc`.
-    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
     fn defined_in_object(&self, handle: &Handle, found: *mut c_void) -> bool {
-        let _ = self;
-        let mut lm: *mut LinkMap = core::ptr::null_mut();
-        // SAFETY: `handle.0` is an open `dlopen` handle and `RTLD_DI_LINKMAP`
-        // writes a `*mut LinkMap` into `lm`.
-        if unsafe { dlinfo(handle.0, RTLD_DI_LINKMAP, (&raw mut lm).cast()) } != 0 || lm.is_null() {
-            return false;
-        }
         let mut info = DlInfo {
             fname: core::ptr::null(),
             fbase: core::ptr::null_mut(),
@@ -176,28 +180,32 @@ impl Object {
         if unsafe { dladdr(found.cast_const(), &raw mut info) } == 0 {
             return false;
         }
-        // SAFETY: `lm` is non-null and valid while `handle.0` remains open.
-        let base = unsafe { (*lm).addr };
-        info.fbase as usize == base
-    }
-
-    /// Verify that `found` is defined in the opened shared object itself, not
-    /// resolved transitively through linked system libraries.
-    #[cfg(not(all(target_os = "linux", not(target_env = "musl"))))]
-    fn defined_in_object(&self, _handle: &Handle, found: *mut c_void) -> bool {
-        let mut info = DlInfo {
-            fname: core::ptr::null(),
-            fbase: core::ptr::null_mut(),
-            sname: core::ptr::null(),
-            saddr: core::ptr::null_mut(),
-        };
-        // SAFETY: `found` is a valid code address returned by `dlsym`.
-        if unsafe { dladdr(found.cast_const(), &raw mut info) } == 0 || info.fname.is_null() {
-            return false;
+        if !info.fname.is_null() {
+            // SAFETY: `fname` is a non-null NUL-terminated path from `dladdr`.
+            let fname = unsafe { CStr::from_ptr(info.fname) };
+            let fname_path = Path::new(std::ffi::OsStr::from_bytes(fname.to_bytes()));
+            if let Ok(meta) = std::fs::metadata(fname_path) {
+                return (meta.dev(), meta.ino()) == self.file_id;
+            }
+            if fname_path == self.canonical.as_path() {
+                return true;
+            }
         }
-        // SAFETY: `fname` is a non-null NUL-terminated path from `dladdr`.
-        let fname = unsafe { CStr::from_ptr(info.fname) };
-        Path::new(std::ffi::OsStr::from_bytes(fname.to_bytes())) == self.canonical.as_path()
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        {
+            let mut lm: *mut LinkMap = core::ptr::null_mut();
+            // SAFETY: `handle.0` is an open `dlopen` handle and `RTLD_DI_LINKMAP`
+            // writes a `*mut LinkMap` into `lm`.
+            if unsafe { dlinfo(handle.0, RTLD_DI_LINKMAP, (&raw mut lm).cast()) } == 0
+                && !lm.is_null()
+            {
+                // SAFETY: `lm` is non-null and valid while `handle.0` remains open.
+                let base = unsafe { (*lm).addr };
+                return info.fbase as usize == base;
+            }
+        }
+        let _ = handle;
+        false
     }
 
     /// The symbol, if this object itself defines it.
@@ -230,21 +238,21 @@ impl Object {
     /// twice for more room.
     pub fn call(&self, symbol: &str, args: &[u8]) -> Result<(i32, Vec<u8>), Failed> {
         const MAX_OUTPUT: usize = 64 * 1024 * 1024;
-        // Held to the end of the call, both tries: that is the turn.
+        // Held to the end of the call, both tries, across every open handle.
+        let _turn = CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
         let Some(function) = self.find(&handle, symbol) else {
             return Err(Failed(format!("{} has no `{symbol}`", self.path)));
         };
+        let args_ptr = if args.is_empty() { &raw const EMPTY_ARG } else { args.as_ptr() };
         // Enough for most answers without asking, and small enough that being
         // wrong costs one more call rather than a reservation.
         let mut out = vec![0u8; 4096];
         let mut wrote = 0usize;
-        // SAFETY: none available. `args` and `out` are live for the call and
-        // their lengths are what is passed; everything else is §9.8.1 asking
-        // the callee to behave and §1.7 recording that it might not.
-        let code = unsafe {
-            function(args.as_ptr(), args.len(), out.as_mut_ptr(), out.len(), &raw mut wrote)
-        };
+        // SAFETY: none available. `args_ptr` and `out` are valid non-dangling
+        // pointers live for the call and their lengths are what is passed.
+        let code =
+            unsafe { function(args_ptr, args.len(), out.as_mut_ptr(), out.len(), &raw mut wrote) };
         if code != 1 {
             if code == 0 && wrote > out.len() {
                 return Err(Failed(format!(
@@ -261,31 +269,31 @@ impl Object {
                 "`{symbol}` asked for {wrote} bytes, past the 64 MiB bound"
             )));
         }
+        let alloc_len = wrote.max(1);
         let mut out = Vec::new();
-        out.try_reserve_exact(wrote)
+        out.try_reserve_exact(alloc_len)
             .map_err(|_| Failed(format!("`{symbol}` could not reserve {wrote} bytes")))?;
-        out.resize(wrote, 0);
+        out.resize(alloc_len, 0);
+        let cap = wrote;
         let mut wrote = 0usize;
-        // SAFETY: as above, with a buffer of the size the callee asked for.
-        let code = unsafe {
-            function(args.as_ptr(), args.len(), out.as_mut_ptr(), out.len(), &raw mut wrote)
-        };
+        // SAFETY: as above, with a non-dangling buffer of at least `cap` bytes.
+        let code = unsafe { function(args_ptr, args.len(), out.as_mut_ptr(), cap, &raw mut wrote) };
         if code == 1 {
             return Err(Failed(format!("`{symbol}` asked for more room twice")));
         }
-        if code == 0 && wrote > out.len() {
+        if code == 0 && wrote > cap {
             return Err(Failed(format!(
-                "`{symbol}` claimed to write {wrote} bytes into a {}-byte buffer",
-                out.len()
+                "`{symbol}` claimed to write {wrote} bytes into a {cap}-byte buffer"
             )));
         }
-        out.truncate(wrote.min(out.len()));
+        out.truncate(wrote.min(cap));
         Ok((code, out))
     }
 }
 
 impl Drop for Object {
     fn drop(&mut self) {
+        let _turn = CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         let handle = self.handle.get_mut().unwrap_or_else(PoisonError::into_inner);
         // SAFETY: `handle` came from `dlopen` and is closed once, here.
         unsafe { dlclose(handle.0) };
@@ -301,5 +309,15 @@ mod tests {
     fn empty_path_is_refused_before_dlopen() {
         let err = Object::open(Path::new("")).err().expect("empty path must fail");
         assert!(err.0.contains("empty"), "{err}");
+    }
+
+    #[test]
+    fn bare_system_library_name_is_refused_before_dlopen() {
+        for name in ["libc.so.6", "libSystem.B.dylib"] {
+            assert!(
+                Object::open(Path::new(name)).is_err(),
+                "bare ambient library name {name:?} must not open via loader search paths"
+            );
+        }
     }
 }

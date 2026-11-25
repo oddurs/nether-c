@@ -317,3 +317,51 @@ fn exponential_symlink_dag_stops_at_total_hop_bound_and_remove_unlinks_symlink()
     );
     assert!(std::fs::symlink_metadata(a.root.join("dangling")).is_err());
 }
+
+#[test]
+fn corrupt_argument_propagates_not_recorded_and_write_leaves_no_temps() {
+    // H15: absent or corrupt argument cairn must fail with NotRecorded, not a
+    // fabricated Malformed witness.
+    let a = Asked::new("arg-store-err", false);
+    let missing_arg = nether_ledger::Cairn::of_encoded(b"never-stored-arg");
+    let call = Call { function: "read".into(), args: vec![missing_arg] };
+    let span = Span { source: a.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+    assert!(matches!(
+        a.world.ask(&call, span, &Recorder::new(&a.store)),
+        Err(nether_world::Unanswered::NotRecorded(_))
+    ));
+
+    // Corrupting a stored argument cairn also fails with NotRecorded.
+    let path_cairn = a.arg(Value::Str("hello.txt".into()));
+    let hex = path_cairn.to_string();
+    let ledger_dir = a.root.parent().unwrap().join("ledger");
+    let obj_path = ledger_dir.join("objects").join(&hex[..2]).join(&hex[2..]);
+    std::fs::write(&obj_path, b"corrupted-bytes").unwrap();
+    let fresh_store = Store::open(&ledger_dir).unwrap();
+    let call2 = Call { function: "read".into(), args: vec![path_cairn] };
+    assert!(matches!(
+        a.world.ask(&call2, span, &Recorder::new(&fresh_store)),
+        Err(nether_world::Unanswered::NotRecorded(_))
+    ));
+
+    // H16: atomic Disk::write overwrites cleanly and leaves no temp files behind.
+    let w = Asked::new("atomic-write", true);
+    std::fs::write(w.root.join("target.txt"), b"old").unwrap();
+    let p = w.arg(Value::Str("target.txt".into()));
+    let b = w.arg(Value::Bytes(b"new-content".to_vec()));
+    assert_eq!(w.ask("write", vec![p, b]), AnswerOf::Given(Value::Unit));
+    assert_eq!(std::fs::read(w.root.join("target.txt")).unwrap(), b"new-content");
+    let entries: Vec<_> =
+        std::fs::read_dir(&w.root).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(entries.len(), 1, "unexpected leftover files: {entries:?}");
+
+    // H16: reading a FIFO with O_NONBLOCK returns Denied immediately without hanging.
+    #[cfg(unix)]
+    {
+        let fifo = a.root.join("pipe");
+        let status = std::process::Command::new("mkfifo").arg(&fifo).status();
+        if status.is_ok_and(|s| s.success()) {
+            assert_eq!(a.reading("pipe"), AnswerOf::Refused(Refusal::Denied));
+        }
+    }
+}

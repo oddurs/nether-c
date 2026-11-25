@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Call, Refusal, Span, Stored, Value};
+use nether_ledger::{Call, Refusal, Span, Value};
 
 use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
@@ -87,14 +87,6 @@ impl Env {
     }
 }
 
-/// The one `Str` argument `env` takes.
-fn asked(into: &Recorder, call: &Call) -> Option<String> {
-    match into.store().get(*call.args.first()?) {
-        Ok(Stored::Value(Value::Str(s))) => Some(s),
-        _ => None,
-    }
-}
-
 impl Provider for Env {
     fn capability(&self) -> Capability {
         Capability::Env
@@ -115,7 +107,7 @@ impl Provider for Env {
             // — not an empty string, which is the class of bug this language
             // exists to make impossible.
             "env" => {
-                let Some(name) = asked(into, call) else {
+                let Some(name) = into.arg_str(call, 0)? else {
                     return Err(Refuse::Collapse("`env` was not given a variable name".into()));
                 };
                 match self.declared.of(&name) {
