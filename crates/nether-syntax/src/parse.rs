@@ -83,6 +83,7 @@ pub fn parse(source: &[u8]) -> Result<Unit, Vec<Fault>> {
         faults: Vec::new(),
         end: end_of(source),
         deep: 0,
+        chain: 0,
         pending_gt: None,
     };
     let unit = p.unit();
@@ -126,6 +127,8 @@ struct Parser<'a> {
     end: Span,
     /// How far in the current expression or type is. See [`MAX_NESTING`].
     deep: u32,
+    /// Cumulative chain steps active across enclosing binary, postfix, and array walks.
+    chain: usize,
     /// Second half of a split `>>` token while closing nested generic types.
     pending_gt: Option<Span>,
 }
@@ -437,6 +440,11 @@ impl Parser<'_> {
         };
         let n = *n;
         self.at += 1;
+        // §3.5: a stratum in a signature is a single ASCII decimal digit `0`..`8`.
+        if span.end.saturating_sub(span.start) != 1 {
+            self.faults.push(Fault { span, kind: FaultKind::NotAStratum });
+            return Err(Given);
+        }
         u8::try_from(n).ok().filter(|d| *d <= 8).ok_or_else(|| {
             self.faults.push(Fault { span, kind: FaultKind::NotAStratum });
             Given
@@ -466,22 +474,22 @@ impl Parser<'_> {
             self.expect_gt("`>` to close the type arguments")?;
         }
         let mut arrays = Vec::new();
-        while self.eat(Punct::LBracket) {
-            if arrays.len() >= MAX_CHAIN {
-                self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
-                return Err(Given);
+        self.with_chain(|p| {
+            while p.eat(Punct::LBracket) {
+                p.chain_step()?;
+                let len = match p.peek() {
+                    Some(TokenKind::Int(n)) => {
+                        let n = *n;
+                        p.at += 1;
+                        Some(n)
+                    }
+                    _ => None,
+                };
+                p.expect(Punct::RBracket, "`]` to close the length")?;
+                arrays.push(len);
             }
-            let len = match self.peek() {
-                Some(TokenKind::Int(n)) => {
-                    let n = *n;
-                    self.at += 1;
-                    Some(n)
-                }
-                _ => None,
-            };
-            self.expect(Punct::RBracket, "`]` to close the length")?;
-            arrays.push(len);
-        }
+            Ok(())
+        })?;
         // §3.5: on a type there is no space, so this is one token or nothing.
         let depth = match self.peek() {
             Some(TokenKind::Depth(d)) => {
@@ -497,7 +505,7 @@ impl Parser<'_> {
     /// A type followed by a name, or nothing. Used where §04 has two
     /// productions that start the same way and the token after decides.
     fn try_binding(&mut self) -> Option<(Type, Name)> {
-        let save = (self.at, self.faults.len(), self.pending_gt);
+        let save = (self.at, self.faults.len(), self.pending_gt, self.chain);
         let out = self
             .ty()
             .ok()
@@ -508,6 +516,7 @@ impl Parser<'_> {
         if out.is_none() {
             self.at = save.0;
             self.pending_gt = save.2;
+            self.chain = save.3;
         }
         out
     }
@@ -547,7 +556,25 @@ impl Parser<'_> {
     fn stmt_or_tail(&mut self) -> Parsed<Line> {
         let from = self.span();
         if self.at_punct(Punct::LBrace) {
-            return Ok(Line::Stmt(Stmt::Block(self.block()?)));
+            let block = self.block()?;
+            if self.continues_expr() {
+                let lhs = Expr { kind: ExprKind::Block(block), span: self.since(from) };
+                let value = self.expr_from(lhs, from)?;
+                return if self.eat(Punct::Semi) {
+                    Ok(Line::Stmt(Stmt::Expr(value)))
+                } else {
+                    Ok(Line::Tail(value))
+                };
+            }
+            if self.eat(Punct::Semi) {
+                let value = Expr { kind: ExprKind::Block(block), span: self.since(from) };
+                return Ok(Line::Stmt(Stmt::Expr(value)));
+            }
+            if block.tail.is_some() && self.at_punct(Punct::RBrace) {
+                let value = Expr { kind: ExprKind::Block(block), span: self.since(from) };
+                return Ok(Line::Tail(value));
+            }
+            return Ok(Line::Stmt(Stmt::Block(block)));
         }
         if self.at_keyword(Keyword::If) {
             return Ok(Line::Stmt(self.if_stmt()?));
@@ -646,9 +673,26 @@ impl Parser<'_> {
 
     // ── §4.5 and §4.6 ───────────────────────────────────────────────────────
 
+    fn continues_expr(&self) -> bool {
+        let Some(TokenKind::Punct(p)) = self.peek() else { return false };
+        matches!(p, Punct::LParen | Punct::LBracket | Punct::Dot | Punct::Eq)
+            || LEVELS.iter().any(|(q, _, _)| q == p)
+            || COMPOUND.iter().any(|(q, _)| q == p)
+    }
+
+    fn expr_from(&mut self, lhs: Expr, from: Span) -> Parsed<Expr> {
+        let lhs = self.postfix_tail(lhs, from)?;
+        let lhs = self.binary_from(lhs, from)?;
+        self.assign_tail(lhs, from)
+    }
+
     fn expr(&mut self) -> Parsed<Expr> {
         let from = self.span();
         let lhs = self.binary(LOWEST)?;
+        self.assign_tail(lhs, from)
+    }
+
+    fn assign_tail(&mut self, lhs: Expr, from: Span) -> Parsed<Expr> {
         if self.eat(Punct::Eq) {
             self.deeper()?;
             let value = self.expr();
@@ -671,6 +715,36 @@ impl Parser<'_> {
         Ok(lhs)
     }
 
+    fn with_chain<T>(&mut self, f: impl FnOnce(&mut Self) -> Parsed<T>) -> Parsed<T> {
+        let saved = self.chain;
+        let out = f(self);
+        self.chain = saved;
+        out
+    }
+
+    fn chain_step(&mut self) -> Parsed<()> {
+        if self.chain >= MAX_CHAIN {
+            self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
+            return Err(Given);
+        }
+        self.chain += 1;
+        Ok(())
+    }
+
+    fn binary_from(&mut self, mut lhs: Expr, from: Span) -> Parsed<Expr> {
+        self.with_chain(|p| {
+            for level in 3..=LOWEST {
+                while let Some(op) = p.operator_at(level) {
+                    p.chain_step()?;
+                    let rhs = p.binary(level - 1)?;
+                    let kind = ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) };
+                    lhs = Expr { kind, span: p.since(from) };
+                }
+            }
+            Ok(lhs)
+        })
+    }
+
     /// Levels 3 to 12 of §4.6, all left-associative.
     fn binary(&mut self, level: u8) -> Parsed<Expr> {
         if level < 3 {
@@ -678,18 +752,15 @@ impl Parser<'_> {
         }
         let from = self.span();
         let mut lhs = self.binary(level - 1)?;
-        let mut chain = 0usize;
-        while let Some(op) = self.operator_at(level) {
-            if chain >= MAX_CHAIN {
-                self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
-                return Err(Given);
+        self.with_chain(|p| {
+            while let Some(op) = p.operator_at(level) {
+                p.chain_step()?;
+                let rhs = p.binary(level - 1)?;
+                let kind = ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) };
+                lhs = Expr { kind, span: p.since(from) };
             }
-            chain += 1;
-            let rhs = self.binary(level - 1)?;
-            let kind = ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) };
-            lhs = Expr { kind, span: self.since(from) };
-        }
-        Ok(lhs)
+            Ok(lhs)
+        })
     }
 
     fn operator_at(&mut self, level: u8) -> Option<BinOp> {
@@ -752,48 +823,41 @@ impl Parser<'_> {
 
     fn postfix(&mut self) -> Parsed<Expr> {
         let from = self.span();
-        let mut base = self.primary()?;
-        let mut chain = 0usize;
-        loop {
-            let kind = if self.eat(Punct::LParen) {
-                if chain >= MAX_CHAIN {
-                    self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
-                    return Err(Given);
-                }
-                chain += 1;
-                let mut args = Vec::new();
-                if !self.at_punct(Punct::RParen) {
-                    loop {
-                        args.push(self.expr()?);
-                        if !self.eat(Punct::Comma) {
-                            break;
+        let base = self.primary()?;
+        self.postfix_tail(base, from)
+    }
+
+    fn postfix_tail(&mut self, mut base: Expr, from: Span) -> Parsed<Expr> {
+        self.with_chain(|p| {
+            loop {
+                let kind = if p.eat(Punct::LParen) {
+                    p.chain_step()?;
+                    let mut args = Vec::new();
+                    if !p.at_punct(Punct::RParen) {
+                        loop {
+                            args.push(p.expr()?);
+                            if !p.eat(Punct::Comma) {
+                                break;
+                            }
                         }
                     }
-                }
-                self.expect(Punct::RParen, "`)` to close the arguments")?;
-                ExprKind::Call { callee: Box::new(base), args }
-            } else if self.eat(Punct::LBracket) {
-                if chain >= MAX_CHAIN {
-                    self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
-                    return Err(Given);
-                }
-                chain += 1;
-                let index = Box::new(self.expr()?);
-                self.expect(Punct::RBracket, "`]` to close the index")?;
-                ExprKind::Index { base: Box::new(base), index }
-            } else if self.eat(Punct::Dot) {
-                if chain >= MAX_CHAIN {
-                    self.faults.push(Fault { span: self.span(), kind: FaultKind::TooDeep });
-                    return Err(Given);
-                }
-                chain += 1;
-                let name = self.name("a field name")?;
-                ExprKind::Field { base: Box::new(base), name }
-            } else {
-                return Ok(base);
-            };
-            base = Expr { kind, span: self.since(from) };
-        }
+                    p.expect(Punct::RParen, "`)` to close the arguments")?;
+                    ExprKind::Call { callee: Box::new(base), args }
+                } else if p.eat(Punct::LBracket) {
+                    p.chain_step()?;
+                    let index = Box::new(p.expr()?);
+                    p.expect(Punct::RBracket, "`]` to close the index")?;
+                    ExprKind::Index { base: Box::new(base), index }
+                } else if p.eat(Punct::Dot) {
+                    p.chain_step()?;
+                    let name = p.name("a field name")?;
+                    ExprKind::Field { base: Box::new(base), name }
+                } else {
+                    return Ok(base);
+                };
+                base = Expr { kind, span: p.since(from) };
+            }
+        })
     }
 
     fn primary(&mut self) -> Parsed<Expr> {
@@ -861,7 +925,8 @@ impl Parser<'_> {
     /// has no `disk!` and a lexer that invented one would be guessing.
     fn capability(&mut self) -> Parsed<Name> {
         let mut name = self.name("a capability")?;
-        if self.eat(Punct::Bang) {
+        if self.at_punct(Punct::Bang) && self.span().start == name.span.end {
+            self.at += 1;
             name.text.push('!');
             name.span = self.since(name.span);
         }

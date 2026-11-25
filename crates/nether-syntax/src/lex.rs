@@ -130,7 +130,7 @@ impl Fault {
             ),
             FaultKind::Reserved("sizeof") => Some(
                 "there are no pointers and no allocation, so there is nothing to measure. \
-                 `len` gives the length of a `Bytes` or a `Str`.",
+                 `len` gives the length of a `Bytes`, and `len(raw(s))` of a `Str`.",
             ),
             _ => None,
         };
@@ -450,6 +450,12 @@ impl Scanner<'_> {
                 let byte = self.byte_escape(here)?;
                 out.push(byte);
                 return Ok(());
+            }
+            '\r' => {
+                if self.rest().starts_with('\n') {
+                    return Err(self.fault(from, FaultKind::UnterminatedString));
+                }
+                return Err(self.fault(self.at - 1, FaultKind::StrayCarriageReturn));
             }
             _ => return Err(self.fault(here, FaultKind::UnknownEscape)),
         };

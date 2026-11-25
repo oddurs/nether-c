@@ -853,3 +853,86 @@ fn pass4_typedef_short_circuit_print_and_refused_shade() {
         "refused(absent) must reject omitted Shade<T> origin instead of fabricating @8"
     );
 }
+
+#[test]
+fn pr_b_syntax_and_lowering_hardening_regressions() {
+    use std::fmt::Write as _;
+
+    // H2: Exponential typedef DAG with extra type args completes linearly without blowup.
+    let mut dag = String::from("typedef I64 T0;\n");
+    for i in 1..=16 {
+        let p = i - 1;
+        let _ = writeln!(dag, "typedef Answer<T{p}, T{p}, T{p}, T{p}> T{i};");
+    }
+    let parsed_dag = parse(dag.as_bytes()).expect("dag parses");
+    assert!(lower(&parsed_dag).is_err(), "extra args in Answer typedef must fail cleanly");
+
+    // H3: Cumulative chain depth across nested parens and precedence levels hits TooDeep.
+    let mut nested_chain = String::from("I64 x = ");
+    for _ in 0..20 {
+        nested_chain.push('(');
+        for _ in 0..20 {
+            nested_chain.push_str("1 + ");
+        }
+    }
+    nested_chain.push('1');
+    for _ in 0..20 {
+        nested_chain.push(')');
+    }
+    nested_chain.push_str(";\n");
+    assert!(
+        parse(nested_chain.as_bytes()).is_err(),
+        "nested cumulative binary chains must hit TooDeep"
+    );
+
+    // H4: Depth assertion inside `Answer<T@d>` must be rejected.
+    let bad_ans = parse(b"U0 f() { Answer<Bytes@3> a = answered(b\"p\"); }\n").expect("parses");
+    assert!(lower(&bad_ans).is_err(), "depth annotation inside Answer<T@d> must be rejected");
+
+    // M1: Nested struct field-by-field initialization honors ancestor `@d` as upper bound.
+    clean(&ir("struct Inner { I64 a; Bytes b; };\n\
+         struct Outer { Inner@3 inner; };\n\
+         U0 f() { Outer o; o.inner.a = 1; o.inner.b = descend disk { must(read(\"k\")) }; }\n"));
+    let too_deep_sub = ir("struct Inner { Bytes b; };\n\
+         struct Outer { Inner@3 inner; };\n\
+         U0 f() { Outer o; o.inner.b = descend net { must(get(\"u\")) }; }\n");
+    assert!(
+        check(&too_deep_sub)
+            .iter()
+            .any(|f| matches!(f.kind, nether_core::FaultKind::Asserted { .. })),
+        "sub-field write deeper than ancestor @3 must fail"
+    );
+
+    // M2: Block tail expressions and block-headed expressions parse and lower cleanly.
+    clean(&ir("I64 f() { { 1 } }\nI64 g() { { 1 } + 2 * 3 }\nU0 h() { { 1 }; }\n"));
+
+    // M3: Non-single-digit signature latent annotations are rejected.
+    for bad in [
+        "U0 f() @ 0x3 {}",
+        "U0 f() @ 0b11 {}",
+        "U0 f() @ 03 {}",
+        "U0 f() @{0x3, 5} {}",
+        "U0 f() @{3, 5_} {}",
+    ] {
+        assert!(parse(bad.as_bytes()).is_err(), "accepted invalid latent annotation: {bad}");
+    }
+
+    // M5: `struct I64` shadowing round-trips cleanly with literal compound index assignment.
+    let shadow_src = "struct I64 { Bool x; };\nU0 f() { Bool[1] a; a[0] = true; a[0] &= false; }\n";
+    let shadow_ir = ir(shadow_src);
+    clean(&shadow_ir);
+    let printed = nether_syntax::print(&shadow_ir);
+    let reparsed = parse(printed.as_bytes()).expect("printed shadow unit must parse");
+    clean(&lower(&reparsed).expect("printed shadow unit must lower"));
+
+    // L2: Invalid type in function signature emits one lowering fault, not two.
+    let bad_sig = parse(b"U0 f(NoSuchType x) { }\n").expect("parses");
+    let errs = lower(&bad_sig).unwrap_err();
+    assert_eq!(errs.len(), 1, "expected single diagnostic for bad param type, got {errs:?}");
+
+    // L5: `descend disk !` with space before `!` must not parse as `disk!`.
+    assert!(
+        parse(b"U0 f() { descend disk ! { 1 }; }\n").is_err(),
+        "space before `!` in capability must fail to parse"
+    );
+}
