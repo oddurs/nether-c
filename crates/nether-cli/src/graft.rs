@@ -23,22 +23,35 @@ const DEFAULT_FUEL: u64 = 1_000_000;
 /// `nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
     let mut wants_json = false;
-    let mut fuel = DEFAULT_FUEL;
+    let mut fuel: Option<u64> = None;
     let (mut trace, mut replace, mut with): (Option<&str>, Option<&str>, Option<&str>) =
         (None, None, None);
+    let mut end_opts = false;
 
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
+        if end_opts {
+            if trace.is_some() {
+                eprintln!("nether: one trace cairn at a time");
+                return usage_error();
+            }
+            trace = Some(arg.as_str());
+            continue;
+        }
         match arg.as_str() {
+            "--" => end_opts = true,
             "--json" => wants_json = true,
-            "--fuel" => {
-                if let Some(Ok(n)) = rest.next().map(|n| n.parse::<u64>()) {
-                    fuel = n;
-                } else {
+            "--fuel" => match rest.next().map(|n| n.parse::<u64>()) {
+                Some(Ok(_)) if fuel.is_some() => {
+                    eprintln!("nether: --fuel is given once");
+                    return usage_error();
+                }
+                Some(Ok(n)) => fuel = Some(n),
+                _ => {
                     eprintln!("nether: --fuel wants a number of steps");
                     return usage_error();
                 }
-            }
+            },
             "--replace" => match rest.next() {
                 Some(v) if !v.starts_with("--") && replace.is_none() => replace = Some(v),
                 _ => {
@@ -92,7 +105,7 @@ pub fn run(args: &[String]) -> ExitCode {
         Ok(c) => c,
         Err(code) => return code,
     };
-    take(&store, trace, replace, with, fuel, wants_json)
+    take(&store, trace, replace, with, fuel.unwrap_or(DEFAULT_FUEL), wants_json)
 }
 
 struct PreparedGraft {
@@ -235,8 +248,16 @@ fn prepare_graft(
                     call.function,
                     hole.short()
                 );
-                return Err(FAILED);
+                return Err(ExitCode::from(code::MALFORMED));
             };
+            if prim.latent().get() != stratum {
+                eprintln!(
+                    "nether: hole {} claims stratum {stratum} for `{}`",
+                    hole.short(),
+                    call.function
+                );
+                return Err(ExitCode::from(code::MALFORMED));
+            }
             let val = wrap_graft_value(prim, &call.function, with, &raw_instead)?;
             if is_read && told.answer(&call).is_some_and(|prev| prev != &val) {
                 eprintln!(
@@ -293,7 +314,7 @@ fn take(
         Err(code) => return code,
     };
     let shown = format!("{}:residue", trace.short());
-    let residue = match bury_with(&unit, source, fuel, &prep.answers) {
+    let residue = match bury_with(&unit, residue, fuel, &prep.answers) {
         Ok(residue) => residue,
         Err(halt) => {
             eprint!(

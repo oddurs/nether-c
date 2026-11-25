@@ -46,9 +46,9 @@ export function decode(encoded) {
   const id = () => hex(take(32));
   const stratum = () => { const d = byte(); if (d > 8) throw Error("Invalid stratum"); return d; };
   const bool = () => { const b = byte(); if (b > 1) throw Error("Invalid boolean"); return b === 1; };
-  const list = (read) => {
+  const list = (read, max = 4096) => {
     const n = count();
-    if (n > 4096) throw Error("Preview limit: more than 4096 entries");
+    if (n > max) throw Error(`Preview limit: more than ${max} entries`);
     return Array.from({ length: n }, read);
   };
   const refusal = () => {
@@ -94,8 +94,8 @@ export function decode(encoded) {
       case 2: object = { kind: "Hole", call: call(), stratum: stratum(), span: span() }; break;
       case 3: object = { kind: "Deposit", value: id(), span: span() }; break;
       case 4: object = { kind: "Witness", stratum: stratum(), call: call(), answer: id(), span: span() }; break;
-      case 5: object = { kind: "Trace", residue: id(), holes: list(id), witnesses: list(id),
-        deposits: list(id), source: id(), depth: stratum(), unrecorded: bool() }; break;
+      case 5: object = { kind: "Trace", residue: id(), holes: list(id, 20000), witnesses: list(id, 20000),
+        deposits: list(id, 20000), source: id(), depth: stratum(), unrecorded: bool() }; break;
       default: throw Error("Unknown node kind");
     }
   }

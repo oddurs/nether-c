@@ -11,17 +11,41 @@ use crate::{FAILED, code, json, usage_error};
 
 /// `nether cairn <path> | --verify <cairn> [--json]`
 pub fn run(args: &[String]) -> ExitCode {
-    let wants_json = args.iter().any(|a| a == "--json");
-    let rest: Vec<&str> = args.iter().filter(|a| *a != "--json").map(String::as_str).collect();
-
-    match rest.as_slice() {
-        ["--verify", name] => verify(name, wants_json),
-        [path] if !path.starts_with("--") => name(Path::new(path), wants_json),
-        _ => {
-            eprintln!("usage: nether cairn <path> | --verify <cairn> [--json]");
-            usage_error()
+    let mut wants_json = false;
+    let mut verify_arg: Option<&str> = None;
+    let mut path_arg: Option<&str> = None;
+    let mut end_opts = false;
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        if end_opts {
+            if path_arg.is_some() || verify_arg.is_some() {
+                return usage();
+            }
+            path_arg = Some(arg.as_str());
+            continue;
+        }
+        match arg.as_str() {
+            "--" => end_opts = true,
+            "--json" => wants_json = true,
+            "--verify" => match rest.next() {
+                Some(v) if verify_arg.is_none() && path_arg.is_none() => verify_arg = Some(v),
+                _ => return usage(),
+            },
+            other if other.starts_with("--") => return usage(),
+            other if path_arg.is_none() && verify_arg.is_none() => path_arg = Some(other),
+            _ => return usage(),
         }
     }
+    match (verify_arg, path_arg) {
+        (Some(name), None) => verify(name, wants_json),
+        (None, Some(path)) => name(Path::new(path), wants_json),
+        _ => usage(),
+    }
+}
+
+fn usage() -> ExitCode {
+    eprintln!("usage: nether cairn <path> | --verify <cairn> [--json]");
+    usage_error()
 }
 
 /// The cairn of a file's contents, as the `Bytes` they are.
@@ -56,10 +80,7 @@ fn name(path: &Path, wants_json: bool) -> ExitCode {
 /// store already refuses to serve bytes that do not hash to the name it was
 /// asked for; what this adds is saying which of the three things happened.
 fn verify(prefix: &str, wants_json: bool) -> ExitCode {
-    let store = match crate::opened() {
-        Ok(store) => store,
-        Err(code) => return code,
-    };
+    let store = crate::opened_readonly();
     let cairn = match store.resolve(prefix) {
         Ok(cairn) => cairn,
         Err(e) => return complain(&e, prefix, wants_json),

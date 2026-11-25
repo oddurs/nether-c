@@ -78,18 +78,29 @@ pub fn residue_unit(
     Ok((text, unit))
 }
 
-/// The stratum a hole would reach, or an error if unreadable or the wrong node kind.
+/// Whether `stratum` matches the prelude primitive named by `call`.
+pub(crate) fn valid_stratum(call: &nether_ledger::Call, stratum: u8) -> bool {
+    nether_core::Prim::from_name(&call.function).is_some_and(|p| p.latent().get() == stratum)
+}
+
+/// The stratum a hole would reach, or an error if unreadable, wrong node kind,
+/// or claiming a stratum that disagrees with its prelude primitive.
 fn reached_hole(store: &Store, node: Cairn) -> Result<u8, StoreError> {
     match store.get(node)? {
-        Stored::Node(Node::Hole { stratum, .. }) => Ok(stratum),
+        Stored::Node(Node::Hole { call, stratum, .. }) if valid_stratum(&call, stratum) => {
+            Ok(stratum)
+        }
         _ => Err(StoreError::Corrupt { asked: node, found: None, why: None }),
     }
 }
 
-/// The stratum a witness reached, or an error if unreadable or the wrong node kind.
+/// The stratum a witness reached, or an error if unreadable, wrong node kind,
+/// or claiming a stratum that disagrees with its prelude primitive.
 fn reached_witness(store: &Store, node: Cairn) -> Result<u8, StoreError> {
     match store.get(node)? {
-        Stored::Node(Node::Witness { stratum, .. }) => Ok(stratum),
+        Stored::Node(Node::Witness { call, stratum, .. }) if valid_stratum(&call, stratum) => {
+            Ok(stratum)
+        }
         _ => Err(StoreError::Corrupt { asked: node, found: None, why: None }),
     }
 }

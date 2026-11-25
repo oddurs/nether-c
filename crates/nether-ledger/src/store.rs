@@ -554,7 +554,14 @@ impl Store {
             vec![objects.join(&prefix[..2])]
         } else {
             let mut list = Vec::new();
-            for entry in fs::read_dir(&objects)? {
+            let entries = match fs::read_dir(&objects) {
+                Ok(entries) => entries,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                    return Err(StoreError::NoMatch(prefix.to_owned()));
+                }
+                Err(e) => return Err(StoreError::Io(e)),
+            };
+            for entry in entries {
                 let entry = entry?;
                 if !entry.file_type()?.is_dir() {
                     continue;

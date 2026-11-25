@@ -4,12 +4,13 @@
 //! answering produces a new trace with a new cairn, and the old one still
 //! exists with its hole in it.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
 use nether_bury::{Answers, HaltKind, bury_with};
-use nether_core::Capability;
+use nether_core::{Capability, Depth, Prim};
 use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
 use nether_syntax::print;
 use nether_world::{
@@ -69,9 +70,19 @@ impl<'a> Asked<'a> {
     /// Read the flags, or say which one was wrong.
     fn parse(args: &'a [String]) -> Result<Self, ExitCode> {
         let mut it = Self::default();
+        let mut fuel_set = false;
+        let mut end_opts = false;
         let mut rest = args.iter();
         while let Some(arg) = rest.next() {
+            if end_opts {
+                if it.name.is_some() {
+                    return Err(wrong("one cairn at a time"));
+                }
+                it.name = Some(arg.as_str());
+                continue;
+            }
             match arg.as_str() {
+                "--" => end_opts = true,
                 "--json" => it.wants_json = true,
                 "--replay" => it.replaying = true,
                 "--grant" => {
@@ -92,25 +103,31 @@ impl<'a> Asked<'a> {
                     Some(_) if it.target.is_some() => {
                         return Err(wrong("`--target` is given once"));
                     }
-                    Some(t) if !t.is_empty() => it.target = Some(t),
+                    Some(t) if !t.is_empty() && !t.starts_with("--") => it.target = Some(t),
                     _ => return Err(wrong("`--target` wants a triple")),
                 },
                 "--fuel" => match rest.next().map(|n| n.parse::<u64>()) {
-                    Some(Ok(n)) => it.fuel = n,
+                    Some(Ok(_)) if fuel_set => return Err(wrong("`--fuel` is given once")),
+                    Some(Ok(n)) => {
+                        it.fuel = n;
+                        fuel_set = true;
+                    }
                     _ => return Err(wrong("`--fuel` wants a number of steps")),
                 },
                 "--reach" => match rest.next() {
-                    Some(h) if !h.is_empty() => it.reach.push(h.clone()),
+                    Some(h) if !h.is_empty() && !h.starts_with("--") => it.reach.push(h.clone()),
                     _ => return Err(wrong("`--reach` wants a host, and optionally a port")),
                 },
                 // §8.3.4: once. Two roots would be two answers to one `read`.
                 "--root" => match rest.next() {
-                    Some(r) if !r.is_empty() && it.root.is_none() => it.root = Some(r),
+                    Some(r) if !r.is_empty() && !r.starts_with("--") && it.root.is_none() => {
+                        it.root = Some(r);
+                    }
                     Some(_) if it.root.is_some() => return Err(wrong("`--root` is given once")),
                     _ => return Err(wrong("`--root` wants a directory")),
                 },
                 "--load" => match rest.next() {
-                    Some(p) if !p.is_empty() => it.load.push(p.clone()),
+                    Some(p) if !p.is_empty() && !p.starts_with("--") => it.load.push(p.clone()),
                     _ => return Err(wrong("`--load` wants the path of a shared object")),
                 },
                 other if other.starts_with("--") => {
@@ -224,9 +241,13 @@ pub fn run(args: &[String]) -> ExitCode {
         Ok(asked) => asked,
         Err(code) => return code,
     };
-    let store = match crate::opened() {
-        Ok(store) => store,
-        Err(code) => return code,
+    let store = if asked.replaying {
+        crate::opened_readonly()
+    } else {
+        match crate::opened() {
+            Ok(store) => store,
+            Err(code) => return code,
+        }
     };
     let cairn = match crate::named(&store, asked.name.unwrap_or_default()) {
         Ok(cairn) => cairn,
@@ -247,7 +268,19 @@ fn questions(store: &Store, holes: &[Cairn]) -> Result<Vec<(Call, Span)>, ExitCo
     holes
         .iter()
         .map(|h| match store.get(*h) {
-            Ok(Stored::Node(Node::Hole { call, span, .. })) => Ok((call, span)),
+            Ok(Stored::Node(Node::Hole { call, stratum, span }))
+                if crate::closing::valid_stratum(&call, stratum) =>
+            {
+                Ok((call, span))
+            }
+            Ok(Stored::Node(Node::Hole { call, stratum, .. })) => {
+                eprintln!(
+                    "nether: hole {} claims stratum {stratum} for `{}`",
+                    h.short(),
+                    call.function
+                );
+                Err(ExitCode::from(code::MALFORMED))
+            }
             Ok(_) => {
                 eprintln!("nether: hole {} is not a hole node in this ledger", h.short());
                 Err(ExitCode::from(code::MALFORMED))
@@ -328,14 +361,41 @@ fn gather_replay(store: &Store, witnesses: &[Cairn], holes: &[Cairn]) -> Result<
     Ok(answers)
 }
 
+fn prior_read_answers(
+    store: &Store,
+    witnesses: &[Cairn],
+) -> Result<HashMap<Call, Cairn>, ExitCode> {
+    let mut prior = HashMap::new();
+    for &w in witnesses {
+        match store.get(w) {
+            Ok(Stored::Node(Node::Witness { stratum, call, answer, .. })) => {
+                if Depth::new(stratum).is_some_and(Depth::reads) {
+                    prior.entry(call).or_insert(answer);
+                }
+            }
+            Ok(_) => {
+                eprintln!("nether: witness {} is not a witness node in this ledger", w.short());
+                return Err(ExitCode::from(code::MALFORMED));
+            }
+            Err(e) => {
+                eprintln!("nether: {e}");
+                return Err(crate::closing::store_exit(&e));
+            }
+        }
+    }
+    Ok(prior)
+}
+
 fn answer_holes(
     store: &Store,
     asked: &Asked,
     holes: &[Cairn],
+    prior_witnesses: &[Cairn],
     said: &mut Vec<(Call, Cairn)>,
     recorded: &mut Vec<Cairn>,
 ) -> Result<Answers, ExitCode> {
     let asked_holes = questions(store, holes)?;
+    let mut prior_reads = prior_read_answers(store, prior_witnesses)?;
     let world = world_from(asked)?;
     let into = Recorder::new(store);
     let outcomes = world.ask_all(&asked_holes, &into);
@@ -357,6 +417,20 @@ fn answer_holes(
                 return Err(FAILED);
             }
             Ok(answer) => {
+                if Prim::from_name(&call.function).is_some_and(|p| p.latent().reads()) {
+                    if let Some(&prev) = prior_reads.get(&call)
+                        && prev != answer.answer()
+                    {
+                        eprintln!(
+                            "nether: `{}` returned {}, disagreeing with earlier read witness {}",
+                            call.function,
+                            answer.answer().short(),
+                            prev.short()
+                        );
+                        return Err(FAILED);
+                    }
+                    prior_reads.entry(call.clone()).or_insert(answer.answer());
+                }
                 let Ok(Stored::Value(value)) = store.get(answer.answer()) else {
                     eprintln!("nether: the answer to `{}` is not readable back", call.function);
                     return Err(FAILED);
@@ -370,7 +444,69 @@ fn answer_holes(
     Ok(answers)
 }
 
-fn finish_replay(cairn: Cairn, next: Cairn, wants_json: bool) -> Result<(), ExitCode> {
+fn first_trace_diff(orig: &Node, next: &Node) -> String {
+    let (
+        Node::Trace {
+            residue: r1,
+            holes: h1,
+            witnesses: w1,
+            deposits: d1,
+            source: s1,
+            depth: dp1,
+            unrecorded: u1,
+        },
+        Node::Trace {
+            residue: r2,
+            holes: h2,
+            witnesses: w2,
+            deposits: d2,
+            source: s2,
+            depth: dp2,
+            unrecorded: u2,
+        },
+    ) = (orig, next)
+    else {
+        return "trace node shape changed".to_string();
+    };
+    if r1 != r2 {
+        return format!("residue: expected {}, got {}", r1.short(), r2.short());
+    }
+    let diff_list = |label: &str, a: &[Cairn], b: &[Cairn]| -> Option<String> {
+        for (i, (x, y)) in a.iter().zip(b).enumerate() {
+            if x != y {
+                return Some(format!("{label}[{i}]: expected {}, got {}", x.short(), y.short()));
+            }
+        }
+        if a.len() != b.len() {
+            return Some(format!("{label} count: expected {}, got {}", a.len(), b.len()));
+        }
+        None
+    };
+    if let Some(d) = diff_list("holes", h1, h2)
+        .or_else(|| diff_list("witnesses", w1, w2))
+        .or_else(|| diff_list("deposits", d1, d2))
+    {
+        return d;
+    }
+    if s1 != s2 {
+        return format!("source: expected {}, got {}", s1.short(), s2.short());
+    }
+    if dp1 != dp2 {
+        return format!("depth: expected {dp1}, got {dp2}");
+    }
+    if u1 != u2 {
+        return format!("unrecorded: expected {u1}, got {u2}");
+    }
+    "trace hash differed".to_string()
+}
+
+fn finish_replay(
+    cairn: Cairn,
+    orig: &Node,
+    deeper: &Node,
+    wants_json: bool,
+) -> Result<(), ExitCode> {
+    let next = Stored::Node(deeper.clone()).cairn();
     if next == cairn {
         if wants_json {
             println!("{{\"cairn\":\"{cairn}\",\"identical\":true}}");
@@ -379,51 +515,127 @@ fn finish_replay(cairn: Cairn, next: Cairn, wants_json: bool) -> Result<(), Exit
         }
         return Ok(());
     }
-    eprintln!("nether: replay produced {} and not {}", next.short(), cairn.short());
-    eprintln!("        §6.7 calls that a bug in the implementation.");
+    let diff = first_trace_diff(orig, deeper);
+    if wants_json {
+        println!(
+            "{{\"cairn\":\"{cairn}\",\"replayed\":\"{next}\",\"identical\":false,\"diff\":{}}}",
+            json::string(&diff)
+        );
+    } else {
+        eprintln!("nether: replay produced {} and not {}", next.short(), cairn.short());
+        eprintln!("        first differing field: {diff}");
+        eprintln!("        §6.7 calls that a bug in the implementation.");
+    }
     Err(ExitCode::from(code::MALFORMED))
+}
+
+fn emit_sealed(store: &Store, told: &Sealed, wants_json: bool) {
+    if wants_json {
+        println!("{}", told.json());
+    } else {
+        print!("{}", told.text(store));
+    }
+}
+
+fn replay_trace(
+    store: &Store,
+    cairn: Cairn,
+    orig_trace: &Node,
+    buried_residue: &nether_bury::Residue,
+    residue_cairn: Cairn,
+    recorded: Vec<Cairn>,
+    wants_json: bool,
+) -> Result<(), ExitCode> {
+    let Node::Trace { deposits, source, unrecorded: marked, .. } = orig_trace else {
+        unreachable!();
+    };
+    let unrecorded = *marked || crate::closing::unrecorded(store, &recorded)?;
+    // Replay verifies equality without mutating the store; compute depth
+    // of any replayed holes from `buried_residue.named` rather than `store`.
+    let mut replay_hole_depth = buried_residue.depth.get();
+    for (c, obj) in &buried_residue.named {
+        if buried_residue.holes.contains(c)
+            && let Stored::Node(Node::Hole { stratum, .. }) = obj
+        {
+            replay_hole_depth = replay_hole_depth.max(*stratum);
+        }
+    }
+    let deepest = crate::closing::depth(store, replay_hole_depth, &[], &recorded)?;
+    let deeper = Node::Trace {
+        residue: residue_cairn,
+        holes: buried_residue.holes.clone(),
+        unrecorded,
+        deposits: crate::closing::deposits(deposits, &buried_residue.deposits),
+        witnesses: recorded,
+        source: *source,
+        depth: deepest,
+    };
+    finish_replay(cairn, orig_trace, &deeper, wants_json)
+}
+
+fn reject_unrecorded_replay(cairn: Cairn) -> ExitCode {
+    eprintln!("nether: {} reached stratum 8, so replaying it proves nothing.", cairn.short());
+    eprintln!();
+    eprintln!("  §1.7: nothing downstream of an unrecorded call is recorded, so a");
+    eprintln!("  second run agreeing with the first would be a coincidence and a");
+    eprintln!("  second run disagreeing would be the same trace. `nether strata`");
+    eprintln!("  says `replayable: no` about this one, and so does this.");
+    FAILED
 }
 
 fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     let (replaying, wants_json) = (asked.replaying, asked.wants_json);
-    let Ok(Stored::Node(Node::Trace {
-        residue,
-        holes,
-        witnesses,
-        deposits,
-        source,
-        unrecorded: marked,
-        ..
-    })) = store.get(cairn)
-    else {
+    let Ok(Stored::Node(orig_trace @ Node::Trace { .. })) = store.get(cairn) else {
         return Err(crate::not_a_trace(store, cairn));
+    };
+    let Node::Trace {
+        residue,
+        ref holes,
+        ref witnesses,
+        ref deposits,
+        source,
+        depth: orig_depth,
+        unrecorded: marked,
+    } = orig_trace
+    else {
+        unreachable!();
     };
 
     let (text, unit) = crate::closing::residue_unit(store, cairn, residue)?;
     let shown = format!("{}:residue", cairn.short());
 
-    let prior_unrecorded = crate::closing::unrecorded(store, &witnesses)?;
-    let _ = crate::closing::depth(store, 0, &[], &witnesses)?;
+    let prior_unrecorded = crate::closing::unrecorded(store, witnesses)?;
+    let _ = crate::closing::depth(store, 0, &[], witnesses)?;
     if replaying && (marked || prior_unrecorded) {
-        eprintln!("nether: {} reached stratum 8, so replaying it proves nothing.", cairn.short());
-        eprintln!();
-        eprintln!("  §1.7: nothing downstream of an unrecorded call is recorded, so a");
-        eprintln!("  second run agreeing with the first would be a coincidence and a");
-        eprintln!("  second run disagreeing would be the same trace. `nether strata`");
-        eprintln!("  says `replayable: no` about this one, and so does this.");
-        return Err(FAILED);
+        return Err(reject_unrecorded_replay(cairn));
     }
 
     let mut said: Vec<(Call, Cairn)> = Vec::new();
     let mut recorded: Vec<Cairn> = witnesses.clone();
     let answers = if replaying {
-        gather_replay(store, &witnesses, &holes)?
+        gather_replay(store, witnesses, holes)?
     } else {
-        answer_holes(store, asked, &holes, &mut said, &mut recorded)?
+        answer_holes(store, asked, holes, witnesses, &mut said, &mut recorded)?
     };
 
-    let residue = match bury_with(&unit, source, asked.fuel, &answers) {
-        Ok(residue) => residue,
+    if !replaying && said.is_empty() {
+        let told = Sealed {
+            was: cairn,
+            now: cairn,
+            said,
+            depth: orig_depth,
+            holes: holes.clone(),
+            spent: 0,
+            any_granted: !asked.granted.is_empty(),
+        };
+        emit_sealed(store, &told, wants_json);
+        return Ok(());
+    }
+
+    // `unit` was parsed from `trace.residue`, so spans generated during
+    // re-burial are byte offsets into `residue` rather than `source`.
+    let buried_residue = match bury_with(&unit, residue, asked.fuel, &answers) {
+        Ok(r) => r,
         Err(halt) => {
             eprint!(
                 "{}",
@@ -436,35 +648,33 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
         }
     };
 
-    let printed = print(&residue.as_unit(&unit));
+    let printed = print(&buried_residue.as_unit(&unit));
     let residue_obj = Stored::Value(Value::Bytes(printed.into_bytes()));
     let unrecorded = marked || crate::closing::unrecorded(store, &recorded)?;
 
     if replaying {
-        // Replay verifies equality without mutating the store.
-        let deepest = crate::closing::depth(store, residue.depth.get(), &residue.holes, &recorded)?;
-        let deeper = Node::Trace {
-            residue: residue_obj.cairn(),
-            holes: residue.holes.clone(),
-            unrecorded,
-            deposits: crate::closing::deposits(&deposits, &residue.deposits),
-            witnesses: recorded,
-            source,
-            depth: deepest,
-        };
-        return finish_replay(cairn, Stored::Node(deeper).cairn(), wants_json);
+        return replay_trace(
+            store,
+            cairn,
+            &orig_trace,
+            &buried_residue,
+            residue_obj.cairn(),
+            recorded,
+            wants_json,
+        );
     }
 
-    for (_, stored) in &residue.named {
+    for (_, stored) in &buried_residue.named {
         crate::kept(store, stored)?;
     }
     let next_residue = crate::kept(store, &residue_obj)?;
-    let deepest = crate::closing::depth(store, residue.depth.get(), &residue.holes, &recorded)?;
+    let deepest =
+        crate::closing::depth(store, buried_residue.depth.get(), &buried_residue.holes, &recorded)?;
     let deeper = Node::Trace {
         residue: next_residue,
-        holes: residue.holes.clone(),
+        holes: buried_residue.holes.clone(),
         unrecorded,
-        deposits: crate::closing::deposits(&deposits, &residue.deposits),
+        deposits: crate::closing::deposits(deposits, &buried_residue.deposits),
         witnesses: recorded,
         source,
         depth: deepest,
@@ -476,15 +686,11 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
         now: next,
         said,
         depth: deepest,
-        holes: residue.holes.clone(),
-        spent: residue.fuel_spent,
+        holes: buried_residue.holes.clone(),
+        spent: buried_residue.fuel_spent,
         any_granted: !asked.granted.is_empty(),
     };
-    if wants_json {
-        println!("{}", told.json());
-    } else {
-        print!("{}", told.text(store));
-    }
+    emit_sealed(store, &told, wants_json);
     Ok(())
 }
 

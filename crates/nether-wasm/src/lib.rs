@@ -39,6 +39,12 @@ use nether_syntax::{lower, parse, print};
 /// The budget, as §8.2 gives `bury` one.
 const DEFAULT_FUEL: u64 = 1_000_000;
 
+/// Browser graph caps mirrored inside WASM before hex+JSON assembly so a small
+/// program depositing many large values returns a clean diagnostic instead of
+/// exhausting linear memory.
+const MAX_WASM_OBJECTS: usize = 20_000;
+const MAX_WASM_ENCODED_BYTES: usize = 16 * 1024 * 1024;
+
 /// Hand back `len` bytes the caller may write into.
 ///
 /// # Safety
@@ -114,16 +120,7 @@ fn block(text: &str) -> *mut u8 {
     at
 }
 
-/// The burial itself, in the order §8.2 puts it.
-///
-/// Public and pointer-free, because the claim worth proving is that this
-/// agrees with `nether bury` on the same source, and a proof that has to go
-/// through linear memory to make it is proving the plumbing instead.
-#[must_use]
-pub fn burying(source: &[u8], fuel: u64) -> String {
-    // Zero means §8.2's default rather than a burial that cannot take a step,
-    // because a budget of nothing is never what anyone meant.
-    let fuel = if fuel == 0 { DEFAULT_FUEL } else { fuel };
+fn parse_and_check(source: &[u8]) -> Result<(&str, nether_core::Unit), String> {
     let text = match core::str::from_utf8(source) {
         Ok(s) => s,
         Err(e) => {
@@ -134,20 +131,46 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
                 span: nether_core::Span { start: at, end: at },
                 kind: nether_syntax::FaultKind::NotUtf8,
             };
-            return trouble(&report(&fault.diagnostic(), prefix, "source"), "");
+            return Err(trouble(&report(&fault.diagnostic(), prefix, "source"), ""));
         }
     };
-    let ast = match parse(source) {
-        Ok(ast) => ast,
-        Err(faults) => return trouble(&report(&faults[0].diagnostic(), text, "source"), ""),
+    let format_all = |diags: Vec<nether_core::Diagnostic>| -> String {
+        let mut out = String::new();
+        for d in &diags {
+            out.push_str(&report(d, text, "source"));
+        }
+        if out.is_empty() { "burial failed with no diagnostic".to_owned() } else { out }
     };
-    let unit = match lower(&ast) {
-        Ok(unit) => unit,
-        Err(faults) => return trouble(&report(&faults[0].diagnostic(), text, "source"), ""),
-    };
-    if let Some(fault) = check(&unit).first() {
-        return trouble(&report(&fault.diagnostic(), text, "source"), "");
+    let ast = parse(source).map_err(|faults| {
+        trouble(&format_all(faults.iter().map(nether_syntax::Fault::diagnostic).collect()), "")
+    })?;
+    let unit = lower(&ast).map_err(|faults| {
+        trouble(&format_all(faults.iter().map(nether_syntax::Fault::diagnostic).collect()), "")
+    })?;
+    let faults = check(&unit);
+    if !faults.is_empty() {
+        return Err(trouble(
+            &format_all(faults.iter().map(nether_core::Fault::diagnostic).collect()),
+            "",
+        ));
     }
+    Ok((text, unit))
+}
+
+/// The burial itself, in the order §8.2 puts it.
+///
+/// Public and pointer-free, because the claim worth proving is that this
+/// agrees with `nether bury` on the same source, and a proof that has to go
+/// through linear memory to make it is proving the plumbing instead.
+#[must_use]
+pub fn burying(source: &[u8], fuel: u64) -> String {
+    // Zero means §8.2's default rather than a burial that cannot take a step,
+    // because a budget of nothing is never what anyone meant.
+    let fuel = if fuel == 0 { DEFAULT_FUEL } else { fuel };
+    let (text, unit) = match parse_and_check(source) {
+        Ok(pair) => pair,
+        Err(err_json) => return err_json,
+    };
 
     // §7.3.1: a span names its source by cairn, so the name exists first.
     let named = Stored::Value(Value::Bytes(source.to_vec()));
@@ -200,7 +223,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
                 .map_or_else(|| "null".to_owned(), quoted);
             Some(format!(
                 "{{\"cairn\":\"{h}\",\"call\":{},\"stratum\":{stratum},\"capability\":{cap}}}",
-                quoted(&format!("{}({} argument(s))", call.function, call.args.len()))
+                quoted(&call.function)
             ))
         })
         .collect();
@@ -214,14 +237,13 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     objects.sort_unstable_by_key(|(id, _)| *id);
     objects.dedup_by_key(|(id, _)| *id);
     let node_count = objects.len();
-    let objects = objects
-        .iter()
-        .map(|(id, object)| format!("[\"{id}\",\"{}\"]", hex(&object.encode())))
-        .collect::<Vec<_>>()
-        .join(",");
+    let encoded_objects = match encode_objects(&objects) {
+        Ok(s) => s,
+        Err(err_json) => return err_json,
+    };
     format!(
         "{{\"cairn\":\"{}\",\"residue\":\"{}\",\"source\":\"{}\",\"depth\":{},\"nodes\":{},\
-         \"fuel_spent\":{},\"holes\":[{}],\"printed\":{},\"objects\":[{objects}]}}",
+         \"fuel_spent\":{},\"holes\":[{}],\"printed\":{},\"objects\":[{encoded_objects}]}}",
         trace.cairn(),
         residue_cairn,
         source_cairn,
@@ -233,14 +255,40 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     )
 }
 
+fn encode_objects(objects: &[(Cairn, &Stored)]) -> Result<String, String> {
+    if objects.len() > MAX_WASM_OBJECTS {
+        return Err(trouble(
+            &format!(
+                "burial produced {} objects, past the browser limit of {MAX_WASM_OBJECTS}",
+                objects.len()
+            ),
+            "",
+        ));
+    }
+    let mut total_encoded: usize = 0;
+    let mut encoded_pairs: Vec<String> = Vec::with_capacity(objects.len());
+    for (id, object) in objects {
+        let raw = object.encode();
+        total_encoded = total_encoded.saturating_add(raw.len());
+        if total_encoded > MAX_WASM_ENCODED_BYTES {
+            return Err(trouble(
+                "burial objects exceed the browser's 16 MiB transport limit",
+                "reduce the output size or run `nether bury` natively.",
+            ));
+        }
+        encoded_pairs.push(format!("[\"{id}\",\"{}\"]", hex(&raw)));
+    }
+    Ok(encoded_pairs.join(","))
+}
+
 fn hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8] = b"0123456789abcdef";
-    bytes
-        .iter()
-        .flat_map(|b| {
-            [char::from(DIGITS[(b >> 4) as usize]), char::from(DIGITS[(b & 15) as usize])]
-        })
-        .collect()
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(char::from(DIGITS[(b >> 4) as usize]));
+        out.push(char::from(DIGITS[(b & 15) as usize]));
+    }
+    out
 }
 
 /// What went wrong, in the shape the page already reads.

@@ -29,9 +29,18 @@ pub fn run(args: &[String]) -> ExitCode {
     let mut at_byte: Option<u64> = None;
     let mut source_path: Option<String> = None;
     let mut depth = DEFAULT_DEPTH;
+    let mut end_opts = false;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
+        if end_opts {
+            if name.is_some() {
+                return complain("one cairn at a time");
+            }
+            name = Some(arg.clone());
+            continue;
+        }
         match arg.as_str() {
+            "--" => end_opts = true,
             "--provenance" => backwards = true,
             "--json" => wants_json = true,
             "--depth" => match rest.next().and_then(|n| n.parse::<usize>().ok()) {
@@ -63,10 +72,7 @@ pub fn run(args: &[String]) -> ExitCode {
         return complain("which cairn?");
     };
 
-    let store = match crate::opened() {
-        Ok(store) => store,
-        Err(code) => return code,
-    };
+    let store = crate::opened_readonly();
     let cairn = match crate::named(&store, &name) {
         Ok(c) => c,
         Err(code) => return code,
@@ -286,13 +292,13 @@ fn provenance(store: &Store, cairn: Cairn, limit: usize, wants_json: bool) -> Ex
         Ok(Stored::Node(n)) => format!("{}  {}", cairn.short(), node(store, &n)),
         Err(e) => {
             eprintln!("nether: {e}");
-            return store_exit(&e);
+            return crate::closing::store_exit(&e);
         }
     };
     let mut lines = vec![head];
     if let Err(e) = walk(store, cairn, limit, 0, &mut lines) {
         eprintln!("nether: {e}");
-        return store_exit(&e);
+        return crate::closing::store_exit(&e);
     }
     if wants_json {
         let each: Vec<String> = lines.iter().map(|l| json::string(l)).collect();
@@ -304,15 +310,6 @@ fn provenance(store: &Store, cairn: Cairn, limit: usize, wants_json: bool) -> Ex
 }
 
 const MAX_PROVENANCE_LINES: usize = 10_000;
-
-fn store_exit(e: &nether_ledger::StoreError) -> ExitCode {
-    match e {
-        nether_ledger::StoreError::Corrupt { .. } | nether_ledger::StoreError::Ragged { .. } => {
-            ExitCode::from(crate::code::MALFORMED)
-        }
-        _ => FAILED,
-    }
-}
 
 fn walk(
     store: &Store,
@@ -409,11 +406,11 @@ fn inspect_at(
         Ok(Stored::Value(Value::Bytes(b))) => b,
         Ok(_) => {
             eprintln!("nether: source {} is not bytes", source.short());
-            return FAILED;
+            return ExitCode::from(crate::code::MALFORMED);
         }
         Err(e) => {
             eprintln!("nether: {e}");
-            return FAILED;
+            return crate::closing::store_exit(&e);
         }
     };
     let Some(at) =
@@ -545,7 +542,7 @@ fn trace_hits(
         }
         let stored = store.get(at).map_err(|e| {
             eprintln!("nether: {e}");
-            FAILED
+            crate::closing::store_exit(&e)
         })?;
         let Stored::Node(n) = stored else { continue };
         let (Node::Deposit { span, .. } | Node::Hole { span, .. } | Node::Witness { span, .. }) =
@@ -576,13 +573,13 @@ fn trace_hits(
         for r in n.references() {
             store.get(r).map_err(|e| {
                 eprintln!("nether: {e}");
-                FAILED
+                crate::closing::store_exit(&e)
             })?;
         }
         let mut lines = vec![format!("{}  {}", at.short(), node(store, &n))];
         if let Err(e) = walk(store, at, limit, 0, &mut lines) {
             eprintln!("nether: {e}");
-            return Err(store_exit(&e));
+            return Err(crate::closing::store_exit(&e));
         }
         hits.push(Hit { cairn: at, span, lines });
     }
@@ -783,13 +780,13 @@ fn find_call(
 
 fn bound_local<'a>(unit: &'a Unit, func: Option<&'a FuncDef>, id: LocalId) -> Option<&'a Expr> {
     if let Some(f) = func {
-        return bound_to(&f.body, id);
+        return bound_to(&f.body, id).or_else(|| assigned_in_block(&f.body, id));
     }
     unit.globals
         .iter()
         .map(|g| &g.value)
         .chain(unit.demands.iter().map(|d| &d.value))
-        .find_map(|e| bound_in_expr(e, id))
+        .find_map(|e| bound_in_expr(e, id).or_else(|| assigned_in_expr(e, id)))
 }
 
 fn bound_in_expr(x: &Expr, id: LocalId) -> Option<&Expr> {
@@ -797,4 +794,46 @@ fn bound_in_expr(x: &Expr, id: LocalId) -> Option<&Expr> {
         return bound_to(b, id);
     }
     children(x).into_iter().find_map(|c| bound_in_expr(c, id))
+}
+
+fn assigned_in_block(b: &Block, id: LocalId) -> Option<&Expr> {
+    let mut best: Option<&Expr> = None;
+    for s in &b.stmts {
+        let cand = match s {
+            Stmt::Let { value, .. } | Stmt::Expr(value) => assigned_in_expr(value, id),
+            Stmt::Declare { .. } => None,
+        };
+        if let Some(e) = cand
+            && best.is_none_or(|prev| e.depth > prev.depth)
+        {
+            best = Some(e);
+        }
+    }
+    if let Some(t) = &b.tail
+        && let Some(e) = assigned_in_expr(t, id)
+        && best.is_none_or(|prev| e.depth > prev.depth)
+    {
+        best = Some(e);
+    }
+    best
+}
+
+fn assigned_in_expr(x: &Expr, id: LocalId) -> Option<&Expr> {
+    if let ExprKind::Assign { place, value } = &x.kind
+        && place.local == id
+    {
+        return Some(value);
+    }
+    if let ExprKind::Block(b) = &x.kind {
+        return assigned_in_block(b, id);
+    }
+    let mut best: Option<&Expr> = None;
+    for c in children(x) {
+        if let Some(e) = assigned_in_expr(c, id)
+            && best.is_none_or(|prev| e.depth > prev.depth)
+        {
+            best = Some(e);
+        }
+    }
+    best
 }

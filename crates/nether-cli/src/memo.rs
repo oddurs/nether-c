@@ -5,12 +5,13 @@
 //! fact the store does not, so deleting the directory loses time and nothing
 //! else.
 
+use std::collections::HashSet;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nether_ledger::{Cairn, Node, Store, Stored, Value};
+use nether_ledger::{AnswerOf, Cairn, Node, Store, Stored, Value};
 
 static MEMO_NONCE: AtomicU64 = AtomicU64::new(0);
 
@@ -19,6 +20,33 @@ pub struct Remembered {
     pub trace: Cairn,
     pub steps: u64,
     pub nodes: usize,
+    pub extra: Vec<Cairn>,
+}
+
+/// Verify that every transitive shaded value inside `v` is present and valid in `store`.
+fn value_complete(store: &Store, v: &Value, seen: &mut HashSet<Cairn>) -> bool {
+    let mut stack: Vec<Value> = vec![v.clone()];
+    while let Some(cur) = stack.pop() {
+        match cur {
+            Value::Shade { value, .. } => {
+                if seen.insert(value) {
+                    let Ok(Stored::Value(inner)) = store.get(value) else {
+                        return false;
+                    };
+                    stack.push(inner);
+                }
+            }
+            Value::Struct { fields, .. } => stack.extend(fields),
+            Value::Array(items) => stack.extend(items),
+            Value::Answer(ans) => {
+                if let AnswerOf::Given(inner) = *ans {
+                    stack.push(inner);
+                }
+            }
+            _ => {}
+        }
+    }
+    true
 }
 
 /// Where one burial's entry lives, or nothing if this build cannot name itself.
@@ -39,11 +67,22 @@ impl Memo {
     /// buried from this source, answered by nobody, and within this budget.
     pub fn recall(&self, store: &Store, source: Cairn, fuel: u64) -> Option<Remembered> {
         let text = std::fs::read_to_string(&self.0).ok()?;
-        let mut words = text.split_whitespace();
+        let mut lines = text.lines();
+        let header = lines.next()?;
+        let mut words = header.split_whitespace();
         let trace: Cairn = words.next()?.parse().ok()?;
         let steps: u64 = words.next()?.parse().ok()?;
         let nodes: usize = words.next()?.parse().ok()?;
         if words.next().is_some() {
+            return None;
+        }
+        let mut extra = Vec::new();
+        if let Some(extra_line) = lines.next() {
+            for tok in extra_line.split_whitespace() {
+                extra.push(tok.parse::<Cairn>().ok()?);
+            }
+        }
+        if lines.next().is_some() {
             return None;
         }
         let Ok(Stored::Node(Node::Trace {
@@ -52,33 +91,62 @@ impl Memo {
             deposits,
             source: s,
             witnesses,
+            depth,
             unrecorded,
-            ..
         })) = store.get(trace)
         else {
             return None;
         };
-        let complete = s == source
-            && !unrecorded
-            && witnesses.is_empty()
-            && steps <= fuel
-            && matches!(store.get(source), Ok(Stored::Value(Value::Bytes(_))))
-            && matches!(store.get(residue), Ok(Stored::Value(Value::Bytes(_))))
-            && holes.iter().all(|h| {
-                matches!(
-                    store.get(*h),
-                    Ok(Stored::Node(Node::Hole { call, .. }))
-                        if call.args.iter().all(|a| matches!(store.get(*a), Ok(Stored::Value(_))))
-                )
-            })
-            && deposits.iter().all(|d| {
-                matches!(
-                    store.get(*d),
-                    Ok(Stored::Node(Node::Deposit { value, .. }))
-                        if matches!(store.get(value), Ok(Stored::Value(_)))
-                )
-            });
-        complete.then_some(Remembered { trace, steps, nodes })
+        if s != source
+            || unrecorded
+            || !witnesses.is_empty()
+            || steps > fuel
+            || !matches!(store.get(source), Ok(Stored::Value(Value::Bytes(_))))
+            || !matches!(store.get(residue), Ok(Stored::Value(Value::Bytes(_))))
+        {
+            return None;
+        }
+        let mut seen = HashSet::new();
+        let mut max_hole_stratum = 0u8;
+        for h in &holes {
+            let Ok(Stored::Node(Node::Hole { call, stratum, span })) = store.get(*h) else {
+                return None;
+            };
+            if !crate::closing::valid_stratum(&call, stratum)
+                || !matches!(store.get(span.source), Ok(Stored::Value(Value::Bytes(_))))
+            {
+                return None;
+            }
+            max_hole_stratum = max_hole_stratum.max(stratum);
+            for a in &call.args {
+                let Ok(Stored::Value(v)) = store.get(*a) else { return None };
+                if !value_complete(store, &v, &mut seen) {
+                    return None;
+                }
+            }
+        }
+        if depth < max_hole_stratum {
+            return None;
+        }
+        for d in &deposits {
+            let Ok(Stored::Node(Node::Deposit { value, span })) = store.get(*d) else {
+                return None;
+            };
+            if !matches!(store.get(span.source), Ok(Stored::Value(Value::Bytes(_)))) {
+                return None;
+            }
+            let Ok(Stored::Value(v)) = store.get(value) else { return None };
+            if !value_complete(store, &v, &mut seen) {
+                return None;
+            }
+        }
+        for &c in &extra {
+            let Ok(Stored::Value(v)) = store.get(c) else { return None };
+            if !value_complete(store, &v, &mut seen) {
+                return None;
+            }
+        }
+        Some(Remembered { trace, steps, nodes, extra })
     }
 
     /// Write the entry, beside it and then over it, so a reader sees a whole
@@ -90,7 +158,19 @@ impl Memo {
         if std::fs::create_dir_all(dir).is_err() {
             return;
         }
-        let payload = format!("{} {} {}\n", r.trace, r.steps, r.nodes);
+        let mut payload = format!("{} {} {}\n", r.trace, r.steps, r.nodes);
+        if !r.extra.is_empty() {
+            let mut seen = HashSet::new();
+            let listed: Vec<String> = r
+                .extra
+                .iter()
+                .copied()
+                .filter(|c| seen.insert(*c))
+                .map(|c| c.to_string())
+                .collect();
+            payload.push_str(&listed.join(" "));
+            payload.push('\n');
+        }
         let pid = std::process::id();
         let (tmp, mut file) = loop {
             let n = MEMO_NONCE.fetch_add(1, Ordering::Relaxed);

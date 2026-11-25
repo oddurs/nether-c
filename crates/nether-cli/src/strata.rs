@@ -15,19 +15,30 @@ use crate::{code, json, lamp, usage_error};
 
 /// `nether strata <cairn> [--json]`
 pub fn run(args: &[String]) -> ExitCode {
-    let wants_json = args.iter().any(|a| a == "--json");
-    let rest: Vec<&str> = args.iter().filter(|a| *a != "--json").map(String::as_str).collect();
-    let [name] = rest.as_slice() else {
-        return complain();
-    };
-    if name.starts_with("--") {
-        return complain();
+    let mut wants_json = false;
+    let mut name: Option<&str> = None;
+    let mut end_opts = false;
+    for arg in args {
+        if end_opts {
+            if name.is_some() {
+                return complain();
+            }
+            name = Some(arg.as_str());
+            continue;
+        }
+        match arg.as_str() {
+            "--" => end_opts = true,
+            "--json" => wants_json = true,
+            other if other.starts_with("--") => return complain(),
+            _ if name.is_some() => return complain(),
+            other => name = Some(other),
+        }
     }
-
-    let store = match crate::opened() {
-        Ok(store) => store,
-        Err(code) => return code,
+    let Some(name) = name else {
+        return complain();
     };
+
+    let store = crate::opened_readonly();
     let cairn = match crate::named(&store, name) {
         Ok(c) => c,
         Err(code) => return code,
@@ -127,7 +138,9 @@ fn survey(
             continue;
         }
         match store.get(at) {
-            Ok(Stored::Node(Node::Hole { call, stratum, span })) => {
+            Ok(Stored::Node(Node::Hole { call, stratum, span }))
+                if crate::closing::valid_stratum(&call, stratum) =>
+            {
                 reaches.push(Reach {
                     stratum,
                     answered: false,
@@ -146,7 +159,9 @@ fn survey(
             continue;
         }
         match store.get(at) {
-            Ok(Stored::Node(Node::Witness { call, stratum, span, .. })) => {
+            Ok(Stored::Node(Node::Witness { call, stratum, span, .. }))
+                if crate::closing::valid_stratum(&call, stratum) =>
+            {
                 reaches.push(Reach {
                     stratum,
                     answered: true,
