@@ -9,5 +9,6 @@
 mod bury;
 
 pub use bury::{
-    Answers, Grinding, Halt, HaltKind, MAX_FRAMES, Residue, STACK, bury, bury_on, bury_with,
+    Answers, Grinding, Halt, HaltKind, MAX_CONCAT, MAX_FRAMES, Residue, STACK, bury, bury_on,
+    bury_with,
 };
