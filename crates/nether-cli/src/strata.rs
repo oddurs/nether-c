@@ -83,6 +83,10 @@ pub fn run(args: &[String]) -> ExitCode {
         eprintln!("nether: this trace is not marked unrecorded, and a witness under it reached 8");
         return ExitCode::from(code::MALFORMED);
     }
+    if marked && told.depth < nether_ledger::MAX_STRATUM {
+        eprintln!("nether: this trace is marked unrecorded, and records depth {}", told.depth);
+        return ExitCode::from(code::MALFORMED);
+    }
     ExitCode::SUCCESS
 }
 
@@ -180,7 +184,7 @@ fn survey(
             continue;
         }
         match store.get(at) {
-            Ok(Stored::Node(Node::Deposit { .. } | Node::Literal(_))) => {}
+            Ok(Stored::Node(Node::Deposit { .. })) => {}
             Ok(_) => return Err(StoreError::Corrupt { asked: at, found: None, why: None }),
             Err(StoreError::Absent(_)) => missing += 1,
             Err(e) => return Err(e),

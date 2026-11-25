@@ -28,7 +28,7 @@ pub fn run(args: &[String]) -> ExitCode {
     let mut wants_json = false;
     let mut at_byte: Option<u64> = None;
     let mut source_path: Option<String> = None;
-    let mut depth = DEFAULT_DEPTH;
+    let mut depth_opt: Option<usize> = None;
     let mut end_opts = false;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
@@ -44,14 +44,17 @@ pub fn run(args: &[String]) -> ExitCode {
             "--provenance" => backwards = true,
             "--json" => wants_json = true,
             "--depth" => match rest.next().and_then(|n| n.parse::<usize>().ok()) {
-                Some(n) => depth = n.min(MAX_DEPTH),
+                Some(_) if depth_opt.is_some() => return complain("`--depth` is given once"),
+                Some(n) => depth_opt = Some(n.min(MAX_DEPTH)),
                 None => return complain("`--depth` wants a number"),
             },
             "--at" => match rest.next().and_then(|n| n.parse().ok()) {
+                Some(_) if at_byte.is_some() => return complain("`--at` is given once"),
                 Some(n) => at_byte = Some(n),
                 None => return complain("`--at` wants a byte offset"),
             },
             "--source" => match rest.next() {
+                Some(_) if source_path.is_some() => return complain("`--source` is given once"),
                 Some(p) if !p.starts_with("--") => source_path = Some(p.clone()),
                 _ => return complain("`--source` wants a path"),
             },
@@ -65,9 +68,13 @@ pub fn run(args: &[String]) -> ExitCode {
     if source_path.is_some() && at_byte.is_none() {
         return complain("`--source` wants `--at`");
     }
+    if depth_opt.is_some() && !backwards && at_byte.is_none() {
+        return complain("`--depth` wants `--provenance` or `--at`");
+    }
     if backwards && at_byte.is_some() {
         return complain("`--provenance` and `--at` are different walks");
     }
+    let depth = depth_opt.unwrap_or(DEFAULT_DEPTH);
     let Some(name) = name else {
         return complain("which cairn?");
     };
@@ -720,8 +727,9 @@ fn find_descend(
         if !seen_locals.insert(id) {
             return None;
         }
-        return bound_local(unit, func, id)
-            .and_then(|v| find_descend(unit, func, v, want, seen, seen_locals));
+        return local_sources(unit, func, id)
+            .into_iter()
+            .find_map(|v| find_descend(unit, func, v, want, seen, seen_locals));
     }
     if let ExprKind::Global(id) = x.kind {
         if !seen.insert(id) {
@@ -763,8 +771,9 @@ fn find_call(
         if !seen_locals.insert(id) {
             return None;
         }
-        return bound_local(unit, func, id)
-            .and_then(|v| find_call(unit, func, v, want, seen, seen_locals));
+        return local_sources(unit, func, id)
+            .into_iter()
+            .find_map(|v| find_call(unit, func, v, want, seen, seen_locals));
     }
     if let ExprKind::Global(id) = x.kind {
         if !seen.insert(id) {
@@ -778,15 +787,28 @@ fn find_call(
     children(x).into_iter().find_map(|c| find_call(unit, func, c, want, seen, seen_locals))
 }
 
-fn bound_local<'a>(unit: &'a Unit, func: Option<&'a FuncDef>, id: LocalId) -> Option<&'a Expr> {
+/// Collect every expression that can contribute depth to local `id`: its `Let`
+/// initializer (if any) plus every `Assign` targeting `id` (both RHS and
+/// `place.path` index expressions), ordered deepest-first so reassignments
+/// deeper than a pure `Let` initializer are never hidden.
+fn local_sources<'a>(unit: &'a Unit, func: Option<&'a FuncDef>, id: LocalId) -> Vec<&'a Expr> {
+    let mut out = Vec::new();
     if let Some(f) = func {
-        return bound_to(&f.body, id).or_else(|| assigned_in_block(&f.body, id));
+        if let Some(init) = bound_to(&f.body, id) {
+            out.push(init);
+        }
+        collect_assigns_in_block(&f.body, id, &mut out);
+    } else {
+        for e in unit.globals.iter().map(|g| &g.value).chain(unit.demands.iter().map(|d| &d.value))
+        {
+            if let Some(init) = bound_in_expr(e, id) {
+                out.push(init);
+            }
+            collect_assigns_in_expr(e, id, &mut out);
+        }
     }
-    unit.globals
-        .iter()
-        .map(|g| &g.value)
-        .chain(unit.demands.iter().map(|d| &d.value))
-        .find_map(|e| bound_in_expr(e, id).or_else(|| assigned_in_expr(e, id)))
+    out.sort_by_key(|a| std::cmp::Reverse(a.depth));
+    out
 }
 
 fn bound_in_expr(x: &Expr, id: LocalId) -> Option<&Expr> {
@@ -796,44 +818,34 @@ fn bound_in_expr(x: &Expr, id: LocalId) -> Option<&Expr> {
     children(x).into_iter().find_map(|c| bound_in_expr(c, id))
 }
 
-fn assigned_in_block(b: &Block, id: LocalId) -> Option<&Expr> {
-    let mut best: Option<&Expr> = None;
+fn collect_assigns_in_block<'a>(b: &'a Block, id: LocalId, out: &mut Vec<&'a Expr>) {
     for s in &b.stmts {
-        let cand = match s {
-            Stmt::Let { value, .. } | Stmt::Expr(value) => assigned_in_expr(value, id),
-            Stmt::Declare { .. } => None,
-        };
-        if let Some(e) = cand
-            && best.is_none_or(|prev| e.depth > prev.depth)
-        {
-            best = Some(e);
+        match s {
+            Stmt::Let { value, .. } | Stmt::Expr(value) => collect_assigns_in_expr(value, id, out),
+            Stmt::Declare { .. } => {}
         }
     }
-    if let Some(t) = &b.tail
-        && let Some(e) = assigned_in_expr(t, id)
-        && best.is_none_or(|prev| e.depth > prev.depth)
-    {
-        best = Some(e);
+    if let Some(t) = &b.tail {
+        collect_assigns_in_expr(t, id, out);
     }
-    best
 }
 
-fn assigned_in_expr(x: &Expr, id: LocalId) -> Option<&Expr> {
+fn collect_assigns_in_expr<'a>(x: &'a Expr, id: LocalId, out: &mut Vec<&'a Expr>) {
     if let ExprKind::Assign { place, value } = &x.kind
         && place.local == id
     {
-        return Some(value);
-    }
-    if let ExprKind::Block(b) = &x.kind {
-        return assigned_in_block(b, id);
-    }
-    let mut best: Option<&Expr> = None;
-    for c in children(x) {
-        if let Some(e) = assigned_in_expr(c, id)
-            && best.is_none_or(|prev| e.depth > prev.depth)
-        {
-            best = Some(e);
+        out.push(value);
+        for proj in &place.path {
+            if let nether_core::Proj::Index(idx) = proj {
+                out.push(idx);
+            }
         }
     }
-    best
+    if let ExprKind::Block(b) = &x.kind {
+        collect_assigns_in_block(b, id, out);
+        return;
+    }
+    for c in children(x) {
+        collect_assigns_in_expr(c, id, out);
+    }
 }

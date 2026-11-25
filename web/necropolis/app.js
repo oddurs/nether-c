@@ -68,13 +68,21 @@ function inspect(object) {
     const body = element("pre");
     const sample = object.data.subarray(0, 2048);
     const textSample = utf8Prefix(object.data, 2048);
+    let textBtn, hexBtn;
     const showText = () => {
-      try { body.textContent = new TextDecoder("utf-8", { fatal: true }).decode(textSample); }
+      textBtn.setAttribute("aria-pressed", "true");
+      hexBtn.setAttribute("aria-pressed", "false");
+      try { body.textContent = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(textSample); }
       catch { body.textContent = "This preview is not valid UTF-8. Use hex to inspect the exact bytes."; }
     };
-    detail.append(button("Text", showText), button("Hex", () => {
+    const showHex = () => {
+      textBtn.setAttribute("aria-pressed", "false");
+      hexBtn.setAttribute("aria-pressed", "true");
       body.textContent = hex(sample).match(/.{1,32}/g)?.map((line) => line.match(/../g).join(" ")).join("\n") || "(empty)";
-    }), body);
+    };
+    textBtn = button("Text", showText);
+    hexBtn = button("Hex", showHex);
+    detail.append(textBtn, hexBtn, body);
     showText();
   } else if (object.kind === "Str") detail.append(element("pre", object.data.slice(0, 2048) + (object.data.length > 2048 ? "…" : "")));
   else if (object.kind === "Array" || object.kind === "Struct") {
@@ -137,7 +145,7 @@ function bury() {
     if (worker !== active) return;
     try {
       if (!data || typeof data !== "object") throw new Error("The burial worker returned an invalid response.");
-      if (data.error) { failed(data.error); return; }
+      if (data.error) { failed(data.note ? `${data.error}\n${data.note}` : data.error); return; }
       const next = new Graph(data);
       const nextNav = new Navigation(next.root);
       const summary = `depth ${data.depth} · ${data.holes.length} hole${data.holes.length === 1 ? "" : "s"} · ${next.encoded.size} objects · ${data.fuel_spent.toLocaleString()} steps`;
@@ -160,7 +168,7 @@ function bury() {
           ids.slice(0, 6).forEach((id, i) => frag.append(button(`${label} ${i + 1}`, () => visit(id), `nc-root-${label}`)));
           if (ids.length > 6) frag.append(button(`All ${ids.length} ${label}s`, () => {
             navigation.visit(graph.root);
-            shown = { incoming: PAGE_SIZE, outgoing: Math.max(PAGE_SIZE, references(root).length) };
+            shown = { incoming: PAGE_SIZE, outgoing: Math.min(references(root).length, PAGE_SIZE * 4) };
             render();
             $("selected-title").focus({ preventScroll: true });
           }));

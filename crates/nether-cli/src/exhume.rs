@@ -365,16 +365,33 @@ fn prior_read_answers(
     store: &Store,
     witnesses: &[Cairn],
 ) -> Result<HashMap<Call, Cairn>, ExitCode> {
-    let mut prior = HashMap::new();
+    let mut prior: HashMap<Call, Cairn> = HashMap::new();
     for &w in witnesses {
         match store.get(w) {
-            Ok(Stored::Node(Node::Witness { stratum, call, answer, .. })) => {
+            Ok(Stored::Node(Node::Witness { stratum, call, answer, .. }))
+                if crate::closing::valid_stratum(&call, stratum) =>
+            {
                 if Depth::new(stratum).is_some_and(Depth::reads) {
-                    prior.entry(call).or_insert(answer);
+                    if let Some(&prev) = prior.get(&call) {
+                        if prev != answer {
+                            eprintln!(
+                                "nether: contradictory prior read witnesses for `{}` ({} vs {})",
+                                call.function,
+                                prev.short(),
+                                answer.short()
+                            );
+                            return Err(ExitCode::from(code::MALFORMED));
+                        }
+                    } else {
+                        prior.insert(call, answer);
+                    }
                 }
             }
             Ok(_) => {
-                eprintln!("nether: witness {} is not a witness node in this ledger", w.short());
+                eprintln!(
+                    "nether: witness {} is not a valid witness node in this ledger",
+                    w.short()
+                );
                 return Err(ExitCode::from(code::MALFORMED));
             }
             Err(e) => {
@@ -604,8 +621,13 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
     let (text, unit) = crate::closing::residue_unit(store, cairn, residue)?;
     let shown = format!("{}:residue", cairn.short());
 
-    let prior_unrecorded = crate::closing::unrecorded(store, witnesses)?;
-    let _ = crate::closing::depth(store, 0, &[], witnesses)?;
+    // Validate holes first to preserve `no_such_hole` diagnostics, then check
+    // source, deposits, witnesses, depth, and unrecorded invariants upfront.
+    let _ = questions(store, holes)?;
+    let prior_unrecorded = crate::closing::verify_trace_parts(
+        store, source, deposits, holes, witnesses, orig_depth, marked,
+    )?;
+    let _ = prior_read_answers(store, witnesses)?;
     if replaying && (marked || prior_unrecorded) {
         return Err(reject_unrecorded_replay(cairn));
     }

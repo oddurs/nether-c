@@ -143,3 +143,24 @@ fn holes_call_uses_function_name_and_all_faults_are_reported() {
     assert!(errs.starts_with("{\"error\":"), "{errs}");
     assert!(errs.contains("missing_one") && errs.contains("missing_two"), "{errs}");
 }
+
+#[test]
+fn nodes_count_matches_native_bury_and_trace_entry_limit_is_enforced() {
+    // M16: `nodes` equals `residue.named.len() + 2` (matching `nether bury`, not counting source).
+    let src = b"demand 1 + 2;\n";
+    let unit = lower(&parse(src).unwrap()).unwrap();
+    let src_cairn = Stored::Value(Value::Bytes(src.to_vec())).cairn();
+    let residue = nether_bury::bury(&unit, src_cairn, 1_000_000).unwrap();
+    let expected_nodes = residue.named.len() + 2;
+    let json = nether_wasm::burying(src, 0);
+    assert!(
+        json.contains(&format!("\"nodes\":{expected_nodes}")),
+        "expected nodes:{expected_nodes} in {json}"
+    );
+
+    // H26: >20,000 deposits returns a clean JSON error matching graph.js's limit.
+    let many_deposits = b"U0 f() { I64 i = 0; while (i < 20001) { 1; i = i + 1; } } demand f();\n";
+    let err = nether_wasm::burying(many_deposits, 1_000_000);
+    assert!(err.starts_with("{\"error\":"), "{err}");
+    assert!(err.contains("20000"), "{err}");
+}

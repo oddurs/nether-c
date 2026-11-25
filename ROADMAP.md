@@ -486,7 +486,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 11 of 11 done
+`##########` 100% · 12 of 12 done
 
 ### buried
 
@@ -501,4 +501,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0316`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0316-core-and-syntax-soundness-hardening.md) Core and syntax soundness hardening <sup>bug · p2</sup>
 - [x] [`0317`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0317-burial-soundness-and-self-hosted-interpreter-hardening.md) Burial soundness and self-hosted interpreter hardening <sup>bug · p2</sup>
 - [x] [`0318`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0318-ledger-foreign-loader-and-world-provider-hardening.md) Ledger, foreign loader, and world provider hardening <sup>bug · p2</sup>
+- [x] [`0319`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0319-cli-rites-wasm-necropolis-and-vim-hardening.md) CLI rites, WASM, Necropolis, and Vim hardening <sup>bug · p2</sup>
 

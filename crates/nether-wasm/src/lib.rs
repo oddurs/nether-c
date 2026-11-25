@@ -44,6 +44,7 @@ const DEFAULT_FUEL: u64 = 1_000_000;
 /// exhausting linear memory.
 const MAX_WASM_OBJECTS: usize = 20_000;
 const MAX_WASM_ENCODED_BYTES: usize = 16 * 1024 * 1024;
+const MAX_WASM_JSON_BYTES: usize = 34 * 1024 * 1024;
 
 /// Hand back `len` bytes the caller may write into.
 ///
@@ -182,7 +183,21 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     };
 
     let printed = print(&residue.as_unit(&unit));
-    let printed_value = Stored::Value(Value::Bytes(printed.clone().into_bytes()));
+    if residue.holes.len() > MAX_WASM_OBJECTS || residue.deposits.len() > MAX_WASM_OBJECTS {
+        return trouble(
+            &format!(
+                "burial produced too many trace entries for the browser limit of {MAX_WASM_OBJECTS}"
+            ),
+            "reduce the trace size or run `nether bury` natively.",
+        );
+    }
+    if printed.len() > MAX_WASM_ENCODED_BYTES {
+        return trouble(
+            "burial residue exceeds the browser's 16 MiB transport limit",
+            "reduce the output size or run `nether bury` natively.",
+        );
+    }
+    let printed_value = Stored::Value(Value::Bytes(printed.as_bytes().to_vec()));
     let residue_cairn = printed_value.cairn();
     // Index `residue.named` once so hole lookups are O(log N) rather than O(H*N).
     let mut named_index: Vec<(Cairn, &Stored)> =
@@ -209,24 +224,9 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         source: source_cairn,
         depth: deepest,
     });
+    // Match `nether bury`: count `residue.named` plus residue and trace (not source).
+    let node_count = residue.named.len() + 2;
 
-    let holes: Vec<_> = residue
-        .holes
-        .iter()
-        .filter_map(|h| {
-            let Some(Stored::Node(Node::Hole { call, stratum, .. })) = lookup(*h) else {
-                return None;
-            };
-            let cap = Depth::new(*stratum)
-                .and_then(nether_core::Capability::at)
-                .map(nether_core::Capability::name)
-                .map_or_else(|| "null".to_owned(), quoted);
-            Some(format!(
-                "{{\"cairn\":\"{h}\",\"call\":{},\"stratum\":{stratum},\"capability\":{cap}}}",
-                quoted(&call.function)
-            ))
-        })
-        .collect();
     // Transport the frozen ledger encoding, not a second value format.
     // Include source, residue and trace explicitly: `named` holds evaluation's
     // objects, not the envelope. Sorting also deduplicates shared values.
@@ -236,38 +236,83 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     }
     objects.sort_unstable_by_key(|(id, _)| *id);
     objects.dedup_by_key(|(id, _)| *id);
-    let node_count = objects.len();
-    let encoded_objects = match encode_objects(&objects) {
-        Ok(s) => s,
-        Err(err_json) => return err_json,
-    };
-    format!(
-        "{{\"cairn\":\"{}\",\"residue\":\"{}\",\"source\":\"{}\",\"depth\":{},\"nodes\":{},\
-         \"fuel_spent\":{},\"holes\":[{}],\"printed\":{},\"objects\":[{encoded_objects}]}}",
+    if objects.len() > MAX_WASM_OBJECTS {
+        return trouble(
+            &format!(
+                "burial produced {} objects, past the browser limit of {MAX_WASM_OBJECTS}",
+                objects.len()
+            ),
+            "",
+        );
+    }
+
+    let mut out = String::with_capacity(1024);
+    let _ = write!(
+        out,
+        "{{\"cairn\":\"{}\",\"residue\":\"{}\",\"source\":\"{}\",\"depth\":{},\"nodes\":{},\"fuel_spent\":{},\"holes\":[",
         trace.cairn(),
         residue_cairn,
         source_cairn,
         deepest,
         node_count,
         residue.fuel_spent,
-        holes.join(","),
-        quoted(&printed)
-    )
+    );
+    if let Err(err_json) = append_holes(&mut out, &residue.holes, &objects) {
+        return err_json;
+    }
+    out.push_str("],\"printed\":");
+    push_quoted(&mut out, &printed);
+    if out.len() > MAX_WASM_JSON_BYTES {
+        return trouble(
+            "burial output exceeds the browser's transport limit",
+            "reduce the output size or run `nether bury` natively.",
+        );
+    }
+    out.push_str(",\"objects\":[");
+    if let Err(err_json) = append_objects(&mut out, &objects) {
+        return err_json;
+    }
+    out.push_str("]}");
+    out
 }
 
-fn encode_objects(objects: &[(Cairn, &Stored)]) -> Result<String, String> {
-    if objects.len() > MAX_WASM_OBJECTS {
-        return Err(trouble(
-            &format!(
-                "burial produced {} objects, past the browser limit of {MAX_WASM_OBJECTS}",
-                objects.len()
-            ),
-            "",
-        ));
+fn append_holes(
+    out: &mut String,
+    holes: &[Cairn],
+    objects: &[(Cairn, &Stored)],
+) -> Result<(), String> {
+    let mut first = true;
+    for h in holes {
+        let Some(Stored::Node(Node::Hole { call, stratum, .. })) =
+            objects.binary_search_by_key(h, |(id, _)| *id).ok().map(|idx| objects[idx].1)
+        else {
+            continue;
+        };
+        if !first {
+            out.push(',');
+        }
+        first = false;
+        let _ = write!(out, "{{\"cairn\":\"{h}\",\"call\":");
+        push_quoted(out, &call.function);
+        let _ = write!(out, ",\"stratum\":{stratum},\"capability\":");
+        match Depth::new(*stratum).and_then(nether_core::Capability::at) {
+            Some(cap) => push_quoted(out, cap.name()),
+            None => out.push_str("null"),
+        }
+        out.push('}');
+        if out.len() > MAX_WASM_JSON_BYTES {
+            return Err(trouble(
+                "burial output exceeds the browser's transport limit",
+                "reduce the output size or run `nether bury` natively.",
+            ));
+        }
     }
+    Ok(())
+}
+
+fn append_objects(out: &mut String, objects: &[(Cairn, &Stored)]) -> Result<(), String> {
     let mut total_encoded: usize = 0;
-    let mut encoded_pairs: Vec<String> = Vec::with_capacity(objects.len());
-    for (id, object) in objects {
+    for (idx, (id, object)) in objects.iter().enumerate() {
         let raw = object.encode();
         total_encoded = total_encoded.saturating_add(raw.len());
         if total_encoded > MAX_WASM_ENCODED_BYTES {
@@ -276,30 +321,46 @@ fn encode_objects(objects: &[(Cairn, &Stored)]) -> Result<String, String> {
                 "reduce the output size or run `nether bury` natively.",
             ));
         }
-        encoded_pairs.push(format!("[\"{id}\",\"{}\"]", hex(&raw)));
+        if idx > 0 {
+            out.push(',');
+        }
+        let _ = write!(out, "[\"{id}\",\"");
+        push_hex(out, &raw);
+        out.push_str("\"]");
+        if out.len() > MAX_WASM_JSON_BYTES {
+            return Err(trouble(
+                "burial output exceeds the browser's transport limit",
+                "reduce the output size or run `nether bury` natively.",
+            ));
+        }
     }
-    Ok(encoded_pairs.join(","))
+    Ok(())
 }
 
-fn hex(bytes: &[u8]) -> String {
+fn push_hex(out: &mut String, bytes: &[u8]) {
     const DIGITS: &[u8] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
+    out.reserve(bytes.len() * 2);
     for &b in bytes {
         out.push(char::from(DIGITS[(b >> 4) as usize]));
         out.push(char::from(DIGITS[(b & 15) as usize]));
     }
-    out
 }
 
 /// What went wrong, in the shape the page already reads.
 fn trouble(said: &str, note: &str) -> String {
-    format!("{{\"error\":{},\"note\":{}}}", quoted(said), quoted(note))
+    let mut out = String::with_capacity(said.len() + note.len() + 24);
+    out.push_str("{\"error\":");
+    push_quoted(&mut out, said);
+    out.push_str(",\"note\":");
+    push_quoted(&mut out, note);
+    out.push('}');
+    out
 }
 
 /// A JSON string. Enough of §7 of RFC 8259 to be correct for what is written
 /// here, which is diagnostics and source.
-fn quoted(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
+fn push_quoted(out: &mut String, s: &str) {
+    out.reserve(s.len() + 2);
     out.push('"');
     for c in s.chars() {
         match c {
@@ -315,5 +376,4 @@ fn quoted(s: &str) -> String {
         }
     }
     out.push('"');
-    out
 }

@@ -15,7 +15,7 @@ function! s:Bin() abort
 endfunction
 
 function! s:ByteOffset() abort
-  if line('$') == 1 && empty(getline(1))
+  if line('$') == 1 && empty(getline(1)) && !&eol
     return 0
   endif
   let l:bom = &bomb ? 3 : 0
@@ -24,16 +24,34 @@ function! s:ByteOffset() abort
 endfunction
 
 function! s:WriteBuffer(tmp) abort
+  if !empty(&fileencoding) && &fileencoding !=# 'utf-8'
+    throw 'nether: buffer fileencoding must be utf-8 (got ' . &fileencoding . ')'
+  endif
   let l:lines = getline(1, '$')
+  if &encoding !=# 'utf-8'
+    let l:lines = map(copy(l:lines), 'iconv(v:val, &encoding, "utf-8")')
+  endif
+  if line('$') == 1 && empty(getline(1)) && !&bomb && !&eol
+    call writefile([], a:tmp, 'b')
+    return
+  endif
+  if &fileformat ==# 'mac'
+    let l:body = join(l:lines, "\r") . (&eol ? "\r" : '')
+    if &bomb
+      let l:body = "\xEF\xBB\xBF" . l:body
+    endif
+    call writefile([l:body], a:tmp, 'b')
+    return
+  endif
   if &fileformat ==# 'dos'
-    let l:lines = map(copy(l:lines), 'v:val . "\r"')
+    if &eol
+      let l:lines = map(copy(l:lines), 'v:val . "\r"')
+    elseif len(l:lines) > 1
+      let l:lines = map(copy(l:lines[0:-2]), 'v:val . "\r"') + [l:lines[-1]]
+    endif
   endif
   if &bomb && !empty(l:lines)
     let l:lines[0] = "\xEF\xBB\xBF" . l:lines[0]
-  endif
-  if line('$') == 1 && empty(getline(1)) && !&bomb
-    call writefile([], a:tmp, 'b')
-    return
   endif
   call writefile(l:lines, a:tmp, &eol ? '' : 'b')
 endfunction
@@ -42,11 +60,11 @@ function! s:FormatReport(data) abort
   let l:lines = [printf('depth %d   %s   %s   at %d..%d',
         \ a:data.depth, a:data.stratum, a:data.type,
         \ a:data.span.start, a:data.span.end)]
-  if type(a:data.descend) == v:t_dict
+  if type(get(a:data, 'descend', v:null)) == v:t_dict
     call add(l:lines, printf('descend %s   at %d..%d',
           \ a:data.descend.capability, a:data.descend.start, a:data.descend.end))
   endif
-  if type(a:data.call) == v:t_dict
+  if type(get(a:data, 'call', v:null)) == v:t_dict
     call add(l:lines, printf('call %s   at %d..%d',
           \ a:data.call.name, a:data.call.start, a:data.call.end))
   endif
@@ -58,12 +76,21 @@ function! s:FormatReport(data) abort
   return l:lines
 endfunction
 
+function! s:ClearScratch() abort
+  if s:scratch_buf > 0 && bufexists(s:scratch_buf)
+    call setbufvar(s:scratch_buf, '&modifiable', 1)
+    silent call deletebufline(s:scratch_buf, 1, '$')
+    call setbufvar(s:scratch_buf, '&modifiable', 0)
+  endif
+endfunction
+
 function! s:ShowScratch(lines) abort
   let l:src_win = win_getid()
   let l:buf = (s:scratch_buf > 0 && bufexists(s:scratch_buf))
         \ ? s:scratch_buf
-        \ : bufnr('^__nether_lamp__$', 1)
+        \ : bufadd('')
   let s:scratch_buf = l:buf
+  let g:nether_scratch_buf = l:buf
   call bufload(l:buf)
   call setbufvar(l:buf, '&buftype', 'nofile')
   call setbufvar(l:buf, '&bufhidden', 'hide')
@@ -83,11 +110,18 @@ function! s:ShowScratch(lines) abort
   endif
 endfunction
 
+function! s:FailInspect(msg) abort
+  let g:nether_last_error = a:msg
+  let g:nether_last_lamp = []
+  let g:nether_last_json = {}
+  call s:ClearScratch()
+  echohl ErrorMsg | echom g:nether_last_error | echohl None
+  return 0
+endfunction
+
 function! s:Inspect() abort
   if !exists('b:nether_trace') || empty(b:nether_trace)
-    let g:nether_last_error = 'nether: no trace bound; run :NetherTrace <cairn>'
-    echohl ErrorMsg | echom g:nether_last_error | echohl None
-    return 0
+    return s:FailInspect('nether: no trace bound; run :NetherTrace <cairn>')
   endif
   let l:byte = s:ByteOffset()
   let l:tmp = tempname()
@@ -98,25 +132,26 @@ function! s:Inspect() abort
           \ . ' --source ' . shellescape(l:tmp)
           \ . ' --json -- ' . shellescape(b:nether_trace)
     let l:out = system(l:cmd)
+  catch
+    return s:FailInspect(v:exception)
   finally
     call delete(l:tmp)
   endtry
   if v:shell_error != 0
-    let g:nether_last_error = trim(l:out)
-    let g:nether_last_lamp = []
-    let g:nether_last_json = {}
-    echohl ErrorMsg | echom g:nether_last_error | echohl None
-    return 0
+    return s:FailInspect(trim(l:out))
   endif
   try
     let l:data = json_decode(l:out)
   catch
-    let g:nether_last_error = 'nether: invalid JSON from lamp'
-    let g:nether_last_lamp = []
-    let g:nether_last_json = {}
-    echohl ErrorMsg | echom g:nether_last_error | echohl None
-    return 0
+    return s:FailInspect('nether: invalid JSON from lamp')
   endtry
+  if type(l:data) != v:t_dict
+        \ || !has_key(l:data, 'depth')
+        \ || !has_key(l:data, 'stratum')
+        \ || !has_key(l:data, 'type')
+        \ || type(get(l:data, 'span', v:null)) != v:t_dict
+    return s:FailInspect('nether: invalid JSON from lamp')
+  endif
   let g:nether_last_error = ''
   let g:nether_last_json = l:data
   let g:nether_last_lamp = s:FormatReport(l:data)
@@ -150,9 +185,9 @@ function! s:Origin() abort
   let l:desc = type(get(l:data, 'descend', v:null)) == v:t_dict ? l:data.descend.start : -1
   let l:call = type(get(l:data, 'call', v:null)) == v:t_dict ? l:data.call.start : -1
   if l:desc >= 0 && l:here != l:desc
-    execute 'goto ' . (l:desc - l:bom + 1)
+    execute 'goto ' . max([1, l:desc - l:bom + 1])
   elseif l:call >= 0
-    execute 'goto ' . (l:call - l:bom + 1)
+    execute 'goto ' . max([1, l:call - l:bom + 1])
   endif
 endfunction
 
@@ -164,7 +199,7 @@ function! s:Provenance() abort
   let l:bom = &bomb ? 3 : 0
   let l:call = type(get(l:data, 'call', v:null)) == v:t_dict ? l:data.call.start : -1
   if l:call >= 0
-    execute 'goto ' . (l:call - l:bom + 1)
+    execute 'goto ' . max([1, l:call - l:bom + 1])
   endif
 endfunction
 
