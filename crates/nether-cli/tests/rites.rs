@@ -541,8 +541,8 @@ fn a_shade_shows_its_origin_and_its_name_and_no_more() {
 /// against the text it points into.
 const BUILD: &str = "demand src;\n\nBytes@3 src = must(descend disk { read(\"main.nc\") });\n";
 
-/// A store holding one burial of `BUILD`: the source, the call that went to
-/// disk, and the trace over it.
+/// A store holding one burial of `BUILD`: the source, one witness at `stratum`,
+/// and the trace over it.
 fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (PathBuf, Cairn, Cairn) {
     let dir = scratch(what);
     let store = Store::open(&dir).expect("a store");
@@ -552,9 +552,27 @@ fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (PathBuf,
     let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
     let at = BUILD.find("read(\"main.nc\")").expect("the call is in the source");
     let span = Span { source, start: at as u64, end: (at + 15) as u64 };
-    let path = put(Value::Str("main.nc".into()));
-    let call = Call { function: "read".into(), args: vec![path] };
-    let answer = put(Value::Bytes(b"int main(void) { return 0; }".to_vec()));
+    let (call, answer) = match stratum {
+        5 => {
+            let url = put(Value::Str("https://example.invalid".into()));
+            (Call { function: "get".into(), args: vec![url] }, put(Value::Bytes(b"ok".to_vec())))
+        }
+        8 => {
+            let sym = put(Value::Str("dlopen".into()));
+            let raw = put(Value::Bytes(Vec::new()));
+            (
+                Call { function: "call_foreign".into(), args: vec![sym, raw] },
+                put(Value::Bytes(b"ok".to_vec())),
+            )
+        }
+        _ => {
+            let path = put(Value::Str("main.nc".into()));
+            (
+                Call { function: "read".into(), args: vec![path] },
+                put(Value::Bytes(b"int main(void) { return 0; }".to_vec())),
+            )
+        }
+    };
     let witness = node(Node::Witness { stratum, call, answer, span });
 
     let trace = node(Node::Trace {
@@ -680,7 +698,11 @@ fn a_trace_that_under_reports_its_own_depth_is_malformed() {
     let out = nether(Some(&dir), &["strata", &trace.to_string()]);
     assert_eq!(code(&out), 65, "{}", stderr(&out));
     assert!(stderr(&out).contains("records depth 3"), "{}", stderr(&out));
-    assert!(stdout(&out).contains("read(\"main.nc\")"), "it still says where:\n{}", stdout(&out));
+    assert!(
+        stdout(&out).contains("get(\"https://example.invalid\")"),
+        "it still says where:\n{}",
+        stdout(&out)
+    );
 }
 
 /// §1.5 makes a seal pure, so the residue of a fetch demanded only through one
@@ -2402,7 +2424,7 @@ fn two_machines_each_answer_half_a_traces_holes_and_seal_byte_identically_to_one
     for (call, val) in merged_replay.all() {
         answers = answers.and(call.clone(), val.clone());
     }
-    let resumed = nether_bury::bury_with(&unit, source, 1_000_000, &answers).unwrap();
+    let resumed = nether_bury::bury_with(&unit, residue, 1_000_000, &answers).unwrap();
     for (_, stored) in &resumed.named {
         coord_store.put(stored).unwrap();
     }
@@ -2989,4 +3011,273 @@ fn pass4_exhume_and_memo_hardening() {
     let m2 = there(&mdir, &["bury", "m.nc", "--json"]);
     assert_eq!(code(&m2), 0, "memo must miss on corrupt residue and repair: {}", stderr(&m2));
     assert_eq!(field(&stdout(&m2), "cairn"), m_trace);
+}
+
+#[test]
+fn pr_e_noop_exhume_residue_spans_and_forged_stratum() {
+    use nether_ledger::{Call, Node, Span, Store, Stored, Value};
+
+    // H19: no-op exhume returns the same cairn without minting a new trace,
+    // and newly created deposits from exhuming carry `span.source == trace.residue`.
+    let dir = a_build("pr-e-h19");
+    std::fs::write(dir.join("k.txt"), "ok").unwrap();
+    let src = "Bytes@3 b = must(descend disk { read(\"k.txt\") });\nU0 go() { if (len(b) == 2) { \"done\\n\"; } }\ndemand go();\n";
+    std::fs::write(dir.join("h19.nc"), src).unwrap();
+    let t1 = field(&stdout(&there(&dir, &["bury", "h19.nc", "--json"])), "cairn");
+    let noop = there(&dir, &["exhume", &t1, "--json"]);
+    assert_eq!(code(&noop), 0, "{}", stderr(&noop));
+    assert_eq!(field(&stdout(&noop), "was"), t1);
+    assert_eq!(field(&stdout(&noop), "sealed"), t1);
+
+    let store = Store::open(dir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { residue: r1, .. }) = store.get(t1.parse().unwrap()).unwrap()
+    else {
+        panic!("expected trace");
+    };
+    let ex = there(&dir, &["exhume", &t1, "--grant", "disk", "--root", ".", "--json"]);
+    assert_eq!(code(&ex), 0, "{}", stderr(&ex));
+    let t2: nether_ledger::Cairn = field(&stdout(&ex), "sealed").parse().unwrap();
+    let Stored::Node(Node::Trace { deposits, .. }) = store.get(t2).unwrap() else {
+        panic!("expected sealed trace");
+    };
+    let Stored::Node(Node::Deposit { span, .. }) = store.get(deposits[0]).unwrap() else {
+        panic!("expected deposit");
+    };
+    assert_eq!(span.source, r1, "new deposit span must point at trace.residue, not trace.source");
+
+    // H20: forged stratum on hole or witness is rejected with exit 65 by strata, exhume, and graft.
+    let fdir = scratch("pr-e-h20");
+    let fstore = Store::open(&fdir).unwrap();
+    let blob = fstore.put(&Stored::Value(Value::Bytes(b"demand 0;\n".to_vec()))).unwrap();
+    let sym = fstore.put(&Stored::Value(Value::Str("f".into()))).unwrap();
+    let empty = fstore.put(&Stored::Value(Value::Bytes(Vec::new()))).unwrap();
+    let call = Call { function: "call_foreign".into(), args: vec![sym, empty] };
+    let span = Span { source: blob, start: 0, end: 6 };
+    let bad_hole =
+        fstore.put(&Stored::Node(Node::Hole { call: call.clone(), stratum: 1, span })).unwrap();
+    let forged_hole_trace = fstore
+        .put(&Stored::Node(Node::Trace {
+            residue: blob,
+            holes: vec![bad_hole],
+            witnesses: vec![],
+            deposits: vec![],
+            source: blob,
+            depth: 1,
+            unrecorded: false,
+        }))
+        .unwrap();
+    assert_eq!(code(&nether(Some(&fdir), &["strata", &forged_hole_trace.to_string()])), 65);
+    assert_eq!(code(&nether(Some(&fdir), &["exhume", &forged_hole_trace.to_string()])), 65);
+    assert_eq!(
+        code(&nether(
+            Some(&fdir),
+            &[
+                "graft",
+                &forged_hole_trace.to_string(),
+                "--replace",
+                &bad_hole.to_string(),
+                "--with",
+                &empty.to_string()
+            ],
+        )),
+        65
+    );
+    let bad_wit =
+        fstore.put(&Stored::Node(Node::Witness { stratum: 1, call, answer: empty, span })).unwrap();
+    let forged_witness_trace = fstore
+        .put(&Stored::Node(Node::Trace {
+            residue: blob,
+            holes: vec![],
+            witnesses: vec![bad_wit],
+            deposits: vec![],
+            source: blob,
+            depth: 1,
+            unrecorded: false,
+        }))
+        .unwrap();
+    assert_eq!(code(&nether(Some(&fdir), &["strata", &forged_witness_trace.to_string()])), 65);
+    assert_eq!(code(&nether(Some(&fdir), &["exhume", &forged_witness_trace.to_string()])), 65);
+}
+
+#[test]
+fn pr_e_replay_diff_readonly_stores_and_read_consistency() {
+    use nether_ledger::{AnswerOf, Node, Store, Stored, Value};
+
+    // H21: divergent replay reports first differing field in text and JSON (exit 65).
+    let rdir = a_build("pr-e-h21");
+    let t0 = field(&stdout(&there(&rdir, &["bury", "build.nc", "--json"])), "cairn");
+    let s0 = field(
+        &stdout(&there(&rdir, &["exhume", &t0, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
+    let rstore = Store::open(rdir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, .. }) =
+        rstore.get(s0.parse().unwrap()).unwrap()
+    else {
+        panic!("expected sealed trace");
+    };
+    let skewed = rstore
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes,
+            witnesses,
+            deposits,
+            source,
+            depth: 4,
+            unrecorded: false,
+        }))
+        .unwrap();
+    let txt = there(&rdir, &["exhume", &skewed.to_string(), "--replay"]);
+    assert_eq!(code(&txt), 65, "{}", stderr(&txt));
+    assert!(
+        stderr(&txt).contains("first differing field: depth: expected 4, got 3"),
+        "{}",
+        stderr(&txt)
+    );
+    let jout = there(&rdir, &["exhume", &skewed.to_string(), "--replay", "--json"]);
+    assert_eq!(code(&jout), 65, "{}", stderr(&jout));
+    assert!(
+        stdout(&jout).contains("\"identical\":false,\"diff\":\"depth: expected 4, got 3\""),
+        "{}",
+        stdout(&jout)
+    );
+
+    // M21: read-only rites and halting bury do not create a nonexistent store directory.
+    let ro_dir = scratch("pr-e-m21");
+    let missing_store = ro_dir.join("never-created");
+    let dummy = "0".repeat(64);
+    for args in [
+        &["lamp", &dummy][..],
+        &["strata", &dummy][..],
+        &["cairn", "--verify", &dummy][..],
+        &["exhume", &dummy, "--replay"][..],
+    ] {
+        let _ = nether(Some(&missing_store), args);
+        assert!(!missing_store.exists(), "{args:?} must not create missing store");
+    }
+    std::fs::write(ro_dir.join("halt.nc"), "demand 1 / 0;\n").unwrap();
+    let h_out = nether(Some(&missing_store), &["bury", ro_dir.join("halt.nc").to_str().unwrap()]);
+    assert_eq!(code(&h_out), 1);
+    assert!(!missing_store.exists(), "halting bury must not create store directory");
+
+    // M22: exhume rejects a new read witness disagreeing with a prior read witness for the same Call.
+    let m22_dir = a_build("pr-e-m22");
+    std::fs::write(m22_dir.join("k.txt"), "v2").unwrap();
+    std::fs::write(
+        m22_dir.join("r.nc"),
+        "Bytes@3 a = must(descend disk { read(\"k.txt\") });\ndemand a;\n",
+    )
+    .unwrap();
+    let bt = field(&stdout(&there(&m22_dir, &["bury", "r.nc", "--json"])), "cairn");
+    let mstore = Store::open(m22_dir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { residue: mr, holes: mh, source: ms, depth: md, .. }) =
+        mstore.get(bt.parse().unwrap()).unwrap()
+    else {
+        panic!("expected trace");
+    };
+    let Stored::Node(Node::Hole { call, stratum, span }) = mstore.get(mh[0]).unwrap() else {
+        panic!("expected hole");
+    };
+    let v1 = mstore
+        .put(&Stored::Value(Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b"v1".to_vec()))))))
+        .unwrap();
+    let w1 = mstore.put(&Stored::Node(Node::Witness { stratum, call, answer: v1, span })).unwrap();
+    let forged = mstore
+        .put(&Stored::Node(Node::Trace {
+            residue: mr,
+            holes: mh,
+            witnesses: vec![w1],
+            deposits: vec![],
+            source: ms,
+            depth: md,
+            unrecorded: false,
+        }))
+        .unwrap();
+    let clash = there(&m22_dir, &["exhume", &forged.to_string(), "--grant", "disk", "--root", "."]);
+    assert_eq!(code(&clash), 1, "{}", stderr(&clash));
+    assert!(stderr(&clash).contains("disagreeing with earlier read witness"), "{}", stderr(&clash));
+
+    // M23: memo recall verifies sealed inner values and repairs if one is deleted.
+    let m23_dir = a_build("pr-e-m23");
+    std::fs::write(m23_dir.join("seal.nc"), "Cairn c = seal 42;\ndemand c;\n").unwrap();
+    let s1 = there(&m23_dir, &["bury", "seal.nc", "--json"]);
+    assert_eq!(code(&s1), 0, "{}", stderr(&s1));
+    let val42 = Stored::Value(Value::Int(42)).cairn().to_string();
+    let val42_path = m23_dir.join(".nether/objects").join(&val42[..2]).join(&val42[2..]);
+    assert!(val42_path.exists());
+    std::fs::remove_file(&val42_path).unwrap();
+    let s2 = there(&m23_dir, &["bury", "seal.nc", "--json"]);
+    assert_eq!(code(&s2), 0, "{}", stderr(&s2));
+    assert!(val42_path.exists(), "memo must repair missing sealed inner value");
+}
+
+#[test]
+fn pr_e_cli_flags_lamp_assign_and_vim_hardening() {
+    // L13 + L14: `lamp --at` follows Declare + Assign, missing node exits 66,
+    // `--` works, duplicate `--fuel` and flag-as-value fail with 64, empty NETHER_STORE falls back.
+    let dir = a_build("pr-e-l13-l14");
+    let src = "Bytes@3 f() {\n  Bytes@3 x = b\"init\";\n  x = must(descend disk { read(\"a.txt\") });\n  return x;\n}\ndemand f();\n";
+    std::fs::write(dir.join("assign.nc"), src).unwrap();
+    let b1 = there(&dir, &["bury", "--json", "--", "assign.nc"]);
+    assert_eq!(code(&b1), 0, "{}", stderr(&b1));
+    let trace = field(&stdout(&b1), "cairn");
+    let ret_pos = src.find("return x;").unwrap() + 7;
+    let l_at = there(&dir, &["lamp", "--at", &ret_pos.to_string(), "--", &trace]);
+    assert_eq!(code(&l_at), 0, "{}", stderr(&l_at));
+    assert!(stdout(&l_at).contains("depth 3   disk"), "{}", stdout(&l_at));
+
+    let dup_fuel = there(&dir, &["bury", "--fuel", "100", "--fuel", "200", "assign.nc"]);
+    assert_eq!(code(&dup_fuel), 64);
+    let bad_flag_val = there(&dir, &["exhume", &trace, "--grant", "env", "--target", "--json"]);
+    assert_eq!(code(&bad_flag_val), 64);
+    let empty_env = std::process::Command::new(env!("CARGO_BIN_EXE_nether"))
+        .args(["strata", "--", &trace])
+        .current_dir(&dir)
+        .env("NETHER_STORE", "")
+        .output()
+        .unwrap();
+    assert_eq!(code(&empty_env), 0, "{}", stderr(&empty_env));
+
+    // M24: Vim plugin rejects non-hex cairns, preserves unrelated buffers, and handles CRLF.
+    let crlf_src = src.replace('\n', "\r\n");
+    std::fs::write(dir.join("crlf.nc"), &crlf_src).unwrap();
+    let crlf_trace = field(&stdout(&there(&dir, &["bury", "crlf.nc", "--json"])), "cairn");
+    let plugin = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("tools/vim/nether.vim");
+    let bin = env!("CARGO_BIN_EXE_nether");
+    let script = format!(
+        "set hidden\n\
+         let g:nether_bin = '{bin}'\n\
+         source {}\n\
+         NetherTrace --help\n\
+         let g:bad_cairn_err = [g:nether_last_error]\n\
+         edit keep__nether_lamp__buf\n\
+         call setline(1, ['keep-me'])\n\
+         edit crlf.nc\n\
+         NetherTrace {crlf_trace}\n\
+         call cursor(4, 10)\n\
+         NetherHover\n\
+         let g:kept = getbufline('keep__nether_lamp__buf', 1, '$')\n\
+         call writefile(g:bad_cairn_err + ['==='] + g:nether_last_lamp + ['==='] + g:kept, 'vim_m24.txt')\n\
+         qa!\n",
+        plugin.display()
+    );
+    std::fs::write(dir.join("m24.vim"), script).unwrap();
+    let vim_out = std::process::Command::new("vim")
+        .args(["-Nu", "NONE", "-i", "NONE", "-n", "-Es", "-S", "m24.vim"])
+        .current_dir(&dir)
+        .env("NETHER_STORE", dir.join(".nether"))
+        .output()
+        .unwrap();
+    assert!(vim_out.status.success(), "vim failed: {:?}", vim_out.status);
+    let rep = std::fs::read_to_string(dir.join("vim_m24.txt")).unwrap();
+    let parts: Vec<&str> = rep.split("\n===\n").collect();
+    assert_eq!(parts.len(), 3, "{rep}");
+    assert!(parts[0].contains("invalid trace cairn"), "{}", parts[0]);
+    assert!(parts[1].contains("depth 3   disk"), "{}", parts[1]);
+    assert_eq!(parts[2].trim(), "keep-me");
 }

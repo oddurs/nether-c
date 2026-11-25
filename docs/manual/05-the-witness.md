@@ -13,7 +13,7 @@ Pick up where [chapter 4](04-the-grant.md) left off:
 ```console
 $ nether exhume 4fc5e660 --grant disk --root .
   ①  read("who.txt")  →  6 bytes  4395a792
-sealed   4fc5e660 + 4395a792 → f03489d0   depth 3   holes 0
+sealed   4fc5e660 + 4395a792 → 49df3bdc   depth 3   holes 0
 ```
 
 That `4395a792` in the middle of the seal line was not decoration. It is the
@@ -39,8 +39,8 @@ rather than as a rule to remember.
 ## Reading it back
 
 ```console
-$ nether lamp f03489d0 --provenance
-f03489d0  trace    depth 3   residue d6374b77   0 hole(s)   1 witness(es)   1 deposit(s)
+$ nether lamp 49df3bdc --provenance
+49df3bdc  trace    depth 3   residue d6374b77   0 hole(s)   1 witness(es)   1 deposit(s)
 ```
 
 One witness, one deposit, no holes left. `--provenance` walks backwards — from
@@ -49,7 +49,7 @@ the answers at the bottom. It is the question "where did this come from",
 asked of the ledger rather than of a person.
 
 ```console
-$ nether strata f03489d0
+$ nether strata 49df3bdc
 depth 3   disk
 
   3  read("who.txt")           cc948e97:7:36

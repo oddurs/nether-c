@@ -55,8 +55,16 @@ fn ledger() -> Result<Store, std::io::Error> {
 }
 
 /// Where the store is: `NETHER_STORE`, or `.nether` beside the work.
+/// An empty `NETHER_STORE=""` falls back to `.nether`.
 fn store_root() -> PathBuf {
-    std::env::var_os("NETHER_STORE").map_or_else(|| PathBuf::from(".nether"), PathBuf::from)
+    std::env::var_os("NETHER_STORE")
+        .filter(|v| !v.is_empty())
+        .map_or_else(|| PathBuf::from(".nether"), PathBuf::from)
+}
+
+/// Open the ledger without creating any directories on disk (read-only rites).
+fn opened_readonly() -> Store {
+    Store::open_readonly(store_root())
 }
 
 /// Put it in the ledger, or say why it would not go.

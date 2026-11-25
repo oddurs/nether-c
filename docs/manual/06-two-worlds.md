@@ -60,7 +60,7 @@ So say what the world is:
 ```console
 $ nether exhume e7e0b6de --grant env --declare WHO=world --clock 0 --target x86_64-unknown-linux-gnu
   ①  env("WHO")  →  world  10960a1b
-sealed   e7e0b6de + 10960a1b → 732a2f23   depth 2   holes 0
+sealed   e7e0b6de + 10960a1b → 9d3f170f   depth 2   holes 0
 ```
 
 And then say it differently:
@@ -68,15 +68,15 @@ And then say it differently:
 ```console
 $ nether exhume e7e0b6de --grant env --declare WHO=moon --clock 0 --target x86_64-unknown-linux-gnu
   ①  env("WHO")  →  moon  c26253b8
-sealed   e7e0b6de + c26253b8 → c9bcc6a6   depth 2   holes 0
+sealed   e7e0b6de + c26253b8 → 2b68cd3e   depth 2   holes 0
 ```
 
 Two rites, one burial, two worlds. Both of them are still there:
 
 ```console
-$ nether lamp 732a2f23
+$ nether lamp 9d3f170f
 Hello, world
-$ nether lamp c9bcc6a6
+$ nether lamp 2b68cd3e
 Hello, moon
 ```
 
@@ -94,7 +94,7 @@ ever overwritten — `e7e0b6de` still has its hole, and will have it forever.
 
 ## The names are the record
 
-`732a2f23` and `c9bcc6a6` are different names because they are different
+`9d3f170f` and `2b68cd3e` are different names because they are different
 things, and they are different things because they were told different things.
 The environment that produced each is not a note somebody kept; it is reachable
 from the trace, through the witness, by anyone holding the name.

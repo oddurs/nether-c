@@ -116,3 +116,28 @@ test("multi-byte UTF-8 previews do not break on arbitrary byte limits", () => {
   assert.throws(() => new Graph(null));
   assert.throws(() => new Graph({ cairn: id(9), objects: [123] }));
 });
+
+test("trace lists accept more than 4096 entries while arrays stay capped at 4096", () => {
+  const many = Array.from({ length: 4100 }, (_, i) => id(i + 10));
+  const bigTrace = "2005" + id(3) + ids() + ids() + ids(...many) + id(1) + "0000";
+  const decoded = decode(bigTrace);
+  assert.equal(decoded.kind, "Trace");
+  assert.equal(decoded.deposits.length, 4100);
+  assert.throws(() => decode("11" + u64(4097) + "00".repeat(4097)), /4096/);
+});
+
+test("Necropolis.bury rejects invalid fuel and skips nether_free on wasm RuntimeError", () => {
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  const freed = [];
+  const exports = {
+    memory,
+    nether_alloc: () => 16,
+    nether_free: (p, n) => freed.push([p, n]),
+    nether_bury: () => { throw new WebAssembly.RuntimeError("unreachable"); },
+  };
+  const nec = new Necropolis(exports);
+  assert.throws(() => nec.bury("abc", -1), RangeError);
+  assert.throws(() => nec.bury("abc", 1.5), RangeError);
+  assert.throws(() => nec.bury("abc"), WebAssembly.RuntimeError);
+  assert.deepEqual(freed, [], "must not call nether_free after a wasm trap");
+});

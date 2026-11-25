@@ -688,7 +688,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .nc-header h1 { color: var(--accent); }
 .nc-private { margin-top: var(--tight) !important; }
 .nc-source { border: 1px solid var(--dimmer); padding: var(--hair) var(--tight); background: var(--sunk); }
-.nc-source summary { cursor: pointer; min-height: 32px; color: var(--code); }
+.nc-source summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--code); }
 .nc-source label { display: block; margin-top: var(--hair); }
 .nc-source textarea { display: block; width: 100%; min-height: 240px; resize: vertical; margin: var(--hair) 0; padding: var(--hair); border: 1px solid var(--dimmer); background: var(--ground); color: var(--ink); font: inherit; line-height: 1.5; }
 .nc-state { display: flex; align-items: center; justify-content: space-between; gap: var(--hair); padding: var(--tight) 0; color: var(--dim); }

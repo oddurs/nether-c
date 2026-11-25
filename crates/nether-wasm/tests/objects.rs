@@ -115,3 +115,31 @@ fn oversize_len_returns_error_block_without_ub() {
         nether_wasm::nether_free(out, len + 4);
     }
 }
+
+#[test]
+fn oversize_encoded_object_graph_returns_clean_error() {
+    use std::fmt::Write as _;
+    let mut src = String::from("U0 big() {\n  Bytes a0 = b\"0123456789abcdef\";\n");
+    for i in 1..=20 {
+        let prev = i - 1;
+        let _ = writeln!(src, "  Bytes a{i} = concat(a{prev}, a{prev});");
+    }
+    src.push_str("  a20;\n}\ndemand big();\n");
+    let json = nether_wasm::burying(src.as_bytes(), 0);
+    assert!(json.starts_with("{\"error\":"), "{json}");
+    assert!(json.contains("16 MiB transport limit"), "{json}");
+}
+
+#[test]
+fn holes_call_uses_function_name_and_all_faults_are_reported() {
+    let json = nether_wasm::burying(
+        b"Bytes@3 b = must(descend disk { read(\"a.txt\") });\ndemand b;\n",
+        0,
+    );
+    assert!(json.contains("\"call\":\"read\""), "{json}");
+    assert!(!json.contains("argument(s)"), "{json}");
+
+    let errs = nether_wasm::burying(b"I64 a = missing_one;\nI64 b = missing_two;\ndemand a;\n", 0);
+    assert!(errs.starts_with("{\"error\":"), "{errs}");
+    assert!(errs.contains("missing_one") && errs.contains("missing_two"), "{errs}");
+}

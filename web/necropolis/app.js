@@ -43,7 +43,8 @@ function relations(target, edges) {
     () => {
       const firstNew = shown[target];
       shown[target] += PAGE_SIZE;
-      render();
+      relations(target, edges);
+      $("neighbourhood").dispatchEvent(new Event("graphchange"));
       container.querySelectorAll(".nc-object")[firstNew]?.focus();
     }, "nc-more"));
 }
@@ -157,7 +158,12 @@ function bury() {
         const frag = document.createDocumentFragment();
         for (const [label, ids] of [["hole", root.holes], ["deposit", root.deposits]]) {
           ids.slice(0, 6).forEach((id, i) => frag.append(button(`${label} ${i + 1}`, () => visit(id), `nc-root-${label}`)));
-          if (ids.length > 6) frag.append(button(`All ${ids.length} ${label}s`, () => visit(graph.root)));
+          if (ids.length > 6) frag.append(button(`All ${ids.length} ${label}s`, () => {
+            navigation.visit(graph.root);
+            shown = { incoming: PAGE_SIZE, outgoing: Math.max(PAGE_SIZE, references(root).length) };
+            render();
+            $("selected-title").focus({ preventScroll: true });
+          }));
         }
         $("roots").replaceChildren(frag);
         $("explorer").hidden = false;
@@ -187,7 +193,10 @@ $("bury").addEventListener("click", bury);
 $("cancel").addEventListener("click", () => { stop(); $("state").textContent = graph ? "Cancelled. The previous trace remains below." : "Cancelled. Bury source to try again."; });
 for (const [id, delta] of [["back", -1], ["forward", 1]]) $(id).addEventListener("click", () => {
   if (!navigation) return;
-  navigation.move(delta); shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE }; render();
+  navigation.move(delta);
+  shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
+  render();
+  $("selected-title").focus({ preventScroll: true });
 });
 $("home").addEventListener("click", () => { if (graph) visit(graph.root); });
 $("copy").addEventListener("click", async () => {

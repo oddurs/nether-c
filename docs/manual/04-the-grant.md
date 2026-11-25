@@ -28,7 +28,7 @@ Now grant the disk:
 ```console
 $ nether exhume 4fc5e660 --grant disk --root .
   ①  read("who.txt")  →  6 bytes  4395a792
-sealed   4fc5e660 + 4395a792 → f03489d0   depth 3   holes 0
+sealed   4fc5e660 + 4395a792 → 49df3bdc   depth 3   holes 0
 ```
 
 Read that second line as arithmetic, because that is what it is. The trace you
@@ -39,7 +39,7 @@ its hole, and still means exactly what it meant.
 And now:
 
 ```console
-$ nether lamp f03489d0
+$ nether lamp 49df3bdc
 Hello, world
 ```
 

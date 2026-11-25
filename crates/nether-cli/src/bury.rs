@@ -27,22 +27,35 @@ const DEFAULT_FUEL: u64 = 1_000_000;
 /// `nether bury <file.nc> [--grant <cap>]... [--fuel <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
     let mut wants_json = false;
-    let mut fuel = DEFAULT_FUEL;
+    let mut fuel: Option<u64> = None;
     let mut granted: Vec<Capability> = Vec::new();
     let mut path: Option<&str> = None;
+    let mut end_opts = false;
 
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
+        if end_opts {
+            if path.is_some() {
+                eprintln!("nether: one file at a time");
+                return usage_error();
+            }
+            path = Some(arg.as_str());
+            continue;
+        }
         match arg.as_str() {
+            "--" => end_opts = true,
             "--json" => wants_json = true,
-            "--fuel" => {
-                if let Some(Ok(n)) = rest.next().map(|n| n.parse::<u64>()) {
-                    fuel = n;
-                } else {
+            "--fuel" => match rest.next().map(|n| n.parse::<u64>()) {
+                Some(Ok(_)) if fuel.is_some() => {
+                    eprintln!("nether: --fuel is given once");
+                    return usage_error();
+                }
+                Some(Ok(n)) => fuel = Some(n),
+                _ => {
                     eprintln!("nether: --fuel wants a number of steps");
                     return usage_error();
                 }
-            }
+            },
             "--grant" => match rest.next().map(|c| Capability::from_name(c)) {
                 Some(Some(cap)) => granted.push(cap),
                 Some(None) => {
@@ -75,9 +88,8 @@ pub fn run(args: &[String]) -> ExitCode {
     };
 
     // A grant is refused rather than accepted and discarded. Honouring one is
-    // `exhume`'s work and that rite is not built, so a `--grant` here would
-    // validate its argument, change nothing, and look like it had worked.
-    // §8.2, and the same reasoning as §8.0.
+    // `exhume`'s work, so a `--grant` here would validate its argument, change
+    // nothing, and look like it had worked. §8.2, and the same reasoning as §8.0.
     if let Some(cap) = granted.first() {
         eprintln!("nether: `bury` cannot honour a grant yet, so it will not take one.");
         eprintln!();
@@ -88,7 +100,7 @@ pub fn run(args: &[String]) -> ExitCode {
         eprintln!("    nether exhume <cairn> --grant {cap}");
         return usage_error();
     }
-    match inter(Path::new(path), fuel, wants_json) {
+    match inter(Path::new(path), fuel.unwrap_or(DEFAULT_FUEL), wants_json) {
         Ok(()) => ExitCode::SUCCESS,
         Err(code) => code,
     }
@@ -112,20 +124,19 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
     let shown = path.display().to_string();
     let unit = crate::closing::checked_unit(&source, &shown)?;
 
-    let store = crate::opened()?;
-
     // Compute the source cairn without mutating the store so a remembered
-    // burial (§8.2.1) writes nothing new.
+    // burial (§8.2.1) or a halting burial creates nothing on disk.
     let source_stored = Stored::Value(Value::Bytes(source));
     let source_cairn = source_stored.cairn();
 
     // §8.2.1: a burial this implementation already did, within this budget,
     // is reported and not done again.
+    let ro_store = crate::opened_readonly();
     let memo = crate::memo::Memo::of(source_cairn);
-    let recalled = memo.as_ref().and_then(|m| m.recall(&store, source_cairn, fuel));
+    let recalled = memo.as_ref().and_then(|m| m.recall(&ro_store, source_cairn, fuel));
     let remembered = recalled.is_some();
-    let done = if let Some(r) = recalled {
-        r
+    let (store, done) = if let Some(r) = recalled {
+        (ro_store, r)
     } else {
         let residue = match bury(&unit, source_cairn, fuel) {
             Ok(residue) => residue,
@@ -141,11 +152,15 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
         };
 
         // Source, everything burial named, then the residue as source, then the trace.
-        // Nothing was written until now: burial holds no capability at all,
-        // and writing to a store is stratum 1.
+        // Nothing was written (and no store directory created) until burial finished.
+        let store = crate::opened()?;
         crate::kept(&store, &source_stored)?;
-        for (_, stored) in &residue.named {
+        let mut extra = Vec::new();
+        for (c, stored) in &residue.named {
             crate::kept(&store, stored)?;
+            if matches!(stored, Stored::Value(_)) {
+                extra.push(*c);
+            }
         }
         let printed = print(&residue.as_unit(&unit));
         let residue_cairn =
@@ -165,11 +180,12 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
             source: source_cairn,
         };
         let trace = crate::kept(&store, &Stored::Node(trace))?;
-        let done = Remembered { trace, steps: residue.fuel_spent, nodes: residue.named.len() + 2 };
+        let done =
+            Remembered { trace, steps: residue.fuel_spent, nodes: residue.named.len() + 2, extra };
         if let Some(memo) = &memo {
             memo.record(&done);
         }
-        done
+        (store, done)
     };
 
     // Read back rather than carried, so a remembered burial and a fresh one

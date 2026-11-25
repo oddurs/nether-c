@@ -8,14 +8,14 @@ status: draft
 
 > One idea: **a replay is a question about the past, not a second run.**
 
-`f03489d0` from [chapter 4](04-the-grant.md) was made by asking the disk what
+`49df3bdc` from [chapter 4](04-the-grant.md) was made by asking the disk what
 was in `who.txt`. Ask whether that is still true:
 
 ```console
 $ nether exhume 4fc5e660 --grant disk --root .
   ①  read("who.txt")  →  6 bytes  4395a792
-sealed   4fc5e660 + 4395a792 → f03489d0   depth 3   holes 0
-$ nether exhume f03489d0 --replay
+sealed   4fc5e660 + 4395a792 → 49df3bdc   depth 3   holes 0
+$ nether exhume 49df3bdc --replay
 identical.
 ```
 
