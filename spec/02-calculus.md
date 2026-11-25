@@ -203,7 +203,10 @@ See [§1.5](01-strata.md#15-seal) for why this is sound.
 
 **[SHADE]** is the second escape, and unlike `seal` it keeps the value —
 opaquely. The origin depth `d` is carried in the type as `Shadeᵈ⟨τ⟩`, which is
-what makes [LOOK] checkable.
+what makes [LOOK] checkable. When `shade e` appears inside a function body and
+`e` depends on a parameter `x`, every call site supplying argument `a` for `x`
+MUST satisfy `d_a ≤ d`, so substituting `x := a` preserves both typing and the
+canonical `Value::Shade.origin`.
 
 **[LOOK]** carries the entire Orpheus rule in one premise: `d ∈ δ`. You may
 look only where you hold the capability the value came from — that one, and

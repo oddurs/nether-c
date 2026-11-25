@@ -388,10 +388,12 @@ SUBST_DEPTH = InductiveRelation(
             subst_depth(app("Seal", e), ZERO, d_a, ZERO),
             var_sorts={"d": "Depth", "d_p": "Depth"},
         ),
-        # Shade produces a Shade at depth 0 (`[SHADE]`)
+        # Shade produces a Shade at depth 0 (`[SHADE]`); subject reduction
+        # requires `d_a <= d` when `e` depends on the substituted parameter, so
+        # `d_p <= max(d, d_a) = d` preserves the static shade origin `d`.
         Rule(
             "SubstShade",
-            (subst_depth(e, d, d_a, d_p),),
+            (subst_depth(e, d, d_a, d_p), le(d_a, d)),
             subst_depth(app("Shade", e), ZERO, d_a, ZERO),
             var_sorts={"d": "Depth", "d_p": "Depth"},
         ),

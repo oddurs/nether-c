@@ -509,6 +509,7 @@ impl Parser<'_> {
         let out = self
             .ty()
             .ok()
+            .filter(|t| t.args.is_empty() || matches!(t.name.text.as_str(), "Answer" | "Shade"))
             .zip(self.name("a name").ok())
             .filter(|_| self.at_punct(Punct::Eq) || self.at_punct(Punct::Semi));
         // Nothing that was tried speculatively gets to complain about it.

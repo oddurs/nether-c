@@ -192,6 +192,7 @@ fn stmt(s: &Stmt, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
                 Some(v) => format!("{}return {};\n", indent(at), expr(v, unit, f)),
                 None => format!("{}return;\n", indent(at)),
             },
+            ExprKind::Block(b) if b.tail.is_some() => format!("{};\n", block(b, unit, f, at)),
             ExprKind::Block(b) => format!("{}\n", block(b, unit, f, at)),
             _ if starts_with_block(x) => format!("{}({});\n", indent(at), expr(x, unit, f)),
             _ => format!("{}{};\n", indent(at), expr(x, unit, f)),
