@@ -33,6 +33,18 @@ impl Cairn {
         Self(*hasher.finalize().as_bytes())
     }
 
+    /// Names `Value::Bytes(bytes)` directly into `blake3` without allocating a
+    /// second copy of the payload.
+    #[must_use]
+    pub(crate) fn of_bytes_value(bytes: &[u8]) -> Self {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(DOMAIN);
+        hasher.update(&[crate::value::tag::BYTES]);
+        hasher.update(&(bytes.len() as u64).to_be_bytes());
+        hasher.update(bytes);
+        Self(*hasher.finalize().as_bytes())
+    }
+
     /// The raw digest.
     #[must_use]
     pub const fn as_bytes(&self) -> &[u8; 32] {

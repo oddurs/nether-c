@@ -10,6 +10,8 @@
 //! stratum 4 the path and the cairn of what was written. Recording the call
 //! and the answer covers both, because the call holds the path.
 
+use std::collections::VecDeque;
+use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -29,15 +31,129 @@ const MOST: u64 = 64 * 1024 * 1024;
 /// `nether_ledger::MAX_OBJECT_BYTES`.
 const MAX_LIST_ENTRIES: usize = 65_536;
 
-/// `O_NOFOLLOW | O_NONBLOCK` for TOCTOU-safe, FIFO-safe `Disk::read`.
-#[cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "arm")))]
-const OPEN_NOFOLLOW_NONBLOCK: i32 = 0x10000 | 0x800;
-#[cfg(all(target_os = "linux", not(any(target_arch = "aarch64", target_arch = "arm"))))]
-const OPEN_NOFOLLOW_NONBLOCK: i32 = 0x20000 | 0x800;
-#[cfg(target_os = "macos")]
-const OPEN_NOFOLLOW_NONBLOCK: i32 = 0x0100 | 0x0004;
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
-const OPEN_NOFOLLOW_NONBLOCK: i32 = 0;
+/// Per-OS/architecture `O_NOFOLLOW`, `O_NONBLOCK`, and `O_DIRECTORY` flags.
+/// Unverified Unix targets fail to compile rather than silently disabling
+/// `O_NOFOLLOW` / `O_NONBLOCK`.
+#[cfg(all(
+    target_os = "linux",
+    any(
+        target_arch = "aarch64",
+        target_arch = "arm",
+        target_arch = "m68k",
+        target_arch = "powerpc",
+        target_arch = "powerpc64"
+    )
+))]
+const OPEN_NOFOLLOW: i32 = 0x10000;
+#[cfg(all(
+    target_os = "linux",
+    any(
+        target_arch = "aarch64",
+        target_arch = "arm",
+        target_arch = "m68k",
+        target_arch = "powerpc",
+        target_arch = "powerpc64"
+    )
+))]
+const OPEN_DIRECTORY: i32 = 0x4000;
+#[cfg(all(
+    target_os = "linux",
+    not(any(
+        target_arch = "aarch64",
+        target_arch = "arm",
+        target_arch = "m68k",
+        target_arch = "powerpc",
+        target_arch = "powerpc64"
+    ))
+))]
+const OPEN_NOFOLLOW: i32 = 0x20000;
+#[cfg(all(
+    target_os = "linux",
+    not(any(
+        target_arch = "aarch64",
+        target_arch = "arm",
+        target_arch = "m68k",
+        target_arch = "powerpc",
+        target_arch = "powerpc64"
+    ))
+))]
+const OPEN_DIRECTORY: i32 = 0x10000;
+#[cfg(all(target_os = "linux", any(target_arch = "mips", target_arch = "mips64")))]
+const OPEN_NONBLOCK: i32 = 0x0080;
+#[cfg(all(target_os = "linux", any(target_arch = "sparc", target_arch = "sparc64")))]
+const OPEN_NONBLOCK: i32 = 0x4000;
+#[cfg(all(
+    target_os = "linux",
+    not(any(
+        target_arch = "mips",
+        target_arch = "mips64",
+        target_arch = "sparc",
+        target_arch = "sparc64"
+    ))
+))]
+const OPEN_NONBLOCK: i32 = 0x0800;
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+const OPEN_NOFOLLOW: i32 = 0x0100;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+const OPEN_NONBLOCK: i32 = 0x0004;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+const OPEN_DIRECTORY: i32 = 0x0010_0000;
+
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+const OPEN_NOFOLLOW: i32 = 0x0100;
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+const OPEN_NONBLOCK: i32 = 0x0004;
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+const OPEN_DIRECTORY: i32 = 0x0002_0000;
+
+#[cfg(target_os = "netbsd")]
+const OPEN_NOFOLLOW: i32 = 0x0100;
+#[cfg(target_os = "netbsd")]
+const OPEN_NONBLOCK: i32 = 0x0004;
+#[cfg(target_os = "netbsd")]
+const OPEN_DIRECTORY: i32 = 0x0020_0000;
+
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))
+))]
+compile_error!("verify O_NOFOLLOW, O_NONBLOCK, and O_DIRECTORY for this Unix target");
+
+#[cfg(unix)]
+const OPEN_NOFOLLOW_NONBLOCK: i32 = OPEN_NOFOLLOW | OPEN_NONBLOCK;
+#[cfg(unix)]
+const OPEN_DIR_FLAGS: i32 = OPEN_NOFOLLOW | OPEN_NONBLOCK | OPEN_DIRECTORY;
+
+#[cfg(all(target_os = "linux", any(target_arch = "mips", target_arch = "mips64")))]
+const ERRNO_LOOP: i32 = 90;
+#[cfg(all(target_os = "linux", any(target_arch = "sparc", target_arch = "sparc64")))]
+const ERRNO_LOOP: i32 = 62;
+#[cfg(all(
+    target_os = "linux",
+    not(any(
+        target_arch = "mips",
+        target_arch = "mips64",
+        target_arch = "sparc",
+        target_arch = "sparc64"
+    ))
+))]
+const ERRNO_LOOP: i32 = 40;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+const ERRNO_LOOP: i32 = 62;
 
 /// The disk, under a root nothing may reach out of.
 ///
@@ -157,8 +273,25 @@ fn step_within(root: &Path, cur: &mut PathBuf, hops: &mut u8) -> bool {
             }
             Component::Normal(n) => {
                 resolved.push(n);
-                if !step_within(root, &mut resolved, hops) {
-                    return false;
+                if resolved.starts_with(root) {
+                    if !step_within(root, &mut resolved, hops) {
+                        return false;
+                    }
+                } else if let Ok(m) = std::fs::symlink_metadata(&resolved)
+                    && m.file_type().is_symlink()
+                {
+                    // Allow symlinked ancestors of `root` itself (e.g., macOS
+                    // `/tmp -> /private/tmp`) while refusing symlinks outside
+                    // `root` that point elsewhere.
+                    if *hops >= 40 {
+                        return false;
+                    }
+                    let Ok(canon) = resolved.canonicalize() else { return false };
+                    if !root.starts_with(&canon) {
+                        return false;
+                    }
+                    *hops += 1;
+                    resolved = canon;
                 }
             }
         }
@@ -186,6 +319,10 @@ fn within(root: &Path, at: &Path) -> bool {
 
 /// The refusal an `io::Error` is. §9.5 lists which each function may give.
 fn why(e: &std::io::Error) -> Refusal {
+    #[cfg(unix)]
+    if e.raw_os_error() == Some(ERRNO_LOOP) {
+        return Refusal::Denied;
+    }
     match e.kind() {
         std::io::ErrorKind::NotFound => Refusal::Absent,
         std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::IsADirectory => Refusal::Denied,
@@ -194,6 +331,86 @@ fn why(e: &std::io::Error) -> Refusal {
         // `unreachable` means for a thing that is supposed to be here.
         _ => Refusal::Unreachable,
     }
+}
+
+#[cfg(unix)]
+fn open_dir_nofollow(path: &Path) -> std::io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.read(true).custom_flags(OPEN_DIR_FLAGS);
+    opts.open(path)
+}
+
+#[cfg(target_os = "linux")]
+enum Step {
+    Normal(OsString),
+    Parent,
+}
+
+#[cfg(target_os = "linux")]
+enum Pinned {
+    Dir(std::fs::File),
+    Child { parent: std::fs::File, name: OsString },
+}
+
+#[cfg(target_os = "linux")]
+fn proc_fd_path(dir: &std::fs::File, name: Option<&std::ffi::OsStr>) -> PathBuf {
+    use std::os::fd::AsRawFd as _;
+    let mut p = PathBuf::from(format!("/proc/self/fd/{}", dir.as_raw_fd()));
+    if let Some(n) = name {
+        p.push(n);
+    }
+    p
+}
+
+#[cfg(target_os = "linux")]
+fn strip_root_prefix(root: &Path, target: &Path, hops: &mut u8) -> Option<Vec<Step>> {
+    let mut prefix = PathBuf::new();
+    let mut iter = target.components();
+    let mut matched = false;
+    while !matched {
+        let part = iter.next()?;
+        match part {
+            Component::RootDir => prefix.push(Component::RootDir.as_os_str()),
+            Component::Prefix(p) => prefix.push(p.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !prefix.pop() {
+                    return None;
+                }
+            }
+            Component::Normal(n) => {
+                prefix.push(n);
+                if prefix != root
+                    && let Ok(m) = std::fs::symlink_metadata(&prefix)
+                    && m.file_type().is_symlink()
+                {
+                    if *hops >= 40 {
+                        return None;
+                    }
+                    let canon = prefix.canonicalize().ok()?;
+                    if !root.starts_with(&canon) {
+                        return None;
+                    }
+                    *hops += 1;
+                    prefix = canon;
+                }
+            }
+        }
+        if prefix == root {
+            matched = true;
+        }
+    }
+    let mut rest = Vec::new();
+    for part in iter {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => rest.push(Step::Parent),
+            Component::Normal(n) => rest.push(Step::Normal(n.to_os_string())),
+            Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    Some(rest)
 }
 
 impl Provider for Disk {
@@ -226,6 +443,26 @@ impl Provider for Disk {
             return into.record(call, stratum, span, &refused(Refusal::Malformed));
         };
         let follow_final = call.function != "remove";
+        #[cfg(target_os = "linux")]
+        {
+            let create_parents = call.function == "write";
+            match self.resolve_pinned(&path, follow_final, create_parents) {
+                Ok(Some(pinned)) => {
+                    let said = Self::act_pinned(&call.function, pinned, call, into)?;
+                    return into.record(call, stratum, span, &said);
+                }
+                Err(_) if call.function == "exists" => {
+                    return into.record(
+                        call,
+                        stratum,
+                        span,
+                        &given(&call.function, Value::Bool(false)),
+                    );
+                }
+                Err(no) => return into.record(call, stratum, span, &refused(no)),
+                Ok(None) => {}
+            }
+        }
         let said = match self.resolve(&path, follow_final) {
             Err(_) if call.function == "exists" => given(&call.function, Value::Bool(false)),
             Err(no) => refused(no),
@@ -236,11 +473,155 @@ impl Provider for Disk {
 }
 
 impl Disk {
+    #[cfg(target_os = "linux")]
+    fn resolve_pinned(
+        &self,
+        path: &str,
+        follow_final: bool,
+        create_parents: bool,
+    ) -> Result<Option<Pinned>, Refusal> {
+        if path.is_empty() || path.contains('\0') {
+            return Err(Refusal::Malformed);
+        }
+        let mut queue: VecDeque<Step> = VecDeque::new();
+        for part in Path::new(path).components() {
+            match part {
+                Component::Normal(name) => queue.push_back(Step::Normal(name.to_os_string())),
+                Component::CurDir => {}
+                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                    return Err(Refusal::Denied);
+                }
+            }
+        }
+        if !follow_final && queue.is_empty() {
+            return Err(Refusal::Denied);
+        }
+        let Ok(canon_root) = self.root.canonicalize() else { return Err(Refusal::Denied) };
+        let Ok(root_dir) = open_dir_nofollow(&canon_root) else { return Err(Refusal::Denied) };
+        if std::fs::symlink_metadata(proc_fd_path(&root_dir, None)).is_err() {
+            return Ok(None);
+        }
+        let mut dir_stack = vec![root_dir];
+        let mut hops = 0u8;
+        while let Some(step) = queue.pop_front() {
+            match step {
+                Step::Parent => {
+                    if dir_stack.len() <= 1 {
+                        return Err(Refusal::Denied);
+                    }
+                    dir_stack.pop();
+                }
+                Step::Normal(name) => {
+                    let is_last = queue.is_empty();
+                    let Some(top) = dir_stack.last() else { return Err(Refusal::Denied) };
+                    let child = proc_fd_path(top, Some(&name));
+                    match std::fs::symlink_metadata(&child) {
+                        Ok(meta) if meta.file_type().is_symlink() && (!is_last || follow_final) => {
+                            if hops >= 40 {
+                                return Err(Refusal::Denied);
+                            }
+                            hops += 1;
+                            let target = std::fs::read_link(&child).map_err(|_| Refusal::Denied)?;
+                            let steps = if target.is_absolute() {
+                                dir_stack.truncate(1);
+                                strip_root_prefix(&canon_root, &target, &mut hops)
+                                    .ok_or(Refusal::Denied)?
+                            } else {
+                                let mut rel = Vec::new();
+                                for part in target.components() {
+                                    match part {
+                                        Component::CurDir => {}
+                                        Component::ParentDir => rel.push(Step::Parent),
+                                        Component::Normal(n) => {
+                                            rel.push(Step::Normal(n.to_os_string()));
+                                        }
+                                        Component::RootDir | Component::Prefix(_) => {
+                                            return Err(Refusal::Denied);
+                                        }
+                                    }
+                                }
+                                rel
+                            };
+                            for s in steps.into_iter().rev() {
+                                queue.push_front(s);
+                            }
+                        }
+                        Ok(_) | Err(_) if is_last => {
+                            let Some(parent) = dir_stack.pop() else {
+                                return Err(Refusal::Denied);
+                            };
+                            return Ok(Some(Pinned::Child { parent, name }));
+                        }
+                        Ok(_) => {
+                            let dir = open_dir_nofollow(&child).map_err(|e| why(&e))?;
+                            dir_stack.push(dir);
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound && create_parents => {
+                            match std::fs::create_dir(&child) {
+                                Ok(()) => {}
+                                Err(ce) if ce.kind() == std::io::ErrorKind::AlreadyExists => {}
+                                Err(ce) => return Err(why(&ce)),
+                            }
+                            let dir = open_dir_nofollow(&child).map_err(|oe| why(&oe))?;
+                            dir_stack.push(dir);
+                        }
+                        Err(e) => return Err(why(&e)),
+                    }
+                }
+            }
+        }
+        if !follow_final {
+            return Err(Refusal::Denied);
+        }
+        let Some(dir) = dir_stack.pop() else { return Err(Refusal::Denied) };
+        Ok(Some(Pinned::Dir(dir)))
+    }
+
+    #[cfg(target_os = "linux")]
+    fn act_pinned(
+        function: &str,
+        pinned: Pinned,
+        call: &Call,
+        into: &Recorder,
+    ) -> Result<Value, Refuse> {
+        Ok(match (function, pinned) {
+            ("read", Pinned::Child { parent, name }) => {
+                Self::read(&proc_fd_path(&parent, Some(&name)))
+            }
+            ("read" | "write", Pinned::Dir(_)) => refused(Refusal::Denied),
+            ("exists", Pinned::Dir(_)) => given(function, Value::Bool(true)),
+            ("exists", Pinned::Child { parent, name }) => {
+                let exists = std::fs::symlink_metadata(proc_fd_path(&parent, Some(&name)))
+                    .is_ok_and(|m| !m.file_type().is_symlink());
+                given(function, Value::Bool(exists))
+            }
+            ("list", Pinned::Dir(dir)) => Self::list_open_dir(&proc_fd_path(&dir, None)),
+            ("list", Pinned::Child { parent, name }) => {
+                match open_dir_nofollow(&proc_fd_path(&parent, Some(&name))) {
+                    Ok(dir) => Self::list_open_dir(&proc_fd_path(&dir, None)),
+                    Err(e) => refused(why(&e)),
+                }
+            }
+            ("remove", Pinned::Child { parent, name }) => {
+                std::fs::remove_file(proc_fd_path(&parent, Some(&name)))
+                    .map_or_else(|e| refused(why(&e)), |()| given(function, Value::Unit))
+            }
+            ("write", Pinned::Child { parent, name }) => {
+                Self::write_in_dir(&proc_fd_path(&parent, None), &name, call, into)?
+            }
+            _ => refused(Refusal::Malformed),
+        })
+    }
+
     /// Touch the world, once, and say what it said.
     fn act(function: &str, at: &Path, call: &Call, into: &Recorder) -> Result<Value, Refuse> {
         Ok(match function {
             "read" => Self::read(at),
-            "exists" => given(function, Value::Bool(at.try_exists().unwrap_or(false))),
+            "exists" => {
+                let exists =
+                    std::fs::symlink_metadata(at).is_ok_and(|m| !m.file_type().is_symlink());
+                given(function, Value::Bool(exists))
+            }
             "list" => Self::list(at),
             "remove" => std::fs::remove_file(at)
                 .map_or_else(|e| refused(why(&e)), |()| given(function, Value::Unit)),
@@ -249,7 +630,7 @@ impl Disk {
         })
     }
 
-    fn list(at: &Path) -> Value {
+    fn list_open_dir(at: &Path) -> Value {
         let entries = match std::fs::read_dir(at) {
             Err(e) => return refused(why(&e)),
             Ok(entries) => entries,
@@ -274,6 +655,27 @@ impl Disk {
         }
         names.sort();
         given("list", Value::Array(names.into_iter().map(Value::Str).collect()))
+    }
+
+    fn list(at: &Path) -> Value {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+            let dir = match open_dir_nofollow(at) {
+                Ok(d) => d,
+                Err(e) => return refused(why(&e)),
+            };
+            let Ok(dir_meta) = dir.metadata() else { return refused(Refusal::Denied) };
+            let Ok(path_meta) = std::fs::symlink_metadata(at) else {
+                return refused(Refusal::Denied);
+            };
+            if path_meta.file_type().is_symlink()
+                || (dir_meta.dev(), dir_meta.ino()) != (path_meta.dev(), path_meta.ino())
+            {
+                return refused(Refusal::Denied);
+            }
+        }
+        Self::list_open_dir(at)
     }
 
     fn read(at: &Path) -> Value {
@@ -308,31 +710,34 @@ impl Disk {
         given("read", Value::Bytes(bytes))
     }
 
-    /// §9.5: the only prelude function whose witness records something the
-    /// ledger cannot later reproduce on its own. Writes via a same-directory
-    /// temporary file and atomic `rename` so `ENOSPC` or a crash never
-    /// truncates an existing file while recording `Refused(Exhausted)`.
-    fn write(at: &Path, call: &Call, into: &Recorder) -> Result<Value, Refuse> {
+    fn write_in_dir(
+        parent: &Path,
+        name: &std::ffi::OsStr,
+        call: &Call,
+        into: &Recorder,
+    ) -> Result<Value, Refuse> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let Some(bytes) = into.arg_bytes(call, 1)? else {
             return Ok(refused(Refusal::Malformed));
         };
-        if let Ok(meta) = std::fs::symlink_metadata(at)
+        let at = parent.join(name);
+        if let Ok(meta) = std::fs::symlink_metadata(&at)
             && !meta.is_file()
         {
             return Ok(refused(Refusal::Denied));
-        }
-        let Some(parent) = at.parent() else {
-            return Ok(refused(Refusal::Denied));
-        };
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            return Ok(refused(why(&e)));
         }
         let (temp, mut file) = loop {
             let n = NEXT.fetch_add(1, Ordering::Relaxed);
             let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
             let candidate = parent.join(format!(".nether-write.{}.{ts}.{n}", std::process::id()));
-            match std::fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+            let mut opts = std::fs::OpenOptions::new();
+            opts.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt as _;
+                opts.custom_flags(OPEN_NOFOLLOW_NONBLOCK);
+            }
+            match opts.open(&candidate) {
                 Ok(f) => break (candidate, f),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
                 Err(e) => return Ok(refused(why(&e))),
@@ -344,10 +749,27 @@ impl Disk {
             return Ok(refused(why(&e)));
         }
         drop(file);
-        if let Err(e) = std::fs::rename(&temp, at) {
+        if let Err(e) = std::fs::rename(&temp, &at) {
             let _ = std::fs::remove_file(&temp);
             return Ok(refused(why(&e)));
         }
         Ok(given("write", Value::Unit))
+    }
+
+    /// §9.5: the only prelude function whose witness records something the
+    /// ledger cannot later reproduce on its own. Writes via a same-directory
+    /// temporary file and atomic `rename` so `ENOSPC` or a crash never
+    /// truncates an existing file while recording `Refused(Exhausted)`.
+    fn write(at: &Path, call: &Call, into: &Recorder) -> Result<Value, Refuse> {
+        let Some(parent) = at.parent() else {
+            return Ok(refused(Refusal::Denied));
+        };
+        let Some(name) = at.file_name() else {
+            return Ok(refused(Refusal::Denied));
+        };
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return Ok(refused(why(&e)));
+        }
+        Self::write_in_dir(parent, name, call, into)
     }
 }

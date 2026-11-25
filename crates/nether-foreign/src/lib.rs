@@ -16,8 +16,9 @@
 
 use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::os::unix::ffi::OsStrExt as _;
-use std::os::unix::fs::MetadataExt as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 
 #[repr(C)]
@@ -40,8 +41,10 @@ struct LinkMap {
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 const RTLD_DI_LINKMAP: c_int = 2;
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+const RTLD_DL_LINKMAP: c_int = 2;
 
-// `dlopen`, `dlsym`, `dlclose`, `dlerror`, `dladdr` (and glibc Linux `dlinfo`).
+// `dlopen`, `dlsym`, `dlclose`, `dlerror`, `dladdr` (and glibc Linux `dlinfo`/`dladdr1`).
 // Minimal POSIX dynamic-loader declarations without an external binding crate.
 #[cfg_attr(target_os = "linux", link(name = "dl"))]
 unsafe extern "C" {
@@ -49,7 +52,15 @@ unsafe extern "C" {
     fn dlsym(handle: *mut c_void, name: *const c_char) -> *mut c_void;
     fn dlclose(handle: *mut c_void) -> c_int;
     fn dlerror() -> *const c_char;
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
     fn dladdr(addr: *const c_void, info: *mut DlInfo) -> c_int;
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    fn dladdr1(
+        addr: *const c_void,
+        info: *mut DlInfo,
+        extra_info: *mut *mut c_void,
+        flags: c_int,
+    ) -> c_int;
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn dlinfo(handle: *mut c_void, request: c_int, info: *mut c_void) -> c_int;
 }
@@ -83,10 +94,8 @@ type Foreign = unsafe extern "C" fn(*const u8, usize, *mut u8, usize, *mut usize
 /// so two at once would be a race in code nobody here can see.
 pub struct Object {
     handle: Mutex<Handle>,
+    #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
     canonical: PathBuf,
-    /// `(dev, ino)` of the canonical file at load time, used to verify symbol
-    /// ownership even across symlink aliases and non-zero-base shared objects.
-    file_id: (u64, u64),
     /// What it was loaded from, for saying which object answered.
     pub path: String,
 }
@@ -144,18 +153,23 @@ impl Object {
         if !meta.is_file() {
             return Err(Failed(format!("{shown} is not a regular file")));
         }
-        let file_id = (meta.dev(), meta.ino());
         let Ok(name) = CString::new(canonical.as_os_str().as_bytes()) else {
             return Err(Failed(format!("{shown} has a NUL in it")));
         };
         // SAFETY: `name` is a valid NUL-terminated string that outlives the
-        // call. Everything after this point is the loader's to get right, and
-        // §1.7 is the specification admitting that.
+        // call. Hold `CALL_LOCK` across `dlopen` (which runs `.init_array`) and
+        // `last_error` so concurrent opens/calls/drops cannot race.
+        let _turn = CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         let handle = unsafe { dlopen(name.as_ptr(), NOW_AND_LOCAL) };
         if handle.is_null() {
             Err(Failed(last_error()))
         } else {
-            Ok(Self { handle: Mutex::new(Handle(handle)), canonical, file_id, path: shown })
+            Ok(Self {
+                handle: Mutex::new(Handle(handle)),
+                #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+                canonical,
+                path: shown,
+            })
         }
     }
 
@@ -176,36 +190,48 @@ impl Object {
             sname: core::ptr::null(),
             saddr: core::ptr::null_mut(),
         };
-        // SAFETY: `found` is a valid code address returned by `dlsym`.
-        if unsafe { dladdr(found.cast_const(), &raw mut info) } == 0 {
-            return false;
-        }
-        if !info.fname.is_null() {
-            // SAFETY: `fname` is a non-null NUL-terminated path from `dladdr`.
-            let fname = unsafe { CStr::from_ptr(info.fname) };
-            let fname_path = Path::new(std::ffi::OsStr::from_bytes(fname.to_bytes()));
-            if let Ok(meta) = std::fs::metadata(fname_path) {
-                return (meta.dev(), meta.ino()) == self.file_id;
-            }
-            if fname_path == self.canonical.as_path() {
-                return true;
-            }
-        }
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         {
-            let mut lm: *mut LinkMap = core::ptr::null_mut();
-            // SAFETY: `handle.0` is an open `dlopen` handle and `RTLD_DI_LINKMAP`
-            // writes a `*mut LinkMap` into `lm`.
-            if unsafe { dlinfo(handle.0, RTLD_DI_LINKMAP, (&raw mut lm).cast()) } == 0
-                && !lm.is_null()
-            {
-                // SAFETY: `lm` is non-null and valid while `handle.0` remains open.
-                let base = unsafe { (*lm).addr };
-                return info.fbase as usize == base;
-            }
+            let _ = self;
+            let mut handle_lm: *mut LinkMap = core::ptr::null_mut();
+            let mut sym_lm: *mut c_void = core::ptr::null_mut();
+            // Compare in-memory `link_map *` pointers directly so filesystem
+            // hardlink TOCTOU, atomic `.so` replacement, and non-zero lowest
+            // `PT_LOAD` `p_vaddr` offsets cannot mislead ownership checks.
+            // SAFETY: `handle.0` is an open `dlopen` handle and `found` is a
+            // valid symbol address returned by `dlsym`.
+            let got_handle =
+                unsafe { dlinfo(handle.0, RTLD_DI_LINKMAP, (&raw mut handle_lm).cast()) } == 0
+                    && !handle_lm.is_null();
+            let got_sym = unsafe {
+                dladdr1(found.cast_const(), &raw mut info, &raw mut sym_lm, RTLD_DL_LINKMAP)
+            } != 0
+                && !sym_lm.is_null();
+            got_handle && got_sym && sym_lm.cast_const() == handle_lm.cast_const().cast()
         }
-        let _ = handle;
-        false
+        #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+        {
+            let _ = handle;
+            // SAFETY: `found` is a valid code address returned by `dlsym`.
+            if unsafe { dladdr(found.cast_const(), &raw mut info) } == 0 {
+                return false;
+            }
+            if !info.fname.is_null() {
+                // SAFETY: `fname` is a non-null NUL-terminated path from `dladdr`.
+                let fname = unsafe { CStr::from_ptr(info.fname) };
+                let fname_path = Path::new(std::ffi::OsStr::from_bytes(fname.to_bytes()));
+                // Prefer exact canonical path match before touching the
+                // filesystem so atomic `.so` replacement keeps working and
+                // hardlinks at another path cannot impersonate `self`.
+                if fname_path == self.canonical.as_path() {
+                    return true;
+                }
+                if fname_path.canonicalize().is_ok_and(|p| p == self.canonical) {
+                    return true;
+                }
+            }
+            false
+        }
     }
 
     /// The symbol, if this object itself defines it.

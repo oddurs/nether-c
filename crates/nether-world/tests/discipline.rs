@@ -31,7 +31,17 @@ fn span() -> Span {
 }
 
 fn asking(function: &str) -> Call {
-    Call { function: function.to_owned(), args: Vec::new() }
+    let arity = nether_core::Prim::from_name(function).map_or(0, nether_core::Prim::arity);
+    let args =
+        (0..arity).map(|i| Cairn::of_encoded(format!("{function}:{i}").as_bytes())).collect();
+    Call { function: function.to_owned(), args }
+}
+
+fn asking_tagged(function: &str, tag: u64) -> Call {
+    let arity = nether_core::Prim::from_name(function).map_or(0, nether_core::Prim::arity);
+    let args =
+        (0..arity).map(|i| Cairn::of_encoded(format!("{function}:{tag}:{i}").as_bytes())).collect();
+    Call { function: function.to_owned(), args }
 }
 
 /// A provider that answers, which is the ordinary case.
@@ -232,11 +242,11 @@ fn many_holes_answer_concurrently_and_keep_discovery_order() {
     let world = World::sealed().granting(Box::new(Shared(state.clone())));
     let at = |start: u64| Span { source: source(), start, end: start + 1 };
     let asked = vec![
-        (asking("read"), at(0)),
-        (asking("read"), at(1)),
-        (asking("read"), at(2)),
-        (asking("write"), at(10)),
-        (asking("read"), at(3)),
+        (asking_tagged("read", 0), at(0)),
+        (asking_tagged("read", 1), at(1)),
+        (asking_tagged("read", 2), at(2)),
+        (asking_tagged("write", 10), at(10)),
+        (asking_tagged("read", 3), at(3)),
     ];
     let out = world.ask_all(&asked, &Recorder::new(&store));
     assert_eq!(out.len(), 5);
@@ -334,13 +344,15 @@ fn concurrency_is_bounded_and_collapsing_cancels_later_holes() {
     let world = World::sealed().granting(Box::new(Ref(state.clone())));
     let at = |start: u64| Span { source: source(), start, end: start + 1 };
 
-    let sixteen: Vec<(Call, Span)> = (100..116).map(|n| (asking("read"), at(n))).collect();
+    let sixteen: Vec<(Call, Span)> =
+        (100..116).map(|n| (asking_tagged("read", n), at(n))).collect();
     let ok = world.ask_all(&sixteen, &Recorder::new(&store));
     assert_eq!(ok.len(), 16);
     let peak = state.peak.load(SeqCst);
     assert!((2..=8).contains(&peak), "peak in-flight was {peak}");
 
-    let collapsing: Vec<(Call, Span)> = (0..12).map(|n| (asking("read"), at(n))).collect();
+    let collapsing: Vec<(Call, Span)> =
+        (0..12).map(|n| (asking_tagged("read", n), at(n))).collect();
     let halted = world.ask_all(&collapsing, &Recorder::new(&store));
     assert_eq!(halted.len(), 2, "{halted:?}");
     assert!(halted[0].is_ok());
@@ -349,4 +361,49 @@ fn concurrency_is_bounded_and_collapsing_cancels_later_holes() {
         Err(nether_world::Unanswered::Collapsed("first collapsed second".to_owned()))
     );
     assert_eq!(state.after_cutoff.load(SeqCst), 0, "holes past the in-flight window ran");
+}
+
+#[test]
+fn identical_read_holes_at_distinct_spans_contact_world_once_and_check_arity() {
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    struct Counting(std::sync::Arc<AtomicUsize>);
+    impl Provider for Counting {
+        fn capability(&self) -> Capability {
+            Capability::Disk
+        }
+        fn answers(&self, function: &str) -> bool {
+            function == "read"
+        }
+        fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
+            let n = self.0.fetch_add(1, SeqCst);
+            into.record(call, Depth::DISK, span, &Value::Int(i64::try_from(n).unwrap_or(0)))
+        }
+    }
+    let dir = scratch("read-dedup-spans");
+    let store = Store::open(&dir).unwrap();
+    let calls = std::sync::Arc::new(AtomicUsize::new(0));
+    let world = World::sealed().granting(Box::new(Counting(calls.clone())));
+    let c = asking_tagged("read", 42);
+    let s0 = Span { source: source(), start: 0, end: 4 };
+    let s1 = Span { source: source(), start: 10, end: 14 };
+    let out = world.ask_all(&[(c.clone(), s0), (c, s1)], &Recorder::new(&store));
+    assert_eq!(calls.load(SeqCst), 1, "identical read calls across spans must contact world once");
+    assert_eq!(out.len(), 2);
+    let r0 = out[0].as_ref().unwrap();
+    let r1 = out[1].as_ref().unwrap();
+    assert_eq!(r0.answer(), r1.answer(), "follower must share leader answer cairn");
+    assert_ne!(r0.witness(), r1.witness(), "follower must carry its own span witness");
+    let Stored::Node(nether_ledger::Node::Witness { span: ws1, .. }) =
+        store.get(r1.witness()).unwrap()
+    else {
+        panic!("expected witness");
+    };
+    assert_eq!(ws1, s1);
+
+    // L3: wrong arity is rejected before calling provider.
+    let bad = Call { function: "read".into(), args: Vec::new() };
+    assert!(matches!(
+        world.ask(&bad, s0, &Recorder::new(&store)),
+        Err(nether_world::Unanswered::Collapsed(_))
+    ));
 }

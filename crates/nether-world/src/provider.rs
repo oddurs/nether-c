@@ -161,6 +161,16 @@ impl World {
                 wanted: wants(&call.function),
             });
         };
+        if let Some(prim) = Prim::from_name(&call.function)
+            && call.args.len() != prim.arity()
+        {
+            return Err(Unanswered::Collapsed(format!(
+                "`{}` expects {} argument(s), got {}",
+                call.function,
+                prim.arity(),
+                call.args.len()
+            )));
+        }
         provider.answer(call, span, into).map_err(|e| match e {
             Refuse::NotRecorded(e) => Unanswered::NotRecorded(e.to_string()),
             Refuse::Collapse(why) => Unanswered::Collapsed(why),
@@ -199,13 +209,14 @@ impl World {
                 continue;
             }
             let run = &asked[i..end];
-            // Deduplicate identical read-stratum `(call, span)` holes within
-            // the batch so duplicate entries contact the world once.
+            // Deduplicate identical read-stratum `Call` holes within the batch
+            // regardless of `Span` so concurrent reads of the same resource
+            // contact the world once and cannot produce conflicting witnesses.
             let mut leaders: Vec<usize> = Vec::with_capacity(run.len());
-            let mut first_of: HashMap<(&Call, Span), usize> = HashMap::new();
+            let mut first_of: HashMap<&Call, usize> = HashMap::new();
             let mut leader_for: Vec<usize> = Vec::with_capacity(run.len());
-            for (idx, (call, span)) in run.iter().enumerate() {
-                let leader = *first_of.entry((call, *span)).or_insert_with(|| {
+            for (idx, (call, _)) in run.iter().enumerate() {
+                let leader = *first_of.entry(call).or_insert_with(|| {
                     leaders.push(idx);
                     idx
                 });
@@ -238,9 +249,24 @@ impl World {
                     leader_results.insert(leaders[li], res);
                 }
             }
-            for &leader in &leader_for {
-                let Some(res) = leader_results.get(&leader).cloned() else {
+            for (idx, &leader) in leader_for.iter().enumerate() {
+                let Some(leader_res) = leader_results.get(&leader) else {
                     break;
+                };
+                let res = match leader_res {
+                    Ok(rec) if idx != leader && run[idx].1 != run[leader].1 => {
+                        let stratum =
+                            Prim::from_name(&run[idx].0.function).map_or(Depth::PURE, Prim::latent);
+                        into.record_existing(&run[idx].0, stratum, run[idx].1, rec.answer())
+                            .map_err(|e| match e {
+                                Refuse::NotRecorded(err) => {
+                                    Unanswered::NotRecorded(err.to_string())
+                                }
+                                Refuse::Collapse(why) => Unanswered::Collapsed(why),
+                                Refuse::Unavailable(why) => Unanswered::Unavailable(why),
+                            })
+                    }
+                    other => other.clone(),
                 };
                 let stop = Self::fatal(&res);
                 out.push(res);
@@ -279,9 +305,14 @@ impl World {
             };
             match into.store().get(hole) {
                 Ok(Stored::Node(Node::Hole { call, stratum, span })) => {
-                    if Prim::from_name(&call.function).is_none_or(|p| p.latent().get() != stratum) {
+                    if Prim::from_name(&call.function).is_none_or(|p| {
+                        p.latent() == Depth::PURE
+                            || p.latent().get() != stratum
+                            || call.args.len() != p.arity()
+                    }) {
                         return Err(Unanswered::NotRecorded(format!(
-                            "hole {hole} claims stratum {stratum} for `{}`",
+                            "hole {hole} claims stratum {stratum} with {} arg(s) for `{}`",
+                            call.args.len(),
                             call.function
                         )));
                     }

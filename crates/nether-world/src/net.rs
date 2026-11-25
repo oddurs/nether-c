@@ -18,7 +18,8 @@
 
 use core::fmt::Write as _;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{IpAddr, Ipv6Addr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use nether_core::{Capability, Depth};
@@ -26,6 +27,20 @@ use nether_ledger::{Call, Refusal, Span, Value};
 
 use crate::provider::{Provider, Refuse, given, refused};
 use crate::recorder::{Recorded, Recorder};
+
+/// Maximum concurrent DNS lookup threads so timed-out `getaddrinfo` calls
+/// cannot exhaust OS threads or panic on spawn failure.
+const MAX_DNS_THREADS: usize = 16;
+
+static ACTIVE_DNS_THREADS: AtomicUsize = AtomicUsize::new(0);
+
+struct DnsThreadGuard;
+
+impl Drop for DnsThreadGuard {
+    fn drop(&mut self) {
+        ACTIVE_DNS_THREADS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
 
 /// How long a socket may take to say anything. §6.4's argument, one layer out:
 /// a burial with no bound on it is a burial that does not finish.
@@ -275,6 +290,76 @@ fn remaining(deadline: Instant) -> Result<Duration, Refusal> {
         .ok_or(Refusal::Unreachable)
 }
 
+fn is_public_v4(ip: Ipv4Addr) -> bool {
+    let [a, b, c, _] = ip.octets();
+    !(ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || ip.is_broadcast()
+        || a == 0
+        // Carrier-grade NAT (RFC 6598): 100.64.0.0/10
+        || (a == 100 && (64..=127).contains(&b))
+        // IETF protocol assignments (RFC 6890): 192.0.0.0/24
+        || (a == 192 && b == 0 && c == 0)
+        // TEST-NET-1/2/3 (RFC 5737)
+        || (a == 192 && b == 0 && c == 2)
+        || (a == 198 && b == 51 && c == 100)
+        || (a == 203 && b == 0 && c == 113)
+        // Benchmarking (RFC 2544): 198.18.0.0/15
+        || (a == 198 && (b == 18 || b == 19))
+        // Reserved (RFC 1112): 240.0.0.0/4
+        || a >= 240)
+}
+
+/// Whether `ip` is globally routable (rejecting loopback, private/ULA,
+/// link-local, unspecified, multicast, documentation, and IPv4-mapped forms).
+fn is_public_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => is_public_v4(v4),
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_public_v4(v4);
+            }
+            let segs = v6.segments();
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                // Link-local unicast: fe80::/10
+                || (segs[0] & 0xffc0) == 0xfe80
+                // Unique local (ULA): fc00::/7
+                || (segs[0] & 0xfe00) == 0xfc00
+                // Site-local (deprecated): fec0::/10
+                || (segs[0] & 0xffc0) == 0xfec0
+                // Documentation: 2001:db8::/32
+                || (segs[0] == 0x2001 && segs[1] == 0x0db8)
+                // Discard-only: 100::/64
+                || (segs[0] == 0x0100 && segs[1] == 0 && segs[2] == 0 && segs[3] == 0)
+                // Well-known NAT64 prefix: 64:ff9b::/96
+                || (segs[0] == 0x0064
+                    && segs[1] == 0xff9b
+                    && segs[2] == 0
+                    && segs[3] == 0
+                    && segs[4] == 0
+                    && segs[5] == 0)
+                // IPv4-compatible (deprecated): ::/96
+                || (segs[0] == 0
+                    && segs[1] == 0
+                    && segs[2] == 0
+                    && segs[3] == 0
+                    && segs[4] == 0
+                    && segs[5] == 0))
+        }
+    }
+}
+
+fn allows_nonpublic_resolution(host: &str) -> bool {
+    host.parse::<IpAddr>().is_ok()
+        || host.eq_ignore_ascii_case("localhost")
+        || host.eq_ignore_ascii_case("localhost.")
+}
+
 fn resolve_with_deadline(
     host: &str,
     port: u16,
@@ -283,12 +368,22 @@ fn resolve_with_deadline(
     if let Ok(ip) = host.parse::<IpAddr>() {
         return Ok(vec![SocketAddr::new(ip, port)]);
     }
+    ACTIVE_DNS_THREADS
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+            (n < MAX_DNS_THREADS).then_some(n + 1)
+        })
+        .map_err(|_| Refusal::Exhausted)?;
     let (tx, rx) = std::sync::mpsc::channel();
     let owned = host.to_owned();
-    std::thread::spawn(move || {
+    let spawn = std::thread::Builder::new().name("nether-dns".to_owned()).spawn(move || {
+        let _guard = DnsThreadGuard;
         let res = (owned.as_str(), port).to_socket_addrs().map(Iterator::collect::<Vec<_>>);
         let _ = tx.send(res);
     });
+    if spawn.is_err() {
+        ACTIVE_DNS_THREADS.fetch_sub(1, Ordering::AcqRel);
+        return Err(Refusal::Exhausted);
+    }
     match rx.recv_timeout(remaining(deadline)?) {
         Ok(Ok(addrs)) => Ok(addrs),
         Ok(Err(e)) => Err(why(&e)),
@@ -298,6 +393,9 @@ fn resolve_with_deadline(
 
 fn connect_with_deadline(host: &str, port: u16, deadline: Instant) -> Result<TcpStream, Refusal> {
     let addrs = resolve_with_deadline(host, port, deadline)?;
+    if !allows_nonpublic_resolution(host) && addrs.iter().any(|addr| !is_public_ip(addr.ip())) {
+        return Err(Refusal::Denied);
+    }
     let mut last = Refusal::Unreachable;
     for (idx, addr) in addrs.iter().enumerate() {
         let left = remaining(deadline)?;
@@ -615,5 +713,49 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
         if crlf != b"\r\n" && crlf != b"\n" {
             return Err(Refusal::Unreachable);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{allows_nonpublic_resolution, is_public_ip};
+    use std::net::IpAddr;
+
+    #[test]
+    fn ssrf_ip_filter_rejects_loopback_private_link_local_and_v4_mapped() {
+        for blocked in [
+            "127.0.0.1",
+            "127.255.255.254",
+            "10.0.0.1",
+            "172.16.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "0.0.0.0",
+            "100.64.0.1",
+            "224.0.0.1",
+            "255.255.255.255",
+            "::1",
+            "::",
+            "::ffff:127.0.0.1",
+            "::ffff:169.254.169.254",
+            "::ffff:10.0.0.1",
+            "fe80::1",
+            "fc00::1",
+            "fd12:3456::1",
+            "ff02::1",
+            "2001:db8::1",
+            "64:ff9b::1",
+        ] {
+            let ip: IpAddr = blocked.parse().unwrap();
+            assert!(!is_public_ip(ip), "{blocked} must be rejected");
+        }
+        for public in ["93.184.216.34", "1.1.1.1", "2606:2800:220:1:248:1893:25c8:1946"] {
+            let ip: IpAddr = public.parse().unwrap();
+            assert!(is_public_ip(ip), "{public} must be allowed");
+        }
+        assert!(allows_nonpublic_resolution("127.0.0.1"));
+        assert!(allows_nonpublic_resolution("::1"));
+        assert!(allows_nonpublic_resolution("localhost"));
+        assert!(!allows_nonpublic_resolution("partner.example"));
     }
 }

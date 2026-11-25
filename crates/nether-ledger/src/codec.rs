@@ -18,6 +18,13 @@ use crate::value::{AnswerOf, MAX_REFUSAL, MAX_STRATUM, Refusal, Value, tag};
 /// bytes of nested arrays are a stack overflow.
 pub const MAX_DEPTH: usize = 128;
 
+/// Maximum estimated in-memory weight of a single decoded value.
+///
+/// Bounds dense `Value::Array` / `Value::Struct` encodings (e.g., millions of
+/// 1-byte `Value::Unit` elements) so a 64 MiB object cannot amplify into
+/// gigabytes of heap memory on decode.
+pub const MAX_DECODED_BYTES: usize = 256 * 1024 * 1024;
+
 // ── encoding ────────────────────────────────────────────────────────────────
 
 impl Value {
@@ -26,12 +33,25 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`DecodeError`] if any nested value exceeds [`MAX_DEPTH`], has
-    /// an out-of-range shade origin, or has an empty struct name.
+    /// an out-of-range shade origin, has an empty struct name, or exceeds
+    /// [`MAX_DECODED_BYTES`].
     pub fn validate(&self) -> Result<(), DecodeError> {
         let mut stack = vec![(self, 0usize)];
+        let mut weight = 0usize;
+        let val_sz = core::mem::size_of::<Self>();
         while let Some((cur, depth)) = stack.pop() {
-            if depth >= MAX_DEPTH {
+            if depth > MAX_DEPTH {
                 return Err(DecodeError::TooDeep);
+            }
+            let extra = match cur {
+                Self::Bytes(b) => b.len(),
+                Self::Str(s) => s.len(),
+                Self::Struct { name, .. } => name.len(),
+                _ => 0,
+            };
+            weight = weight.saturating_add(val_sz).saturating_add(extra);
+            if weight > MAX_DECODED_BYTES {
+                return Err(DecodeError::TooLarge { bytes: weight, limit: MAX_DECODED_BYTES });
             }
             match cur {
                 Self::Shade { origin, .. } if *origin > MAX_STRATUM => {
@@ -419,6 +439,33 @@ impl Stored {
     }
 }
 
+/// Summary produced by [`scan_stored`] without materializing `Value` trees.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Scanned {
+    pub is_node: bool,
+    pub is_trace: bool,
+    pub references: Vec<Cairn>,
+    pub nodes: Vec<Cairn>,
+}
+
+/// Validates canonical encoding of one value or node and extracts node
+/// references without allocating `Value` payloads.
+pub(crate) fn scan_stored(bytes: &[u8]) -> Result<Scanned, DecodeError> {
+    let mut reader = Reader { bytes, at: 0, weight: 0 };
+    let scanned = if reader.bytes.first() == Some(&tag::NODE) {
+        reader.at = 1;
+        reader.scan_node()?
+    } else {
+        reader.skip_value(0)?;
+        Scanned { is_node: false, is_trace: false, references: Vec::new(), nodes: Vec::new() }
+    };
+    let left = reader.remaining();
+    if left > 0 {
+        return Err(DecodeError::TrailingBytes(left));
+    }
+    Ok(scanned)
+}
+
 /// Decodes one value or node from `bytes`.
 ///
 /// # Errors
@@ -426,7 +473,7 @@ impl Stored {
 /// [`DecodeError`] for anything that is not a canonical encoding, including
 /// trailing bytes after an otherwise complete one.
 pub fn decode_stored(bytes: &[u8]) -> Result<Stored, DecodeError> {
-    let mut reader = Reader { bytes, at: 0 };
+    let mut reader = Reader { bytes, at: 0, weight: 0 };
     let stored = if reader.bytes.first() == Some(&tag::NODE) {
         reader.at = 1;
         Stored::Node(reader.node()?)
@@ -470,14 +517,23 @@ pub fn decode(bytes: &[u8]) -> Result<Value, DecodeError> {
 struct Reader<'a> {
     bytes: &'a [u8],
     at: usize,
+    weight: usize,
 }
 
-impl Reader<'_> {
+impl<'a> Reader<'a> {
+    fn charge(&mut self, bytes: usize) -> Result<(), DecodeError> {
+        self.weight = self.weight.saturating_add(bytes);
+        if self.weight > MAX_DECODED_BYTES {
+            return Err(DecodeError::TooLarge { bytes: self.weight, limit: MAX_DECODED_BYTES });
+        }
+        Ok(())
+    }
+
     const fn remaining(&self) -> usize {
         self.bytes.len() - self.at
     }
 
-    fn take(&mut self, n: usize) -> Result<&[u8], DecodeError> {
+    fn take(&mut self, n: usize) -> Result<&'a [u8], DecodeError> {
         if self.remaining() < n {
             return Err(DecodeError::Truncated { needed: n, had: self.remaining() });
         }
@@ -506,10 +562,14 @@ impl Reader<'_> {
         Ok(Cairn::from_bytes(self.take_array::<32>()?))
     }
 
-    fn text(&mut self) -> Result<String, DecodeError> {
+    fn text_str(&mut self) -> Result<&'a str, DecodeError> {
         let n = self.len()?;
         let raw = self.take(n)?;
-        core::str::from_utf8(raw).map(ToOwned::to_owned).map_err(|_| DecodeError::NotUtf8)
+        core::str::from_utf8(raw).map_err(|_| DecodeError::NotUtf8)
+    }
+
+    fn text(&mut self) -> Result<String, DecodeError> {
+        self.text_str().map(ToOwned::to_owned)
     }
 
     /// A count is only believable if the input could carry that many things.
@@ -602,10 +662,160 @@ impl Reader<'_> {
         }
     }
 
+    fn scan_node(&mut self) -> Result<Scanned, DecodeError> {
+        match self.byte()? {
+            kind::LITERAL => {
+                self.skip_value(0)?;
+                Ok(Scanned {
+                    is_node: true,
+                    is_trace: false,
+                    references: Vec::new(),
+                    nodes: Vec::new(),
+                })
+            }
+            kind::APPLY => {
+                let function = self.cairn()?;
+                let args = self.cairns()?;
+                let result = self.cairn()?;
+                let mut references = Vec::with_capacity(args.len() + 2);
+                references.push(function);
+                references.extend_from_slice(&args);
+                references.push(result);
+                Ok(Scanned { is_node: true, is_trace: false, references, nodes: Vec::new() })
+            }
+            kind::HOLE => {
+                let call = self.call()?;
+                let _ = self.stratum()?;
+                let span = self.span()?;
+                let mut references = call.args;
+                references.push(span.source);
+                Ok(Scanned { is_node: true, is_trace: false, references, nodes: Vec::new() })
+            }
+            kind::DEPOSIT => {
+                let value = self.cairn()?;
+                let span = self.span()?;
+                Ok(Scanned {
+                    is_node: true,
+                    is_trace: false,
+                    references: vec![value, span.source],
+                    nodes: Vec::new(),
+                })
+            }
+            kind::WITNESS => {
+                let _ = self.stratum()?;
+                let call = self.call()?;
+                let answer = self.cairn()?;
+                let span = self.span()?;
+                let mut references = call.args;
+                references.push(answer);
+                references.push(span.source);
+                Ok(Scanned { is_node: true, is_trace: false, references, nodes: Vec::new() })
+            }
+            kind::TRACE => {
+                let residue = self.cairn()?;
+                let holes = self.cairns()?;
+                let witnesses = self.cairns()?;
+                let deposits = self.cairns()?;
+                let source = self.cairn()?;
+                let _ = self.stratum()?;
+                match self.byte()? {
+                    0x00 | 0x01 => {}
+                    other => return Err(DecodeError::BadMark(other)),
+                }
+                let node_count = holes.len() + witnesses.len() + deposits.len();
+                let mut nodes = Vec::with_capacity(node_count);
+                nodes.extend_from_slice(&holes);
+                nodes.extend_from_slice(&witnesses);
+                nodes.extend_from_slice(&deposits);
+                let mut references = Vec::with_capacity(node_count + 2);
+                references.push(residue);
+                references.extend_from_slice(&nodes);
+                references.push(source);
+                Ok(Scanned { is_node: true, is_trace: true, references, nodes })
+            }
+            other => Err(DecodeError::UnknownKind(other)),
+        }
+    }
+
+    fn skip_value(&mut self, depth: usize) -> Result<(), DecodeError> {
+        if depth > MAX_DEPTH {
+            return Err(DecodeError::TooDeep);
+        }
+        self.charge(core::mem::size_of::<Value>())?;
+        match self.byte()? {
+            tag::UNIT => Ok(()),
+            tag::BOOL => match self.byte()? {
+                0x00 | 0x01 => Ok(()),
+                other => Err(DecodeError::BadBool(other)),
+            },
+            tag::INT => {
+                let _ = self.take(8)?;
+                Ok(())
+            }
+            tag::BYTES => {
+                let n = self.len()?;
+                let _ = self.take(n)?;
+                self.charge(n)
+            }
+            tag::STR => {
+                let n = self.text_str()?.len();
+                self.charge(n)
+            }
+            tag::CAIRN => {
+                let _ = self.take(32)?;
+                Ok(())
+            }
+            tag::SHADE => {
+                let origin = self.byte()?;
+                if origin > MAX_STRATUM {
+                    return Err(DecodeError::NoSuchStratum(origin));
+                }
+                let _ = self.take(32)?;
+                Ok(())
+            }
+            tag::STRUCT => {
+                let name_len = self.text_str()?.len();
+                if name_len == 0 {
+                    return Err(DecodeError::EmptyStructName);
+                }
+                self.charge(name_len)?;
+                let count = self.len()?;
+                self.believable(count, 1)?;
+                for _ in 0..count {
+                    self.skip_value(depth + 1)?;
+                }
+                Ok(())
+            }
+            tag::ARRAY => {
+                let count = self.len()?;
+                self.believable(count, 1)?;
+                for _ in 0..count {
+                    self.skip_value(depth + 1)?;
+                }
+                Ok(())
+            }
+            tag::ANSWER => match self.byte()? {
+                0x00 => self.skip_value(depth + 1),
+                0x01 => {
+                    let _ = self.refusal()?;
+                    Ok(())
+                }
+                other => Err(DecodeError::BadAnswer(other)),
+            },
+            tag::REFUSAL => {
+                let _ = self.refusal()?;
+                Ok(())
+            }
+            tag::NODE => Err(DecodeError::WrongShape),
+            other => Err(DecodeError::UnknownTag(other)),
+        }
+    }
+
     fn value(&mut self, depth: usize) -> Result<Value, DecodeError> {
         if depth > MAX_DEPTH {
             return Err(DecodeError::TooDeep);
         }
+        self.charge(core::mem::size_of::<Value>())?;
         match self.byte()? {
             tag::UNIT => Ok(Value::Unit),
             tag::BOOL => match self.byte()? {
@@ -616,9 +826,15 @@ impl Reader<'_> {
             tag::INT => Ok(Value::Int(i64::from_be_bytes(self.take_array::<8>()?))),
             tag::BYTES => {
                 let n = self.len()?;
-                Ok(Value::Bytes(self.take(n)?.to_vec()))
+                let slice = self.take(n)?;
+                self.charge(n)?;
+                Ok(Value::Bytes(slice.to_vec()))
             }
-            tag::STR => Ok(Value::Str(self.text()?)),
+            tag::STR => {
+                let s = self.text_str()?;
+                self.charge(s.len())?;
+                Ok(Value::Str(s.to_owned()))
+            }
             tag::CAIRN => Ok(Value::Cairn(self.cairn()?)),
             tag::SHADE => {
                 let origin = self.byte()?;
@@ -628,10 +844,12 @@ impl Reader<'_> {
                 Ok(Value::Shade { origin, value: self.cairn()? })
             }
             tag::STRUCT => {
-                let name = self.text()?;
-                if name.is_empty() {
+                let name_str = self.text_str()?;
+                if name_str.is_empty() {
                     return Err(DecodeError::EmptyStructName);
                 }
+                self.charge(name_str.len())?;
+                let name = name_str.to_owned();
                 let count = self.len()?;
                 self.believable(count, 1)?;
                 // Grown, not reserved: a count is believable against the bytes
@@ -935,7 +1153,29 @@ mod tests {
         for _ in 0..MAX_DEPTH {
             value = Value::Array(vec![value]);
         }
-        assert_eq!(decode(&value.encode()).unwrap(), value);
+        assert!(value.validate().is_ok(), "validate must match decode at MAX_DEPTH");
+        let encoded = value.try_encode().expect("try_encode must match decode at MAX_DEPTH");
+        assert_eq!(decode(&encoded).unwrap(), value);
+        assert!(super::scan_stored(&encoded).is_ok());
+
+        let too_deep = Value::Array(vec![value]);
+        assert_eq!(too_deep.validate(), Err(DecodeError::TooDeep));
+        assert_eq!(too_deep.try_encode(), Err(DecodeError::TooDeep));
+        let too_deep_bytes = too_deep.encode();
+        assert_eq!(decode(&too_deep_bytes), Err(DecodeError::TooDeep));
+        assert_eq!(super::scan_stored(&too_deep_bytes), Err(DecodeError::TooDeep));
+    }
+
+    #[test]
+    fn decode_and_scan_enforce_decoded_weight_budget() {
+        let val_sz = core::mem::size_of::<Value>();
+        let count = super::MAX_DECODED_BYTES / val_sz + 1;
+        let mut bytes = Vec::with_capacity(9 + count);
+        bytes.push(tag::ARRAY);
+        bytes.extend_from_slice(&(count as u64).to_be_bytes());
+        bytes.resize(9 + count, tag::UNIT);
+        assert!(matches!(decode(&bytes), Err(DecodeError::TooLarge { .. })));
+        assert!(matches!(super::scan_stored(&bytes), Err(DecodeError::TooLarge { .. })));
     }
 }
 
