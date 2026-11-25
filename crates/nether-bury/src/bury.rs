@@ -230,7 +230,7 @@ pub const MAX_FRAMES: u32 = if cfg!(target_family = "wasm") { 128 } else { 2048 
 /// and the number is written down here rather than inherited from whoever
 /// called. The browser instead uses the module's 8 MiB linker stack and a
 /// conservative 128-frame limit; it cannot spawn a native thread.
-pub const STACK: usize = if cfg!(target_family = "wasm") { 8 << 20 } else { 64 << 20 };
+pub const STACK: usize = if cfg!(target_family = "wasm") { 8 << 20 } else { 128 << 20 };
 
 /// What burial was going round in when the fuel ran out.
 #[derive(Debug, Clone, PartialEq, Eq)]
