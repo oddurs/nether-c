@@ -1700,3 +1700,311 @@ demand descend disk! {
         act_res.questions()
     );
 }
+
+#[test]
+fn round2_bury_settling_order() {
+    // C6: Starved inner block mutation must not hoist into parent `settling` before earlier reads.
+    let starved_src = r"
+demand {
+    I64 x = 1;
+    ({ I64 old = opaque x; x = 2; old }) + opaque x
+};
+";
+    let starved_unit = parse_and_check(starved_src);
+    let starved_res = bury(&starved_unit, 10_000).unwrap();
+    let starved_out = starved_res.as_unit(&starved_unit);
+    assert!(check(&starved_out).is_empty(), "C6 faults: {:?}", check(&starved_out));
+    let starved_printed = nether_syntax::print(&starved_out);
+    assert!(
+        !starved_printed.contains("I64 x = 1;\n  x = 2;"),
+        "x = 2 must not hoist above old = opaque x: {starved_printed}"
+    );
+
+    // C6b: Non-starved sibling block after a stuck lhs must not hoist its write above lhs.
+    let sibling_src = r"
+demand {
+    I64 x = 1;
+    (opaque x + { x = 2; 10 }) + opaque x
+};
+";
+    let sibling_unit = parse_and_check(sibling_src);
+    let sibling_res = bury(&sibling_unit, 10_000).unwrap();
+    let sibling_out = sibling_res.as_unit(&sibling_unit);
+    assert!(check(&sibling_out).is_empty(), "C6b faults: {:?}", check(&sibling_out));
+    let sibling_printed = nether_syntax::print(&sibling_out);
+    assert!(
+        !sibling_printed.contains("I64 x = 1;\n  x = 2;"),
+        "sibling write must not hoist above stuck lhs: {sibling_printed}"
+    );
+}
+
+#[test]
+fn round2_bury_act_safety_and_globals() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
+    let read_ans = |path: &str, data: &[u8]| {
+        Answers::none().and(
+            Call { function: "read".into(), args: vec![Value::Str(path.into()).cairn()] },
+            given_bytes(data),
+        )
+    };
+    let draw_ans = |n: i64, data: &[u8]| {
+        Answers::none().and(
+            Call { function: "draw".into(), args: vec![Value::Int(n).cairn()] },
+            Value::Bytes(data.to_vec()),
+        )
+    };
+
+    // C7a: Loop serving an act on turn 0 then starving on turn 1 must not replay the act in Stage 2.
+    let loop_src = r#"
+demand {
+    I64 total = 0;
+    for (I64 i = 0; i < 2; i = i + 1) {
+        if (i == 0) { total = total + len(descend entropy { draw(4) }); }
+        else { total = total + len(must(descend disk { read("f") })); }
+    }
+    total
+};
+"#;
+    let loop_unit = parse_and_check(loop_src);
+    let loop_stage1 = bury_with(
+        &loop_unit,
+        Cairn::of_encoded(loop_src.as_bytes()),
+        10_000,
+        &draw_ans(4, b"AAAA"),
+    )
+    .unwrap();
+    let loop_printed = nether_syntax::print(&loop_stage1.as_unit(&loop_unit));
+    let loop_resumed = parse_and_check(&loop_printed);
+    let loop_stage2 = bury_with(
+        &loop_resumed,
+        Cairn::of_encoded(loop_printed.as_bytes()),
+        10_000,
+        &read_ans("f", b"BBBBB"),
+    )
+    .unwrap();
+    assert!(
+        loop_stage2.holes.is_empty(),
+        "Stage 2 must not re-ask draw(4): {:?}",
+        loop_stage2.questions()
+    );
+    assert_eq!(loop_stage2.demands[0].kind, ExprKind::Literal(Literal::Int(9)));
+
+    // C7b: Starved demand before an act must block a later demand from stealing that act's answer.
+    let theft_src = r#"
+demand {
+    Bytes a = must(descend disk { read("f") });
+    Bytes b = descend entropy { draw(1) };
+    concat(a, b)
+};
+demand descend entropy { draw(1) };
+"#;
+    let theft_unit = parse_and_check(theft_src);
+    let theft_res =
+        bury_with(&theft_unit, Cairn::of_encoded(theft_src.as_bytes()), 10_000, &draw_ans(1, b"A"))
+            .unwrap();
+    assert!(
+        !matches!(theft_res.demands[1].kind, ExprKind::Literal(_)),
+        "Demand 2 must not steal draw(1) while Demand 1's earlier draw(1) is blocked"
+    );
+}
+
+#[test]
+fn round2_bury_single_evaluation_globals() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
+    let read_ans = |path: &str, data: &[u8]| {
+        Answers::none().and(
+            Call { function: "read".into(), args: vec![Value::Str(path.into()).cairn()] },
+            given_bytes(data),
+        )
+    };
+
+    // C8a: Already-evaluated global is updated in `as_unit()` so Stage 2 does not re-deposit.
+    let cached_src = r#"
+Bytes g = { 999; b"ok" };
+demand { Bytes u = must(descend disk { read("f") }); concat(u, g) };
+demand g;
+"#;
+    let cached_unit = parse_and_check(cached_src);
+    let cached_stage1 = bury(&cached_unit, 10_000).unwrap();
+    let cached_printed = nether_syntax::print(&cached_stage1.as_unit(&cached_unit));
+    let cached_resumed = parse_and_check(&cached_printed);
+    let cached_stage2 = bury_with(
+        &cached_resumed,
+        Cairn::of_encoded(cached_printed.as_bytes()),
+        10_000,
+        &read_ans("f", b"X"),
+    )
+    .unwrap();
+    assert_eq!(
+        cached_stage1.deposits.len() + cached_stage2.deposits.len(),
+        1,
+        "global must deposit once across stages"
+    );
+
+    // C8b: Global starving before a deposit stays as `Global(id)` and deposits once in Stage 2.
+    let dep_src = r#"
+Bytes g = { Bytes u = must(descend disk { read("f") }); 999; u };
+demand concat(g, g);
+"#;
+    let dep_unit = parse_and_check(dep_src);
+    let dep_stage1 = bury(&dep_unit, 10_000).unwrap();
+    let dep_printed = nether_syntax::print(&dep_stage1.as_unit(&dep_unit));
+    let dep_resumed = parse_and_check(&dep_printed);
+    let dep_stage2 = bury_with(
+        &dep_resumed,
+        Cairn::of_encoded(dep_printed.as_bytes()),
+        10_000,
+        &read_ans("f", b"Y"),
+    )
+    .unwrap();
+    assert_eq!(
+        dep_stage1.deposits.len() + dep_stage2.deposits.len(),
+        1,
+        "concat(g, g) must deposit once"
+    );
+}
+
+#[test]
+fn round2_bury_descend_refused_asserted_loop_and_shade() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
+    let read_ans = |path: &str, data: &[u8]| {
+        Answers::none().and(
+            Call { function: "read".into(), args: vec![Value::Str(path.into()).cairn()] },
+            given_bytes(data),
+        )
+    };
+
+    // C9: Settled statements inside `descend` stay wrapped in `descend cap { ... }`.
+    let c9_src = r#"
+demand {
+    Answer<Bytes> a = answered(b"init");
+    descend disk {
+        a = read("k");
+    };
+    Bytes u = must(descend disk { read("u") });
+    concat(must(a), u)
+};
+"#;
+    let c9_u = parse_and_check(c9_src);
+    let c9_r =
+        bury_with(&c9_u, Cairn::of_encoded(c9_src.as_bytes()), 10_000, &read_ans("k", b"hi"))
+            .unwrap();
+    let c9_out = c9_r.as_unit(&c9_u);
+    assert!(check(&c9_out).is_empty(), "C9 descend settling faults: {:?}", check(&c9_out));
+    assert!(check(&parse_and_check(&nether_syntax::print(&c9_out))).is_empty());
+
+    // H6: `demand utf8(b"\xff");` lands `refused(malformed)` so residue round-trips cleanly.
+    let h6_u = parse_and_check("demand utf8(b\"\\xff\");\n");
+    let h6_r = bury(&h6_u, 10_000).unwrap();
+    let h6_printed = nether_syntax::print(&h6_r.as_unit(&h6_u));
+    assert!(check(&parse_and_check(&h6_printed)).is_empty(), "H6 residue: {h6_printed}");
+
+    // H7: `as_unit` clears `asserted` on `unit.locals` when a demand-block `@3` local folds.
+    let h7_src = r#"
+demand {
+    Bytes@3 x = must(descend disk { read("a") });
+    Bytes u = must(descend disk { read("u") });
+    concat(x, u)
+};
+"#;
+    let h7_u = parse_and_check(h7_src);
+    let h7_r =
+        bury_with(&h7_u, Cairn::of_encoded(h7_src.as_bytes()), 10_000, &read_ans("a", b"ok"))
+            .unwrap();
+    let h7_out = h7_r.as_unit(&h7_u);
+    assert!(check(&h7_out).is_empty(), "H7 faults: {:?}", check(&h7_out));
+    assert!(check(&parse_and_check(&nether_syntax::print(&h7_out))).is_empty());
+
+    // H8: `return` from inside a loop strips dead-branch `break` guards.
+    let h8_src = r#"
+Bytes f() {
+    while (true) {
+        if (false) {
+            if (given(descend disk { read("d") })) { break; }
+        }
+        return must(descend disk { read("r") });
+    }
+    b""
+}
+demand f();
+"#;
+    let h8_u = parse_and_check(h8_src);
+    let h8_r = bury(&h8_u, 10_000).unwrap();
+    let h8_out = h8_r.as_unit(&h8_u);
+    assert!(check(&h8_out).is_empty(), "H8 faults: {:?}", check(&h8_out));
+    assert!(check(&parse_and_check(&nether_syntax::print(&h8_out))).is_empty());
+}
+
+#[test]
+fn round2_bury_nested_dirty_rollback_and_shaded_let() {
+    use nether_bury::{Answers, bury_with};
+    use nether_ledger::{AnswerOf, Call, Value};
+
+    let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
+    let read_ans = |path: &str, data: &[u8]| {
+        Answers::none().and(
+            Call { function: "read".into(), args: vec![Value::Str(path.into()).cairn()] },
+            given_bytes(data),
+        )
+    };
+
+    // H9: Non-closed effectful assignment nested inside a call expression triggers DirtyRollback.
+    let h9_src = r#"
+demand {
+    Answer<Bytes> a = answered(b"init");
+    Bytes t = concat(b"", { a = { 888; descend disk { read("a") } }; b"" });
+    Bytes u = must(descend disk { read("u") });
+    concat(t, concat(must(a), u))
+};
+"#;
+    let h9_u = parse_and_check(h9_src);
+    let h9_r =
+        bury_with(&h9_u, Cairn::of_encoded(h9_src.as_bytes()), 10_000, &read_ans("a", b"ok"))
+            .unwrap();
+    assert!(h9_r.deposits.is_empty(), "H9 nested non-closed assign must roll back deposit");
+
+    // H10 + M5: Effectful `let` shaded later keeps origin 3 without re-asking `read("a")` in Stage 2.
+    let shade_src = r#"
+demand {
+    Bytes x = { b"dep"; must(descend disk { read("a") }) };
+    Shade<Bytes> s = shade x;
+    Bytes u = must(descend disk { read("u") });
+    concat(u, descend disk { look s })
+};
+"#;
+    let shade_unit = parse_and_check(shade_src);
+    let shade_stage1 = bury_with(
+        &shade_unit,
+        Cairn::of_encoded(shade_src.as_bytes()),
+        10_000,
+        &read_ans("a", b"hi"),
+    )
+    .unwrap();
+    let shade_out = shade_stage1.as_unit(&shade_unit);
+    assert!(check(&shade_out).is_empty(), "M5/H10 faults: {:?}", check(&shade_out));
+    let shade_printed = nether_syntax::print(&shade_out);
+    let shade_resumed = parse_and_check(&shade_printed);
+    let shade_stage2 = bury_with(
+        &shade_resumed,
+        Cairn::of_encoded(shade_printed.as_bytes()),
+        10_000,
+        &read_ans("u", b"U:"),
+    )
+    .unwrap();
+    assert!(
+        shade_stage2.holes.is_empty(),
+        "M5 Stage 2 must not re-ask read(a): {:?}",
+        shade_stage2.questions()
+    );
+    assert_eq!(shade_stage1.deposits.len() + shade_stage2.deposits.len(), 1);
+    assert_eq!(shade_stage2.demands[0].kind, ExprKind::Literal(Literal::Bytes(b"U:hi".to_vec())));
+}

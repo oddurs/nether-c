@@ -486,7 +486,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 9 of 9 done
+`##########` 100% · 10 of 10 done
 
 ### buried
 
@@ -499,4 +499,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0278`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0278-7-3-1-states-the-hole-list-twice-two-ways.md) §7.3.1 states the hole list twice, two ways <sup>spec · p1</sup>
 - [x] [`0280`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0280-a-binding-inside-a-global-s-initialiser-is-called-malformed.md) A binding inside a global's initialiser is called malformed <sup>bug · p2 · 0</sup>
 - [x] [`0316`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0316-core-and-syntax-soundness-hardening.md) Core and syntax soundness hardening <sup>bug · p2</sup>
+- [x] [`0317`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0317-burial-soundness-and-self-hosted-interpreter-hardening.md) Burial soundness and self-hosted interpreter hardening <sup>bug · p2</sup>
 

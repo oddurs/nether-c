@@ -86,14 +86,49 @@ I64 plain_end(Bytes source, I64 from, I64 until)
   return until;
 }
 
-// Decode the escape forms used by the sample programs. Scans plain runs
-// iteratively and recurses only at backslash escapes.
+// Count backslash escapes in [from, until) using only integer locals.
+I64 escape_count(Bytes source, I64 from, I64 until)
+{
+  I64 n = 0;
+  I64 cur = from;
+  while (cur < until) {
+    I64 cut = plain_end(source, cur + 0, until);
+    if (cut >= until) { return n + 0; }
+    n += 1;
+    cur = cut + 2;
+  }
+  return n + 0;
+}
+
+// Byte offset of the `target`-th backslash escape (0-indexed) in [from, until).
+I64 nth_escape(Bytes source, I64 from, I64 until, I64 target)
+{
+  I64 n = 0;
+  I64 cur = from;
+  while (cur < until) {
+    I64 cut = plain_end(source, cur + 0, until);
+    if (cut >= until) { return until; }
+    if (n == target) { return cut; }
+    n += 1;
+    cur = cut + 2;
+  }
+  return until;
+}
+
+// Decode the escape forms used by the sample programs. Uses balanced
+// divide-and-conquer so literals with thousands of escapes use O(log N)
+// call frames and stay within WASM's frame limit.
 Bytes unescape(Bytes source, I64 from, I64 until)
 {
   if (from >= until) { return b""; }
   I64 cut = plain_end(source, from, until);
+  if (cut >= until) { return slice(source, from, until); }
+  I64 n = escape_count(source, cut, until);
+  if (n > 8) {
+    I64 mid = nth_escape(source, cut, until, n / 2);
+    return concat(unescape(source, from, mid), unescape(source, mid, until));
+  }
   Bytes head_chunk = slice(source, from, cut);
-  if (cut >= until) { return head_chunk; }
   Bytes esc = b"";
   if (at(source, cut, b"\\n")) { esc = b"\n"; }
   else if (at(source, cut, b"\\r")) { esc = b"\r"; }

@@ -23,14 +23,27 @@ I64 type_end(Bytes s, I64 p)
 }
 I64 type_body_end(Bytes s, I64 p)
 {
+  Bytes head_t = token(s, p);
   I64 next = name_end(s, p);
   if (token(s, next) == b"<") {
+    if (head_t != b"Shade" && head_t != b"Answer") {
+      return malformed_source(s);
+    }
     I64 inner = type_end(s, token_end(s, next));
     return expect(s, inner, b">");
   }
   return next;
 }
 I64 type_suffix(Bytes s, I64 p)
+{
+  if (token(s, p) != b"@") { return p; }
+  I64 start = skip(s, token_end(s, p));
+  if (!digit(s, start) || number(token(s, start)) > 8) {
+    return malformed_source(s);
+  }
+  return token_end(s, start);
+}
+I64 latent_suffix(Bytes s, I64 p)
 {
   if (token(s, p) != b"@") { return p; }
   I64 start = skip(s, token_end(s, p));
@@ -57,7 +70,7 @@ I64 declaration_end(Bytes s, I64 p)
   I64 after_name = name_end(s, type_end(s, p));
   if (token(s, after_name) == b"(") {
     I64 after_params = group_end(s, token_end(s, after_name), b")");
-    I64 body = expect(s, type_suffix(s, after_params), b"{");
+    I64 body = expect(s, latent_suffix(s, after_params), b"{");
     return group_end(s, body, b"}");
   }
   return group_end(s, expect(s, after_name, b"="), b";");
@@ -127,14 +140,24 @@ Bytes placeholder_value(Bytes s, I64 p)
 {
   Bytes v = declared_value(s, p);
   if (failed(v)) { return v; }
-  return clamp_depths(v);
+  return check_param_origins(v, p);
 }
-Bytes clamp_depths(Bytes v)
+Bytes check_param_origins(Bytes v, I64 p)
 {
   I64 d = max(0, depth(v));
   Bytes t = kind(v);
-  if (t == b"Shade" || t == b"Answer") {
-    return value(t, d, clamp_depths(data(v)));
+  if (t == b"Shade") {
+    if (depth(data(v)) < 0) {
+      return problem(b"shade parameter requires explicit origin depth", p);
+    }
+    Bytes inner = check_param_origins(data(v), p);
+    if (failed(inner)) { return inner; }
+    return value(t, d, inner);
+  }
+  if (t == b"Answer") {
+    Bytes inner = check_param_origins(data(v), p);
+    if (failed(inner)) { return inner; }
+    return value(t, d, inner);
   }
   return value(t, d, data(v));
 }
@@ -153,14 +176,14 @@ Bool same_type(Bytes a, Bytes b)
   }
   return true;
 }
-Bytes check_binding(Bytes s, I64 p, Bytes v)
+Bytes check_binding(Bytes s, I64 p, Bytes v, Bool check_asserts)
 {
   if (failed(v)) { return v; }
   Bytes want = declared_value(s, p);
   if (failed(want)) { return want; }
   if (!same_type(want, v)) { return problem(b"binding type mismatch", p); }
   I64 asserted = annotation(s, p);
-  if (asserted >= 0 && asserted != depth(v)) {
+  if (check_asserts && asserted >= 0 && asserted != depth(v)) {
     return problem(b"depth assertion mismatch", p);
   }
   return v;
@@ -191,7 +214,7 @@ Bytes global_value(Bytes s, Bytes name, I64 p, Bytes memory, Bool checking)
   if (!failed(found(r)) && token(s, cursor(r)) != b";") {
     return result(p, problem(b"expected ;", cursor(r)), memory_of(r));
   }
-  Bytes v = check_binding(s, global, found(r));
+  Bytes v = check_binding(s, global, found(r), true);
   return result(p, v, remember(memory_of(r), name, v));
 }
 
@@ -211,7 +234,9 @@ Bytes expression(Bytes s, I64 p, Bytes env, I64 ambient, Bytes memory, Bool chec
   }
   if (t == b"(") {
     Bytes r = expression(s, next, env, ambient, memory, checking);
-    if (failed(found(r))) { return r; }
+    if (failed(found(r)) || kind(found(r)) == b"Return") {
+      return relocate(r, group_end(s, cursor(r), b")"));
+    }
     return relocate(r, expect(s, cursor(r), b")"));
   }
   if (t == b"descend") {
@@ -227,7 +252,7 @@ Bytes expression(Bytes s, I64 p, Bytes env, I64 ambient, Bytes memory, Bool chec
     I64 d = capability(cap_name);
     if (d < 0) { return result(next, problem(b"unknown capability", next), memory); }
     I64 body = expect(s, cap_end, b"{");
-    return block_value(s, body, env, ambient | (1 << d), memory, checking);
+    return block_value(s, body, env, b"", ambient | (1 << d), memory, checking);
   }
   if (t == b"shade" || t == b"look" || t == b"seal") {
     Bytes r = expression(s, next, env, ambient, memory, checking);
@@ -267,7 +292,7 @@ Bytes arguments(Bytes s, I64 p, Bytes env, I64 ambient, Bytes memory, Bool check
 {
   if (token(s, p) == b")") { return result(token_end(s, p), b"", memory); }
   Bytes r = expression(s, p, env, ambient, memory, checking);
-  if (failed(found(r))) {
+  if (failed(found(r)) || kind(found(r)) == b"Return") {
     return result(group_end(s, cursor(r), b")"), packet(found(r)), memory_of(r));
   }
   if (token(s, cursor(r)) == b")") {
@@ -281,7 +306,7 @@ Bytes arguments(Bytes s, I64 p, Bytes env, I64 ambient, Bytes memory, Bool check
 Bytes argument_error(Bytes args)
 {
   if (len(args) == 0) { return b""; }
-  if (failed(head(args))) { return head(args); }
+  if (failed(head(args)) || kind(head(args)) == b"Return") { return head(args); }
   return argument_error(rest(args));
 }
 I64 argument_count(Bytes args)
@@ -302,7 +327,7 @@ Bytes parameters(Bytes s, I64 p, Bytes args, Bytes env, Bytes memory)
     return result(token_end(s, p), value(b"Environment", 0, env), memory);
   }
   if (len(args) == 0) { return result(p, problem(b"too few arguments", p), memory); }
-  Bytes v = check_binding(s, p, head(args));
+  Bytes v = check_binding(s, p, head(args), true);
   if (failed(v)) { return result(p, v, memory); }
   I64 at_name = type_end(s, p);
   Bytes name = token(s, at_name);
@@ -345,11 +370,14 @@ Bytes invoke(Bytes s, Bytes name, Bytes args, I64 ambient,
   if ((callee_ambient & ambient) != callee_ambient) {
     return result(p, problem(b"call requires a deeper ambient stratum", p), memory);
   }
-  I64 body = expect(s, type_suffix(s, after), b"{");
-  Bytes r = block_value(s, body, data(found(bound)), callee_ambient, memory, checking);
-  Bytes v = check_binding(s, f, unwrap_return(found(r)));
+  I64 arg_d = argument_depth(args);
+  I64 body_ambient = callee_ambient | 131072;
+  if (arg_d > 0) { body_ambient = body_ambient | 65536; }
+  I64 body = expect(s, latent_suffix(s, after), b"{");
+  Bytes r = block_value(s, body, data(found(bound)), b"", body_ambient, memory, checking);
+  Bytes v = check_binding(s, f, unwrap_return(found(r)), arg_d == 0);
   if (failed(v)) { return replace_value(r, v); }
-  return replace_value(r, deepen(v, argument_depth(args)));
+  return replace_value(r, deepen(v, arg_d));
 }
 
 // Prelude operations have values, not source cursors or lexical environments.
@@ -374,8 +402,8 @@ Bytes prelude(Bytes name, Bytes args, I64 ambient, Bool checking, I64 p)
     return deepen(data(a), depth(a));
   }
   if (name == b"len") {
-    if (kind(a) != b"Bytes" && kind(a) != b"Str") {
-      return problem(b"len requires Bytes or Str", p);
+    if (kind(a) != b"Bytes") {
+      return problem(b"len requires Bytes", p);
     }
     return value(b"I64", depth(a), decimal(len(data(a))));
   }
@@ -425,35 +453,54 @@ U0 deposit_value(Bytes v)
   else if (kind(v) == b"I64") { number(data(v)); }
 }
 
-Bytes block_value(Bytes s, I64 p, Bytes env, I64 ambient, Bytes memory, Bool checking)
+Bytes block_value(Bytes s, I64 p, Bytes env, Bytes locals, I64 ambient, Bytes memory, Bool checking)
 {
   Bytes t = token(s, p);
   if (t == b"}") { return result(token_end(s, p), unit_value(), memory); }
   if (type_word(t)) {
     I64 name = type_end(s, p);
+    Bytes lname = token(s, name);
+    if (len(lookup(locals, lname)) > 0) {
+      return result(group_end(s, p, b"}"), problem(concat(b"duplicate local: ", lname), name), memory);
+    }
     I64 start = expect(s, name_end(s, name), b"=");
     Bytes r = expression(s, start, env, ambient, memory, checking);
-    Bytes v = check_binding(s, p, found(r));
+    if (failed(found(r))) { return relocate(r, group_end(s, cursor(r), b"}")); }
+    if (kind(found(r)) == b"Return") {
+      Bytes check_env = env;
+      if (checking) {
+        Bytes ph = placeholder_value(s, p);
+        if (failed(ph)) { return result(group_end(s, cursor(r), b"}"), ph, memory_of(r)); }
+        check_env = bind(env, lname, ph);
+      }
+      return finish_return(s, relocate(r, expect(s, cursor(r), b";")),
+                           check_env, bind(locals, lname, unit_value()), ambient, checking);
+    }
+    Bytes v = check_binding(s, p, found(r), (ambient & 65536) == 0);
     if (failed(v)) { return result(group_end(s, cursor(r), b"}"), v, memory_of(r)); }
     I64 next = expect(s, cursor(r), b";");
-    return block_value(s, next, bind(env, token(s, name), v), ambient, memory_of(r), checking);
+    return block_value(s, next, bind(env, lname, v), bind(locals, lname, unit_value()),
+                       ambient, memory_of(r), checking);
   }
   if (t == b"return") {
+    if ((ambient & 131072) == 0) {
+      return result(group_end(s, p, b"}"), problem(b"return outside function", p), memory);
+    }
     I64 next = token_end(s, p);
     if (token(s, next) == b";") {
       Bytes rv = value(b"Return", 0, unit_value());
-      return finish_return(s, result(token_end(s, next), rv, memory), env, ambient, checking);
+      return finish_return(s, result(token_end(s, next), rv, memory), env, locals, ambient, checking);
     }
     Bytes r = expression(s, next, env, ambient, memory, checking);
     if (failed(found(r))) { return relocate(r, group_end(s, cursor(r), b"}")); }
     Bytes rv = wrap_return(found(r));
     return finish_return(s, result(expect(s, cursor(r), b";"), rv, memory_of(r)),
-                         env, ambient, checking);
+                         env, locals, ambient, checking);
   }
   Bytes r = expression(s, p, env, ambient, memory, checking);
   if (failed(found(r))) { return relocate(r, group_end(s, cursor(r), b"}")); }
   if (kind(found(r)) == b"Return") {
-    return finish_return(s, r, env, ambient, checking);
+    return finish_return(s, r, env, locals, ambient, checking);
   }
   if (token(s, cursor(r)) == b"}") { return relocate(r, token_end(s, cursor(r))); }
   I64 next = expect(s, cursor(r), b";");
@@ -461,16 +508,28 @@ Bytes block_value(Bytes s, I64 p, Bytes env, I64 ambient, Bytes memory, Bool che
     return result(group_end(s, next, b"}"), problem(b"unsupported deposit type", p), memory_of(r));
   }
   if (!checking) { deposit_value(found(r)); }
-  return block_value(s, next, env, ambient, memory_of(r), checking);
+  return block_value(s, next, env, locals, ambient, memory_of(r), checking);
 }
 
 // Checking still visits unreachable syntax. Its memory cannot contaminate
 // evaluation: an early return skips that syntax and keeps only work it reached.
-Bytes finish_return(Bytes s, Bytes r, Bytes env, I64 ambient, Bool checking)
+Bytes finish_return(Bytes s, Bytes r, Bytes env, Bytes locals, I64 ambient, Bool checking)
 {
   if (checking && !failed(found(r))) {
-    Bytes tail = block_value(s, cursor(r), env, ambient, memory_of(r), checking);
+    if (token(s, cursor(r)) == b"}") {
+      return relocate(r, token_end(s, cursor(r)));
+    }
+    Bytes tail = block_value(s, cursor(r), env, locals, ambient, memory_of(r), checking);
     if (failed(found(tail))) { return tail; }
+    Bytes tf = found(tail);
+    if (kind(tf) == b"Return" || kind(tf) != b"U0") {
+      Bytes rv = unwrap_return(found(r));
+      Bytes tv = unwrap_return(tf);
+      if (!same_type(rv, tv) && !same_type(tv, rv)) {
+        return replace_value(tail, problem(b"unreachable return type mismatch", cursor(r)));
+      }
+      return replace_value(tail, wrap_return(deepen(rv, depth(tv))));
+    }
     return replace_value(tail, found(r));
   }
   return relocate(r, group_end(s, cursor(r), b"}"));
@@ -505,6 +564,23 @@ I64 function_ambient(Bytes s, I64 p)
   return mask | (1 << number(token(s, start)));
 }
 
+Bytes check_latent_exact(Bytes s, I64 f, Bytes bound_env, I64 body, I64 declared, Bytes memory)
+{
+  I64 d = 1;
+  while (d <= 8) {
+    I64 bit = 1 << d;
+    if ((declared & bit) != 0) {
+      I64 without = (declared ^ bit) | 131072;
+      Bytes probe = block_value(s, body, bound_env, b"", without, memory, true);
+      if (!failed(found(probe))) {
+        return problem(b"latent depth assertion mismatch", f);
+      }
+    }
+    d += 1;
+  }
+  return unit_value();
+}
+
 Bytes validate_program(Bytes s, I64 p, Bytes memory)
 {
   if (skip(s, p) >= len(s)) { return result(p, unit_value(), memory); }
@@ -519,8 +595,15 @@ Bytes validate_program(Bytes s, I64 p, Bytes memory)
   if (token(s, after) == b"(") {
     Bytes args = placeholder_parameters(s, token_end(s, after));
     I64 signature_end = group_end(s, token_end(s, after), b")");
-    Bytes r = invoke(s, name, args, function_ambient(s, signature_end), memory, true, p);
+    I64 declared_ambient = function_ambient(s, signature_end);
+    Bytes r = invoke(s, name, args, declared_ambient, memory, true, p);
     if (failed(found(r))) { return r; }
+    if (declared_ambient > 1) {
+      Bytes bound = parameters(s, token_end(s, after), args, b"", memory);
+      I64 body = expect(s, latent_suffix(s, signature_end), b"{");
+      Bytes exact = check_latent_exact(s, p, data(found(bound)), body, declared_ambient, memory);
+      if (failed(exact)) { return result(p, exact, memory_of(r)); }
+    }
     return validate_program(s, declaration_end(s, p), memory_of(r));
   }
   Bytes r = global_value(s, name, skip(s, at_name), memory, true);
