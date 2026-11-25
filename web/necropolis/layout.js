@@ -18,8 +18,12 @@ if (stage) {
       if (!bounds.width || !selectedEl) return;
       const selected = selectedEl.getBoundingClientRect();
       wires.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+      const MAX_WIRES = 64;
       for (const side of ["incoming", "outgoing"]) {
+        let drawn = 0;
         for (const card of document.querySelectorAll(`#${side} .nc-object`)) {
+          if (drawn >= MAX_WIRES) break;
+          drawn++;
           const r = card.getBoundingClientRect();
           const left = side === "incoming";
           const x1 = (left ? r.right : selected.right) - bounds.left;

@@ -181,6 +181,44 @@ fn wrap_graft_value(
     }
 }
 
+fn check_draw_length(
+    store: &Store,
+    call: &Call,
+    with: Cairn,
+    raw_instead: &Value,
+) -> Result<(), ExitCode> {
+    let Some(&len_cairn) = call.args.first() else {
+        return Err(ExitCode::from(code::MALFORMED));
+    };
+    let n = match store.get(len_cairn) {
+        Ok(Stored::Value(Value::Int(n))) => n,
+        Ok(_) => {
+            eprintln!("nether: `draw` argument {} is not an integer", len_cairn.short());
+            return Err(ExitCode::from(code::MALFORMED));
+        }
+        Err(e) => {
+            eprintln!("nether: {e}");
+            return Err(crate::closing::store_exit(&e));
+        }
+    };
+    let Value::Bytes(bytes) = raw_instead else {
+        return Err(FAILED);
+    };
+    let Ok(want) = usize::try_from(n) else {
+        eprintln!("nether: `draw({n})` asks for an invalid length");
+        return Err(FAILED);
+    };
+    if bytes.len() != want {
+        eprintln!(
+            "nether: {} is {} bytes, but `draw({want})` requires {want} bytes",
+            with.short(),
+            bytes.len()
+        );
+        return Err(FAILED);
+    }
+    Ok(())
+}
+
 fn prepare_graft(
     store: &Store,
     trace: Cairn,
@@ -200,23 +238,22 @@ fn prepare_graft(
         Ok(Stored::Value(v)) => v,
         Ok(_) => {
             eprintln!("nether: {} is not a value in this ledger", with.short());
-            return Err(ExitCode::from(code::MALFORMED));
+            return Err(FAILED);
         }
         Err(e) => {
             eprintln!("nether: {e}");
             return Err(crate::closing::store_exit(&e));
         }
     };
-    if told.all().any(|(_, said)| said.cairn() == replace) {
+    if witnesses.contains(&replace) || told.all().any(|(_, said)| said.cairn() == replace) {
         eprintln!("nether: {} was already answered under {}", replace.short(), trace.short());
         eprintln!("        §8.7: a graft replaces a hole. Graft or exhume the trace that");
         eprintln!("        still has it.");
         return Err(FAILED);
     }
 
-    // Only supply the targeted hole's replacement answer. Seeding `told.all()`
-    // would feed stale prior witnesses into remaining open holes of the same
-    // call (e.g. a second `draw` or `write`) instead of `--with`.
+    // Validate every hole in `holes` (no early break) before selecting the
+    // targeted hole so corrupt/trailing holes are never skipped.
     let mut earlier_calls: HashSet<Call> = HashSet::new();
     let mut matched: Option<(Call, u8, Span, Value)> = None;
     for hole in holes {
@@ -231,6 +268,14 @@ fn prepare_graft(
                 return Err(crate::closing::store_exit(&e));
             }
         };
+        if !crate::closing::valid_stratum(&call, stratum) {
+            eprintln!(
+                "nether: hole {} claims stratum {stratum} for `{}`",
+                hole.short(),
+                call.function
+            );
+            return Err(ExitCode::from(code::MALFORMED));
+        }
         if *hole == replace && matched.is_none() {
             let is_read = Depth::new(stratum).is_some_and(Depth::reads);
             if !is_read && earlier_calls.contains(&call) {
@@ -250,15 +295,10 @@ fn prepare_graft(
                 );
                 return Err(ExitCode::from(code::MALFORMED));
             };
-            if prim.latent().get() != stratum {
-                eprintln!(
-                    "nether: hole {} claims stratum {stratum} for `{}`",
-                    hole.short(),
-                    call.function
-                );
-                return Err(ExitCode::from(code::MALFORMED));
-            }
             let val = wrap_graft_value(prim, &call.function, with, &raw_instead)?;
+            if prim == Prim::Draw {
+                check_draw_length(store, &call, with, &raw_instead)?;
+            }
             if is_read && told.answer(&call).is_some_and(|prev| prev != &val) {
                 eprintln!(
                     "nether: {} disagrees with an earlier read witness for `{}` under {}",
@@ -268,8 +308,7 @@ fn prepare_graft(
                 );
                 return Err(FAILED);
             }
-            matched = Some((call, stratum, span, val));
-            break;
+            matched = Some((call.clone(), stratum, span, val));
         }
         earlier_calls.insert(call);
     }
@@ -297,14 +336,20 @@ fn take(
         witnesses,
         deposits,
         source,
+        depth: orig_depth,
         unrecorded: marked,
-        ..
     })) = store.get(trace)
     else {
         return crate::not_a_trace(store, trace);
     };
 
-    let mut prep = match prepare_graft(store, trace, &holes, witnesses, replace, with) {
+    if let Err(code) = crate::closing::verify_trace_parts(
+        store, source, &deposits, &holes, &witnesses, orig_depth, marked,
+    ) {
+        return code;
+    }
+
+    let prep = match prepare_graft(store, trace, &holes, witnesses, replace, with) {
         Ok(p) => p,
         Err(code) => return code,
     };
@@ -327,7 +372,33 @@ fn take(
             };
         }
     };
+    if residue.served == 0 {
+        eprintln!(
+            "nether: hole {} was not reached by {}; refusing to record an unused witness",
+            replace.short(),
+            trace.short()
+        );
+        return FAILED;
+    }
+    commit_graft(
+        store, trace, replace, with, &unit, &residue, prep, &deposits, source, marked, wants_json,
+    )
+}
 
+#[allow(clippy::too_many_arguments)]
+fn commit_graft(
+    store: &Store,
+    trace: Cairn,
+    replace: Cairn,
+    with: Cairn,
+    unit: &nether_core::Unit,
+    residue: &nether_bury::Residue,
+    mut prep: PreparedGraft,
+    deposits: &[Cairn],
+    source: Cairn,
+    marked: bool,
+    wants_json: bool,
+) -> ExitCode {
     let (mut reused, mut made) = (0usize, 0usize);
     let mut record = |stored: &Stored| -> Result<Cairn, ExitCode> {
         if store.has(stored.cairn()) {
@@ -359,7 +430,7 @@ fn take(
         }
     }
 
-    let printed = print(&residue.as_unit(&unit));
+    let printed = print(&residue.as_unit(unit));
     let next_residue = match record(&Stored::Value(Value::Bytes(printed.into_bytes()))) {
         Ok(c) => c,
         Err(code) => return code,
@@ -375,7 +446,7 @@ fn take(
         residue: next_residue,
         holes: residue.holes.clone(),
         witnesses: prep.witnesses,
-        deposits: crate::closing::deposits(&deposits, &residue.deposits),
+        deposits: crate::closing::deposits(deposits, &residue.deposits),
         source,
         depth,
         unrecorded,

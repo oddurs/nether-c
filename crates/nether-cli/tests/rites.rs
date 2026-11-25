@@ -762,14 +762,21 @@ fn a_trace_shallower_than_a_hole_it_owes_is_malformed() {
 fn a_trace_that_never_went_anywhere_says_so() {
     let dir = scratch("strata-pure");
     let store = Store::open(&dir).expect("a store");
-    let literal = store.put(&Stored::Node(Node::Literal(Value::Int(7)))).expect("put");
+    let src = store.put(&Stored::Value(Value::Bytes(b"demand 7;\n".to_vec()))).expect("put");
+    let val = store.put(&Stored::Value(Value::Int(7))).expect("put");
+    let dep = store
+        .put(&Stored::Node(Node::Deposit {
+            value: val,
+            span: nether_ledger::Span { source: src, start: 0, end: 1 },
+        }))
+        .expect("put");
     let trace = store
         .put(&Stored::Node(Node::Trace {
-            residue: literal,
+            residue: src,
             holes: vec![],
             witnesses: vec![],
-            deposits: vec![literal],
-            source: literal,
+            deposits: vec![dep],
+            source: src,
             depth: 0,
             unrecorded: false,
         }))
@@ -889,8 +896,12 @@ fn a_trace_that_hides_a_stratum_8_witness_is_malformed() {
     );
 
     let replayed = nether(Some(&dir), &["exhume", &trace.to_string(), "--replay"]);
-    assert_eq!(code(&replayed), 1, "{}", stdout(&replayed));
-    assert!(stderr(&replayed).contains("proves nothing"), "{}", stderr(&replayed));
+    assert_eq!(code(&replayed), 65, "{}", stdout(&replayed));
+    assert!(
+        stderr(&replayed).contains("not marked unrecorded, and a witness under it reached 8"),
+        "{}",
+        stderr(&replayed)
+    );
 }
 
 #[test]
@@ -2563,7 +2574,7 @@ fn real_vim_editor_shows_hover_depth_jumps_to_origin_and_walks_provenance() {
          call cursor(7, 8)\n\
          NetherHover\n\
          let g:hover1 = copy(g:nether_last_lamp)\n\
-         let g:scratch = getbufline('__nether_lamp__', 1, '$')\n\
+         let g:scratch = getbufline(g:nether_scratch_buf, 1, '$')\n\
          NetherOrigin\n\
          let g:desc_pos = [string([line('.'), col('.'), getline('.')[col('.') - 1 : col('.') + 11]])]\n\
          NetherOrigin\n\
@@ -3280,4 +3291,260 @@ fn pr_e_cli_flags_lamp_assign_and_vim_hardening() {
     assert!(parts[0].contains("invalid trace cairn"), "{}", parts[0]);
     assert!(parts[1].contains("depth 3   disk"), "{}", parts[1]);
     assert_eq!(parts[2].trim(), "keep-me");
+}
+
+#[test]
+fn round2_exhume_and_strata_hardening() {
+    use nether_ledger::{AnswerOf, Call, Node, Span, Store, Stored, Value};
+
+    // H22 + H23: exhume --replay & no-op exhume reject corrupt/missing deposits/source,
+    // under-reported depth, unmarked stratum-8 witness, and contradictory prior reads.
+    let dir = a_build("r2-exhume");
+    let t0 = field(&stdout(&there(&dir, &["bury", "build.nc", "--json"])), "cairn");
+    let s0 = field(
+        &stdout(&there(&dir, &["exhume", &t0, "--grant", "disk", "--root", ".", "--json"])),
+        "sealed",
+    );
+    let store = Store::open(dir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { residue, holes, witnesses, deposits, source, depth, .. }) =
+        store.get(s0.parse().unwrap()).unwrap()
+    else {
+        panic!("expected sealed trace");
+    };
+    // H22: smuggled non-deposit node in `deposits` fails --replay with exit 65.
+    let lit = store.put(&Stored::Node(Node::Literal(Value::Int(1)))).unwrap();
+    let smuggled_dep = store
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes: holes.clone(),
+            witnesses: witnesses.clone(),
+            deposits: vec![lit],
+            source,
+            depth,
+            unrecorded: false,
+        }))
+        .unwrap();
+    assert_eq!(code(&there(&dir, &["exhume", &smuggled_dep.to_string(), "--replay"])), 65);
+    // M13: strata also rejects Node::Literal in deposits and marked && depth < 8.
+    assert_eq!(code(&there(&dir, &["strata", &smuggled_dep.to_string()])), 65);
+    let bad_mark = store
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes: vec![],
+            witnesses: vec![],
+            deposits: vec![],
+            source,
+            depth: 3,
+            unrecorded: true,
+        }))
+        .unwrap();
+    assert_eq!(code(&there(&dir, &["strata", &bad_mark.to_string()])), 65);
+    assert_eq!(code(&there(&dir, &["exhume", &bad_mark.to_string()])), 65);
+
+    // H23: under-reported depth on no-op exhume fails with exit 65.
+    let under_depth = store
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes,
+            witnesses,
+            deposits,
+            source,
+            depth: 0,
+            unrecorded: false,
+        }))
+        .unwrap();
+    assert_eq!(code(&there(&dir, &["exhume", &under_depth.to_string()])), 65);
+
+    // H23: unmarked stratum-8 witness fails exhume with exit 65 (not 1).
+    let sym = store.put(&Stored::Value(Value::Str("f".into()))).unwrap();
+    let arg_b = store.put(&Stored::Value(Value::Bytes(vec![]))).unwrap();
+    let ans8 = store
+        .put(&Stored::Value(Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(vec![]))))))
+        .unwrap();
+    let w8 = store
+        .put(&Stored::Node(Node::Witness {
+            stratum: 8,
+            call: Call { function: "call_foreign".into(), args: vec![sym, arg_b] },
+            answer: ans8,
+            span: Span { source, start: 0, end: 1 },
+        }))
+        .unwrap();
+    let hidden_u = store
+        .put(&Stored::Node(Node::Trace {
+            residue,
+            holes: vec![],
+            witnesses: vec![w8],
+            deposits: vec![],
+            source,
+            depth: 8,
+            unrecorded: false,
+        }))
+        .unwrap();
+    assert_eq!(code(&there(&dir, &["exhume", &hidden_u.to_string()])), 65);
+    assert_eq!(code(&there(&dir, &["exhume", &hidden_u.to_string(), "--replay"])), 65);
+
+    // H22: deleting source blob fails --replay with exit 66 (not `identical.`).
+    let s_hex = source.to_string();
+    let s_path = dir.join(".nether/objects").join(&s_hex[..2]).join(&s_hex[2..]);
+    let saved_src = std::fs::read(&s_path).unwrap();
+    std::fs::remove_file(&s_path).unwrap();
+    assert_eq!(code(&there(&dir, &["exhume", &s0, "--replay"])), 66);
+    std::fs::write(&s_path, saved_src).unwrap();
+}
+
+#[test]
+fn round2_graft_hardening() {
+    use nether_ledger::{Node, Store, Stored, Value};
+
+    // H24 + L4: graft checks trailing holes, rejects ghost holes, checks witness cairns,
+    // validates draw(n) byte length, and exits 1 on valid non-value --with.
+    let gdir = a_build("r2-graft");
+    std::fs::write(gdir.join("d.nc"), "Bytes@7 x = descend entropy { draw(4) };\ndemand x;\n")
+        .unwrap();
+    let gt = field(&stdout(&there(&gdir, &["bury", "d.nc", "--json"])), "cairn");
+    let gstore = Store::open(gdir.join(".nether")).unwrap();
+    let Stored::Node(Node::Trace { holes: gh, deposits: gd, source: gs, depth: gdepth, .. }) =
+        gstore.get(gt.parse().unwrap()).unwrap()
+    else {
+        panic!("expected trace");
+    };
+    let wrong_len = gstore.put(&Stored::Value(Value::Bytes(b"12".to_vec()))).unwrap();
+    let draw_bad = there(
+        &gdir,
+        &["graft", &gt, "--replace", &gh[0].to_string(), "--with", &wrong_len.to_string()],
+    );
+    assert_eq!(code(&draw_bad), 1, "{}", stderr(&draw_bad));
+    assert!(stderr(&draw_bad).contains("requires 4 bytes"), "{}", stderr(&draw_bad));
+
+    // Valid non-value --with exits 1 (not 65).
+    let non_val = there(&gdir, &["graft", &gt, "--replace", &gh[0].to_string(), "--with", &gt]);
+    assert_eq!(code(&non_val), 1, "{}", stderr(&non_val));
+
+    // Ghost hole present in trace.holes but not in trace.residue is refused without writing.
+    let empty_res = gstore.put(&Stored::Value(Value::Bytes(b"demand 1;\n".to_vec()))).unwrap();
+    let ghost_trace = gstore
+        .put(&Stored::Node(Node::Trace {
+            residue: empty_res,
+            holes: gh.clone(),
+            witnesses: vec![],
+            deposits: gd,
+            source: gs,
+            depth: gdepth,
+            unrecorded: false,
+        }))
+        .unwrap();
+    let ok4 = gstore.put(&Stored::Value(Value::Bytes(b"1234".to_vec()))).unwrap();
+    let ghost_out = there(
+        &gdir,
+        &[
+            "graft",
+            &ghost_trace.to_string(),
+            "--replace",
+            &gh[0].to_string(),
+            "--with",
+            &ok4.to_string(),
+        ],
+    );
+    assert_eq!(code(&ghost_out), 1, "{}", stderr(&ghost_out));
+    assert!(stderr(&ghost_out).contains("was not reached"), "{}", stderr(&ghost_out));
+
+    // Already-answered witness cairn reports "was already answered".
+    let grafted = field(
+        &stdout(&there(
+            &gdir,
+            &["graft", &gt, "--replace", &gh[0].to_string(), "--with", &ok4.to_string(), "--json"],
+        )),
+        "grafted",
+    );
+    let Stored::Node(Node::Trace { witnesses: gw, .. }) =
+        gstore.get(grafted.parse().unwrap()).unwrap()
+    else {
+        panic!("expected grafted trace");
+    };
+    let again = there(
+        &gdir,
+        &["graft", &grafted, "--replace", &gw[0].to_string(), "--with", &ok4.to_string()],
+    );
+    assert_eq!(code(&again), 1, "{}", stderr(&again));
+    assert!(stderr(&again).contains("was already answered"), "{}", stderr(&again));
+}
+
+#[test]
+fn round2_lamp_memo_and_vim_hardening() {
+    // H25 + M14: lamp --at finds descend/call across reassigned pure Let, and rejects
+    // duplicate/unused flags with exit 64.
+    let ldir = a_build("r2-lamp");
+    let lsrc = "Bytes@3 f() {\n  Bytes@3 x = b\"init\";\n  x = must(descend disk { read(\"a.txt\") });\n  return x;\n}\ndemand f();\n";
+    std::fs::write(ldir.join("l.nc"), lsrc).unwrap();
+    let lt = field(&stdout(&there(&ldir, &["bury", "l.nc", "--json"])), "cairn");
+    let ret_pos = lsrc.find("return x;").unwrap() + 7;
+    let lat = there(&ldir, &["lamp", "--at", &ret_pos.to_string(), &lt]);
+    assert_eq!(code(&lat), 0, "{}", stderr(&lat));
+    assert!(stdout(&lat).contains("descend disk"), "{}", stdout(&lat));
+    assert!(stdout(&lat).contains("call read"), "{}", stdout(&lat));
+    assert_eq!(code(&there(&ldir, &["lamp", "--depth", "2", &lt])), 64);
+    assert_eq!(
+        code(&there(&ldir, &["lamp", "--provenance", "--depth", "2", "--depth", "3", &lt])),
+        64
+    );
+    assert_eq!(code(&there(&ldir, &["lamp", "--at", "0", "--at", "1", &lt])), 64);
+    assert_eq!(
+        code(&there(&ldir, &["lamp", "--at", "0", "--source", "l.nc", "--source", "l.nc", &lt])),
+        64
+    );
+
+    // M15: tampering memo `steps` to 0 invalidates the memo and respects `--fuel 1`.
+    let mdir = a_build("r2-memo");
+    std::fs::write(mdir.join("m.nc"), "demand 1 + 2 + 3 + 4;\n").unwrap();
+    assert_eq!(code(&there(&mdir, &["bury", "m.nc", "--json"])), 0);
+    let memo_entry =
+        std::fs::read_dir(mdir.join(".nether/memo")).unwrap().next().unwrap().unwrap().path();
+    let orig_memo = std::fs::read_to_string(&memo_entry).unwrap();
+    let mut parts: Vec<&str> = orig_memo.split_whitespace().collect();
+    parts[1] = "0";
+    std::fs::write(&memo_entry, format!("{}\n", parts.join(" "))).unwrap();
+    let low_fuel = there(&mdir, &["bury", "m.nc", "--fuel", "1"]);
+    assert_eq!(code(&low_fuel), 75, "tampered memo steps=0 must not bypass --fuel 1");
+
+    // H27 + M18: Vim plugin handles dos+noeol, mac fileformat, and preserves __nether_lamp__ file.
+    let vdir = a_build("r2-vim");
+    let dos_noeol = "Bytes@3 x = must(descend disk { read(\"a.txt\") });\r\ndemand x;";
+    std::fs::write(vdir.join("dos_noeol.nc"), dos_noeol).unwrap();
+    let vt_dos = field(&stdout(&there(&vdir, &["bury", "dos_noeol.nc", "--json"])), "cairn");
+    let plugin = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("tools/vim/nether.vim");
+    let bin = env!("CARGO_BIN_EXE_nether");
+    let vscript = format!(
+        "set hidden\n\
+         let g:nether_bin = '{bin}'\n\
+         source {}\n\
+         edit __nether_lamp__\n\
+         call setline(1, ['user-file-untouched'])\n\
+         edit dos_noeol.nc\n\
+         NetherTrace {vt_dos}\n\
+         call cursor(2, 8)\n\
+         NetherHover\n\
+         let g:ok_dos = copy(g:nether_last_lamp)\n\
+         let g:user_buf = getbufline('__nether_lamp__', 1, '$')\n\
+         call writefile(g:ok_dos + ['==='] + g:user_buf, 'vim_r2.txt')\n\
+         qa!\n",
+        plugin.display()
+    );
+    std::fs::write(vdir.join("r2.vim"), vscript).unwrap();
+    let vout = std::process::Command::new("vim")
+        .args(["-Nu", "NONE", "-i", "NONE", "-n", "-Es", "-S", "r2.vim"])
+        .current_dir(&vdir)
+        .env("NETHER_STORE", vdir.join(".nether"))
+        .output()
+        .unwrap();
+    assert!(vout.status.success(), "vim failed: {:?}", vout.status);
+    let vrep = std::fs::read_to_string(vdir.join("vim_r2.txt")).unwrap();
+    let vparts: Vec<&str> = vrep.split("\n===\n").collect();
+    assert_eq!(vparts.len(), 2, "{vrep}");
+    assert!(vparts[0].contains("depth 3   disk"), "{}", vparts[0]);
+    assert_eq!(vparts[1].trim(), "user-file-untouched");
 }

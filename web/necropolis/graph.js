@@ -1,5 +1,5 @@
 // Read the frozen ledger format (§7). This is a local WASM view, not an importer.
-const utf8 = new TextDecoder("utf-8", { fatal: true });
+const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const HEX = /^[0-9a-f]*$/;
 export const PAGE_SIZE = 12;
 export const short = (id) => id.slice(0, 8);
@@ -46,8 +46,9 @@ export function decode(encoded) {
   const id = () => hex(take(32));
   const stratum = () => { const d = byte(); if (d > 8) throw Error("Invalid stratum"); return d; };
   const bool = () => { const b = byte(); if (b > 1) throw Error("Invalid boolean"); return b === 1; };
-  const list = (read, max = 4096) => {
+  const list = (read, max = 4096, itemBytes = 1) => {
     const n = count();
+    if (BigInt(n) * BigInt(itemBytes) > BigInt(bytes.length - p)) throw Error("Length exceeds object");
     if (n > max) throw Error(`Preview limit: more than ${max} entries`);
     return Array.from({ length: n }, read);
   };
@@ -83,19 +84,19 @@ export function decode(encoded) {
     if (end < start) throw Error("Backwards source span");
     return { source, start, end };
   };
-  const call = () => ({ function: name(), args: list(id) });
+  const call = () => ({ function: name(), args: list(id, 4096, 32) });
   let object;
   if (bytes[0] !== 32) object = value();
   else {
     byte();
     switch (byte()) {
       case 0: object = { kind: "Literal", value: value() }; break;
-      case 1: object = { kind: "Apply", function: id(), args: list(id), result: id() }; break;
+      case 1: object = { kind: "Apply", function: id(), args: list(id, 4096, 32), result: id() }; break;
       case 2: object = { kind: "Hole", call: call(), stratum: stratum(), span: span() }; break;
       case 3: object = { kind: "Deposit", value: id(), span: span() }; break;
       case 4: object = { kind: "Witness", stratum: stratum(), call: call(), answer: id(), span: span() }; break;
-      case 5: object = { kind: "Trace", residue: id(), holes: list(id, 20000), witnesses: list(id, 20000),
-        deposits: list(id, 20000), source: id(), depth: stratum(), unrecorded: bool() }; break;
+      case 5: object = { kind: "Trace", residue: id(), holes: list(id, 20000, 32), witnesses: list(id, 20000, 32),
+        deposits: list(id, 20000, 32), source: id(), depth: stratum(), unrecorded: bool() }; break;
       default: throw Error("Unknown node kind");
     }
   }
@@ -108,6 +109,15 @@ export function references(o) {
   const edges = [];
   const add = (label, id) => edges.push({ label, id });
   const many = (label, ids) => ids.forEach((id, i) => add(`${label} ${i + 1}`, id));
+  const walkValue = (v, prefix) => {
+    if (!v || typeof v !== "object") return;
+    if (v.kind === "Shade") add(prefix ? `${prefix} shaded` : "shaded", v.data);
+    else if (v.kind === "Cairn") add(prefix ? `${prefix} target` : "target", v.data);
+    else if (v.kind === "Answer" && v.data && v.data.kind !== "Refusal") walkValue(v.data, prefix ? `${prefix} given` : "given");
+    else if (v.kind === "Array" || v.kind === "Struct") {
+      v.data.forEach((item, i) => walkValue(item, prefix ? `${prefix} #${i + 1}` : `entry ${i + 1}`));
+    }
+  };
   if (o.kind === "Trace") {
     add("residue", o.residue);
     many("hole", o.holes); many("witness", o.witnesses); many("deposit", o.deposits);
@@ -118,6 +128,8 @@ export function references(o) {
     many("argument", o.call.args);
     if (o.kind === "Witness") add("answer", o.answer);
   } else if (o.kind === "Deposit") add("value", o.value);
+  else if (o.kind === "Literal") walkValue(o.value, "value");
+  else walkValue(o, "");
   if (o.span) add("source", o.span.source);
   return edges;
 }
@@ -127,9 +139,19 @@ export function preview(o, limit = 160) {
   if (o.call) return `${o.call.function}(${o.call.args.length} argument${o.call.args.length === 1 ? "" : "s"})`;
   if (o.kind === "Bytes") {
     const sample = utf8Prefix(o.data, limit);
-    try { s = `b${JSON.stringify(utf8.decode(sample))}`; }
-    catch { s = `hex ${hex(o.data.subarray(0, limit))}`; }
-    if (o.data.length > sample.length) s += `… (${o.data.length} bytes)`;
+    const suffix = `… (${o.data.length} bytes)`;
+    try {
+      const body = `b${JSON.stringify(utf8.decode(sample))}`;
+      if (o.data.length > sample.length || body.length > limit) {
+        const keep = Math.max(1, limit - suffix.length);
+        return body.slice(0, keep) + suffix;
+      }
+      return body;
+    } catch {
+      const maxBytes = Math.max(1, Math.floor((limit - 4 - suffix.length) / 2));
+      if (o.data.length > maxBytes) return `hex ${hex(o.data.subarray(0, maxBytes))}${suffix}`;
+      return `hex ${hex(o.data)}`;
+    }
   } else if (o.kind === "Str") s = JSON.stringify(o.data.slice(0, limit));
   else if (o.kind === "Shade") s = `opaque · origin ${o.origin} · ${short(o.data)}`;
   else if (o.kind === "Answer") s = `${o.data.kind === "Refusal" ? "refused" : "given"}: ${preview(o.data, limit)}`;
@@ -156,9 +178,9 @@ export class Graph {
       if (size > 32 * 1024 * 1024) throw Error("Graph limit: 16 MiB of canonical objects");
       this.encoded.set(id, encoded);
     }
-    if (this.get(this.root).kind !== "Trace") throw Error("The trace root is missing or unreadable");
-    for (const [id, encoded] of this.encoded) {
-      if (!encoded.startsWith("20")) continue;
+    const root = this.get(this.root);
+    if (root.kind !== "Trace") throw Error(root.kind === "Unavailable" ? root.data : "The trace root is missing or unreadable");
+    for (const [id] of this.encoded) {
       for (const edge of references(this.get(id))) {
         if (!this.incoming.has(edge.id)) this.incoming.set(edge.id, []);
         this.incoming.get(edge.id).push({ id, label: edge.label });
@@ -208,7 +230,7 @@ export function sourceExcerpt(graph, span) {
     }
   }
   const selectedBytes = utf8Prefix(o.data.subarray(start, end), 2048);
-  const display = new TextDecoder();
+  const display = new TextDecoder("utf-8", { ignoreBOM: true });
   return { before: display.decode(o.data.subarray(from, start)),
     selected: display.decode(selectedBytes),
     after: end - start > selectedBytes.length ? "… (selection truncated)" : display.decode(o.data.subarray(end, to)),

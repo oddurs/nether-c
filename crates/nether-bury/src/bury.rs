@@ -69,6 +69,8 @@ pub struct Residue {
     pub specialised: Vec<FuncDef>,
     /// Evaluation steps spent. Deterministic for a given unit and budget.
     pub fuel_spent: u64,
+    /// Number of world answers consumed from `answers` during this burial.
+    pub served: usize,
     /// The deepest stratum anything in the residue still reaches.
     ///
     /// Not `Trace`'s `depth`, which is the deepest stratum a witness *reached*
@@ -692,6 +694,7 @@ struct Checkpoint {
     globals: Vec<Option<Val>>,
     globals_residual: Vec<Option<Expr>>,
     served: HashMap<nether_ledger::Call, usize>,
+    answers_used: usize,
     starved: Option<Block>,
     flow: Option<Flow>,
     pc: Depth,
@@ -732,6 +735,7 @@ impl<'a> Burial<'a> {
             deposits: Vec::new(),
             asked: HashMap::new(),
             served: HashMap::new(),
+            answers_used: 0,
             reserved_acts: HashMap::new(),
             act_blocked: false,
             specialised: Vec::new(),
@@ -755,6 +759,7 @@ impl<'a> Burial<'a> {
             globals: self.globals.clone(),
             globals_residual: self.globals_residual.clone(),
             served: self.served.clone(),
+            answers_used: self.answers_used,
             starved: self.starved.take(),
             flow: self.flow.clone(),
             pc: self.pc,
@@ -825,6 +830,7 @@ impl<'a> Burial<'a> {
         }
         self.globals_residual = cp.globals_residual;
         self.served = cp.served;
+        self.answers_used = cp.answers_used;
         self.starved = cp.starved;
         self.flow = cp.flow;
         self.pc = cp.pc;
@@ -972,6 +978,7 @@ impl<'a> Burial<'a> {
                 Some(e) if e.fuel_spent <= self.left => {
                     self.left -= e.fuel_spent;
                     self.spent += e.fuel_spent;
+                    self.answers_used += e.served;
                     self.named.extend(e.named.into_iter().filter(|(c, _)| self.known.insert(*c)));
                     self.deposits.extend(e.deposits);
                     demands.extend(e.demands);
@@ -1019,6 +1026,7 @@ impl<'a> Burial<'a> {
             deposits: self.deposits,
             holes: self.holes,
             fuel_spent: self.spent,
+            served: self.answers_used,
             depth,
             globals: self.globals_residual,
         }
@@ -1233,6 +1241,8 @@ struct Burial<'a> {
     /// is one hole however many places wait on it, so every one of them takes
     /// the first answer and none of them uses it up.
     served: HashMap<nether_ledger::Call, usize>,
+    /// Total answers (read and act) consumed from `self.answers` in non-rolled-back paths.
+    answers_used: usize,
     /// Number of act-stratum answers reserved for earlier rolled-back residuals
     /// so later demands index past them instead of stealing or duplicating acts.
     reserved_acts: HashMap<nether_ledger::Call, usize>,
@@ -2278,6 +2288,7 @@ impl Burial<'_> {
         };
         if let Some(said) = self.answers.get(&asked, nth).cloned() {
             if let Some(ans) = Self::answered(&said, x) {
+                self.answers_used += 1;
                 if !shared {
                     *self.served.entry(asked).or_default() += 1;
                 }

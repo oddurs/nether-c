@@ -337,6 +337,8 @@ try {
   await click("#home"); assert.equal(await text("identity"), rootId);
   await click(".nc-root-deposit"); await click('#outgoing [data-kind="Bytes"]');
   assert.match(await text("detail"), /a deposit that happened/);
+  assert.equal(await evaluate("[...document.querySelectorAll('#detail button')].find(b => b.textContent === 'Text').getAttribute('aria-pressed')"), "true");
+  assert.equal(await evaluate("[...document.querySelectorAll('#detail button')].find(b => b.textContent === 'Hex').getAttribute('aria-pressed')"), "false");
   console.log("browser: hole, argument, source span, deposit and keyboard history");
 
   await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });

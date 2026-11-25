@@ -37,7 +37,9 @@ test("every node tag exposes only its labelled recorded edges", () => {
   const witness = decode("200403" + call + id(3) + span);
   assert.equal(references(witness)[1].label, "answer");
   assert.deepEqual(references(decode(trace)).map((e) => e.label), ["residue", "hole 1", "deposit 1", "source"]);
-  assert.deepEqual(references(decode("0605" + id(3))), [], "shades stay opaque");
+  assert.deepEqual(references(decode("0605" + id(3))), [{ label: "shaded", id: id(3) }]);
+  assert.deepEqual(references(decode("05" + id(4))), [{ label: "target", id: id(4) }]);
+  assert.deepEqual(references(decode("20000605" + id(3))), [{ label: "value shaded", id: id(3) }]);
 });
 
 test("malformed canonical objects fail closed", () => {
@@ -140,4 +142,28 @@ test("Necropolis.bury rejects invalid fuel and skips nether_free on wasm Runtime
   assert.throws(() => nec.bury("abc", 1.5), RangeError);
   assert.throws(() => nec.bury("abc"), WebAssembly.RuntimeError);
   assert.deepEqual(freed, [], "must not call nether_free after a wasm trap");
+});
+
+test("UTF-8 BOM is preserved, value edges populate incoming, and hex preview keeps byte count", () => {
+  // H26: ignoreBOM preserves leading U+FEFF in Str and Struct names.
+  assert.equal(decode("04" + text("\uFEFFhi")).data, "\uFEFFhi");
+  assert.equal(decode("10" + text("\uFEFF") + u64(0)).name, "\uFEFF");
+
+  // H26: Shade/Cairn/nested values populate Graph.incoming.
+  const shadeObj = "0603" + id(7);
+  const g = new Graph({
+    cairn: id(9),
+    objects: [[id(9), trace], [id(5), "2003" + id(6) + span], [id(6), shadeObj], [id(7), "02" + u64(42)]],
+  });
+  assert.deepEqual(g.incoming.get(id(7)), [{ id: id(6), label: "shaded" }]);
+
+  // H26: Unavailable trace root surfaces root.data instead of a generic error.
+  const hugeTrace = "2005" + id(3) + ids() + ids() + u64(20001) + id(7).repeat(20001) + id(1) + "0000";
+  assert.throws(() => new Graph({ cairn: id(9), objects: [[id(9), hugeTrace]] }), /20000/);
+
+  // L5: Binary Bytes preview preserves the byte-count suffix when truncated.
+  const bin = new Uint8Array(200).fill(0xff);
+  const shown = preview({ kind: "Bytes", data: bin }, 80);
+  assert.ok(shown.endsWith("… (200 bytes)"), `missing suffix: ${shown}`);
+  assert.ok(shown.length <= 80, `exceeded limit: ${shown.length}`);
 });

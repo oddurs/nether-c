@@ -163,3 +163,69 @@ pub fn deposits(before: &[Cairn], now: &[Cairn]) -> Vec<Cairn> {
     out.extend_from_slice(now);
     out
 }
+
+/// Validate a trace's `source`, `deposits`, `holes`, `witnesses`, `depth`, and
+/// `unrecorded` mark upfront before exhuming, replaying, or grafting.
+///
+/// Returns whether any prior witness reached stratum 8.
+pub fn verify_trace_parts(
+    store: &Store,
+    source: Cairn,
+    deposits: &[Cairn],
+    holes: &[Cairn],
+    witnesses: &[Cairn],
+    orig_depth: u8,
+    marked: bool,
+) -> Result<bool, ExitCode> {
+    match store.get(source) {
+        Ok(Stored::Value(Value::Bytes(_))) => {}
+        Ok(_) => {
+            eprintln!("nether: source {} is not bytes", source.short());
+            return Err(ExitCode::from(code::MALFORMED));
+        }
+        Err(e) => {
+            eprintln!("nether: {e}");
+            return Err(store_exit(&e));
+        }
+    }
+    for &d in deposits {
+        match store.get(d) {
+            Ok(Stored::Node(Node::Deposit { value, .. })) => match store.get(value) {
+                Ok(Stored::Value(_)) => {}
+                Ok(_) => {
+                    eprintln!("nether: deposit value {} is not a value", value.short());
+                    return Err(ExitCode::from(code::MALFORMED));
+                }
+                Err(e) => {
+                    eprintln!("nether: {e}");
+                    return Err(store_exit(&e));
+                }
+            },
+            Ok(_) => {
+                eprintln!("nether: deposit {} is not a deposit node in this ledger", d.short());
+                return Err(ExitCode::from(code::MALFORMED));
+            }
+            Err(e) => {
+                eprintln!("nether: {e}");
+                return Err(store_exit(&e));
+            }
+        }
+    }
+    let prior_unrecorded = unrecorded(store, witnesses)?;
+    if !marked && prior_unrecorded {
+        eprintln!("nether: this trace is not marked unrecorded, and a witness under it reached 8");
+        return Err(ExitCode::from(code::MALFORMED));
+    }
+    if marked && orig_depth < nether_ledger::MAX_STRATUM {
+        eprintln!("nether: this trace is marked unrecorded, and records depth {orig_depth}");
+        return Err(ExitCode::from(code::MALFORMED));
+    }
+    let min_depth = depth(store, 0, holes, witnesses)?;
+    if min_depth > orig_depth {
+        eprintln!(
+            "nether: this trace records depth {orig_depth}, and a hole or witness under it reaches {min_depth}"
+        );
+        return Err(ExitCode::from(code::MALFORMED));
+    }
+    Ok(prior_unrecorded)
+}
