@@ -243,7 +243,11 @@ Burial takes a **fuel budget**: a bound on the number of evaluation steps.
 
 A **step** is one evaluation of one expression node. It is charged when
 evaluation of that node begins, before anything else happens to it, and it is
-charged once. Three consequences, because each is a place two implementations
+charged once. Bulk byte operations (concatenation, slicing, hashing, sealing,
+depositing, UTF-8 decoding, structural equality on bytes/strings, and naming
+world-call arguments) also charge `floor(bytes / 64)` additional steps
+deterministically so large byte allocations cannot amplify work beyond the fuel
+budget. Three consequences, because each is a place two implementations
 could otherwise disagree:
 
 - A unit-level binding is evaluated at most once, however many times it is

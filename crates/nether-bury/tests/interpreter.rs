@@ -632,3 +632,79 @@ demand prove();
     );
     assert_eq!(said(&source), vec![Value::Bytes(b"one \"two\"\n".to_vec())]);
 }
+
+#[test]
+fn self_hosted_enforces_capability_set_callee_isolation_shade_origins_and_return() {
+    // C7: capability set is non-subsuming (`net` does not grant `disk`).
+    for (program, expected) in [
+        ("demand descend net { must(read(\"secret.txt\")) };", "request requires descend"),
+        (
+            "Shade<Bytes> s = descend disk { shade must(read(\"secret.txt\")) }; demand descend net { len(look(s)) };",
+            "Orpheus:",
+        ),
+        (
+            "Bytes f() @3 { must(read(\"secret.txt\")) } demand descend net { f() };",
+            "call requires a deeper ambient stratum",
+        ),
+        // H8: callee does not inherit caller's ambient capabilities.
+        (
+            "Bytes f() { must(read(\"secret.txt\")) } demand descend disk { f() };",
+            "request requires descend",
+        ),
+        // H9: explicit Shade<T@d> checks origin depth.
+        (
+            "Shade<Bytes@3> bad = descend net { shade must(get(\"https://x\")) }; demand bad;",
+            "binding type mismatch",
+        ),
+        // H10: post-return code inside a function is still checked.
+        ("Bytes f() { return b\"ok\"; missing_call() } demand f();", "unknown call"),
+        // M11: trailing tokens in global and semantic errors inside parens / return.
+        ("Bytes a = b\"ok\" trailing; demand a;", "expected ;"),
+        ("demand (missing());", "unknown call"),
+        ("Bytes f() { return missing(); } demand f();", "unknown call"),
+    ] {
+        let residue = guest(program, &Answers::none());
+        assert!(residue.holes.is_empty(), "{program}");
+        assert!(residue.deposits.is_empty(), "{program}");
+        let values = results(&residue);
+        assert_eq!(values[0].0, "Error", "{program}: {values:?}");
+        assert!(
+            String::from_utf8_lossy(&values[0].2).contains(expected),
+            "{program}: expected {expected:?}, got {values:?}"
+        );
+    }
+
+    // H9: explicit Shade<Bytes@5> accepts depth-5 shade.
+    let ok_shade = "Shade<Bytes@5> s = descend net { shade must(get(\"https://ok.invalid\")) }; demand descend net { len(look(s)) };";
+    let pending = guest(ok_shade, &Answers::none());
+    assert_eq!(pending.holes.len(), 1);
+
+    // H10: `return` inside `descend` exits the enclosing function immediately.
+    let ret_in_descend = r#"
+Bytes f() {
+    descend disk {
+        return b"early";
+    }
+    "unreachable";
+    b"late"
+}
+demand f();
+"#;
+    let r = guest(ret_in_descend, &Answers::none());
+    assert!(r.deposits.is_empty());
+    assert_eq!(results(&r), vec![("Bytes".into(), 0, b"early".to_vec())]);
+
+    // C7: `descend disk!` and `descend net!` are recognized as capabilities 4 and 6.
+    let act_prog = "demand descend disk! { descend net! { b\"ok\" } };";
+    let act_res = guest(act_prog, &Answers::none());
+    assert!(act_res.holes.is_empty());
+    assert_eq!(results(&act_res), vec![("Bytes".into(), 0, b"ok".to_vec())]);
+
+    // M12: long string literal and long comment (>250 bytes) do not hit MAX_FRAMES.
+    let long_comment = "a".repeat(300);
+    let long_str = "z".repeat(260);
+    let long_prog = format!("/* {long_comment} */ demand b\"{long_str}\";");
+    let long_res = guest(&long_prog, &Answers::none());
+    assert!(long_res.holes.is_empty());
+    assert_eq!(results(&long_res), vec![("Bytes".into(), 0, long_str.into_bytes())]);
+}

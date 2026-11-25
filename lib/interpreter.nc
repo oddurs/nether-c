@@ -20,28 +20,29 @@ Bool white(Bytes source, I64 from)
 // Skip the whitespace and comments the lexical specification permits.
 I64 skip(Bytes source, I64 from)
 {
-  if (from >= len(source)) {
-    return from;
-  } else if (white(source, from)) {
-    return skip(source, from + 1);
-  } else if (at(source, from, b"//")) {
-    return skip_line(source, from + 2);
-  } else if (at(source, from, b"/*")) {
-    return skip_block(source, from + 2);
-  } else {
-    return from;
+  I64 p = from;
+  while (p < len(source)) {
+    if (white(source, p + 0)) {
+      p += 1;
+    } else if (at(source, p + 0, b"//")) {
+      p = skip_line(source, p + 2);
+    } else if (at(source, p + 0, b"/*")) {
+      p = skip_block(source, p + 2);
+    } else {
+      return p + 0;
+    }
   }
+  return p + 0;
 }
 
 I64 skip_line(Bytes source, I64 from)
 {
-  if (from >= len(source)) {
-    return len(source);
-  } else if (at(source, from, b"\n")) {
-    return skip(source, from + 1);
-  } else {
-    return skip_line(source, from + 1);
+  I64 p = from;
+  while (p < len(source)) {
+    if (at(source, p + 0, b"\n")) { return p + 1; }
+    p += 1;
   }
+  return len(source);
 }
 
 // Malformed syntax collapses through an invalid slice. Semantic errors have
@@ -53,52 +54,55 @@ I64 malformed_source(Bytes source)
 
 I64 skip_block(Bytes source, I64 from)
 {
-  if (from + 1 >= len(source)) {
-    return malformed_source(source);
-  } else if (at(source, from, b"*/")) {
-    return skip(source, from + 2);
-  } else {
-    return skip_block(source, from + 1);
+  I64 p = from;
+  while (p + 1 < len(source)) {
+    if (at(source, p + 0, b"*/")) { return p + 2; }
+    p += 1;
   }
+  return malformed_source(source);
 }
 
 // The first occurrence of needle at or after from, or len(source) when it is
 // absent. It is the only search primitive the parser needs.
 I64 seek(Bytes source, I64 from, Bytes needle)
 {
-  if (from > len(source) - len(needle)) {
-    return len(source);
-  } else if (at(source, from, needle)) {
-    return from;
-  } else {
-    return seek(source, from + 1, needle);
+  I64 p = from;
+  I64 limit = len(source) - len(needle);
+  while (p <= limit) {
+    if (at(source, p + 0, needle)) { return p + 0; }
+    p += 1;
   }
+  return len(source);
 }
 
-// Decode the escape forms used by the sample programs. The lexer has already
-// found both quote positions; an unclosed literal therefore remains a parser
-// failure rather than silently becoming an empty value.
+// Advance across a contiguous non-escape chunk inside a quoted literal.
+I64 plain_end(Bytes source, I64 from, I64 until)
+{
+  I64 p = from;
+  while (p < until) {
+    if (at(source, p + 0, b"\\")) { return p + 0; }
+    p += 1;
+  }
+  return until;
+}
+
+// Decode the escape forms used by the sample programs. Scans plain runs
+// iteratively and recurses only at backslash escapes.
 Bytes unescape(Bytes source, I64 from, I64 until)
 {
-  if (from >= until) {
-    return b"";
-  } else if (at(source, from, b"\\n")) {
-    return concat(b"\n", unescape(source, from + 2, until));
-  } else if (at(source, from, b"\\r")) {
-    return concat(b"\r", unescape(source, from + 2, until));
-  } else if (at(source, from, b"\\t")) {
-    return concat(b"\t", unescape(source, from + 2, until));
-  } else if (at(source, from, b"\\\"")) {
-    return concat(b"\"", unescape(source, from + 2, until));
-  } else if (at(source, from, b"\\\\")) {
-    return concat(b"\\", unescape(source, from + 2, until));
-  } else if (at(source, from, b"\\0")) {
-    return concat(b"\0", unescape(source, from + 2, until));
-  } else if (at(source, from, b"\\")) {
-    return slice(source, -1, 0);
-  } else {
-    return concat(slice(source, from, from + 1), unescape(source, from + 1, until));
-  }
+  if (from >= until) { return b""; }
+  I64 cut = plain_end(source, from, until);
+  Bytes head_chunk = slice(source, from, cut);
+  if (cut >= until) { return head_chunk; }
+  Bytes esc = b"";
+  if (at(source, cut, b"\\n")) { esc = b"\n"; }
+  else if (at(source, cut, b"\\r")) { esc = b"\r"; }
+  else if (at(source, cut, b"\\t")) { esc = b"\t"; }
+  else if (at(source, cut, b"\\\"")) { esc = b"\""; }
+  else if (at(source, cut, b"\\\\")) { esc = b"\\"; }
+  else if (at(source, cut, b"\\0")) { esc = b"\0"; }
+  else { return slice(source, -1, 0); }
+  return concat(head_chunk, concat(esc, unescape(source, cut + 2, until)));
 }
 
 // The closing quote is not the first quote after the opener: a quoted escape
@@ -106,17 +110,22 @@ Bytes unescape(Bytes source, I64 from, I64 until)
 // the same decision about a backslash.
 I64 quote_end(Bytes source, I64 from)
 {
-  if (from >= len(source)) {
-    return malformed_source(source);
-  } else if (at(source, from, b"\n")) {
-    return malformed_source(source);
-  } else if (at(source, from, b"\\")) {
-    return quote_end(source, from + 2);
-  } else if (at(source, from, b"\"")) {
-    return from;
-  } else {
-    return quote_end(source, from + 1);
+  I64 p = from;
+  while (p < len(source)) {
+    if (at(source, p + 0, b"\n") || at(source, p + 0, b"\r")) {
+      return malformed_source(source);
+    } else if (at(source, p + 0, b"\\")) {
+      if (p + 1 >= len(source) || at(source, p + 1, b"\n") || at(source, p + 1, b"\r")) {
+        return malformed_source(source);
+      }
+      p += 2;
+    } else if (at(source, p + 0, b"\"")) {
+      return p + 0;
+    } else {
+      p += 1;
+    }
   }
+  return malformed_source(source);
 }
 
 // A quoted text literal at `from`, returned as Bytes so that the evaluator can
@@ -153,10 +162,9 @@ Bool digit(Bytes source, I64 p)
 
 I64 word_end(Bytes source, I64 p)
 {
-  if (letter(source, p) || digit(source, p)) {
-    return word_end(source, p + 1);
-  }
-  return p;
+  I64 q = p;
+  while (letter(source, q + 0) || digit(source, q + 0)) { q += 1; }
+  return q + 0;
 }
 
 I64 token_end(Bytes source, I64 p)
