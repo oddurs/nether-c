@@ -208,13 +208,22 @@ fn assignment_is_right_associative_and_the_binaries_are_not() {
 /// section heading and checks that every sample still has the name it had.
 #[test]
 fn a_paragraph_can_be_inserted_anywhere_and_no_sample_moves() {
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     let before: Vec<String> = spec::samples().into_iter().map(|s| s.key).collect();
 
-    let at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    let copy = std::env::temp_dir().join(format!("nether-spec-{at}"));
-    std::fs::create_dir_all(&copy).expect("a scratch directory");
+    let copy = Scratch(std::env::temp_dir().join(format!(
+        "nether-spec-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    )));
+    std::fs::create_dir_all(&copy.0).expect("a scratch directory");
     for entry in std::fs::read_dir(spec::spec_dir()).expect("spec/ is there") {
         let path = entry.expect("readable").path();
         if path.extension().is_none_or(|e| e != "md") {
@@ -231,11 +240,10 @@ fn a_paragraph_can_be_inserted_anywhere_and_no_sample_moves() {
                 }
             })
             .collect();
-        std::fs::write(copy.join(path.file_name().unwrap()), pushed.join("\n")).expect("written");
+        std::fs::write(copy.0.join(path.file_name().unwrap()), pushed.join("\n")).expect("written");
     }
 
-    let after: Vec<String> = spec::samples_in(&copy).into_iter().map(|s| s.key).collect();
-    std::fs::remove_dir_all(&copy).ok();
+    let after: Vec<String> = spec::samples_in(&copy.0).into_iter().map(|s| s.key).collect();
     assert_eq!(before, after, "a sample changed name because prose moved");
     assert_eq!(before.len(), SAMPLES.len(), "the copy lost or gained a sample");
 }

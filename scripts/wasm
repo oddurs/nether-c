@@ -36,7 +36,20 @@ if ! rustup target list --installed 2>/dev/null | grep -qx "$target"; then
   exit 1
 fi
 
-cargo build --quiet -p nether-wasm --profile wasm --target "$target"
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+sep=$(printf '\037')
+encoded_flags="--remap-path-prefix=${cargo_home}=/c${sep}--remap-path-prefix=${root}=/n"
+if [ -n "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
+  encoded_flags="${CARGO_ENCODED_RUSTFLAGS}${sep}${encoded_flags}"
+elif [ -n "${RUSTFLAGS:-}" ]; then
+  existing=$(printf '%s' "$RUSTFLAGS" | awk '{ for (i = 1; i <= NF; i++) printf "%s%s", (i > 1 ? "\037" : ""), $i }')
+  if [ -n "$existing" ]; then
+    encoded_flags="${existing}${sep}${encoded_flags}"
+  fi
+fi
+
+env -u RUSTFLAGS CARGO_ENCODED_RUSTFLAGS="$encoded_flags" \
+  cargo build --quiet -p nether-wasm --profile wasm --target "$target"
 mkdir -p "$(dirname "$shipped")"
 cp "$built" "$shipped"
 

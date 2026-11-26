@@ -66,22 +66,33 @@ fn whole(heard: &[u8]) -> bool {
     body.len() >= promised
 }
 
+struct Scratch(std::path::PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 struct Asked {
     store: Store,
     world: World,
+    _dir: Scratch,
 }
 
 impl Asked {
     fn reaching(what: &str, reach: Vec<String>, sending: bool) -> Self {
-        let at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos());
-        let root = std::env::temp_dir().join(format!("nether-net-{what}-{at}"));
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "nether-net-{what}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(&root).expect("a directory");
         let store = Store::open(root.join("ledger")).expect("a store");
         let net: Box<dyn Provider> =
             if sending { Box::new(Net::sending(reach)) } else { Box::new(Net::fetching(reach)) };
-        Self { store, world: World::sealed().granting(net) }
+        Self { store, world: World::sealed().granting(net), _dir: Scratch(root) }
     }
 
     fn arg(&self, v: Value) -> Cairn {

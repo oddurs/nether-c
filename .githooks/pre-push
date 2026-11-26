@@ -2,7 +2,8 @@
 # main only ever advances through a merged pull request.
 set -eu
 
-remote_ref_default=$(./scripts/agent default-branch)
+root=$(git rev-parse --show-toplevel)
+remote_ref_default=$("$root/scripts/agent" default-branch)
 head=$(git rev-parse HEAD)
 branch=$(git symbolic-ref --quiet --short HEAD) || {
   echo "pre-push: detached HEAD; check out a feature branch before pushing" >&2
@@ -22,8 +23,8 @@ while read -r _local_ref local_sha remote_ref _remote_sha; do
         echo "pre-push: push the checked-out branch and HEAD, one branch at a time" >&2
         exit 1
       }
-      ./scripts/agent guard
-      ./scripts/agent clean
+      "$root/scripts/agent" guard
+      "$root/scripts/agent" clean
       ;;
   esac
 done
@@ -34,9 +35,9 @@ stamp="$(git rev-parse --git-dir)/nether-checked"
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$head" ]; then
   rm -f "$stamp"
 else
-  ./scripts/task check
+  "$root/scripts/task" check
 fi
-./scripts/agent clean
+"$root/scripts/agent" clean
 [ "$head" = "$(git rev-parse HEAD)" ] || {
   echo "pre-push: HEAD changed during checks; retry against the new commit" >&2
   exit 1

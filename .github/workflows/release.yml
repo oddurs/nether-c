@@ -30,7 +30,6 @@ jobs:
       - name: Install the pinned toolchain
         run: |
           rustup show active-toolchain || rustup toolchain install
-          rustup component add rustfmt clippy
           rustup target add wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
@@ -82,6 +81,10 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
       # The tag is the version, and this is where it becomes one. Without it
       # the binary reports `CARGO_PKG_VERSION`, which is the workspace version
       # and is `0.0.0` on purpose -- the crates are not published. v0.2.0
@@ -91,24 +94,30 @@ jobs:
           export NETHER_VERSION="${GITHUB_REF_NAME#v}"
           scripts/task release:build ${{ matrix.target }}
 
-      # Asked of the artifact rather than of the build that made it. Both
-      # strings are exact and neither can appear by accident: one is the
-      # version this tag is, the other is what a non-release build says
-      # instead. Read rather than executed, because a cross-compiled binary
-      # does not run on the machine that built it.
+      # Asked of the artifact rather than of the build that made it. On native
+      # targets, execute `--version` and match the exact `nether <version>`
+      # banner; on cross-compiled targets that cannot run on this runner, check
+      # the embedded version string directly.
       - name: The binary must say which release it is
         run: |
           bin="target/${{ matrix.target }}/release/nether"
           want="${GITHUB_REF_NAME#v}"
+          host=$(rustc -vV | awk '/^host:/ { print $2 }')
           if grep -qFa "(not a release build)" "$bin"; then
             echo "::error::$bin was built without NETHER_VERSION"
             exit 1
           fi
-          if ! grep -qFa "$want" "$bin"; then
+          if [ "$host" = "${{ matrix.target }}" ]; then
+            got=$("$bin" --version)
+            if [ "$got" != "nether $want" ]; then
+              echo "::error::$bin --version reported '$got', expected 'nether $want'"
+              exit 1
+            fi
+          elif ! grep -qFa "$want" "$bin"; then
             echo "::error::$bin does not carry the version $want"
             exit 1
           fi
-          echo "$bin carries $want"
+          echo "$bin carries nether $want"
 
       # One deterministic archive per target, named so a person can tell them
       # apart in a directory of downloads.
@@ -123,24 +132,27 @@ jobs:
           name = sys.argv[1]
           root = os.path.join("dist", name)
           out = os.path.join("dist", f"{name}.tar.gz")
-          with gzip.GzipFile(out, "wb", mtime=0) as gz:
-              with tarfile.open(fileobj=gz, mode="w", format=tarfile.GNU_FORMAT) as tf:
-                  for base, dirs, files in os.walk(root):
-                      dirs.sort()
-                      files.sort()
-                      rel_dir = os.path.relpath(base, "dist")
-                      info = tf.gettarinfo(base, arcname=rel_dir)
-                      info.uid = info.gid = info.mtime = 0
-                      info.uname = info.gname = ""
-                      tf.addfile(info)
-                      for fn in files:
-                          path = os.path.join(base, fn)
-                          rel = os.path.relpath(path, "dist")
-                          info = tf.gettarinfo(path, arcname=rel)
+          with open(out, "wb") as out_fh:
+              with gzip.GzipFile(filename="", mode="wb", fileobj=out_fh, mtime=0) as gz:
+                  with tarfile.open(fileobj=gz, mode="w", format=tarfile.GNU_FORMAT) as tf:
+                      for base, dirs, files in os.walk(root):
+                          dirs.sort()
+                          files.sort()
+                          rel_dir = os.path.relpath(base, "dist")
+                          info = tf.gettarinfo(base, arcname=rel_dir)
                           info.uid = info.gid = info.mtime = 0
                           info.uname = info.gname = ""
-                          with open(path, "rb") as fh:
-                              tf.addfile(info, fh)
+                          info.mode = 0o755
+                          tf.addfile(info)
+                          for fn in files:
+                              path = os.path.join(base, fn)
+                              rel = os.path.relpath(path, "dist")
+                              info = tf.gettarinfo(path, arcname=rel)
+                              info.uid = info.gid = info.mtime = 0
+                              info.uname = info.gname = ""
+                              info.mode = 0o755 if os.access(path, os.X_OK) else 0o644
+                              with open(path, "rb") as fh:
+                                  tf.addfile(info, fh)
           PY
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -206,21 +218,23 @@ jobs:
         with:
           path: incoming
 
-      # The face is 3.2kB and drawn from nothing. People will want it without
-      # cloning the repository for one file.
+      # Both weights of the face (regular and bold) ship directly alongside the
+      # standalone LICENSE so anyone can use the WOFF files without cloning the
+      # repository. 0235.
       - name: Gather what ships
         run: |
           mkdir -p dist
           find incoming -name '*.tar.gz' -exec cp {} dist/ \;
           cp site/nether.woff "dist/nether-${GITHUB_REF_NAME}.woff"
           cp site/nether-bold.woff "dist/nether-bold-${GITHUB_REF_NAME}.woff"
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - spec/ \
+          cp LICENSE dist/LICENSE
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -cf - spec/ docs/manual/ \
             | gzip -n > "dist/netherc-spec-${GITHUB_REF_NAME}.tar.gz"
 
       # A project whose argument is that you can name what you were given
       # should not ship tarballs nobody can check.
       - name: Write the checksums
-        run: cd dist && rm -f SHA256SUMS && sha256sum * > ../SHA256SUMS && mv ../SHA256SUMS . && cat SHA256SUMS
+        run: cd dist && rm -f SHA256SUMS && LC_ALL=C sha256sum * > ../SHA256SUMS && mv ../SHA256SUMS . && cat SHA256SUMS
 
       - name: The notes come from CHANGELOG.md
         run: scripts/notes "${GITHUB_REF_NAME}" > notes.md

@@ -813,7 +813,7 @@ def verify_codec_fixtures_and_exclusions() -> int:
         raise ProofFault("distinct fixtures produced colliding encodings")
 
     too_deep = b"".join(b"\x11" + _u64_be(1) for _ in range(MAX_DEPTH + 1)) + b"\x00"
-    for bad_bytes, expected_err in (
+    bad_values = (
         (b"\x06\x09" + c0, "NoSuchStratum"),
         (b"\x10\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", "EmptyStructName"),
         (b"\x08\x06", "NoSuchRefusal"),
@@ -822,7 +822,10 @@ def verify_codec_fixtures_and_exclusions() -> int:
         (b"\x20\x00\x00", "WrongShape"),
         (b"\x00\x00", "TrailingBytes"),
         (too_deep, "TooDeep"),
-    ):
+        (b"\x04" + _u64_be(2) + b"\xff\xfe", "NotUtf8"),
+        (b"\x10" + _u64_be(2) + b"\xff\xfe" + _u64_be(0), "NotUtf8"),
+    )
+    for bad_bytes, expected_err in bad_values:
         try:
             py_decode_value(bad_bytes)
         except ValueError as exc:
@@ -831,13 +834,20 @@ def verify_codec_fixtures_and_exclusions() -> int:
         else:
             raise ProofFault(f"decoder accepted invalid bytes for {expected_err}")
 
-    for bad_node, expected_err in (
+    bad_nodes = (
         (b"\x00\x00", "WrongShape"),
         (b"\x20\x02" + _u64_be(0) + _u64_be(0) + b"\x00" + c0 + _u64_be(0) + _u64_be(0), "EmptyCallName"),
+        (b"\x20\x02" + py_encode_call("read", ()) + b"\x09" + py_encode_span(c0, 0, 1), "NoSuchStratum"),
+        (b"\x20\x02" + py_encode_call("read", ()) + b"\x03" + py_encode_span(c0, 5, 1), "BadSpan"),
+        (b"\x20\x02" + _u64_be(2) + b"\xff\xfe" + _u64_be(0) + b"\x03" + py_encode_span(c0, 0, 1), "NotUtf8"),
         (b"\x20\x03" + c1 + c0 + _u64_be(5) + _u64_be(1), "BadSpan"),
+        (b"\x20\x04\x09" + py_encode_call("read", ()) + c1 + py_encode_span(c0, 0, 1), "NoSuchStratum"),
+        (b"\x20\x04\x03" + _u64_be(0) + _u64_be(0) + c1 + py_encode_span(c0, 0, 1), "EmptyCallName"),
+        (b"\x20\x04\x03" + py_encode_call("read", ()) + c1 + py_encode_span(c0, 5, 1), "BadSpan"),
         (b"\x20\x05" + c0 + _u64_be(0) + _u64_be(0) + _u64_be(0) + c0 + b"\x09\x00", "NoSuchStratum"),
         (b"\x20\x05" + c0 + _u64_be(0) + _u64_be(0) + _u64_be(0) + c0 + b"\x00\x02", "BadMark"),
-    ):
+    )
+    for bad_node, expected_err in bad_nodes:
         try:
             py_decode_node(bad_node)
         except ValueError as exc:
@@ -851,7 +861,7 @@ def verify_codec_fixtures_and_exclusions() -> int:
 
 if __name__ == "__main__":
     n_fix = verify_codec_fixtures_and_exclusions()
-    print(f"verified {n_fix} canonical byte fixtures and 13 §7.1.1 exclusion guards")
+    print(f"verified {n_fix} canonical byte fixtures and 21 §7.1.1 exclusion guards")
     for name, fn in (
         ("value_decode_encode", prove_value_decode_encode),
         ("node_decode_encode", prove_node_decode_encode),

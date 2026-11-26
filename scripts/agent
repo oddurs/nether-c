@@ -59,6 +59,9 @@ cmd_doctor() {
   check "gh authenticated"       gh auth status
   check "cargo present"          command -v cargo
   check "python3 present"        command -v python3
+  check "node present"           command -v node
+  check "wasm32 target installed" sh -c 'rustup target list --installed 2>/dev/null | grep -qx wasm32-unknown-unknown'
+  check "vim present"            command -v vim
   check "cairn present"          command -v cairn
   check "origin configured"      git remote get-url origin
 
@@ -69,7 +72,7 @@ cmd_doctor() {
     git config core.hooksPath .githooks
   fi
 
-  if git diff --quiet && git diff --cached --quiet; then
+  if [ -z "$(git status --porcelain --untracked-files=all)" ]; then
     printf '  \033[32mok\033[0m    working tree clean\n'
   else
     printf '  \033[33mwarn\033[0m  working tree dirty\n'
@@ -126,13 +129,18 @@ cmd_pr() {
   head=$(git rev-parse HEAD)
   [ "$(git config --get core.hooksPath)" = .githooks ] || die "install hooks with scripts/setup"
   cmd_policy
-  # An API failure must not look like an absent PR. Retrying reuses an open PR;
-  # a branch whose earlier PR is closed or merged starts a new unit of work.
-  existing=$(gh pr list --head "$branch" --base "$base" --state all --json number,state,isDraft \
+  # An API failure must not look like an absent PR. Check open PRs first so an
+  # earlier closed PR on the same branch never shadows an open one; if none is
+  # open, refuse a branch whose earlier PR is already closed or merged.
+  existing=$(gh pr list --head "$branch" --base "$base" --state open --json number,state,isDraft \
     --jq '.[0] | if . == null then "" else "\(.number) \(.state) \(.isDraft)" end')
-  case "$existing" in
-    *' CLOSED '*|*' MERGED '*) die "this branch already has a finished PR; start a new worktree" ;;
-  esac
+  if [ -z "$existing" ]; then
+    finished=$(gh pr list --head "$branch" --base "$base" --state all --json number,state,isDraft \
+      --jq '.[0] | if . == null then "" else "\(.number) \(.state) \(.isDraft)" end')
+    case "$finished" in
+      *' CLOSED '*|*' MERGED '*) die "this branch already has a finished PR; start a new worktree" ;;
+    esac
+  fi
   if [ "${1:-}" = --draft ]; then
     case "$existing" in *' false') die "existing PR is ready; --draft will not silently change it" ;; esac
   fi
@@ -147,15 +155,18 @@ cmd_pr() {
   cmd_clean
   [ "$head" = "$(git rev-parse HEAD)" ] || die "HEAD changed during checks; retry against the new commit"
   stamp="$(git rev-parse --git-dir)/nether-checked"
+  trap 'rm -f "$stamp"' EXIT INT TERM
   printf '%s\n' "$head" > "$stamp"
   say "pushing $branch"
   rc=0
   git push -u origin "$branch" || rc=$?
   if [ "$rc" -ne 0 ]; then
     rm -f "$stamp"
+    trap - EXIT INT TERM
     die "push of $branch failed (exit $rc); nothing was opened or armed"
   fi
   rm -f "$stamp"
+  trap - EXIT INT TERM
   # `--fill-first`, not `--fill`. With one commit they agree; with more than
   # one, `--fill` titles the pull request after the *branch* — and a squash
   # merge takes its subject from the title, so what lands on `main` is

@@ -489,7 +489,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 15 of 15 done
+`##########` 100% · 16 of 16 done
 
 ### buried
 
@@ -508,4 +508,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0320`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0320-website-and-necropolis-visual-a11y-and-ux-polish.md) Website and Necropolis visual, a11y, and UX polish <sup>bug · p2</sup>
 - [x] [`0321`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0321-split-pages-build-deploy-jobs-and-omit-template-html.md) Split Pages build/deploy jobs and omit template.html <sup>bug · p2</sup>
 - [x] [`0322`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0322-align-docs-manual-spec-and-specimen-with-ground-truth.md) Align docs, manual, spec, and specimen with ground truth <sup>docs · p1</sup>
+- [x] [`0323`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0323-speed-up-proof-checks-fix-test-leaks-and-harden-ci-and-tooling.md) Speed up proof checks, fix test leaks, and harden CI and tooling <sup>bug · p1</sup>
 

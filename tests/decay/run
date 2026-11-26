@@ -10,6 +10,7 @@ the new number, and a missing ceiling seals itself.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -188,6 +189,34 @@ def main() -> int:
         expect("a core below the ceiling passes", r.returncode == 0, r.stderr)
         expect("and prints the command to lower it",
                f"echo {actual} >" in r.stdout, r.stdout)
+
+        # Default `.decay-ceiling` missing: must refuse without `--init`, and
+        # seal itself when `--init` is passed explicitly.
+        repo_tmp = tmp / "repo"
+        (repo_tmp / "scripts").mkdir(parents=True)
+        (repo_tmp / "crates" / "core" / "src").mkdir(parents=True)
+        shutil.copy2(DECAY, repo_tmp / "scripts" / "decay")
+        (repo_tmp / "crates" / "core" / "src" / "lib.rs").write_text(BODY, encoding="utf-8")
+        default_ceiling = repo_tmp / ".decay-ceiling"
+
+        r_refuse = subprocess.run(
+            [str(repo_tmp / "scripts" / "decay")],
+            cwd=repo_tmp, capture_output=True, text=True,
+        )
+        expect("missing default .decay-ceiling refuses to bypass",
+               r_refuse.returncode == 1 and not default_ceiling.exists(),
+               r_refuse.stdout + r_refuse.stderr)
+        expect("and suggests restoring or --init",
+               "--init" in r_refuse.stderr, r_refuse.stderr)
+
+        r_init = subprocess.run(
+            [str(repo_tmp / "scripts" / "decay"), "--init"],
+            cwd=repo_tmp, capture_output=True, text=True,
+        )
+        expect("default .decay-ceiling seals with --init",
+               r_init.returncode == 0 and default_ceiling.is_file()
+               and int(default_ceiling.read_text(encoding="utf-8").strip()) == actual,
+               r_init.stdout + r_init.stderr)
 
     print(f"decay: {ran[0] - len(failures)}/{ran[0]} checks passed")
     if failures:

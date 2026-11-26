@@ -190,13 +190,16 @@ case "${1:-}" in
 
     head=$(git rev-parse HEAD)
     stamp="$(git rev-parse --git-dir)/nether-checked"
+    trap 'rm -f "$stamp"' EXIT INT TERM
     printf '%s\n' "$head" > "$stamp"
     git tag -a "$version" -m "$version"
     if ! git push origin "$version"; then
       rm -f "$stamp"
+      trap - EXIT INT TERM
       exit 1
     fi
     rm -f "$stamp"
+    trap - EXIT INT TERM
     echo "tagged $version and pushed it; the Release workflow takes it from here"
     ;;
 

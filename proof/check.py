@@ -547,6 +547,19 @@ def verify_kernel_soundness_guards() -> None:
         else:
             raise AssertionError(f"lattice_decide accepted unregistered compound term `{bad_compound}`")
 
+    # 33. Bit-projection and membership weakening must still reject false set/depth claims
+    for bad_opt in (
+        neg(conj(not_subset(d1_s, d2_s), not_subset(d2_s, d1_s))),
+        imp(le(var("d"), app("max_set", d1_s)), elem(var("d"), d1_s)),
+        imp(elem(var("d"), d1_s), le(var("d"), var("0"))),
+    ):
+        try:
+            lattice_decide(bad_opt)
+        except ProofFault:
+            pass
+        else:
+            raise AssertionError(f"lattice_decide accepted false set/depth claim `{bad_opt}`")
+
 
 def verify_closed_theorem(name: str, thm: Theorem, expected_conclusion: str) -> None:
     if not isinstance(thm, Theorem):

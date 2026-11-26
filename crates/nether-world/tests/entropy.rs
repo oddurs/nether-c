@@ -8,21 +8,32 @@ use nether_core::{Capability, Depth};
 use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
 use nether_world::{Entropy, Provider, Recorder, Unanswered, World};
 
+struct Scratch(std::path::PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 struct Asked {
     store: Store,
     world: World,
+    _dir: Scratch,
 }
 
 impl Asked {
     fn new(what: &str) -> Self {
-        let at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos());
-        let root = std::env::temp_dir().join(format!("nether-entropy-{what}-{at}"));
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "nether-entropy-{what}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(&root).expect("a directory");
         let store = Store::open(root.join("ledger")).expect("a store");
         let source: Box<dyn Provider> = Box::new(Entropy::opening().expect("a source"));
-        Self { store, world: World::sealed().granting(source) }
+        Self { store, world: World::sealed().granting(source), _dir: Scratch(root) }
     }
 
     fn arg(&self, v: Value) -> Cairn {
