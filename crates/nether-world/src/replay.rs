@@ -3,11 +3,13 @@
 use std::collections::HashMap;
 
 use nether_core::{Depth, Prim};
-use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Stratum, Value};
 
-fn valid_call_stratum(call: &Call, stratum: u8) -> bool {
-    Prim::from_name(&call.function).is_some_and(|p| {
-        p.latent() > Depth::PURE && p.latent().get() == stratum && call.args.len() == p.arity()
+fn valid_call_stratum(call: &Call, stratum: Stratum) -> bool {
+    Prim::from_name(call.function()).is_some_and(|p| {
+        p.latent() > Depth::PURE
+            && p.latent().get() == stratum.as_u8()
+            && call.args().len() == p.arity()
     })
 }
 
@@ -103,7 +105,7 @@ impl Replay {
             let Stored::Value(v) = store.get(answer)? else {
                 return Err(StoreError::Corrupt { asked: answer, found: None, why: None });
             };
-            if Depth::new(stratum).is_some_and(Depth::reads) {
+            if Depth::new(stratum.as_u8()).is_some_and(Depth::reads) {
                 if let Some(&prev) = seen_reads.get(&call) {
                     if prev != answer {
                         return Err(StoreError::Corrupt { asked: *w, found: None, why: None });
@@ -176,7 +178,7 @@ impl Replay {
             let Stored::Value(_) = store.get(answer)? else {
                 return Err(MergeError::BaseWitness(w));
             };
-            if Depth::new(stratum).is_some_and(Depth::reads) {
+            if Depth::new(stratum.as_u8()).is_some_and(Depth::reads) {
                 if let Some(&(_, prev_ans)) = base_reads.get(&call) {
                     if prev_ans != answer {
                         return Err(MergeError::BaseWitness(w));
@@ -186,7 +188,7 @@ impl Replay {
                 }
             }
         }
-        let mut open: Vec<(Call, u8, Span)> = Vec::with_capacity(holes.len());
+        let mut open: Vec<(Call, Stratum, Span)> = Vec::with_capacity(holes.len());
         for (slot, &h) in holes.iter().enumerate() {
             let Stored::Node(Node::Hole { call, stratum, span }) = store.get(h)? else {
                 return Err(MergeError::Mismatched(slot, h, h));
@@ -223,7 +225,7 @@ impl Replay {
                 }
                 return Err(MergeError::Conflict(slot, hole, first, witness));
             }
-            if Depth::new(*h_stratum).is_some_and(Depth::reads) {
+            if Depth::new(h_stratum.as_u8()).is_some_and(Depth::reads) {
                 if let Some(&(base_w, base_ans)) = base_reads.get(h_call)
                     && base_ans != answer
                 {

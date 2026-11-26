@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 
 use nether_core::check;
-use nether_ledger::{Cairn, Node, Stored, Value, decode_stored};
+use nether_ledger::{Cairn, Node, Stored, Stratum, Value, decode_stored};
 use nether_syntax::{lower, parse, print};
 
 fn exported(source: &[u8]) -> BTreeMap<Cairn, Stored> {
@@ -51,7 +51,7 @@ fn the_browser_receives_the_native_graph_not_a_summary_of_it() {
             witnesses: Vec::new(),
             deposits: residue.deposits,
             source: original.cairn(),
-            depth: residue.depth.get(),
+            depth: Stratum::new(residue.depth.get()).unwrap(),
             unrecorded: false,
         });
         assert_eq!(objects.get(&trace.cairn()), Some(&trace));
@@ -83,7 +83,7 @@ fn trace_depth_joins_owed_hole_strata_even_through_seal() {
     let Some(Stored::Node(Node::Trace { depth, holes, .. })) = objects.get(&trace_id) else {
         panic!("expected trace object");
     };
-    assert_eq!(*depth, 2);
+    assert_eq!(*depth, Stratum::TWO);
     assert_eq!(holes.len(), 1);
 }
 

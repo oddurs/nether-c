@@ -363,7 +363,8 @@ impl Provider for Disk {
     }
 
     fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
-        let stratum = match call.function.as_str() {
+        let func = call.function();
+        let stratum = match func {
             "write" | "remove" => Depth::DISK_WRITE,
             _ => Depth::DISK,
         };
@@ -373,36 +374,31 @@ impl Provider for Disk {
         // refusal is wrapped even for `exists`, because there is no plain
         // `Bool` that is not also an answer to a question nobody asked.
         let Some(path) = into.arg_str(call, 0)? else {
-            if call.function == "exists" {
+            if func == "exists" {
                 return Err(Refuse::Collapse("`exists` was not given a path".into()));
             }
             return into.record(call, stratum, span, &refused(Refusal::Malformed));
         };
-        let follow_final = call.function != "remove";
+        let follow_final = func != "remove";
         #[cfg(target_os = "linux")]
         {
-            let create_parents = call.function == "write";
+            let create_parents = func == "write";
             match self.resolve_pinned(&path, follow_final, create_parents) {
                 Ok(Some(pinned)) => {
-                    let said = Self::act_pinned(&call.function, pinned, call, into)?;
+                    let said = Self::act_pinned(func, pinned, call, into)?;
                     return into.record(call, stratum, span, &said);
                 }
-                Err(_) if call.function == "exists" => {
-                    return into.record(
-                        call,
-                        stratum,
-                        span,
-                        &given(&call.function, Value::Bool(false)),
-                    );
+                Err(_) if func == "exists" => {
+                    return into.record(call, stratum, span, &given(func, Value::Bool(false)));
                 }
                 Err(no) => return into.record(call, stratum, span, &refused(no)),
                 Ok(None) => {}
             }
         }
         let said = match self.resolve(&path, follow_final) {
-            Err(_) if call.function == "exists" => given(&call.function, Value::Bool(false)),
+            Err(_) if func == "exists" => given(func, Value::Bool(false)),
             Err(no) => refused(no),
-            Ok(at) => Self::act(&call.function, &at, call, into)?,
+            Ok(at) => Self::act(func, &at, call, into)?,
         };
         into.record(call, stratum, span, &said)
     }

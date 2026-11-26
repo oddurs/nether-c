@@ -12,7 +12,7 @@ use std::process::ExitCode;
 
 use nether_bury::bury;
 use nether_core::{Capability, Depth};
-use nether_ledger::{Cairn, Node, Store, Stored, Value};
+use nether_ledger::{Cairn, Node, Store, Stored, Stratum, Value};
 use nether_syntax::print;
 
 use crate::memo::Remembered;
@@ -150,7 +150,12 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
         // Burial holds no capability, so nothing was answered and there are no
         // witnesses. §6.6: exhumation is what records one.
         let witnesses: Vec<Cairn> = Vec::new();
-        let depth = crate::closing::depth(&store, residue.depth.get(), &residue.holes, &witnesses)?;
+        let depth = crate::closing::depth(
+            &store,
+            crate::closing::stratum(residue.depth),
+            &residue.holes,
+            &witnesses,
+        )?;
         let trace = Node::Trace {
             residue: residue_cairn,
             holes: residue.holes.clone(),
@@ -203,7 +208,7 @@ struct Buried {
     /// check that.
     residue: Cairn,
     source: Cairn,
-    depth: u8,
+    depth: Stratum,
     holes: Vec<Cairn>,
     nodes: usize,
     /// What this burial spent. §8.2: reported by the rite, and not recorded in
@@ -229,8 +234,8 @@ impl Buried {
             let numeral = circled(n + 1);
             match store.get(*hole) {
                 Ok(Stored::Node(Node::Hole { call, stratum, .. })) => {
-                    let said = crate::lamp::said(store, &call.function, &call.args);
-                    let cap = Depth::new(stratum)
+                    let said = crate::lamp::said(store, call.function(), call.args());
+                    let cap = Depth::new(stratum.as_u8())
                         .and_then(Capability::at)
                         .map_or_else(String::new, |c| format!("  {}", c.name()));
                     let _ = writeln!(out, "  hole {numeral}  {said:<30} stratum {stratum}{cap}");
@@ -250,7 +255,7 @@ impl Buried {
             .map(|h| match store.get(*h) {
                 Ok(Stored::Node(Node::Hole { call, stratum, .. })) => format!(
                     "{{\"cairn\":\"{h}\",\"call\":{},\"stratum\":{stratum}}}",
-                    json::string(&call.function)
+                    json::string(call.function())
                 ),
                 _ => format!("{{\"cairn\":\"{h}\"}}"),
             })

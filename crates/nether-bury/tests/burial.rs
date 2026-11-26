@@ -682,10 +682,9 @@ demand descend disk {
 };
 "#;
     let deep_unit = parse_and_check(deep_shade_src);
-    let call = nether_ledger::Call {
-        function: "read".into(),
-        args: vec![nether_ledger::Value::Str("f".into()).cairn()],
-    };
+    let call =
+        nether_ledger::Call::try_new("read", vec![nether_ledger::Value::Str("f".into()).cairn()])
+            .unwrap();
     let answers = nether_bury::Answers::none().and(
         call,
         nether_ledger::Value::Answer(Box::new(nether_ledger::AnswerOf::Given(
@@ -843,7 +842,7 @@ demand caller();
 "#;
     let caller_unit = parse_and_check(caller_local);
     let caller_ans = Answers::none().and(
-        Call { function: "read".into(), args: vec![Value::Str("f.txt".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("f.txt".into()).cairn()]).unwrap(),
         given_bytes(b"hi"),
     );
     let caller_res =
@@ -880,7 +879,7 @@ demand f(0);
 "#;
     let assert_unit = parse_and_check(stale_assert);
     let assert_ans = Answers::none().and(
-        Call { function: "read".into(), args: vec![Value::Str("a.txt".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("a.txt".into()).cairn()]).unwrap(),
         given_bytes(b"hi"),
     );
     let assert_res =
@@ -922,7 +921,7 @@ demand (shade b) == (shade concat(b, b""));
 "#;
     let eq_unit = parse_and_check(shade_eq);
     let read_f = Answers::none().and(
-        Call { function: "read".into(), args: vec![Value::Str("f".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("f".into()).cairn()]).unwrap(),
         given_bytes(b"hi"),
     );
     let eq_res = bury_with(&eq_unit, Cairn::of_encoded(shade_eq.as_bytes()), 10_000, &read_f)
@@ -937,7 +936,7 @@ demand descend net {
 "#;
     let stuck_unit = parse_and_check(shade_stuck);
     let get_u = Answers::none().and(
-        Call { function: "get".into(), args: vec![Value::Str("u".into()).cairn()] },
+        Call::try_new("get", vec![Value::Str("u".into()).cairn()]).unwrap(),
         given_bytes(b"hi"),
     );
     let stuck_res =
@@ -974,11 +973,11 @@ demand f();
     let assign_unit = parse_and_check(shade_assign);
     let read_ab = Answers::none()
         .and(
-            Call { function: "read".into(), args: vec![Value::Str("a".into()).cairn()] },
+            Call::try_new("read", vec![Value::Str("a".into()).cairn()]).unwrap(),
             given_bytes(b"A"),
         )
         .and(
-            Call { function: "read".into(), args: vec![Value::Str("b".into()).cairn()] },
+            Call::try_new("read", vec![Value::Str("b".into()).cairn()]).unwrap(),
             given_bytes(b"B"),
         );
     let assign_res =
@@ -1055,7 +1054,7 @@ demand descend entropy { draw(4) };
 "#;
     let steal_unit = parse_and_check(steal_act);
     let draw_four = Answers::none().and(
-        Call { function: "draw".into(), args: vec![Value::Int(4).cairn()] },
+        Call::try_new("draw", vec![Value::Int(4).cairn()]).unwrap(),
         Value::Bytes(b"AAAA".to_vec()),
     );
     let steal_res =
@@ -1127,13 +1126,11 @@ demand {
 "#;
     let post_unit = parse_and_check(post_prune);
     let post_ans = Answers::none().and(
-        Call {
-            function: "post".into(),
-            args: vec![
-                Value::Str("https://x".into()).cairn(),
-                Value::Bytes(b"hi".to_vec()).cairn(),
-            ],
-        },
+        Call::try_new(
+            "post",
+            vec![Value::Str("https://x".into()).cairn(), Value::Bytes(b"hi".to_vec()).cairn()],
+        )
+        .unwrap(),
         given_bytes(b"ok"),
     );
     let post_res =
@@ -1205,7 +1202,7 @@ demand {
 "#;
     let na_unit = parse_and_check(nested_ans);
     let na_ans = Answers::none().and(
-        Call { function: "read".into(), args: vec![Value::Str("k".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("k".into()).cairn()]).unwrap(),
         given_bytes(b"hello"),
     );
     let na_res =
@@ -1229,7 +1226,7 @@ demand g;
 "#;
     let gd_unit = parse_and_check(global_dep);
     let gd_ans = Answers::none().and(
-        Call { function: "read".into(), args: vec![Value::Str("g".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("g".into()).cairn()]).unwrap(),
         given_bytes(b"ok"),
     );
     let gd_res =
@@ -1252,7 +1249,7 @@ demand {
 "#;
     let ld_unit = parse_and_check(let_dep);
     let ld_ans = Answers::none().and(
-        Call { function: "read".into(), args: vec![Value::Str("l".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("l".into()).cairn()]).unwrap(),
         given_bytes(b"ok"),
     );
     let ld_res =
@@ -1296,7 +1293,7 @@ demand {
 "#;
     let la_unit = parse_and_check(list_arg);
     let la_ans = Answers::none().and(
-        Call { function: "list".into(), args: vec![Value::Str("sub".into()).cairn()] },
+        Call::try_new("list", vec![Value::Str("sub".into()).cairn()]).unwrap(),
         Value::Answer(Box::new(AnswerOf::Given(Value::Array(vec![Value::Str("a".into())])))),
     );
     let la_res =
@@ -1407,7 +1404,7 @@ fn staging_rollback_for_assign_demand_and_mutating_let() {
     let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
     let ans = |name: &str| {
         Answers::none().and(
-            Call { function: "read".into(), args: vec![Value::Str(name.into()).cairn()] },
+            Call::try_new("read", vec![Value::Str(name.into()).cairn()]).unwrap(),
             given_bytes(b"ok"),
         )
     };
@@ -1457,7 +1454,7 @@ demand {
     let m1_printed = nether_syntax::print(&m1.as_unit(&mu));
     let m2_unit = parse_and_check(&m1_printed);
     let both = ans("m").and(
-        Call { function: "read".into(), args: vec![Value::Str("u".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("u".into()).cairn()]).unwrap(),
         given_bytes(b"xy"),
     );
     let m2 = bury_with(&m2_unit, Cairn::of_encoded(m1_printed.as_bytes()), 10_000, &both).unwrap();
@@ -1493,7 +1490,7 @@ demand {
     let s1_printed = nether_syntax::print(&s1_out);
     let s2_unit = parse_and_check(&s1_printed);
     let s_both = ans("s").and(
-        Call { function: "read".into(), args: vec![Value::Str("u".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("u".into()).cairn()]).unwrap(),
         given_bytes(b"u"),
     );
     let s2 =
@@ -1565,7 +1562,7 @@ demand {
 "#;
     let h5u = parse_and_check(h5_src);
     let h5a = Answers::none().and(
-        Call { function: "read".into(), args: vec![Value::Str("a".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("a".into()).cairn()]).unwrap(),
         Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b"hi".to_vec())))),
     );
     let h5r = bury_with(&h5u, Cairn::of_encoded(h5_src.as_bytes()), 10_000, &h5a).unwrap();
@@ -1588,7 +1585,7 @@ demand {
 "#;
     let h6u = parse_and_check(h6_src);
     let h6a = Answers::none().and(
-        Call { function: "read".into(), args: vec![Value::Str("a".into()).cairn()] },
+        Call::try_new("read", vec![Value::Str("a".into()).cairn()]).unwrap(),
         Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b"hi".to_vec())))),
     );
     let h6r = bury_with(&h6u, Cairn::of_encoded(h6_src.as_bytes()), 10_000, &h6a).unwrap();
@@ -1678,10 +1675,11 @@ demand descend disk! {
 };
 "#;
     let act_unit = parse_and_check(m10_src);
-    let w_call = Call {
-        function: "write".into(),
-        args: vec![Value::Str("out".into()).cairn(), Value::Bytes(b"x".to_vec()).cairn()],
-    };
+    let w_call = Call::try_new(
+        "write",
+        vec![Value::Str("out".into()).cairn(), Value::Bytes(b"x".to_vec()).cairn()],
+    )
+    .unwrap();
     let ok = Value::Answer(Box::new(AnswerOf::Given(Value::Unit)));
     let act_ans = Answers::none().and(w_call.clone(), ok.clone()).and(w_call, ok);
     let act_res = bury_with(&act_unit, Cairn::of_encoded(m10_src.as_bytes()), 10_000, &act_ans)
@@ -1694,7 +1692,7 @@ demand descend disk! {
     assert!(
         act_res.questions().iter().all(|n| matches!(
             n,
-            nether_ledger::Node::Hole { call, .. } if call.function == "read"
+            nether_ledger::Node::Hole { call, .. } if call.function() == "read"
         )),
         "spurious write hole: {:?}",
         act_res.questions()
@@ -1746,13 +1744,13 @@ fn round2_bury_act_safety_and_globals() {
     let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
     let read_ans = |path: &str, data: &[u8]| {
         Answers::none().and(
-            Call { function: "read".into(), args: vec![Value::Str(path.into()).cairn()] },
+            Call::try_new("read", vec![Value::Str(path.into()).cairn()]).unwrap(),
             given_bytes(data),
         )
     };
     let draw_ans = |n: i64, data: &[u8]| {
         Answers::none().and(
-            Call { function: "draw".into(), args: vec![Value::Int(n).cairn()] },
+            Call::try_new("draw", vec![Value::Int(n).cairn()]).unwrap(),
             Value::Bytes(data.to_vec()),
         )
     };
@@ -1819,7 +1817,7 @@ fn round2_bury_single_evaluation_globals() {
     let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
     let read_ans = |path: &str, data: &[u8]| {
         Answers::none().and(
-            Call { function: "read".into(), args: vec![Value::Str(path.into()).cairn()] },
+            Call::try_new("read", vec![Value::Str(path.into()).cairn()]).unwrap(),
             given_bytes(data),
         )
     };
@@ -1878,7 +1876,7 @@ fn round2_bury_descend_refused_asserted_loop_and_shade() {
     let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
     let read_ans = |path: &str, data: &[u8]| {
         Answers::none().and(
-            Call { function: "read".into(), args: vec![Value::Str(path.into()).cairn()] },
+            Call::try_new("read", vec![Value::Str(path.into()).cairn()]).unwrap(),
             given_bytes(data),
         )
     };
@@ -1952,7 +1950,7 @@ fn round2_bury_nested_dirty_rollback_and_shaded_let() {
     let given_bytes = |b: &[u8]| Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b.to_vec()))));
     let read_ans = |path: &str, data: &[u8]| {
         Answers::none().and(
-            Call { function: "read".into(), args: vec![Value::Str(path.into()).cairn()] },
+            Call::try_new("read", vec![Value::Str(path.into()).cairn()]).unwrap(),
             given_bytes(data),
         )
     };

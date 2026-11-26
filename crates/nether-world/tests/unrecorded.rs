@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{AnswerOf, Cairn, Call, Node, Refusal, Span, Store, Stored, Value};
+use nether_ledger::{AnswerOf, Cairn, Call, Node, Refusal, Span, Store, Stored, Stratum, Value};
 use nether_world::{Provider, Recorder, Unanswered, Unrecorded, World};
 
 struct Scratch(PathBuf);
@@ -98,11 +98,12 @@ impl Asked {
     }
 
     fn call(&self, symbol: &str, args: &[u8]) -> Result<AnswerOf, Unanswered> {
-        let call = Call {
-            function: "call_foreign".into(),
-            args: vec![self.arg(Value::Str(symbol.into())), self.arg(Value::Bytes(args.to_vec()))],
-        };
-        let span = Span { source: self.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+        let call = Call::try_new(
+            "call_foreign",
+            vec![self.arg(Value::Str(symbol.into())), self.arg(Value::Bytes(args.to_vec()))],
+        )
+        .unwrap();
+        let span = Span::new(self.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
         let recorded = self.world.ask(&call, span, &Recorder::new(&self.store))?;
 
         let Ok(Stored::Node(Node::Witness { stratum, answer, .. })) =
@@ -110,7 +111,7 @@ impl Asked {
         else {
             panic!("no witness")
         };
-        assert_eq!(stratum, Depth::UNRECORDED.get(), "§9.8 puts it at 8");
+        assert_eq!(stratum, Stratum::EIGHT, "§9.8 puts it at 8");
         assert_eq!(answer, recorded.answer(), "the witness names something else");
         match self.store.get(recorded.answer()) {
             Ok(Stored::Value(Value::Answer(a))) => Ok(*a),
@@ -142,14 +143,15 @@ fn the_attempt_is_written_before_the_call_without_polluting_objects() {
     let a = Asked::loading("attempt", &[&path]);
     a.call("said", b"x").expect("granted");
 
-    let call = Call {
-        function: "call_foreign".into(),
-        args: vec![a.arg(Value::Str("said".into())), a.arg(Value::Bytes(b"x".to_vec()))],
-    };
-    let span = Span { source: a.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+    let call = Call::try_new(
+        "call_foreign",
+        vec![a.arg(Value::Str("said".into())), a.arg(Value::Bytes(b"x".to_vec()))],
+    )
+    .unwrap();
+    let span = Span::new(a.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
     let phantom = Cairn::of_encoded(
         &Stored::Node(Node::Witness {
-            stratum: Depth::UNRECORDED.get(),
+            stratum: Stratum::EIGHT,
             call: call.clone(),
             answer: a.arg(Value::Answer(Box::new(AnswerOf::Refused(Refusal::Unreachable)))),
             span,

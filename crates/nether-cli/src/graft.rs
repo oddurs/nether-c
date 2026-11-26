@@ -11,7 +11,7 @@ use std::process::ExitCode;
 
 use nether_bury::{Answers, bury_with};
 use nether_core::{Depth, Prim};
-use nether_ledger::{AnswerOf, Cairn, Call, Node, Span, Store, Stored, Value};
+use nether_ledger::{AnswerOf, Cairn, Call, Node, Span, Store, Stored, Stratum, Value};
 use nether_syntax::print;
 use nether_world::Replay;
 
@@ -114,7 +114,7 @@ struct PreparedGraft {
     answers: Answers,
     witnesses: Vec<Cairn>,
     call: Call,
-    stratum: u8,
+    stratum: Stratum,
     span: Span,
     value: Value,
     is_read: bool,
@@ -179,7 +179,7 @@ fn check_draw_length(
     with: Cairn,
     raw_instead: &Value,
 ) -> Result<(), ExitCode> {
-    let Some(&len_cairn) = call.args.first() else {
+    let Some(&len_cairn) = call.args().first() else {
         return Err(ExitCode::from(code::MALFORMED));
     };
     let Stored::Value(Value::Int(n)) =
@@ -230,7 +230,7 @@ fn prepare_graft(
     // Validate every hole in `holes` (no early break) before selecting the
     // targeted hole so corrupt/trailing holes are never skipped.
     let mut earlier_calls: HashSet<Call> = HashSet::new();
-    let mut matched: Option<(Call, u8, Span, Value)> = None;
+    let mut matched: Option<(Call, Stratum, Span, Value)> = None;
     for hole in holes {
         let Stored::Node(Node::Hole { call, stratum, span }) =
             store.get(*hole).map_err(|e| crate::closing::store_err(&e))?
@@ -242,30 +242,30 @@ fn prepare_graft(
             eprintln!(
                 "nether: hole {} claims stratum {stratum} for `{}`",
                 hole.short(),
-                call.function
+                call.function()
             );
             return Err(ExitCode::from(code::MALFORMED));
         }
         if *hole == replace && matched.is_none() {
-            let is_read = Depth::new(stratum).is_some_and(Depth::reads);
+            let is_read = Depth::new(stratum.as_u8()).is_some_and(Depth::reads);
             if !is_read && earlier_calls.contains(&call) {
                 eprintln!(
                     "nether: {} is not the first open act hole for `{}` under {}",
                     replace.short(),
-                    call.function,
+                    call.function(),
                     trace.short()
                 );
                 return Err(FAILED);
             }
-            let Some(prim) = Prim::from_name(&call.function) else {
+            let Some(prim) = Prim::from_name(call.function()) else {
                 eprintln!(
                     "nether: unknown prelude call `{}` in hole {}",
-                    call.function,
+                    call.function(),
                     hole.short()
                 );
                 return Err(ExitCode::from(code::MALFORMED));
             };
-            let val = wrap_graft_value(prim, &call.function, with, &raw_instead)?;
+            let val = wrap_graft_value(prim, call.function(), with, &raw_instead)?;
             if prim == Prim::Draw {
                 check_draw_length(store, &call, with, &raw_instead)?;
             }
@@ -273,7 +273,7 @@ fn prepare_graft(
                 eprintln!(
                     "nether: {} disagrees with an earlier read witness for `{}` under {}",
                     with.short(),
-                    call.function,
+                    call.function(),
                     trace.short()
                 );
                 return Err(FAILED);
@@ -287,7 +287,7 @@ fn prepare_graft(
         eprintln!("        `nether strata {}` says what it was told.", trace.short());
         return Err(FAILED);
     };
-    let is_read = Depth::new(stratum).is_some_and(Depth::reads);
+    let is_read = Depth::new(stratum.as_u8()).is_some_and(Depth::reads);
     let answers = Answers::none().and(call.clone(), value.clone());
     Ok(PreparedGraft { answers, witnesses, call, stratum, span, value, is_read })
 }
@@ -385,7 +385,12 @@ fn commit_graft(
         Err(code) => return code,
     };
     let (depth, unrecorded) = match (
-        crate::closing::depth(store, residue.depth.get(), &residue.holes, &prep.witnesses),
+        crate::closing::depth(
+            store,
+            crate::closing::stratum(residue.depth),
+            &residue.holes,
+            &prep.witnesses,
+        ),
         crate::closing::unrecorded(store, &prep.witnesses),
     ) {
         (Ok(d), Ok(u)) => (d, marked || u),

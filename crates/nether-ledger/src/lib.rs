@@ -23,4 +23,6 @@ pub use store::{
     AffectedTrace, AttemptGuard, Audit, IndexError, MAX_OBJECT_BYTES, PACKAGE_DOMAIN, Package,
     PackageError, ResolvedPackage, Store, StoreError,
 };
-pub use value::{AnswerOf, MAX_REFUSAL, MAX_STRATUM, Refusal, Value};
+pub use value::{
+    AnswerOf, EmptyNameError, MAX_REFUSAL, MAX_STRATUM, NonEmptyName, Refusal, Stratum, Value,
+};

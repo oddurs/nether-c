@@ -1,7 +1,7 @@
 //! Writing an answer down, and the proof that it was written.
 
 use nether_core::Depth;
-use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Stratum, Value};
 
 use crate::provider::Refuse;
 
@@ -80,7 +80,7 @@ impl<'a> Recorder<'a> {
     ///
     /// Returns [`StoreError`] if the argument cairn cannot be read or verified.
     pub fn arg(&self, call: &Call, index: usize) -> Result<Option<Value>, StoreError> {
-        let Some(&cairn) = call.args.get(index) else {
+        let Some(&cairn) = call.args().get(index) else {
             return Ok(None);
         };
         match self.store.get(cairn)? {
@@ -158,7 +158,7 @@ impl<'a> Recorder<'a> {
     ) -> Result<Recorded, Refuse> {
         let answer = self.store.put(&Stored::Value(said.clone()))?;
         let witness = self.store.put(&Stored::Node(Node::Witness {
-            stratum: stratum.get(),
+            stratum: Stratum::new(stratum.get()).unwrap_or(Stratum::MAX),
             call: call.clone(),
             answer,
             span,
@@ -176,7 +176,7 @@ impl<'a> Recorder<'a> {
         answer: Cairn,
     ) -> Result<Recorded, Refuse> {
         let witness = self.store.put(&Stored::Node(Node::Witness {
-            stratum: stratum.get(),
+            stratum: Stratum::new(stratum.get()).unwrap_or(Stratum::MAX),
             call: call.clone(),
             answer,
             span,

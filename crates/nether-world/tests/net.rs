@@ -100,8 +100,8 @@ impl Asked {
     }
 
     fn ask(&self, function: &str, args: Vec<Cairn>) -> AnswerOf {
-        let call = Call { function: function.to_owned(), args };
-        let span = Span { source: self.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+        let call = Call::try_new(function, args).unwrap();
+        let span = Span::new(self.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
         let recorded = self.world.ask(&call, span, &Recorder::new(&self.store)).expect("granted");
 
         // §1.4, and §9.6's "sealed on arrival": the witness names the answer,
@@ -163,8 +163,8 @@ fn a_post_carries_its_body_and_is_stratum_six() {
 fn fetching_alone_will_not_send() {
     // §1.8: sending is deeper, because the world remembers what was said.
     let a = Asked::reaching("no-post", vec!["example.invalid".into()], false);
-    let call = Call { function: "post".into(), args: Vec::new() };
-    let span = Span { source: a.arg(Value::Bytes(b"x".to_vec())), start: 0, end: 1 };
+    let call = Call::try_new("post", Vec::new()).unwrap();
+    let span = Span::new(a.arg(Value::Bytes(b"x".to_vec())), 0, 1).unwrap();
     let no = a.world.ask(&call, span, &Recorder::new(&a.store)).expect_err("not granted");
     assert!(no.to_string().contains("net!"), "{no}");
 }
@@ -372,11 +372,9 @@ fn http_framing_handles_204_keepalive_conflicting_cl_and_bad_te() {
 
     // 4. `Net::sending` (stratum 6) must not answer stratum-5 `get` holes, and `+80` port is Malformed.
     let sender = Asked::reaching("sending-only", vec!["127.0.0.1".into()], true);
-    let get_call = Call {
-        function: "get".into(),
-        args: vec![sender.arg(Value::Str("http://127.0.0.1/".into()))],
-    };
-    let span = Span { source: sender.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+    let get_call =
+        Call::try_new("get", vec![sender.arg(Value::Str("http://127.0.0.1/".into()))]).unwrap();
+    let span = Span::new(sender.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
     assert!(matches!(
         sender.world.ask(&get_call, span, &Recorder::new(&sender.store)),
         Err(nether_world::Unanswered::Ungranted { .. })

@@ -16,7 +16,9 @@
 //! The generator is seeded and deterministic, so a failure here is reproducible
 //! from the seed printed with it. `scripts/task fuzz` runs it for longer.
 
-use nether_ledger::{AnswerOf, Cairn, Call, Node, Refusal, Span, Value, decode_stored};
+use nether_ledger::{
+    AnswerOf, Cairn, Call, Node, NonEmptyName, Refusal, Span, Stratum, Value, decode_stored,
+};
 
 /// xorshift64*. Five lines, deterministic, and nothing to install.
 struct Rng(u64);
@@ -63,8 +65,8 @@ fn hex(bytes: &[u8]) -> String {
 /// A corpus worth mutating: every tag and every node kind.
 fn corpus() -> Vec<Vec<u8>> {
     let c = Cairn::of_encoded(b"seed");
-    let span = Span { source: c, start: 0, end: 3 };
-    let call = Call { function: "read".to_owned(), args: vec![c] };
+    let span = Span::new(c, 0, 3).unwrap();
+    let call = Call::try_new("read", vec![c]).unwrap();
 
     let values = vec![
         Value::Unit,
@@ -73,26 +75,29 @@ fn corpus() -> Vec<Vec<u8>> {
         Value::Bytes(vec![1, 2, 3, 4]),
         Value::Str("café".to_owned()),
         Value::Cairn(c),
-        Value::Shade { origin: 4, value: c },
+        Value::Shade { origin: Stratum::FOUR, value: c },
         Value::Answer(Box::new(AnswerOf::Given(Value::Int(7)))),
         Value::Answer(Box::new(AnswerOf::Refused(Refusal::Denied))),
         Value::Refusal(Refusal::Conflict),
-        Value::Struct { name: "Header".to_owned(), fields: vec![Value::Int(1), Value::Unit] },
+        Value::Struct {
+            name: NonEmptyName::new("Header").unwrap(),
+            fields: vec![Value::Int(1), Value::Unit],
+        },
         Value::Array(vec![Value::Int(1), Value::Array(vec![Value::Unit])]),
     ];
     let nodes = vec![
         Node::Literal(Value::Int(3)),
         Node::Apply { function: c, args: vec![c, c], result: c },
-        Node::Hole { call: call.clone(), stratum: 3, span },
+        Node::Hole { call: call.clone(), stratum: Stratum::THREE, span },
         Node::Deposit { value: c, span },
-        Node::Witness { stratum: 5, call, answer: c, span },
+        Node::Witness { stratum: Stratum::FIVE, call, answer: c, span },
         Node::Trace {
             residue: c,
             holes: vec![c],
             witnesses: vec![c],
             deposits: vec![c],
             source: c,
-            depth: 3,
+            depth: Stratum::THREE,
             unrecorded: true,
         },
     ];

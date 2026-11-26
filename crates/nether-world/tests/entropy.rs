@@ -5,7 +5,7 @@
 //! which means what is checked here is everything around the bytes.
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Stratum, Value};
 use nether_world::{Entropy, Provider, Recorder, Unanswered, World};
 
 struct Scratch(std::path::PathBuf);
@@ -41,8 +41,8 @@ impl Asked {
     }
 
     fn draw(&self, n: i64) -> Result<Vec<u8>, Unanswered> {
-        let call = Call { function: "draw".into(), args: vec![self.arg(Value::Int(n))] };
-        let span = Span { source: self.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+        let call = Call::try_new("draw", vec![self.arg(Value::Int(n))]).unwrap();
+        let span = Span::new(self.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
         let recorded = self.world.ask(&call, span, &Recorder::new(&self.store))?;
 
         // §1.4, and it is the whole of why stratum 7 is survivable: the bytes
@@ -52,7 +52,7 @@ impl Asked {
         else {
             panic!("no witness")
         };
-        assert_eq!(stratum, Depth::ENTROPY.get(), "§9.7 puts `draw` at 7");
+        assert_eq!(stratum, Stratum::SEVEN, "§9.7 puts `draw` at 7");
         assert_eq!(answer, recorded.answer(), "the witness names something else");
         match self.store.get(recorded.answer()) {
             // §9.7 types it `Bytes`, not `Answer<Bytes>`: there is no no.

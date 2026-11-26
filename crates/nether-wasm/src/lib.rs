@@ -33,7 +33,7 @@
 use core::fmt::Write as _;
 
 use nether_core::{Depth, check, report};
-use nether_ledger::{Cairn, Node, Stored, Value};
+use nether_ledger::{Cairn, Node, Stored, Stratum, Value};
 use nether_syntax::{lower, parse, print};
 
 /// The budget, as §8.2 gives `bury` one.
@@ -209,7 +209,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     };
     // §7.3.2: a trace's depth is the deepest of its residue and every hole it
     // owes, matching `nether bury` (e.g. a pure `seal` of a deep call).
-    let mut deepest = residue.depth.get();
+    let mut deepest = Stratum::new(residue.depth.get()).unwrap_or(Stratum::MAX);
     for h in &residue.holes {
         if let Some(Stored::Node(Node::Hole { stratum, .. })) = lookup(*h) {
             deepest = deepest.max(*stratum);
@@ -319,9 +319,9 @@ fn append_holes(
         }
         first = false;
         let _ = write!(out, "{{\"cairn\":\"{h}\",\"call\":");
-        push_quoted(out, &call.function);
+        push_quoted(out, call.function());
         let _ = write!(out, ",\"stratum\":{stratum},\"capability\":");
-        match Depth::new(*stratum).and_then(nether_core::Capability::at) {
+        match Depth::new(stratum.as_u8()).and_then(nether_core::Capability::at) {
             Some(cap) => push_quoted(out, cap.name()),
             None => out.push_str("null"),
         }

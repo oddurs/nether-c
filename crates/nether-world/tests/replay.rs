@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use nether_core::Depth;
-use nether_ledger::{Call, Node, Span, Store, StoreError, Stored, Value};
+use nether_ledger::{Call, Node, Span, Store, StoreError, Stored, Stratum, Value};
 use nether_world::{Disk, MergeError, Recorder, Replay, World};
 
 struct Scratch(PathBuf);
@@ -42,7 +42,7 @@ impl Drop for Scratch {
 }
 
 fn asking(function: &str) -> Call {
-    Call { function: function.to_owned(), args: Vec::new() }
+    Call::try_new(function, Vec::new()).unwrap()
 }
 
 fn temp_dir(tag: &str) -> Scratch {
@@ -79,8 +79,8 @@ fn a_replay_that_was_told_nothing_answers_nothing() {
 fn a_replay_answers_the_question_and_not_one_like_it() {
     // §6.3 makes a hole's identity its call, arguments included. An answer to
     // `read("a.nc")` is not an answer to `read("b.nc")`.
-    let a = Call { function: "read".into(), args: vec![nether_ledger::Cairn::of_encoded(b"a")] };
-    let b = Call { function: "read".into(), args: vec![nether_ledger::Cairn::of_encoded(b"b")] };
+    let a = Call::try_new("read", vec![nether_ledger::Cairn::of_encoded(b"a")]).unwrap();
+    let b = Call::try_new("read", vec![nether_ledger::Cairn::of_encoded(b"b")]).unwrap();
     let replay = Replay::of(&[(a.clone(), Value::Int(1))]);
     assert_eq!(replay.answer(&a), Some(&Value::Int(1)));
     assert_eq!(replay.answer(&b), None);
@@ -101,9 +101,9 @@ fn two_workers_answer_assigned_slots_and_merge_in_slot_order_under_retries() {
         let arg = origin.put(&Stored::Value(Value::Str(name.into()))).unwrap();
         let hole = origin
             .put(&Stored::Node(Node::Hole {
-                call: Call { function: "read".into(), args: vec![arg] },
-                stratum: 3,
-                span: Span { source: src, start: idx as u64, end: idx as u64 + 1 },
+                call: Call::try_new("read", vec![arg]).unwrap(),
+                stratum: Stratum::THREE,
+                span: Span::new(src, idx as u64, idx as u64 + 1).unwrap(),
             }))
             .unwrap();
         holes.push(hole);
@@ -174,15 +174,15 @@ fn conflicting_and_mismatched_worker_witnesses_are_rejected() {
     let src = store.put(&Stored::Value(Value::Bytes(b"main.nc".to_vec()))).unwrap();
     let arg = store.put(&Stored::Value(Value::Str("http://127.0.0.1/in".into()))).unwrap();
     let body = store.put(&Stored::Value(Value::Bytes(b"payload".to_vec()))).unwrap();
-    let call = Call { function: "post".into(), args: vec![arg, body] };
-    let span0 = Span { source: src, start: 0, end: 10 };
-    let span1 = Span { source: src, start: 12, end: 22 };
+    let call = Call::try_new("post", vec![arg, body]).unwrap();
+    let span0 = Span::new(src, 0, 10).unwrap();
+    let span1 = Span::new(src, 12, 22).unwrap();
 
     let h0 = store
-        .put(&Stored::Node(Node::Hole { call: call.clone(), stratum: 6, span: span0 }))
+        .put(&Stored::Node(Node::Hole { call: call.clone(), stratum: Stratum::SIX, span: span0 }))
         .unwrap();
     let h1 = store
-        .put(&Stored::Node(Node::Hole { call: call.clone(), stratum: 6, span: span1 }))
+        .put(&Stored::Node(Node::Hole { call: call.clone(), stratum: Stratum::SIX, span: span1 }))
         .unwrap();
     let holes = vec![h0, h1];
 
@@ -230,11 +230,11 @@ fn of_trace_rejects_missing_witnesses_and_merge_keeps_base_answers() {
 
     let src = store.put(&Stored::Value(Value::Bytes(b"m.nc".to_vec()))).unwrap();
     let arg = store.put(&Stored::Value(Value::Str("a.txt".into()))).unwrap();
-    let call = Call { function: "read".into(), args: vec![arg] };
-    let span0 = Span { source: src, start: 0, end: 4 };
-    let span1 = Span { source: src, start: 5, end: 9 };
+    let call = Call::try_new("read", vec![arg]).unwrap();
+    let span0 = Span::new(src, 0, 4).unwrap();
+    let span1 = Span::new(src, 5, 9).unwrap();
     let h1 = store
-        .put(&Stored::Node(Node::Hole { call: call.clone(), stratum: 3, span: span1 }))
+        .put(&Stored::Node(Node::Hole { call: call.clone(), stratum: Stratum::THREE, span: span1 }))
         .unwrap();
     let rec = Recorder::new(&store);
     let base_w = rec.record(&call, Depth::DISK, span0, &Value::Bytes(b"v1".to_vec())).unwrap();
@@ -265,17 +265,17 @@ fn forged_stratum_is_rejected_and_replay_order_and_dedup_hold() {
     let store = Store::open(root.join("store")).unwrap();
     let src = store.put(&Stored::Value(Value::Bytes(b"m.nc".to_vec()))).unwrap();
     let arg = store.put(&Stored::Value(Value::Str("sym".into()))).unwrap();
-    let span = Span { source: src, start: 0, end: 4 };
+    let span = Span::new(src, 0, 4).unwrap();
 
     // H20: forged `call_foreign` claiming stratum 1 is rejected by both ask_slots and merge.
-    let forged_call = Call { function: "call_foreign".into(), args: vec![arg] };
+    let forged_call = Call::try_new("call_foreign", vec![arg]).unwrap();
     let forged_hole = store
-        .put(&Stored::Node(Node::Hole { call: forged_call.clone(), stratum: 1, span }))
+        .put(&Stored::Node(Node::Hole { call: forged_call.clone(), stratum: Stratum::ONE, span }))
         .unwrap();
     let forged_ans = store.put(&Stored::Value(Value::Bytes(b"ok".to_vec()))).unwrap();
     let forged_wit = store
         .put(&Stored::Node(Node::Witness {
-            stratum: 1,
+            stratum: Stratum::ONE,
             call: forged_call,
             answer: forged_ans,
             span,
@@ -296,9 +296,9 @@ fn forged_stratum_is_rejected_and_replay_order_and_dedup_hold() {
     ));
 
     // L9: Replay::all() preserves deterministic insertion order.
-    let c1 = Call { function: "read".into(), args: vec![arg] };
+    let c1 = Call::try_new("read", vec![arg]).unwrap();
     let arg2 = store.put(&Stored::Value(Value::Str("other".into()))).unwrap();
-    let c2 = Call { function: "read".into(), args: vec![arg2] };
+    let c2 = Call::try_new("read", vec![arg2]).unwrap();
     let r = Replay::of(&[
         (c2.clone(), Value::Int(2)),
         (c1.clone(), Value::Int(1)),
@@ -318,7 +318,7 @@ fn forged_stratum_is_rejected_and_replay_order_and_dedup_hold() {
         .granting(Box::new(nether_world::Disk::reading(&d1)))
         .granting(Box::new(nether_world::Disk::reading(&d2)));
     let f_arg = store.put(&Stored::Value(Value::Str("f.txt".into()))).unwrap();
-    let read_call = Call { function: "read".into(), args: vec![f_arg] };
+    let read_call = Call::try_new("read", vec![f_arg]).unwrap();
     let rec = replaced.ask(&read_call, span, &Recorder::new(&store)).unwrap();
     assert_eq!(
         store.get(rec.answer()).unwrap(),
@@ -331,16 +331,21 @@ fn forged_stratum_is_rejected_and_replay_order_and_dedup_hold() {
     // and contradictory read witnesses.
     assert!(matches!(Replay::of_trace(&store, &[forged_wit]), Err(StoreError::Corrupt { .. })));
 
-    let pure_call = Call { function: "concat".into(), args: vec![arg, arg2] };
+    let pure_call = Call::try_new("concat", vec![arg, arg2]).unwrap();
     let pure_wit = store
-        .put(&Stored::Node(Node::Witness { stratum: 0, call: pure_call, answer: forged_ans, span }))
+        .put(&Stored::Node(Node::Witness {
+            stratum: Stratum::ZERO,
+            call: pure_call,
+            answer: forged_ans,
+            span,
+        }))
         .unwrap();
     assert!(matches!(Replay::of_trace(&store, &[pure_wit]), Err(StoreError::Corrupt { .. })));
 
-    let bad_arity_call = Call { function: "read".into(), args: vec![arg, arg2] };
+    let bad_arity_call = Call::try_new("read", vec![arg, arg2]).unwrap();
     let bad_arity_wit = store
         .put(&Stored::Node(Node::Witness {
-            stratum: 3,
+            stratum: Stratum::THREE,
             call: bad_arity_call,
             answer: forged_ans,
             span,
@@ -352,7 +357,7 @@ fn forged_stratum_is_rejected_and_replay_order_and_dedup_hold() {
     let ans2 = store.put(&Stored::Value(Value::Bytes(b"two".to_vec()))).unwrap();
     let w1 = store
         .put(&Stored::Node(Node::Witness {
-            stratum: 3,
+            stratum: Stratum::THREE,
             call: read_call.clone(),
             answer: ans1,
             span,
@@ -360,10 +365,10 @@ fn forged_stratum_is_rejected_and_replay_order_and_dedup_hold() {
         .unwrap();
     let w2 = store
         .put(&Stored::Node(Node::Witness {
-            stratum: 3,
+            stratum: Stratum::THREE,
             call: read_call,
             answer: ans2,
-            span: Span { source: src, start: 6, end: 10 },
+            span: Span::new(src, 6, 10).unwrap(),
         }))
         .unwrap();
     assert!(matches!(Replay::of_trace(&store, &[w1, w2]), Err(StoreError::Corrupt { .. })));

@@ -4,7 +4,11 @@
 //! here: a node is a thing the ledger stores *about* evaluation rather than a
 //! value a program can hold, and it lands with the node model.
 
+use core::fmt;
+use core::ops::Deref;
+
 use crate::cairn::Cairn;
+use crate::codec::DecodeError;
 
 /// Tag bytes, fixed by `spec/07-ledger.md` §7.1 and not ours to change.
 pub(crate) mod tag {
@@ -75,6 +79,135 @@ pub enum AnswerOf {
 /// The deepest stratum a shade may claim to have come from.
 pub const MAX_STRATUM: u8 = 8;
 
+/// A validated stratum byte (`0..=8`) in the canonical encoding.
+///
+/// Private field enforces `spec/07-ledger.md` §7.1.1 / §7.3.1 so no safe API
+/// can construct a stratum past the bottom of the lattice.
+///
+/// ```compile_fail
+/// use nether_ledger::Stratum;
+/// let _ = Stratum(9);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Stratum(u8);
+
+impl Stratum {
+    /// Stratum 0 (pure).
+    pub const ZERO: Self = Self(0);
+    /// Stratum 1 (store).
+    pub const ONE: Self = Self(1);
+    /// Stratum 2 (env).
+    pub const TWO: Self = Self(2);
+    /// Stratum 3 (disk).
+    pub const THREE: Self = Self(3);
+    /// Stratum 4 (disk!).
+    pub const FOUR: Self = Self(4);
+    /// Stratum 5 (net).
+    pub const FIVE: Self = Self(5);
+    /// Stratum 6 (net!).
+    pub const SIX: Self = Self(6);
+    /// Stratum 7 (entropy).
+    pub const SEVEN: Self = Self(7);
+    /// Stratum 8 (unrecorded).
+    pub const EIGHT: Self = Self(8);
+    /// The deepest valid stratum.
+    pub const MAX: Self = Self::EIGHT;
+
+    /// Constructs a stratum if `n <= MAX_STRATUM`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError::NoSuchStratum`] if `n > 8`.
+    pub const fn new(n: u8) -> Result<Self, DecodeError> {
+        if n <= MAX_STRATUM { Ok(Self(n)) } else { Err(DecodeError::NoSuchStratum(n)) }
+    }
+
+    /// The stratum byte (`0..=8`).
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        self.0
+    }
+}
+
+impl fmt::Display for Stratum {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Returned when constructing a [`NonEmptyName`] from an empty string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmptyNameError;
+
+impl fmt::Display for EmptyNameError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("name cannot be empty")
+    }
+}
+
+impl core::error::Error for EmptyNameError {}
+
+/// A non-empty UTF-8 name for a nominal struct or prelude call.
+///
+/// Private field enforces `spec/07-ledger.md` §7.1.1 / §7.3.1 so empty struct
+/// and call names are unconstructible through safe APIs.
+///
+/// ```compile_fail
+/// use nether_ledger::NonEmptyName;
+/// let _ = NonEmptyName(String::new());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NonEmptyName(String);
+
+impl NonEmptyName {
+    /// Constructs a validated non-empty name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EmptyNameError`] if `name` is empty.
+    pub fn new(name: impl Into<String>) -> Result<Self, EmptyNameError> {
+        let s = name.into();
+        if s.is_empty() { Err(EmptyNameError) } else { Ok(Self(s)) }
+    }
+
+    /// The underlying string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consumes this name and returns the underlying [`String`].
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl Deref for NonEmptyName {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for NonEmptyName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl PartialEq<str> for NonEmptyName {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for NonEmptyName {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
 /// A value, as the ledger sees it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
@@ -99,14 +232,14 @@ pub enum Value {
     /// compared, and its contents may not be reached without descending again.
     Shade {
         /// The stratum it came from, `0..=8`.
-        origin: u8,
+        origin: Stratum,
         /// The name of the value inside.
         value: Cairn,
     },
     /// A nominal struct. The name is part of the value.
     Struct {
         /// The type's name. Never empty.
-        name: String,
+        name: NonEmptyName,
         /// Fields, in declaration order.
         fields: Vec<Value>,
     },

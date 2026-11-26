@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use nether_bury::{Answers, Halt, Residue, bury_on};
 use nether_core::{Unit, check};
-use nether_ledger::{Cairn, Node, Stored, Value};
+use nether_ledger::{Cairn, Node, Stored, Stratum, Value};
 use nether_syntax::{lower, parse, print};
 
 const FIXTURES: &[&str] = &[
@@ -64,10 +64,11 @@ fn trace_cairn(unit: &Unit, r: &Residue) -> Cairn {
     let source = Cairn::of_encoded(b"parallel");
     let printed = print(&r.as_unit(unit));
     let residue = Stored::Value(Value::Bytes(printed.into_bytes())).cairn();
-    let depth = r.questions().into_iter().fold(r.depth.get(), |d, n| match n {
-        Node::Hole { stratum, .. } => d.max(*stratum),
-        _ => d,
-    });
+    let depth =
+        r.questions().into_iter().fold(Stratum::new(r.depth.get()).unwrap(), |d, n| match n {
+            Node::Hole { stratum, .. } => d.max(*stratum),
+            _ => d,
+        });
     Node::Trace {
         residue,
         holes: r.holes.clone(),

@@ -17,7 +17,7 @@ use nether_core::{
     BinOp, Block, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, Held, Literal, LocalDef, LocalId,
     Span, Stmt, Type, Unit, check,
 };
-use nether_ledger::{Cairn, Node, Stored, Value};
+use nether_ledger::{Cairn, Node, Stored, Stratum, Value};
 use nether_syntax::{lower, parse, print};
 
 fn e(kind: ExprKind, ty: Type, depth: Depth) -> Expr {
@@ -187,10 +187,11 @@ demand must(descend disk { read("absent.txt") });
 fn trace_cairn(unit: &Unit, r: &Residue) -> Cairn {
     let printed = print(&r.as_unit(unit));
     let residue = Stored::Value(Value::Bytes(printed.into_bytes())).cairn();
-    let depth = r.questions().into_iter().fold(r.depth.get(), |d, n| match n {
-        Node::Hole { stratum, .. } => d.max(*stratum),
-        _ => d,
-    });
+    let depth =
+        r.questions().into_iter().fold(Stratum::new(r.depth.get()).unwrap(), |d, n| match n {
+            Node::Hole { stratum, .. } => d.max(*stratum),
+            _ => d,
+        });
     Node::Trace {
         residue,
         holes: r.holes.clone(),

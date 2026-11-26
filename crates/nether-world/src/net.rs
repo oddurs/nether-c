@@ -247,7 +247,8 @@ impl Provider for Net {
     }
 
     fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
-        let stratum = if call.function == "post" { Depth::NET_WRITE } else { Depth::NET };
+        let func = call.function();
+        let stratum = if func == "post" { Depth::NET_WRITE } else { Depth::NET };
         // §6.3: a world-call whose argument is not finished cannot have become
         // a hole, and §04 types this one as a `Str`.
         let Some(url) = into.arg_str(call, 0)? else {
@@ -259,7 +260,7 @@ impl Provider for Net {
             // after: a reach that is checked by whether the connection failed
             // is not a reach.
             Ok(at) if !self.reaches(&at.host, at.port) => refused(Refusal::Denied),
-            Ok(at) => Self::speak(&call.function, &at, call, into)?,
+            Ok(at) => Self::speak(func, &at, call, into)?,
         };
         into.record(call, stratum, span, &said)
     }

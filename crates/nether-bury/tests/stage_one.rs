@@ -20,7 +20,7 @@ use nether_core::{
     Block, Capability, Demand, Depth, Expr, ExprKind, FuncDef, FuncId, GlobalDef, GlobalId, Held,
     Literal, LocalDef, LocalId, Prim, Span, Type, Unit, check,
 };
-use nether_ledger::{Cairn, Node, Value};
+use nether_ledger::{Cairn, Node, Stratum, Value};
 
 /// `build.nc`, as §6.2 writes it, with the `compile` it says a program has to
 /// supply for itself.
@@ -195,15 +195,15 @@ fn build_nc_buries_to_depth_three_with_one_hole() {
     assert_eq!(r.holes.len(), 1, "holes 1: {:?}", r.questions());
 
     let [Node::Hole { call, stratum, span, .. }] = r.questions()[..] else { panic!() };
-    assert_eq!(call.function, "read");
-    assert_eq!(*stratum, 3);
-    assert_eq!(r.value(call.args[0]), Some(&Value::Str("main.nc".into())));
+    assert_eq!(call.function(), "read");
+    assert_eq!(*stratum, Stratum::THREE);
+    assert_eq!(r.value(call.args()[0]), Some(&Value::Str("main.nc".into())));
 
     // The span is the one `read("main.nc")` occupies in build.nc, named
     // against the cairn of build.nc rather than against a path.
-    assert_eq!(span.source, Cairn::of_encoded(BUILD_NC.as_bytes()));
+    assert_eq!(span.source(), Cairn::of_encoded(BUILD_NC.as_bytes()));
     let want = span_of(r#"read("main.nc")"#);
-    assert_eq!((span.start, span.end), (u64::from(want.start), u64::from(want.end)));
+    assert_eq!((span.start(), span.end()), (u64::from(want.start), u64::from(want.end)));
 }
 
 #[test]

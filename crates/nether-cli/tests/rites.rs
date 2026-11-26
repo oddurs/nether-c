@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use nether_ledger::{Cairn, Node, Store, Stored, Value};
+use nether_ledger::{Cairn, Node, Store, Stored, Stratum, Value};
 
 /// A directory nothing else is using, removed on drop.
 struct Scratch(PathBuf);
@@ -413,15 +413,15 @@ fn a_small_trace(what: &str) -> (Scratch, Cairn, Cairn, Cairn) {
 
     let source = put(Value::Bytes(b"demand greet;\n".to_vec()));
     let path = put(Value::Str("main.nc".into()));
-    let span = Span { source, start: 15, end: 30 };
-    let call = Call { function: "read".into(), args: vec![path] };
+    let span = Span::new(source, 15, 30).unwrap();
+    let call = Call::try_new("read", vec![path]).unwrap();
 
-    let hole = node(Node::Hole { call: call.clone(), stratum: 3, span });
+    let hole = node(Node::Hole { call: call.clone(), stratum: Stratum::THREE, span });
     let answer = put(Value::Bytes(b"the file's contents".to_vec()));
-    let witness = node(Node::Witness { stratum: 3, call, answer, span });
+    let witness = node(Node::Witness { stratum: Stratum::THREE, call, answer, span });
 
     let greeting = put(Value::Str("Hello from the nether".into()));
-    let deposit = node(Node::Deposit { value: greeting, span: Span { source, start: 3, end: 9 } });
+    let deposit = node(Node::Deposit { value: greeting, span: Span::new(source, 3, 9).unwrap() });
 
     let trace = node(Node::Trace {
         residue: hole,
@@ -429,7 +429,7 @@ fn a_small_trace(what: &str) -> (Scratch, Cairn, Cairn, Cairn) {
         witnesses: vec![witness],
         deposits: vec![deposit],
         source: hole,
-        depth: 3,
+        depth: Stratum::THREE,
         unrecorded: false,
     });
     (dir, trace, answer, greeting)
@@ -470,7 +470,7 @@ fn deposits_are_read_in_the_order_the_trace_holds_them() {
     // would write it: lamp concatenates what it is given and adds nothing.
     let at = |source, start: u64, text: &str| {
         let v = put(Value::Str(format!("{text}\n")));
-        node(Node::Deposit { value: v, span: Span { source, start, end: start + 1 } })
+        node(Node::Deposit { value: v, span: Span::new(source, start, start + 1).unwrap() })
     };
     // Offsets and sources in no order a sort would keep.
     let roots = vec![
@@ -485,7 +485,7 @@ fn deposits_are_read_in_the_order_the_trace_holds_them() {
         witnesses: vec![],
         deposits: roots,
         source: one,
-        depth: 0,
+        depth: Stratum::ZERO,
         unrecorded: false,
     });
 
@@ -559,7 +559,9 @@ fn a_shade_shows_its_origin_and_its_name_and_no_more() {
     let dir = scratch("lamp-shade");
     let store = Store::open(&dir).expect("a store");
     let inside = store.put(&Stored::Value(Value::Str("secret".into()))).expect("put");
-    let shade = store.put(&Stored::Value(Value::Shade { origin: 5, value: inside })).expect("put");
+    let shade = store
+        .put(&Stored::Value(Value::Shade { origin: Stratum::FIVE, value: inside }))
+        .expect("put");
 
     let out = nether(Some(&dir), &["lamp", &shade.to_string()]);
     let text = stdout(&out);
@@ -584,29 +586,30 @@ fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (Scratch,
 
     let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
     let at = BUILD.find("read(\"main.nc\")").expect("the call is in the source");
-    let span = Span { source, start: at as u64, end: (at + 15) as u64 };
+    let span = Span::new(source, at as u64, (at + 15) as u64).unwrap();
     let (call, answer) = match stratum {
         5 => {
             let url = put(Value::Str("https://example.invalid".into()));
-            (Call { function: "get".into(), args: vec![url] }, put(Value::Bytes(b"ok".to_vec())))
+            (Call::try_new("get", vec![url]).unwrap(), put(Value::Bytes(b"ok".to_vec())))
         }
         8 => {
             let sym = put(Value::Str("dlopen".into()));
             let raw = put(Value::Bytes(Vec::new()));
             (
-                Call { function: "call_foreign".into(), args: vec![sym, raw] },
+                Call::try_new("call_foreign", vec![sym, raw]).unwrap(),
                 put(Value::Bytes(b"ok".to_vec())),
             )
         }
         _ => {
             let path = put(Value::Str("main.nc".into()));
             (
-                Call { function: "read".into(), args: vec![path] },
+                Call::try_new("read", vec![path]).unwrap(),
                 put(Value::Bytes(b"int main(void) { return 0; }".to_vec())),
             )
         }
     };
-    let witness = node(Node::Witness { stratum, call, answer, span });
+    let witness =
+        node(Node::Witness { stratum: Stratum::new(stratum).unwrap(), call, answer, span });
 
     let trace = node(Node::Trace {
         residue: source,
@@ -614,7 +617,7 @@ fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (Scratch,
         witnesses: vec![witness],
         deposits: vec![],
         source,
-        depth,
+        depth: Stratum::new(depth).unwrap(),
         unrecorded,
     });
     (dir, trace, source)
@@ -648,19 +651,19 @@ fn a_trace_that_reached_stratum_8_says_so_without_being_asked() {
     let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
 
     let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
-    let span = Span { source, start: 0, end: 11 };
+    let span = Span::new(source, 0, 11).unwrap();
     let symbol = put(Value::Str("dlopen".into()));
     let args = put(Value::Bytes(Vec::new()));
-    let call = Call { function: "call_foreign".into(), args: vec![symbol, args] };
+    let call = Call::try_new("call_foreign", vec![symbol, args]).unwrap();
     let answer = put(Value::Bytes(b"whatever it said".to_vec()));
-    let witness = node(Node::Witness { stratum: 8, call, answer, span });
+    let witness = node(Node::Witness { stratum: Stratum::EIGHT, call, answer, span });
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![],
         witnesses: vec![witness],
         deposits: vec![],
         source,
-        depth: 8,
+        depth: Stratum::EIGHT,
         unrecorded: true,
     });
 
@@ -684,17 +687,17 @@ fn a_hole_is_a_stratum_owed_and_not_a_stratum_reached() {
     let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
 
     let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
-    let span = Span { source, start: 0, end: 11 };
+    let span = Span::new(source, 0, 11).unwrap();
     let url = put(Value::Str("https://example.invalid/x".into()));
-    let call = Call { function: "get".into(), args: vec![url] };
-    let hole = node(Node::Hole { call, stratum: 5, span });
+    let call = Call::try_new("get", vec![url]).unwrap();
+    let hole = node(Node::Hole { call, stratum: Stratum::FIVE, span });
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![hole],
         witnesses: vec![],
         deposits: vec![],
         source,
-        depth: 5,
+        depth: Stratum::FIVE,
         unrecorded: false,
     });
 
@@ -768,17 +771,17 @@ fn a_trace_shallower_than_a_hole_it_owes_is_malformed() {
     let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
 
     let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
-    let span = Span { source, start: 0, end: 11 };
+    let span = Span::new(source, 0, 11).unwrap();
     let url = put(Value::Str("https://example.invalid/x".into()));
-    let call = Call { function: "get".into(), args: vec![url] };
-    let hole = node(Node::Hole { call, stratum: 5, span });
+    let call = Call::try_new("get", vec![url]).unwrap();
+    let hole = node(Node::Hole { call, stratum: Stratum::FIVE, span });
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![hole],
         witnesses: vec![],
         deposits: vec![],
         source,
-        depth: 0,
+        depth: Stratum::ZERO,
         unrecorded: false,
     });
 
@@ -800,7 +803,7 @@ fn a_trace_that_never_went_anywhere_says_so() {
     let dep = store
         .put(&Stored::Node(Node::Deposit {
             value: val,
-            span: nether_ledger::Span { source: src, start: 0, end: 1 },
+            span: nether_ledger::Span::new(src, 0, 1).unwrap(),
         }))
         .expect("put");
     let trace = store
@@ -810,7 +813,7 @@ fn a_trace_that_never_went_anywhere_says_so() {
             witnesses: vec![],
             deposits: vec![dep],
             source: src,
-            depth: 0,
+            depth: Stratum::ZERO,
             unrecorded: false,
         }))
         .expect("put");
@@ -854,18 +857,18 @@ fn a_span_whose_source_is_gone_still_gives_the_offset() {
     let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
 
     let source = Value::Bytes(BUILD.as_bytes().to_vec()).cairn();
-    let span = Span { source, start: 47, end: 62 };
+    let span = Span::new(source, 47, 62).unwrap();
     let path = put(Value::Str("main.nc".into()));
-    let call = Call { function: "read".into(), args: vec![path] };
+    let call = Call::try_new("read", vec![path]).unwrap();
     let answer = put(Value::Bytes(b"x".to_vec()));
-    let witness = node(Node::Witness { stratum: 3, call, answer, span });
+    let witness = node(Node::Witness { stratum: Stratum::THREE, call, answer, span });
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![],
         witnesses: vec![witness],
         deposits: vec![],
         source,
-        depth: 3,
+        depth: Stratum::THREE,
         unrecorded: false,
     });
 
@@ -890,7 +893,7 @@ fn a_node_that_is_gone_is_a_lower_bound_and_says_so() {
             witnesses: vec![],
             deposits: vec![],
             source: gone,
-            depth: 0,
+            depth: Stratum::ZERO,
             unrecorded: false,
         }))
         .expect("put");
@@ -948,18 +951,18 @@ fn a_corrupt_node_under_a_trace_is_malformed_and_not_merely_missing() {
     let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
 
     let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
-    let span = Span { source, start: 0, end: 11 };
+    let span = Span::new(source, 0, 11).unwrap();
     let path = put(Value::Str("main.nc".into()));
-    let call = Call { function: "read".into(), args: vec![path] };
+    let call = Call::try_new("read", vec![path]).unwrap();
     let answer = put(Value::Bytes(b"x".to_vec()));
-    let witness = node(Node::Witness { stratum: 3, call, answer, span });
+    let witness = node(Node::Witness { stratum: Stratum::THREE, call, answer, span });
     let trace = node(Node::Trace {
         residue: source,
         holes: vec![],
         witnesses: vec![witness],
         deposits: vec![],
         source,
-        depth: 3,
+        depth: Stratum::THREE,
         unrecorded: false,
     });
 
@@ -1001,18 +1004,18 @@ fn two_answers_to_one_question_are_two_lines() {
 
     let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
     let at = BUILD.find("read(\"main.nc\")").expect("the call is in the source");
-    let span = Span { source, start: at as u64, end: (at + 15) as u64 };
+    let span = Span::new(source, at as u64, (at + 15) as u64).unwrap();
     let path = put(Value::Str("main.nc".into()));
-    let call = Call { function: "read".into(), args: vec![path] };
+    let call = Call::try_new("read", vec![path]).unwrap();
 
     let one = node(Node::Witness {
-        stratum: 3,
+        stratum: Stratum::THREE,
         call: call.clone(),
         answer: put(Value::Bytes(b"before".to_vec())),
         span,
     });
     let two = node(Node::Witness {
-        stratum: 3,
+        stratum: Stratum::THREE,
         call,
         answer: put(Value::Bytes(b"after".to_vec())),
         span,
@@ -1023,7 +1026,7 @@ fn two_answers_to_one_question_are_two_lines() {
         witnesses: vec![one, two],
         deposits: vec![],
         source,
-        depth: 3,
+        depth: Stratum::THREE,
         unrecorded: false,
     });
 
@@ -1070,33 +1073,39 @@ fn a_rendered_call_reads_back_as_the_call_that_was_made() {
     let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
     let node = |n: Node| store.put(&Stored::Node(n)).expect("put");
     let source = put(Value::Bytes(BUILD.as_bytes().to_vec()));
-    let span = Span { source, start: 0, end: 11 };
+    let span = Span::new(source, 0, 11).unwrap();
 
     let asking = |call: Call| {
-        let hole = node(Node::Hole { call, stratum: 8, span });
+        let hole = node(Node::Hole { call, stratum: Stratum::EIGHT, span });
         node(Node::Trace {
             residue: source,
             holes: vec![hole],
             witnesses: vec![],
             deposits: vec![],
             source,
-            depth: 8,
+            depth: Stratum::EIGHT,
             unrecorded: false,
         })
     };
 
-    let empty = asking(Call {
-        function: "call_foreign".into(),
-        args: vec![put(Value::Str("dlopen".into())), put(Value::Bytes(Vec::new()))],
-    });
+    let empty = asking(
+        Call::try_new(
+            "call_foreign",
+            vec![put(Value::Str("dlopen".into())), put(Value::Bytes(Vec::new()))],
+        )
+        .unwrap(),
+    );
     let out = nether(Some(&dir), &["strata", &empty.to_string()]);
     assert!(stdout(&out).contains(r#"call_foreign("dlopen", b"")"#), "{}", stdout(&out));
 
     // And one holding the delimiter itself.
-    let awkward = asking(Call {
-        function: "call_foreign".into(),
-        args: vec![put(Value::Str("x".into())), put(Value::Bytes(b"a, b)".to_vec()))],
-    });
+    let awkward = asking(
+        Call::try_new(
+            "call_foreign",
+            vec![put(Value::Str("x".into())), put(Value::Bytes(b"a, b)".to_vec()))],
+        )
+        .unwrap(),
+    );
     let out = nether(Some(&dir), &["strata", &awkward.to_string()]);
     assert!(stdout(&out).contains(r#"b"a, b)""#), "{}", stdout(&out));
 }
@@ -2500,7 +2509,7 @@ fn two_machines_each_answer_half_a_traces_holes_and_seal_byte_identically_to_one
         witnesses: merged_witnesses,
         deposits: all_deposits,
         source,
-        depth: 6,
+        depth: Stratum::SIX,
         unrecorded: false,
     });
     let merged_cairn = coord_store.put(&merged_node).unwrap();
@@ -2771,7 +2780,7 @@ fn graft_does_not_wrap_non_refusable_primitives_in_answer() {
     else {
         panic!("expected grafted trace");
     };
-    assert_eq!(depth, 2, "graft dropped depth when synthesizing fresh witness");
+    assert_eq!(depth, Stratum::TWO, "graft dropped depth when synthesizing fresh witness");
     assert_eq!(witnesses.len(), 1, "graft dropped witness provenance");
 }
 
@@ -3102,7 +3111,7 @@ fn pr_e_noop_exhume_residue_spans_and_forged_stratum() {
     let Stored::Node(Node::Deposit { span, .. }) = store.get(deposits[0]).unwrap() else {
         panic!("expected deposit");
     };
-    assert_eq!(span.source, r1, "new deposit span must point at trace.residue, not trace.source");
+    assert_eq!(span.source(), r1, "new deposit span must point at trace.residue, not trace.source");
 
     // H20: forged stratum on hole or witness is rejected with exit 65 by strata, exhume, and graft.
     let fdir = scratch("pr-e-h20");
@@ -3110,10 +3119,11 @@ fn pr_e_noop_exhume_residue_spans_and_forged_stratum() {
     let blob = fstore.put(&Stored::Value(Value::Bytes(b"demand 0;\n".to_vec()))).unwrap();
     let sym = fstore.put(&Stored::Value(Value::Str("f".into()))).unwrap();
     let empty = fstore.put(&Stored::Value(Value::Bytes(Vec::new()))).unwrap();
-    let call = Call { function: "call_foreign".into(), args: vec![sym, empty] };
-    let span = Span { source: blob, start: 0, end: 6 };
-    let bad_hole =
-        fstore.put(&Stored::Node(Node::Hole { call: call.clone(), stratum: 1, span })).unwrap();
+    let call = Call::try_new("call_foreign", vec![sym, empty]).unwrap();
+    let span = Span::new(blob, 0, 6).unwrap();
+    let bad_hole = fstore
+        .put(&Stored::Node(Node::Hole { call: call.clone(), stratum: Stratum::ONE, span }))
+        .unwrap();
     let forged_hole_trace = fstore
         .put(&Stored::Node(Node::Trace {
             residue: blob,
@@ -3121,7 +3131,7 @@ fn pr_e_noop_exhume_residue_spans_and_forged_stratum() {
             witnesses: vec![],
             deposits: vec![],
             source: blob,
-            depth: 1,
+            depth: Stratum::ONE,
             unrecorded: false,
         }))
         .unwrap();
@@ -3141,8 +3151,9 @@ fn pr_e_noop_exhume_residue_spans_and_forged_stratum() {
         )),
         65
     );
-    let bad_wit =
-        fstore.put(&Stored::Node(Node::Witness { stratum: 1, call, answer: empty, span })).unwrap();
+    let bad_wit = fstore
+        .put(&Stored::Node(Node::Witness { stratum: Stratum::ONE, call, answer: empty, span }))
+        .unwrap();
     let forged_witness_trace = fstore
         .put(&Stored::Node(Node::Trace {
             residue: blob,
@@ -3150,7 +3161,7 @@ fn pr_e_noop_exhume_residue_spans_and_forged_stratum() {
             witnesses: vec![bad_wit],
             deposits: vec![],
             source: blob,
-            depth: 1,
+            depth: Stratum::ONE,
             unrecorded: false,
         }))
         .unwrap();
@@ -3182,7 +3193,7 @@ fn pr_e_replay_diff_readonly_stores_and_read_consistency() {
             witnesses,
             deposits,
             source,
-            depth: 4,
+            depth: Stratum::FOUR,
             unrecorded: false,
         }))
         .unwrap();
@@ -3382,7 +3393,7 @@ fn round2_exhume_and_strata_hardening() {
             witnesses: vec![],
             deposits: vec![],
             source,
-            depth: 3,
+            depth: Stratum::THREE,
             unrecorded: true,
         }))
         .unwrap();
@@ -3397,7 +3408,7 @@ fn round2_exhume_and_strata_hardening() {
             witnesses,
             deposits,
             source,
-            depth: 0,
+            depth: Stratum::ZERO,
             unrecorded: false,
         }))
         .unwrap();
@@ -3411,10 +3422,10 @@ fn round2_exhume_and_strata_hardening() {
         .unwrap();
     let w8 = store
         .put(&Stored::Node(Node::Witness {
-            stratum: 8,
-            call: Call { function: "call_foreign".into(), args: vec![sym, arg_b] },
+            stratum: Stratum::EIGHT,
+            call: Call::try_new("call_foreign", vec![sym, arg_b]).unwrap(),
             answer: ans8,
-            span: Span { source, start: 0, end: 1 },
+            span: Span::new(source, 0, 1).unwrap(),
         }))
         .unwrap();
     let hidden_u = store
@@ -3424,7 +3435,7 @@ fn round2_exhume_and_strata_hardening() {
             witnesses: vec![w8],
             deposits: vec![],
             source,
-            depth: 8,
+            depth: Stratum::EIGHT,
             unrecorded: false,
         }))
         .unwrap();

@@ -89,8 +89,8 @@ impl Asked {
 
     /// What was recorded, exactly as the program would receive it.
     fn said(&self, function: &str, args: Vec<Cairn>) -> Value {
-        let call = Call { function: function.to_owned(), args };
-        let span = Span { source: self.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+        let call = Call::try_new(function, args).unwrap();
+        let span = Span::new(self.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
         let recorded = self.world.ask(&call, span, &Recorder::new(&self.store)).expect("granted");
 
         // §1.4: the witness names the answer, and both were written before
@@ -171,11 +171,12 @@ fn writing_is_stratum_four_and_reading_alone_will_not_do_it() {
     // §1.8: writing is deeper than reading because the ordering is how much of
     // the world a mistake reaches.
     let reading = Asked::new("no-write", false);
-    let call = Call {
-        function: "write".to_owned(),
-        args: vec![reading.arg(Value::Str("out".into())), reading.arg(Value::Bytes(b"x".to_vec()))],
-    };
-    let span = Span { source: reading.arg(Value::Bytes(b"x".to_vec())), start: 0, end: 1 };
+    let call = Call::try_new(
+        "write",
+        vec![reading.arg(Value::Str("out".into())), reading.arg(Value::Bytes(b"x".to_vec()))],
+    )
+    .unwrap();
+    let span = Span::new(reading.arg(Value::Bytes(b"x".to_vec())), 0, 1).unwrap();
     let refused = reading
         .world
         .ask(&call, span, &Recorder::new(&reading.store))
@@ -217,9 +218,8 @@ fn the_disk_write_provider_does_not_answer_reads() {
     assert!(!a.world.holds(Capability::Net), "disk! does not reach the network");
 
     std::fs::write(a.root.join("main.nc"), b"x").expect("a file");
-    let call =
-        Call { function: "read".to_owned(), args: vec![a.arg(Value::Str("main.nc".into()))] };
-    let span = Span { source: a.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+    let call = Call::try_new("read", vec![a.arg(Value::Str("main.nc".into()))]).unwrap();
+    let span = Span::new(a.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
     assert!(matches!(
         a.world.ask(&call, span, &Recorder::new(&a.store)),
         Err(nether_world::Unanswered::Ungranted { .. })
@@ -235,9 +235,8 @@ fn what_was_read_outlives_the_file_it_was_read_from() {
     let file = a.root.join("main.nc");
     std::fs::write(&file, b"int main(void) { return 0; }").expect("a file");
 
-    let call =
-        Call { function: "read".to_owned(), args: vec![a.arg(Value::Str("main.nc".into()))] };
-    let span = Span { source: a.arg(Value::Bytes(b"build.nc".to_vec())), start: 0, end: 1 };
+    let call = Call::try_new("read", vec![a.arg(Value::Str("main.nc".into()))]).unwrap();
+    let span = Span::new(a.arg(Value::Bytes(b"build.nc".to_vec())), 0, 1).unwrap();
     let recorded = a.world.ask(&call, span, &Recorder::new(&a.store)).expect("disk was granted");
 
     std::fs::remove_file(&file).expect("delete it");
@@ -360,8 +359,8 @@ fn corrupt_argument_propagates_not_recorded_and_write_leaves_no_temps() {
     // fabricated Malformed witness.
     let a = Asked::new("arg-store-err", false);
     let missing_arg = nether_ledger::Cairn::of_encoded(b"never-stored-arg");
-    let call = Call { function: "read".into(), args: vec![missing_arg] };
-    let span = Span { source: a.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+    let call = Call::try_new("read", vec![missing_arg]).unwrap();
+    let span = Span::new(a.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
     assert!(matches!(
         a.world.ask(&call, span, &Recorder::new(&a.store)),
         Err(nether_world::Unanswered::NotRecorded(_))
@@ -374,7 +373,7 @@ fn corrupt_argument_propagates_not_recorded_and_write_leaves_no_temps() {
     let obj_path = ledger_dir.join("objects").join(&hex[..2]).join(&hex[2..]);
     std::fs::write(&obj_path, b"corrupted-bytes").unwrap();
     let fresh_store = Store::open(&ledger_dir).unwrap();
-    let call2 = Call { function: "read".into(), args: vec![path_cairn] };
+    let call2 = Call::try_new("read", vec![path_cairn]).unwrap();
     assert!(matches!(
         a.world.ask(&call2, span, &Recorder::new(&fresh_store)),
         Err(nether_world::Unanswered::NotRecorded(_))
@@ -428,10 +427,10 @@ fn symlinked_root_ancestor_allows_in_root_absolute_symlink_and_denies_escapes() 
     let store = Store::open(base.join("ledger")).unwrap();
     let world = World::sealed().granting(Box::new(Disk::reading(&alias_root)));
     let src = store.put(&Stored::Value(Value::Bytes(b"x.nc".to_vec()))).unwrap();
-    let span = Span { source: src, start: 0, end: 1 };
+    let span = Span::new(src, 0, 1).unwrap();
     let ask_read = |name: &str| {
         let arg = store.put(&Stored::Value(Value::Str(name.into()))).unwrap();
-        let call = Call { function: "read".into(), args: vec![arg] };
+        let call = Call::try_new("read", vec![arg]).unwrap();
         let rec = world.ask(&call, span, &Recorder::new(&store)).unwrap();
         match store.get(rec.answer()).unwrap() {
             Stored::Value(Value::Answer(a)) => *a,
