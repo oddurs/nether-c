@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Orpheus rule &mdash; Nether C</title>
-<meta name="description" content="chapter 08 draft edit the source">
+<meta name="description" content="One idea: you may carry a value up; you must go back down to look at it.">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/manual/08-the-orpheus-rule.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="The Orpheus rule &mdash; Nether C">
-<meta property="og:description" content="chapter 08 draft edit the source">
+<meta property="og:description" content="One idea: you may carry a value up; you must go back down to look at it.">
 <meta property="og:url" content="https://netherc.org/manual/08-the-orpheus-rule.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -61,9 +61,9 @@ try {
 </details>
 </aside>
 <div class="reading-pane">
-<div class="pane-title"><span>The Orpheus rule</span><span aria-hidden="true">[text]</span></div>
+<div class="pane-title"><span>manual/08-the-orpheus-rule.md</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c meta-bar"><span>chapter 08</span> <span>draft</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/08-the-orpheus-rule.md">edit the source</a></span></p><h1 id="the-orpheus-rule"><a href="#the-orpheus-rule">The Orpheus rule</a></h1><blockquote><p>One idea: <strong>you may carry a value up; you must go back down to look at it.</strong></p></blockquote><p>Nine strata, and depth composes upwards: a thing built from parts is exactly as deep as its deepest part. That is <a href="../spec/01-strata.html">§1.1</a>, and on its own it would make deep values useless — one network call and everything downstream of it is at stratum 5 forever, including the integer you got by counting its bytes.</p><p>So there is a way out, and there is a price. A <strong>shade</strong> is a deep value carried up to the surface. Sealing one, naming it, passing it around, storing it: all fine, all at depth 0. Looking at what is inside it is not.</p><p>Write <code>stamp.nc</code>:</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// stamp.nc — the Orpheus rule, and the error spec/01-strata.md §1.6 prints.</span>
+<p class="c meta-bar"><span>chapter 08</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/08-the-orpheus-rule.md">edit the source</a></span></p><h1 id="the-orpheus-rule"><a href="#the-orpheus-rule">The Orpheus rule</a></h1><blockquote><p>One idea: <strong>you may carry a value up; you must go back down to look at it.</strong></p></blockquote><p>Nine strata, and depth composes upwards: a thing built from parts is exactly as deep as its deepest part. That is <a href="../spec/01-strata.html">§1.1</a>, and on its own it would make deep values useless — one network call and everything downstream of it is at stratum 5 forever, including the integer you got by counting its bytes.</p><p>So there is a way out, and there is a price. A <strong>shade</strong> is a deep value carried up to the surface. Sealing one, naming it, passing it around, storing it: all fine, all at depth 0. Looking at what is inside it is not.</p><p>Write <code>stamp.nc</code>:</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// stamp.nc — the Orpheus rule, and the error spec/01-strata.md §1.6 prints.</span>
 <span class="c">//</span>
 <span class="c">// A shade may be carried up out of any stratum. It may only be looked at by</span>
 <span class="c">// going back down, and this does not: the look is at the top level of a file,</span>
@@ -112,7 +112,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">the face</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>

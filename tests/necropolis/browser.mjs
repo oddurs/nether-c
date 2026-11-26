@@ -191,7 +191,7 @@ try {
   await command("Browser.grantPermissions", { origin, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] }, false);
   for (const width of [1248, 768, 390, 320]) {
     await command("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width < 500 });
-    for (const path of ["/site/", "/site/releases.html", "/site/spec/00-overview.html", "/site/specimen.html", "/site/in-memoriam.html", "/site/manual/00-a-way-in.html"]) {
+    for (const path of ["/site/", "/site/releases.html", "/site/spec/index.html", "/site/spec/00-overview.html", "/site/specimen.html", "/site/in-memoriam.html", "/site/manual/index.html", "/site/manual/00-a-way-in.html"]) {
       await command("Page.navigate", { url: origin + path });
       await until("document.readyState === 'complete' && location.pathname === " + JSON.stringify(path));
       await evaluate("document.fonts.ready");
@@ -251,12 +251,26 @@ try {
       await checkTypeGrid(path + "@" + width);
       if (path.includes("/spec/")) {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents li').length"), 12);
-        assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
-        assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 11);
+        if (path.endsWith("/index.html")) {
+          assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 0);
+          assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 12);
+          assert.equal(await evaluate("document.querySelectorAll('main tbody tr').length"), 12);
+          assert.ok(await evaluate("Boolean(document.querySelector('.box.shout a[href*=\"71-canonical-encoding\"]'))"));
+        } else {
+          assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
+          assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 11);
+        }
       } else if (path.includes("/manual/")) {
         assert.equal(await evaluate("document.querySelectorAll('nav.contents li').length"), 10);
-        assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
-        assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 9);
+        if (path.endsWith("/index.html")) {
+          assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 0);
+          assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 10);
+          assert.equal(await evaluate("document.querySelectorAll('.chapters a.chapter').length"), 10);
+          assert.equal(await evaluate("document.querySelectorAll('.chapters .chapter-idea').length"), 10);
+        } else {
+          assert.equal(await evaluate("document.querySelectorAll('nav.contents [aria-current=page]').length"), 1);
+          assert.equal(await evaluate("document.querySelectorAll('nav.contents a').length"), 9);
+        }
       } else if (path.endsWith("/specimen.html")) {
         assert.equal(await evaluate("document.querySelectorAll('.glyph-card').length"), 140);
         assert.equal(await evaluate("document.querySelectorAll('pre.glyph-grid').length"), 280);
@@ -370,19 +384,22 @@ try {
         await command("Emulation.setEmulatedMedia", { features: [] });
         await until("[...document.querySelectorAll('img[data-still]')].every(i => !i.getAttribute('src').endsWith('-still.gif')) && [...document.images].every(i => i.complete && i.naturalWidth > 0)");
       }
-      const shotPrefix = path.includes("/spec/") ? "spec-"
+      const shotPrefix = path === "/site/spec/index.html" ? "spec-index-"
+        : path.includes("/spec/") ? "spec-"
+        : path === "/site/manual/index.html" ? "manual-index-"
         : path.includes("/manual/") ? "manual-"
         : path.endsWith("/releases.html") ? "releases-"
         : path.endsWith("/specimen.html") ? "specimen-"
         : path.endsWith("/in-memoriam.html") ? "in-memoriam-"
         : "site-";
       await screenshot(shotPrefix + width);
-      if (path.includes("/spec/")) {
+      if (path === "/site/spec/00-overview.html") {
         await evaluate("document.querySelector('.directory-drawer').open = true");
         await click('nav.contents a[href="02-calculus.html"]');
         await until("location.pathname === '/site/spec/02-calculus.html' && document.readyState === 'complete'");
         assert.match(await evaluate("document.querySelector('nav.contents [aria-current]').textContent"), /calculus/);
       } else if (path.endsWith("/releases.html")) {
+        assert.equal(await evaluate("document.querySelectorAll('nav.contents .directory-group').length"), 2, "releases directory separates guide and changelog");
         assert.ok(await evaluate("[...document.querySelectorAll('nav.contents a')].every(a => document.getElementById(a.hash.slice(1)))"), "releases directory anchors resolve");
         assert.ok(await evaluate("document.querySelectorAll('figure.listing figcaption .copy-btn').length > 0"), "releases listings get copy buttons");
         if (width === 1248) {
