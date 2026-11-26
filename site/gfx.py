@@ -169,14 +169,17 @@ class Frame:
         self.rect(x, y + h - 1, w, 1, lo)
         self.rect(x + w - 1, y, 1, h, lo)
 
-    def text(self, x: int, y: int, s: str, c: int) -> int:
+    def text(self, x: int, y: int, s: str, c: int, scale: int = 1) -> int:
         for ch in s.upper():
             glyph = FONT.get(ch, FONT[" "])
             for row, bits in enumerate(glyph):
                 for col, on in enumerate(bits):
                     if on == "#":
-                        self.set(x + col, y + row, c)
-            x += 6
+                        if scale == 1:
+                            self.set(x + col, y + row, c)
+                        else:
+                            self.rect(x + col * scale, y + row * scale, scale, scale, c)
+            x += 6 * scale
         return x
 
     @staticmethod
@@ -275,13 +278,7 @@ def cairn() -> tuple[list[Frame], list[int]]:
                 if shade is not None:
                     small.set(left + x, y + n, shade)
 
-    frame = Frame(32 * scale, 40 * scale, VOID)
-    for yy in range(40):
-        for x in range(32):
-            c = small.px[yy * 32 + x]
-            if c != VOID:
-                frame.rect(x * scale, yy * scale, scale, scale, c)
-    return [frame], [0]
+    return [magnify(small, scale)], [0]
 
 
 def magnify(source: Frame, scale: int) -> Frame:
@@ -326,11 +323,15 @@ def hero() -> tuple[list[Frame], list[int]]:
     w, h, frames = 200, 64, []
     for phase in range(12):
         f = Frame(w, h, VOID)
+
+        # Sky sediment drifting past the cairn silhouette.
         for n in range(38):
             x = (n * 37 + phase * (1 + n % 3)) % w
             y = 3 + (n * 19) % 43
             if not 77 < x < 124 or y < 24:
                 f.set(x, y, DEEP if n % 4 else ASH)
+
+        # Perspective shaft grid and descending horizontal strata lines.
         for x in range(-40, 241, 20):
             for y in range(43, 60):
                 xx = 100 + (x - 100) * (y - 39) // 23
@@ -338,6 +339,8 @@ def hero() -> tuple[list[Frame], list[int]]:
                     f.set(xx, y, DEEP)
         for y in (45, 50, 56, 62):
             f.rect(20 + (y - 43) * 2, y, 160 - (y - 43) * 4, 1, ASH)
+
+        # Plinth and three stacked cairn stones.
         f.rect(76, 51, 48, 2, STONE_MID)
         f.rect(81, 53, 38, 1, STONE_LIT)
         f.rect(87, 54, 26, 1, STONE_SHADE)
@@ -346,6 +349,8 @@ def hero() -> tuple[list[Frame], list[int]]:
         block(f, 88, 35, 24, 6, 4, STONE_LIT, STONE_MID, STONE_SHADE)
         block(f, 94, 28, 13, 5, 3, STONE_LIT, STONE_MID, STONE_SHADE)
         f.rect(89, 39, 18, 1, SULPHUR)
+
+        # Lamp alcove and periodic pulse on the top stone.
         pulse = phase % 6
         f.rect(98, 32, 5, 4, PLUM)
         f.rect(99, 33, 3, 2, STONE_DARK)
@@ -353,6 +358,8 @@ def hero() -> tuple[list[Frame], list[int]]:
             f.rect(97, 31, 7, 1, LILAC)
             f.set(96, 33, LILAC)
             f.set(105, 33, LILAC)
+
+        # Orbiting trace cube and five companion motes.
         angle = math.tau * phase / 12
         cx = 100 + round(math.cos(angle) * 33)
         cy = 21 + round(math.sin(angle) * 7)
@@ -372,7 +379,7 @@ def hero() -> tuple[list[Frame], list[int]]:
     return frames, [14] * len(frames)
 
 
-def write_gif(path: Path, frames: list[Frame], delays: list[int], loop: bool = True,
+def write_gif(frames: list[Frame], delays: list[int], loop: bool = True,
               mode: str = "nether") -> bytes:
     w, h = frames[0].w, frames[0].h
     out = bytearray(b"GIF89a")
@@ -417,7 +424,7 @@ def write_png(frame: Frame, scale: int = 1) -> bytes:
     for y in range(frame.h):
         row = bytes(frame.px[y * frame.w : (y + 1) * frame.w])
         if scale > 1:
-            row = bytes(b for px in row for _ in range(scale) for b in (px,))
+            row = bytes(px for px in row for _ in range(scale))
         for _ in range(scale):
             raw.append(0)  # filter: none. The image is flat colour; nothing to predict.
             raw += row
@@ -431,18 +438,6 @@ def write_png(frame: Frame, scale: int = 1) -> bytes:
         + chunk(b"IDAT", zlib.compress(bytes(raw), 9))
         + chunk(b"IEND", b"")
     )
-
-
-def big_text(f: Frame, x: int, y: int, s: str, c: int, scale: int) -> int:
-    """The 5x7 font, blown up. Blocky on purpose."""
-    for ch in s.upper():
-        glyph = FONT.get(ch, FONT[" "])
-        for row, bits in enumerate(glyph):
-            for col, on in enumerate(bits):
-                if on == "#":
-                    f.rect(x + col * scale, y + row * scale, scale, scale, c)
-        x += 6 * scale
-    return x
 
 
 # ── a 5x7 font ──────────────────────────────────────────────────────────────
@@ -780,13 +775,13 @@ def og_card() -> Frame:
         for x in ((y // 6) % 3, W - 5 + ((y // 6) % 3)):
             f.set(x, y, ASH)
 
-    big_text(f, 12, 14, "NETHER C", BONE, 3)          # 8 chars * 18 = 144
-    big_text(f, 12, 42, "A C DIALECT IN WHICH", SMOKE, 1)
-    big_text(f, 12, 52, "NOTHING RUNS", SALMON, 2)    # 12 chars * 12 = 144
+    f.text(12, 14, "NETHER C", BONE, scale=3)          # 8 chars * 18 = 144
+    f.text(12, 42, "A C DIALECT IN WHICH", SMOKE)
+    f.text(12, 52, "NOTHING RUNS", SALMON, scale=2)    # 12 chars * 12 = 144
 
     f.rect(12, 74, W - 24, 1, ASH)
-    big_text(f, 12, 81, "THE PROGRAM HAS ALREADY RUN.", SMOKE, 1)
-    big_text(f, 12, 90, "YOU READ WHAT IS LEFT OF IT.", SMOKE, 1)
+    f.text(12, 81, "THE PROGRAM HAS ALREADY RUN.", SMOKE)
+    f.text(12, 90, "YOU READ WHAT IS LEFT OF IT.", SMOKE)
     return f
 
 
@@ -821,12 +816,12 @@ def main() -> int:
         frames, delays = make()
         for mode, suffix in (("nether", ""), ("lit", "-lit")):
             filename = name.replace(".gif", suffix + ".gif")
-            work.append((filename, write_gif(OUT / filename, frames, delays, mode=mode),
+            work.append((filename, write_gif(frames, delays, mode=mode),
                          f"{len(frames)} frame(s)"))
             if len(frames) > 1:
                 still = filename.replace(".gif", "-still.gif")
                 settled = frames[0] if name.startswith("badge-") else frames[-1]
-                work.append((still, write_gif(OUT / still, [settled], [0],
+                work.append((still, write_gif([settled], [0],
                                               loop=False, mode=mode), "still"))
     work.append(("card.png", write_png(og_card(), scale=6), "1200x630"))
 

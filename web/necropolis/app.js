@@ -1,4 +1,4 @@
-import { Graph, Navigation, PAGE_SIZE, hex, preview, references, short, sourceExcerpt, utf8Prefix } from "./graph.js";
+import { Graph, Navigation, PAGE_SIZE, hex, plural, preview, references, short, sourceExcerpt, utf8, utf8Prefix } from "./graph.js";
 
 const $ = (id) => document.getElementById(id);
 const element = (tag, text, className) => {
@@ -49,6 +49,40 @@ function relations(target, edges) {
     }, "nc-more"));
 }
 
+function renderBytesInspector(detail, note, object) {
+  note(`${object.data.length} bytes. Preview limited to the first 2,048 bytes.`);
+  const body = element("pre");
+  const sample = object.data.subarray(0, 2048);
+  const textSample = utf8Prefix(object.data, 2048);
+  let textBtn, hexBtn;
+  const showText = () => {
+    textBtn.setAttribute("aria-pressed", "true");
+    hexBtn.setAttribute("aria-pressed", "false");
+    try { body.textContent = utf8.decode(textSample); }
+    catch { body.textContent = "This preview is not valid UTF-8. Use hex to inspect the exact bytes."; }
+  };
+  const showHex = () => {
+    textBtn.setAttribute("aria-pressed", "false");
+    hexBtn.setAttribute("aria-pressed", "true");
+    body.textContent = hex(sample).match(/.{1,32}/g)?.map((line) => line.match(/../g).join(" ")).join("\n") || "(empty)";
+  };
+  textBtn = button("Text", showText);
+  hexBtn = button("Hex", showHex);
+  detail.append(textBtn, hexBtn, body);
+  showText();
+}
+
+function renderSpanExcerpt(detail, note, span) {
+  const excerpt = sourceExcerpt(graph, span);
+  detail.append(element("h3", "Where this happened"));
+  note(`Source ${short(span.source)} · bytes ${span.start}–${span.end}${excerpt ? ` · line ${excerpt.line}` : ""}`);
+  if (excerpt) {
+    const code = element("pre", undefined, "nc-excerpt");
+    code.append(document.createTextNode(excerpt.before), element("mark", excerpt.selected), document.createTextNode(excerpt.after));
+    detail.append(code);
+  } else note("Source bytes unavailable, or the recorded span is outside them.");
+}
+
 function inspect(object) {
   const detail = $("detail");
   detail.replaceChildren();
@@ -63,43 +97,13 @@ function inspect(object) {
     const args = object.call.args.map((id) => preview(graph.get(id), 120));
     detail.append(element("pre", `${object.call.function}(${args.join(", ")})`));
   }
-  if (object.kind === "Bytes") {
-    note(`${object.data.length} bytes. Preview limited to the first 2,048 bytes.`);
-    const body = element("pre");
-    const sample = object.data.subarray(0, 2048);
-    const textSample = utf8Prefix(object.data, 2048);
-    let textBtn, hexBtn;
-    const showText = () => {
-      textBtn.setAttribute("aria-pressed", "true");
-      hexBtn.setAttribute("aria-pressed", "false");
-      try { body.textContent = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(textSample); }
-      catch { body.textContent = "This preview is not valid UTF-8. Use hex to inspect the exact bytes."; }
-    };
-    const showHex = () => {
-      textBtn.setAttribute("aria-pressed", "false");
-      hexBtn.setAttribute("aria-pressed", "true");
-      body.textContent = hex(sample).match(/.{1,32}/g)?.map((line) => line.match(/../g).join(" ")).join("\n") || "(empty)";
-    };
-    textBtn = button("Text", showText);
-    hexBtn = button("Hex", showHex);
-    detail.append(textBtn, hexBtn, body);
-    showText();
-  } else if (object.kind === "Str") detail.append(element("pre", object.data.slice(0, 2048) + (object.data.length > 2048 ? "…" : "")));
+  if (object.kind === "Bytes") renderBytesInspector(detail, note, object);
+  else if (object.kind === "Str") detail.append(element("pre", object.data.slice(0, 2048) + (object.data.length > 2048 ? "…" : "")));
   else if (object.kind === "Array" || object.kind === "Struct") {
     note(`${object.data.length} entries in declaration order. First 32 shown.`);
     object.data.slice(0, 32).forEach((v, i) => detail.append(element("pre", `${i + 1}. ${v.kind}: ${preview(v, 256)}`)));
   } else if (!object.call) detail.append(element("pre", preview(object, 2048)));
-  if (object.span) {
-    const s = object.span;
-    const excerpt = sourceExcerpt(graph, s);
-    detail.append(element("h3", "Where this happened"));
-    note(`Source ${short(s.source)} · bytes ${s.start}–${s.end}${excerpt ? ` · line ${excerpt.line}` : ""}`);
-    if (excerpt) {
-      const code = element("pre", undefined, "nc-excerpt");
-      code.append(document.createTextNode(excerpt.before), element("mark", excerpt.selected), document.createTextNode(excerpt.after));
-      detail.append(code);
-    } else note("Source bytes unavailable, or the recorded span is outside them.");
-  }
+  if (object.span) renderSpanExcerpt(detail, note, object.span);
 }
 
 function render() {
@@ -132,6 +136,50 @@ function failed(message) {
   $("state").textContent = graph ? "Burial did not finish. The previous trace is still shown below." : "Burial did not finish. Edit the source or retry.";
 }
 
+function commitBurial(data) {
+  const next = new Graph(data);
+  const nextNav = new Navigation(next.root);
+  const summary = `depth ${data.depth} · ${plural(data.holes.length, "hole")} · ${next.encoded.size} objects · ${data.fuel_spent.toLocaleString()} steps`;
+  const root = next.get(next.root);
+  const prevGraph = graph;
+  const prevNav = navigation;
+  const prevShown = shown;
+  const prevTitle = $("trace-title").textContent;
+  const prevSummary = $("summary").textContent;
+  const prevRoots = Array.from($("roots").childNodes);
+  const prevHidden = $("explorer").hidden;
+  graph = next;
+  navigation = nextNav;
+  shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
+  try {
+    $("trace-title").textContent = `Trace ${short(graph.root)}`;
+    $("summary").textContent = summary;
+    const frag = document.createDocumentFragment();
+    for (const [label, ids] of [["hole", root.holes], ["deposit", root.deposits]]) {
+      ids.slice(0, 6).forEach((id, i) => frag.append(button(`${label} ${i + 1}`, () => visit(id), `nc-root-${label}`)));
+      if (ids.length > 6) frag.append(button(`All ${ids.length} ${label}s`, () => {
+        navigation.visit(graph.root);
+        shown = { incoming: PAGE_SIZE, outgoing: Math.min(references(root).length, PAGE_SIZE * 4) };
+        render();
+        $("selected-title").focus({ preventScroll: true });
+      }));
+    }
+    $("roots").replaceChildren(frag);
+    $("explorer").hidden = false;
+    render();
+  } catch (inner) {
+    graph = prevGraph;
+    navigation = prevNav;
+    shown = prevShown;
+    $("trace-title").textContent = prevTitle;
+    $("summary").textContent = prevSummary;
+    $("roots").replaceChildren(...prevRoots);
+    $("explorer").hidden = prevHidden;
+    if (prevGraph) render();
+    throw inner;
+  }
+}
+
 function bury() {
   stop();
   $("diagnostic").hidden = true;
@@ -147,47 +195,7 @@ function bury() {
     try {
       if (!data || typeof data !== "object") throw new Error("The burial worker returned an invalid response.");
       if (data.error) { failed(data.note ? `${data.error}\n${data.note}` : data.error); return; }
-      const next = new Graph(data);
-      const nextNav = new Navigation(next.root);
-      const summary = `depth ${data.depth} · ${data.holes.length} hole${data.holes.length === 1 ? "" : "s"} · ${next.encoded.size} objects · ${data.fuel_spent.toLocaleString()} steps`;
-      const root = next.get(next.root);
-      const prevGraph = graph;
-      const prevNav = navigation;
-      const prevShown = shown;
-      const prevTitle = $("trace-title").textContent;
-      const prevSummary = $("summary").textContent;
-      const prevRoots = Array.from($("roots").childNodes);
-      const prevHidden = $("explorer").hidden;
-      graph = next;
-      navigation = nextNav;
-      shown = { incoming: PAGE_SIZE, outgoing: PAGE_SIZE };
-      try {
-        $("trace-title").textContent = `Trace ${short(graph.root)}`;
-        $("summary").textContent = summary;
-        const frag = document.createDocumentFragment();
-        for (const [label, ids] of [["hole", root.holes], ["deposit", root.deposits]]) {
-          ids.slice(0, 6).forEach((id, i) => frag.append(button(`${label} ${i + 1}`, () => visit(id), `nc-root-${label}`)));
-          if (ids.length > 6) frag.append(button(`All ${ids.length} ${label}s`, () => {
-            navigation.visit(graph.root);
-            shown = { incoming: PAGE_SIZE, outgoing: Math.min(references(root).length, PAGE_SIZE * 4) };
-            render();
-            $("selected-title").focus({ preventScroll: true });
-          }));
-        }
-        $("roots").replaceChildren(frag);
-        $("explorer").hidden = false;
-        render();
-      } catch (inner) {
-        graph = prevGraph;
-        navigation = prevNav;
-        shown = prevShown;
-        $("trace-title").textContent = prevTitle;
-        $("summary").textContent = prevSummary;
-        $("roots").replaceChildren(...prevRoots);
-        $("explorer").hidden = prevHidden;
-        if (prevGraph) render();
-        throw inner;
-      }
+      commitBurial(data);
       stop();
       $("state").textContent = "Buried. Choose a hole, deposit, or reference to explore.";
     } catch (e) { failed(e.message); }

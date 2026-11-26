@@ -7,7 +7,7 @@ calculus (`Lit`, `Var`, `Prim`, `Select`, `Abs`, `App`, `Descend`, `Seal`,
 syntax lowering are tested directly against the Rust compiler and evaluator.
 """
 from __future__ import annotations
-from typing import Dict, Tuple
+from collections.abc import Callable
 
 from kernel import (
     Formula,
@@ -18,7 +18,6 @@ from kernel import (
     Theorem,
     app,
     elem,
-    eq,
     inst_all,
     lattice_decide,
     le,
@@ -301,7 +300,6 @@ d2_p = var("d2_p")
 d3_p = var("d3_p")
 d_f_p = var("d_f_p")
 d_a_p = var("d_a_p")
-d_r_p = var("d_r_p")
 y = var("y")
 
 
@@ -419,7 +417,7 @@ SUBST_DEPTH = InductiveRelation(
 )
 
 
-def _subst_prop(args: Tuple[Term, ...]) -> Formula:
+def _subst_prop(args: tuple[Term, ...]) -> Formula:
     _expr, d_before, d_arg, d_after = args
     return le(d_after, d_max(d_before, d_arg))
 
@@ -610,17 +608,17 @@ STEP_TYPED = InductiveRelation(
 )
 
 
-def _monotone_prop(args: Tuple[Term, ...]) -> Formula:
+def _monotone_prop(args: tuple[Term, ...]) -> Formula:
     _before, _after, d_before, d_after = args
     return le(d_after, d_before)
 
 
 def prove_soundness_of_bound() -> Theorem:
     subst_thm = prove_substitution_monotonicity()
-    cases: Dict[str, object] = {}
+    cases: dict[str, Callable[[tuple[Theorem, ...], tuple[Theorem, ...]], Theorem]] = {}
     for r in STEP_TYPED.rules:
         if r.name == "StepBeta":
-            def _beta_case(prems: Tuple[Theorem, ...], _ihs: Tuple[Theorem, ...], r: Rule = r) -> Theorem:
+            def _beta_case(prems: tuple[Theorem, ...], _ihs: tuple[Theorem, ...], r: Rule = r) -> Theorem:
                 sub_bound = mp(inst_all(subst_thm, [b, d_r, d_a, d_sub]), prems[0])
                 return lattice_decide(
                     _monotone_prop(r.conclusion.terms[0].args),
@@ -636,7 +634,7 @@ def prove_soundness_of_bound() -> Theorem:
         STEP_TYPED,
         ("_before", "_after", "_d_before", "_d_after"),
         le(var("_d_after"), var("_d_before")),
-        cases,  # type: ignore[arg-type]
+        cases,
     )
 
 

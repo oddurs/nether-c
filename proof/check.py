@@ -2,11 +2,11 @@
 """Verify all machine-checked proofs in `proof/` and reject admitted obligations."""
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 import io
 from pathlib import Path
 import sys
 import tokenize
-from typing import Sequence
 
 from kernel import (
     Formula,
@@ -79,6 +79,7 @@ KERNEL_PRIVATE = frozenset(
         "_rule_payload",
         "_thm_payload",
         "_rel_payload",
+        "_require_payload",
     }
 )
 
@@ -114,152 +115,146 @@ def verify_no_admissions(directory: Path = PROOF_DIR) -> int:
     return count
 
 
-def verify_kernel_soundness_guards() -> None:
-    """Self-test the LCF kernel: forged theorems, missing cases, undischarged hypotheses,
-    false lattice claims, and admitted obligations must all be rejected."""
+def _expect_fault(
+    fn: Callable[[], object],
+    msg: str,
+    exc_type: type[BaseException] = ProofFault,
+) -> None:
+    try:
+        fn()
+    except exc_type:
+        pass
+    else:
+        raise AssertionError(msg)
+
+
+def _verify_sealing_guards() -> None:
     p = pred("P", var("x"))
 
     # 1. Direct Theorem construction without the kernel token must fail
-    try:
-        Theorem(object(), frozenset(), p)
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel allowed forged Theorem construction")
-
-    # 2. False lattice inequality (`d1 <= d2` with no hypotheses) must fail
-    try:
-        lattice_decide(le(var("d1"), var("d2")))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel accepted invalid lattice inequality")
-
-    # 3. Rule induction with a missing rule case must fail
-    rel = InductiveRelation(
-        "DummyRel",
-        (
-            Rule("Base", (), pred("DummyRel", var("0"))),
-            Rule("Step", (pred("DummyRel", var("d")),), pred("DummyRel", var("d"))),
-        ),
+    _expect_fault(
+        lambda: Theorem(object(), frozenset(), p),
+        "kernel allowed forged Theorem construction",
     )
-    try:
-        rule_induction(
-            rel,
-            ("_d",),
-            le(var("_d"), var("8")),
-            {"Base": lambda _prems, _ihs: lattice_decide(le(var("0"), var("8")))},
-        )
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel allowed rule_induction with missing rule case")
-
-    # 4. Rule induction whose case leaves an extra undischarged assumption must fail
-    extra = pred("UnprovedExtra", var("_d"))
-    try:
-        rule_induction(
-            rel,
-            ("_d",),
-            extra,
-            {
-                "Base": lambda _prems, _ihs: assume(extra),
-                "Step": lambda _prems, ihs: ihs[0],
-            },
-        )
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel allowed rule_induction with undischarged assumption")
 
     # 5. Admission scanner must reject `sorry` and `admit`
-    try:
-        scan_source_for_admissions(Path("synthetic.py"), "thm = sorry()\n")
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("scanner allowed `sorry` identifier")
+    _expect_fault(
+        lambda: scan_source_for_admissions(Path("synthetic.py"), "thm = sorry()\n"),
+        "scanner allowed `sorry` identifier",
+    )
 
     # 6. A proof script outside the kernel must not name the seal
+    _expect_fault(
+        lambda: scan_source_for_admissions(Path("synthetic.py"), "from kernel import _SEAL\n"),
+        "scanner allowed a proof script to import the kernel seal",
+    )
+
+    # 19. Duck-typed and subclassed Theorem / InductiveRelation objects must be rejected
+    class FakeThm:
+        assumptions = frozenset()
+        conclusion = eq(var("1"), var("0"))
+
+    _expect_fault(
+        lambda: sym(FakeThm()),  # type: ignore[arg-type]
+        "kernel accepted duck-typed Theorem in sym",
+    )
+    _expect_fault(
+        lambda: type("EvilThm", (Theorem,), {}),
+        "kernel allowed subclassing Theorem",
+    )
+
+    class FakeRel:
+        name = "HasType"
+        arity = 1
+        rules = ()
+
+    _expect_fault(
+        lambda: rule_induction(FakeRel(), ("_a",), eq(var("0"), var("1")), {}),  # type: ignore[arg-type]
+        "kernel accepted duck-typed InductiveRelation in rule_induction",
+    )
+
+    # 22. Malformed Formula construction must be rejected
+    _expect_fault(
+        lambda: Formula("=", (var("0"), var("0")), (pred("False"),), "0"),
+        "Formula accepted extraneous subs/binder",
+    )
+
+    # 25 & 28. Sealed kernel objects must not expose __dict__ or allow object.__setattr__ mutation
+    t0 = refl(var("0"))
+    seal_rel = InductiveRelation("SealRel", (Rule("Mk", (), pred("SealRel", var("0"))),))
+    term_0 = var("0")
+    form_0 = eq(term_0, term_0)
+    rule_0 = Rule("R0", (), pred("P0", term_0))
+    for obj, attr, bad_val in (
+        (t0, "conclusion", eq(var("0"), var("1"))),
+        (seal_rel, "rules", ()),
+        (term_0, "op", "1"),
+        (form_0, "terms", (var("0"), var("1"))),
+        (rule_0, "conclusion", eq(var("0"), var("1"))),
+    ):
+        _expect_fault(
+            lambda obj=obj: vars(obj),
+            f"{type(obj).__name__} exposed __dict__ via vars()",
+            TypeError,
+        )
+        _expect_fault(
+            lambda obj=obj, attr=attr, bad_val=bad_val: object.__setattr__(obj, attr, bad_val),
+            f"{type(obj).__name__} allowed object.__setattr__ mutation",
+            AttributeError,
+        )
+
+    # 30. Re-calling __init__ must never mutate sealed kernel objects in place (C1)
+    sealed_thm = refl(var("0"))
     try:
-        scan_source_for_admissions(Path("synthetic.py"), "from kernel import _SEAL\n")
-    except ProofFault:
+        sealed_thm.conclusion.__init__("=", (var("0"), var("1")))  # type: ignore[misc]
+    except (TypeError, ProofFault):
         pass
-    else:
-        raise AssertionError("scanner allowed a proof script to import the kernel seal")
+    if sealed_thm.conclusion != eq(var("0"), var("0")):
+        raise AssertionError(f"re-calling __init__ mutated sealed Theorem: {sealed_thm.conclusion}")
+
+
+def _verify_lattice_guards() -> None:
+    d1_s, d2_s = var("δ1"), var("δ2")
+
+    # 2. False lattice inequality (`d1 <= d2` with no hypotheses) must fail
+    _expect_fault(
+        lambda: lattice_decide(le(var("d1"), var("d2"))),
+        "kernel accepted invalid lattice inequality",
+    )
 
     # 7. False set-inclusion claim `(max_set(δ1) <= max_set(δ2)) |- (δ1 ⊆ δ2)` must fail
-    d1_s, d2_s = var("δ1"), var("δ2")
-    try:
-        lattice_decide(
+    _expect_fault(
+        lambda: lattice_decide(
             subset(d1_s, d2_s),
             [assume(le(app("max_set", d1_s), app("max_set", d2_s)))],
-        )
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("lattice_decide accepted false max_set -> subset claim")
+        ),
+        "lattice_decide accepted false max_set -> subset claim",
+    )
 
-    # 8. Incomparable sets with equal maxima exist: `|- ¬((δ1 ⊈ δ2 ∧ δ2 ⊈ δ1) ∧ max_set(δ1)=_d max_set(δ2))` must fail
-    try:
-        lattice_decide(
+    # 8. Incomparable sets with equal maxima exist
+    _expect_fault(
+        lambda: lattice_decide(
             neg(
                 conj(
                     conj(not_subset(d1_s, d2_s), not_subset(d2_s, d1_s)),
                     eq_d(app("max_set", d1_s), app("max_set", d2_s)),
                 )
             )
-        )
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("lattice_decide missed incomparable sets sharing a maximum")
-
-    # 9. InductiveRelation must reject non-predicate / non-matching conclusions (`0 = 1`)
-    try:
-        InductiveRelation("Forge", (Rule("Bad", (), eq(var("0"), var("1"))),))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("InductiveRelation allowed non-predicate conclusion")
-
-    # 10. InductiveRelation must reject empty rules and non-positive recursion
-    try:
-        InductiveRelation("Empty", ())
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("InductiveRelation allowed empty rules")
-    try:
-        InductiveRelation("Neg", (Rule("Bad", (neg(pred("Neg", var("x"))),), pred("Neg", var("x"))),))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("InductiveRelation allowed negative recursion")
-
-    # 11. Constants cannot be generalized or bound
-    try:
-        gen("0", assume(eq(var("0"), var("x"))))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel allowed generalizing constant `0`")
+        ),
+        "lattice_decide missed incomparable sets sharing a maximum",
+    )
 
     # 12. lattice_decide must not assume `0 ∈ δ` implicitly from variable name
-    try:
-        lattice_decide(elem(var("0"), var("δ")))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("lattice_decide assumed implicit `0 ∈ δ` axiom")
+    _expect_fault(
+        lambda: lattice_decide(elem(var("0"), var("δ"))),
+        "lattice_decide assumed implicit `0 ∈ δ` axiom",
+    )
 
     # 13. lattice_decide must distinguish opaque applications from variables
-    try:
-        lattice_decide(eq_d(app("f", var("x")), var("f(x)")))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("lattice_decide conflated app `f(x)` with var `f(x)`")
+    _expect_fault(
+        lambda: lattice_decide(eq_d(app("f", var("x")), var("f(x)"))),
+        "lattice_decide conflated app `f(x)` with var `f(x)`",
+    )
 
     # 14. Nested implications must not use 3-element chain shortcut
     x0, x1, x2, x3 = var("x0"), var("x1"), var("x2"), var("x3")
@@ -270,103 +265,123 @@ def verify_kernel_soundness_guards() -> None:
             imp(imp(le(x2, x1), le(x3, x0)), imp(imp(le(x3, x2), le(x3, x0)), le(x3, x0))),
         ),
     )
-    try:
-        lattice_decide(pigeon)
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("lattice_decide accepted 3-chain false nested implication")
+    _expect_fault(
+        lambda: lattice_decide(pigeon),
+        "lattice_decide accepted 3-chain false nested implication",
+    )
 
-    # 15. rule_induction must freshen rule variables colliding with prop free vars
+    # 20. Polymorphic FOL `=` must not be decided by finite-domain lattice_decide
+    _expect_fault(
+        lambda: lattice_decide(eq(var("0"), var("0"))),
+        "lattice_decide accepted polymorphic FOL `=`",
+    )
+
+    # 27. Reject short-circuited out-of-range depths, reserved constants, and Unicode digits
+    for bad_goal in (
+        disj(le(var("0"), var("0")), le(var("999"), var("0"))),
+        le(var("True"), var("8")),
+        le(var("²"), var("8")),
+    ):
+        _expect_fault(
+            lambda bad_goal=bad_goal: lattice_decide(bad_goal),
+            f"lattice_decide accepted invalid goal `{bad_goal}`",
+        )
+
+    # 32. lattice_decide must reject unregistered compound terms (C3)
+    for bad_compound in (
+        le(app("VInt", var("999")), var("8")),
+        le(app("f", var("x")), var("8")),
+        subset(app("foo", var("0")), app("foo", var("0"))),
+    ):
+        _expect_fault(
+            lambda bad_compound=bad_compound: lattice_decide(bad_compound),
+            f"lattice_decide accepted unregistered compound term `{bad_compound}`",
+        )
+
+    # 33. Bit-projection and membership weakening must still reject false set/depth claims
+    for bad_opt in (
+        neg(conj(not_subset(d1_s, d2_s), not_subset(d2_s, d1_s))),
+        imp(le(var("d"), app("max_set", d1_s)), elem(var("d"), d1_s)),
+        imp(elem(var("d"), d1_s), le(var("d"), var("0"))),
+    ):
+        _expect_fault(
+            lambda bad_opt=bad_opt: lattice_decide(bad_opt),
+            f"lattice_decide accepted false set/depth claim `{bad_opt}`",
+        )
+
+
+def _verify_induction_guards() -> None:
+    # 3. Rule induction with a missing rule case must fail
+    rel = InductiveRelation(
+        "DummyRel",
+        (
+            Rule("Base", (), pred("DummyRel", var("0"))),
+            Rule("Step", (pred("DummyRel", var("d")),), pred("DummyRel", var("d"))),
+        ),
+    )
+    _expect_fault(
+        lambda: rule_induction(
+            rel,
+            ("_d",),
+            le(var("_d"), var("8")),
+            {"Base": lambda _prems, _ihs: lattice_decide(le(var("0"), var("8")))},
+        ),
+        "kernel allowed rule_induction with missing rule case",
+    )
+
+    # 4. Rule induction whose case leaves an extra undischarged assumption must fail
+    extra = pred("UnprovedExtra", var("_d"))
+    _expect_fault(
+        lambda: rule_induction(
+            rel,
+            ("_d",),
+            extra,
+            {
+                "Base": lambda _prems, _ihs: assume(extra),
+                "Step": lambda _prems, ihs: ihs[0],
+            },
+        ),
+        "kernel allowed rule_induction with undischarged assumption",
+    )
+
+    # 9 & 10. Reject non-predicate conclusions, empty rules, and negative recursion
+    _expect_fault(
+        lambda: InductiveRelation("Forge", (Rule("Bad", (), eq(var("0"), var("1"))),)),
+        "InductiveRelation allowed non-predicate conclusion",
+    )
+    _expect_fault(
+        lambda: InductiveRelation("Empty", ()),
+        "InductiveRelation allowed empty rules",
+    )
+    _expect_fault(
+        lambda: InductiveRelation("Neg", (Rule("Bad", (neg(pred("Neg", var("x"))),), pred("Neg", var("x"))),)),
+        "InductiveRelation allowed negative recursion",
+    )
+
+    # 15 & 16. Freshen colliding rule vars and reject conflicting relation definitions
     any_rel = InductiveRelation("AnyRel", (Rule("R1", (), pred("AnyRel", var("x"))),))
-    try:
-        rule_induction(
+    _expect_fault(
+        lambda: rule_induction(
             any_rel,
             ("_a",),
             eq(var("_a"), var("x")),
             {"R1": lambda _p, _ih: refl(var("x"))},
-        )
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("rule_induction unified rule variable with prop free var")
-
-    # 16. Conflicting InductiveRelation definitions for the same name must fail
-    try:
-        InductiveRelation("AnyRel", (Rule("R2", (), pred("AnyRel", var("1"))),))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel allowed conflicting InductiveRelation definitions")
-
-    # 17. rewrite must not replace predicate head symbols
-    rw = rewrite(assume(eq(app("P", var("x")), app("Q", var("x")))), assume(pred("P", var("x"))))
-    if rw.conclusion != pred("P", var("x")):
-        raise AssertionError(f"rewrite altered predicate head symbol: {rw.conclusion}")
-
-    # 18. inst must avoid variable capture under quantifiers
-    f_all = forall("x", forall("y", pred("R", var("x"), var("y"))))
-    t_inst = inst(assume(f_all), var("y"))
-    if t_inst.conclusion.binder == "y":
-        raise AssertionError(f"inst captured bound variable `y`: {t_inst.conclusion}")
-
-    # 19. Duck-typed and subclassed Theorem / InductiveRelation objects must be rejected
-    class FakeThm:
-        assumptions = frozenset()
-        conclusion = eq(var("1"), var("0"))
-
-    try:
-        sym(FakeThm())  # type: ignore[arg-type]
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel accepted duck-typed Theorem in sym")
-
-    try:
-        type("EvilThm", (Theorem,), {})
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel allowed subclassing Theorem")
-
-    class FakeRel:
-        name = "HasType"
-        arity = 1
-        rules = ()
-
-    try:
-        rule_induction(FakeRel(), ("_a",), eq(var("0"), var("1")), {})  # type: ignore[arg-type]
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("kernel accepted duck-typed InductiveRelation in rule_induction")
-
-    # 20. Polymorphic FOL `=` must not be decided by finite-domain lattice_decide
-    try:
-        lattice_decide(eq(var("0"), var("0")))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("lattice_decide accepted polymorphic FOL `=`")
+        ),
+        "rule_induction unified rule variable with prop free var",
+    )
+    _expect_fault(
+        lambda: InductiveRelation("AnyRel", (Rule("R2", (), pred("AnyRel", var("1"))),)),
+        "kernel allowed conflicting InductiveRelation definitions",
+    )
 
     # 21. Mutually negative InductiveRelation premises must be rejected
-    try:
-        InductiveRelation(
+    _expect_fault(
+        lambda: InductiveRelation(
             "MutNegA",
             (Rule("NegStep", (neg(pred("MutNegB", var("x"))),), pred("MutNegA", var("x"))),),
-        )
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("InductiveRelation allowed negative predicate premise")
-
-    # 22. Malformed Formula construction must be rejected
-    try:
-        Formula("=", (var("0"), var("0")), (pred("False"),), "0")
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("Formula accepted extraneous subs/binder")
+        ),
+        "InductiveRelation allowed negative predicate premise",
+    )
 
     # 23. rule_induction must snapshot `params` against stateful iterables
     pair_rel = InductiveRelation("Pair01", (Rule("Mk", (), pred("Pair01", var("0"), var("1"))),))
@@ -382,17 +397,15 @@ def verify_kernel_soundness_guards() -> None:
             self.calls += 1
             return iter(("_a", "_a") if self.calls == 4 else ("_a", "_b"))
 
-    try:
-        rule_induction(
+    _expect_fault(
+        lambda: rule_induction(
             pair_rel,
             EvilParams(),  # type: ignore[arg-type]
             eq(var("_a"), var("1")),
             {"Mk": lambda _p, _ih: refl(var("1"))},
-        )
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("rule_induction accepted stateful params iterable")
+        ),
+        "rule_induction accepted stateful params iterable",
+    )
 
     # 24. apply_rule must snapshot `subst` against stateful dict subclasses
     eq_zero = InductiveRelation(
@@ -413,87 +426,44 @@ def verify_kernel_soundness_guards() -> None:
     if res_map.conclusion != pred("EqZero", var("0")):
         raise AssertionError(f"apply_rule accepted stateful dict substitution: {res_map.conclusion}")
 
-    # 25. Theorem and InductiveRelation must not expose __dict__ or allow attribute mutation
-    t0 = refl(var("0"))
-    try:
-        vars(t0)
-    except TypeError:
-        pass
-    else:
-        raise AssertionError("Theorem exposed __dict__ via vars()")
-    try:
-        object.__setattr__(t0, "conclusion", eq(var("0"), var("1")))
-    except AttributeError:
-        pass
-    else:
-        raise AssertionError("Theorem allowed object.__setattr__ mutation")
-    try:
-        object.__setattr__(pair_rel, "rules", ())
-    except AttributeError:
-        pass
-    else:
-        raise AssertionError("InductiveRelation allowed object.__setattr__ mutation")
+
+def _verify_sort_guards() -> None:
+    # 11. Constants cannot be generalized or bound
+    _expect_fault(
+        lambda: gen("0", assume(eq(var("0"), var("x")))),
+        "kernel allowed generalizing constant `0`",
+    )
+
+    # 17. rewrite must not replace predicate head symbols
+    rw = rewrite(assume(eq(app("P", var("x")), app("Q", var("x")))), assume(pred("P", var("x"))))
+    if rw.conclusion != pred("P", var("x")):
+        raise AssertionError(f"rewrite altered predicate head symbol: {rw.conclusion}")
+
+    # 18. inst must avoid variable capture under quantifiers
+    f_all = forall("x", forall("y", pred("R", var("x"), var("y"))))
+    t_inst = inst(assume(f_all), var("y"))
+    if t_inst.conclusion.binder == "y":
+        raise AssertionError(f"inst captured bound variable `y`: {t_inst.conclusion}")
 
     # 26. Reserved 0-ary constructors (Bool, VUnit, Nil) cannot be substituted as variables
     for cname in ("Bool", "VUnit", "Nil"):
-        try:
-            subst_term(var(cname), {cname: var("I64")})
-        except ProofFault:
-            pass
-        else:
-            raise AssertionError(f"subst_term treated reserved constant `{cname}` as a variable")
-
-    # 27. lattice_decide must reject short-circuited out-of-range depths, reserved constants, and Unicode digits
-    for bad_goal in (
-        disj(le(var("0"), var("0")), le(var("999"), var("0"))),
-        le(var("True"), var("8")),
-        le(var("²"), var("8")),
-    ):
-        try:
-            lattice_decide(bad_goal)
-        except ProofFault:
-            pass
-        else:
-            raise AssertionError(f"lattice_decide accepted invalid goal `{bad_goal}`")
-
-    # 28. Term, Formula, and Rule must not expose __dict__ or allow object.__setattr__ mutation
-    term_0 = var("0")
-    form_0 = eq(term_0, term_0)
-    rule_0 = Rule("R0", (), pred("P0", term_0))
-    for obj, attr, bad_val in (
-        (term_0, "op", "1"),
-        (form_0, "terms", (var("0"), var("1"))),
-        (rule_0, "conclusion", eq(var("0"), var("1"))),
-    ):
-        try:
-            vars(obj)
-        except TypeError:
-            pass
-        else:
-            raise AssertionError(f"{type(obj).__name__} exposed __dict__ via vars()")
-        try:
-            object.__setattr__(obj, attr, bad_val)
-        except AttributeError:
-            pass
-        else:
-            raise AssertionError(f"{type(obj).__name__} allowed object.__setattr__ mutation")
+        _expect_fault(
+            lambda cname=cname: subst_term(var(cname), {cname: var("I64")}),
+            f"subst_term treated reserved constant `{cname}` as a variable",
+        )
 
     # 29. Quantifiers over lattice_decide variables must preserve Depth/Set sorts across gen/inst
     d_le_8 = gen("d", lattice_decide(le(var("d"), var("8"))))
     for bad_term in (var("9"), var("∅"), app("VUnit")):
-        try:
-            inst(d_le_8, bad_term)
-        except ProofFault:
-            pass
-        else:
-            raise AssertionError(f"inst allowed non-Depth term `{bad_term}` for Depth quantifier")
+        _expect_fault(
+            lambda bad_term=bad_term: inst(d_le_8, bad_term),
+            f"inst allowed non-Depth term `{bad_term}` for Depth quantifier",
+        )
     x_le_8 = gen("x", inst(d_le_8, var("x")))
-    try:
-        inst(x_le_8, var("9"))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("inst lost Depth sort after re-generalization")
+    _expect_fault(
+        lambda: inst(x_le_8, var("9")),
+        "inst lost Depth sort after re-generalization",
+    )
     bad_ind = InductiveRelation("BadDepthRel", (Rule("R", (), pred("BadDepthRel", var("d"))),))
     bad_ind_thm = rule_induction(
         bad_ind,
@@ -501,64 +471,34 @@ def verify_kernel_soundness_guards() -> None:
         le(var("_d"), var("8")),
         {"R": lambda _p, _ih: lattice_decide(le(var("d"), var("8")))},
     )
-    try:
-        inst(bad_ind_thm, var("9"))
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("rule_induction lost Depth sort on inductive parameter")
-
-    # 30. Re-calling __init__ must never mutate sealed kernel objects in place (C1)
-    sealed_thm = refl(var("0"))
-    try:
-        sealed_thm.conclusion.__init__("=", (var("0"), var("1")))  # type: ignore[misc]
-    except (TypeError, ProofFault):
-        pass
-    if sealed_thm.conclusion != eq(var("0"), var("0")):
-        raise AssertionError(f"re-calling __init__ mutated sealed Theorem: {sealed_thm.conclusion}")
+    _expect_fault(
+        lambda: inst(bad_ind_thm, var("9")),
+        "rule_induction lost Depth sort on inductive parameter",
+    )
 
     # 31. rule_induction must reject assumed sorts on unsorted premise-only rule vars (C2)
     boom = InductiveRelation(
         "BoomUnsorted",
         (Rule("Mk", (eq(var("d"), var("9")),), pred("BoomUnsorted", var("0"))),),
     )
-    try:
-        rule_induction(
+    _expect_fault(
+        lambda: rule_induction(
             boom,
             ("_a",),
             le(var("9"), var("8")),
             {"Mk": lambda prems, _ihs: rewrite(prems[0], lattice_decide(le(var("d"), var("8"))))},
-        )
-    except ProofFault:
-        pass
-    else:
-        raise AssertionError("rule_induction erased Depth sort on unsorted premise-only variable")
+        ),
+        "rule_induction erased Depth sort on unsorted premise-only variable",
+    )
 
-    # 32. lattice_decide must reject unregistered compound terms (C3)
-    for bad_compound in (
-        le(app("VInt", var("999")), var("8")),
-        le(app("f", var("x")), var("8")),
-        subset(app("foo", var("0")), app("foo", var("0"))),
-    ):
-        try:
-            lattice_decide(bad_compound)
-        except ProofFault:
-            pass
-        else:
-            raise AssertionError(f"lattice_decide accepted unregistered compound term `{bad_compound}`")
 
-    # 33. Bit-projection and membership weakening must still reject false set/depth claims
-    for bad_opt in (
-        neg(conj(not_subset(d1_s, d2_s), not_subset(d2_s, d1_s))),
-        imp(le(var("d"), app("max_set", d1_s)), elem(var("d"), d1_s)),
-        imp(elem(var("d"), d1_s), le(var("d"), var("0"))),
-    ):
-        try:
-            lattice_decide(bad_opt)
-        except ProofFault:
-            pass
-        else:
-            raise AssertionError(f"lattice_decide accepted false set/depth claim `{bad_opt}`")
+def verify_kernel_soundness_guards() -> None:
+    """Self-test the LCF kernel: forged theorems, missing cases, undischarged hypotheses,
+    false lattice claims, and admitted obligations must all be rejected."""
+    _verify_sealing_guards()
+    _verify_lattice_guards()
+    _verify_induction_guards()
+    _verify_sort_guards()
 
 
 def verify_closed_theorem(name: str, thm: Theorem, expected_conclusion: str) -> None:
@@ -576,141 +516,139 @@ def main(argv: Sequence[str] = ()) -> int:
     _ = argv
     scanned = verify_no_admissions()
     verify_kernel_soundness_guards()
+    n_fixtures, _n_exclusions = encoding.verify_codec_fixtures_and_exclusions()
 
-    t_amb = calculus.prove_ambient_soundness()
-    verify_closed_theorem(
-        "ambient_soundness",
-        t_amb,
-        "(∀_a0. (∀_a1:Set. (∀_a2. (∀_a3. (∀_a4:Depth. (∀_a5:Set. (HasType(_a0, _a1, _a2, _a3, _a4, _a5) → (_a4 <= max_set(∪(_a1, _a5))))))))))",
-    )
-
-    t_sub = calculus.prove_substitution_monotonicity()
-    verify_closed_theorem(
-        "substitution_monotonicity",
-        t_sub,
-        "(∀_a0. (∀_a1:Depth. (∀_a2:Depth. (∀_a3:Depth. (SubstDepth(_a0, _a1, _a2, _a3) → (_a3 <= max(_a1, _a2)))))))",
-    )
-
-    t_mon = calculus.prove_soundness_of_bound()
-    verify_closed_theorem(
-        "soundness_of_bound",
-        t_mon,
-        "(∀_a0. (∀_a1. (∀_a2:Depth. (∀_a3:Depth. (StepTyped(_a0, _a1, _a2, _a3) → (_a3 <= _a2))))))",
-    )
-
-    orpheus_thms = [
+    theorems = [
+        (
+            "ambient_soundness",
+            f"({len(calculus.HAS_TYPE.rules)} typing rules)",
+            calculus.prove_ambient_soundness(),
+            "(∀_a0. (∀_a1:Set. (∀_a2. (∀_a3. (∀_a4:Depth. (∀_a5:Set. (HasType(_a0, _a1, _a2, _a3, _a4, _a5) → (_a4 <= max_set(∪(_a1, _a5))))))))))",
+        ),
+        (
+            "substitution_monotonicity",
+            f"({len(calculus.SUBST_DEPTH.rules)} subst rules)",
+            calculus.prove_substitution_monotonicity(),
+            "(∀_a0. (∀_a1:Depth. (∀_a2:Depth. (∀_a3:Depth. (SubstDepth(_a0, _a1, _a2, _a3) → (_a3 <= max(_a1, _a2)))))))",
+        ),
+        (
+            "soundness_of_bound",
+            f"({len(calculus.STEP_TYPED.rules)} step rules)",
+            calculus.prove_soundness_of_bound(),
+            "(∀_a0. (∀_a1. (∀_a2:Depth. (∀_a3:Depth. (StepTyped(_a0, _a1, _a2, _a3) → (_a3 <= _a2))))))",
+        ),
         (
             "look_sufficiency_ambient",
+            "",
             orpheus.prove_look_sufficiency_ambient(),
             "(∀d:Depth. (∀d_p:Depth. (∀δ:Set. (∀s. (((d_p <= max_set(∪(δ, g(s)))) ∧ (d ∈ δ)) → (max(d, d_p) <= max_set(∪(δ, g(s)))))))))",
         ),
         (
             "look_sufficiency_confinement",
+            "",
             orpheus.prove_look_sufficiency_confinement(),
             "(∀d:Depth. (∀δ:Set. (∀s. ((d ∈ δ) → (singleton(d) ⊆ ∪(δ, g(s)))))))",
         ),
         (
             "look_necessity_confinement",
+            "",
             orpheus.prove_look_necessity_confinement(),
             "(∀d:Depth. (∀δ:Set. ((singleton(d) ⊆ ∪(δ, ∅_raw)) ↔ (d ∈ δ))))",
         ),
         (
             "look_necessity_numeric",
+            "",
             orpheus.prove_look_necessity_numeric(),
             "(∀d:Depth. (∀δ:Set. ((max(d, 0) <= max_set(∪(δ, ∅_raw))) ↔ (d <= max_set(δ)))))",
         ),
         (
             "numeric_vs_membership_counterexample",
+            "",
             orpheus.prove_numeric_vs_membership_counterexample(),
             "((3 <= max_set(∪(∅, singleton(5)))) ∧ ((3 ∉ ∪(∅, singleton(5))) ∧ (singleton(3) ⊈ ∪(∅, singleton(5)))))",
         ),
         (
             "binding_taint_violates_ambient",
+            "",
             orpheus.prove_binding_taint_violates_ambient(),
             "¬(max(3, 0) <= max_set(∪(∅, ∅_raw)))",
         ),
         (
             "scope_restain_shifts_obligation_to_caller",
+            "",
             orpheus.prove_scope_restain_shifts_obligation_to_caller(),
             "(∀d:Depth. (∀δ_f:Set. (∀δ_caller:Set. (((singleton(d) ⊆ δ_f) ∧ (δ_f ⊆ δ_caller)) → (d ∈ δ_caller)))))",
         ),
-    ]
-    for name, thm, expected in orpheus_thms:
-        verify_closed_theorem(name, thm, expected)
-
-    staging_thms = [
         (
             "roundtrip_identity",
+            "",
             staging.prove_roundtrip_identity(),
             "(∀_a0. (∀_a1. (RoundTrip(_a0, _a1) → (_a1 = _a0))))",
         ),
         (
             "hole_set_union_law",
+            "",
             staging.prove_hole_set_union_law(),
             "(∀s_k:Depth. (∀δ_A:Set. (∀δ_B:Set. (((s_k ∈ δ_A) ∨ (s_k ∈ δ_B)) ↔ (s_k ∈ ∪(δ_A, δ_B))))))",
         ),
         (
             "staging_idempotence_set",
+            "",
             staging.prove_staging_idempotence_set(),
             "(∀s_k:Depth. (∀δ_A:Set. (((s_k ∈ δ_A) ∨ (s_k ∈ δ_A)) ↔ (s_k ∈ δ_A))))",
         ),
         (
             "staging_law",
+            "",
             staging.prove_staging_law(),
             "(∀_a0. (∀_a1. (∀_a2. (∀_a3. (∀_a4. (StagedEval(_a0, _a1, _a2, _a3, _a4) → (_a3 = _a4)))))))",
         ),
         (
             "dependent_hole_non_monotone_counterexample",
+            "",
             staging.prove_dependent_hole_non_monotone_counterexample(),
             "((5 ∉ ∪(∅, singleton(3))) ∧ (((5 ∈ ∪(∅, singleton(5))) ∧ (3 ∉ ∪(∅, singleton(5)))) ∧ ((5 ∈ ∪(∪(∅, singleton(3)), ∪(∅, singleton(5)))) ∧ (3 ∈ ∪(∪(∅, singleton(3)), ∪(∅, singleton(5)))))))",
         ),
         (
             "cumulative_dependent_hole_law",
+            "",
             staging.prove_cumulative_dependent_hole_law(),
             "(∀d_in:Depth. (∀d_out:Depth. (∀δ_A:Set. (∀δ_B:Set. ((δ_A ⊆ δ_B) → ((((d_in ∈ δ_A) ∧ (d_out ∈ δ_A)) ∨ ((d_in ∈ δ_B) ∧ (d_out ∈ δ_B))) ↔ ((d_in ∈ ∪(δ_A, δ_B)) ∧ (d_out ∈ ∪(δ_A, δ_B)))))))))",
         ),
-    ]
-    for name, thm, expected in staging_thms:
-        verify_closed_theorem(name, thm, expected)
-
-    n_fixtures = encoding.verify_codec_fixtures_and_exclusions()
-    encoding_thms = [
         (
             "value_decode_encode",
+            "",
             encoding.prove_value_decode_encode(),
             "(∀_a0. (∀_a1. (∀_a2. (∀_a3. (ValRoundTrip(_a0, _a1, _a2, _a3) → ((_a2 = _a0) ∧ (_a3 = _a1)))))))",
         ),
         (
             "node_decode_encode",
+            "",
             encoding.prove_node_decode_encode(),
             "(∀_a0. (∀_a1. (∀_a2. (NodeRoundTrip(_a0, _a1, _a2) → (_a2 = Pair(_a0, _a1))))))",
         ),
         (
             "injectivity_from_left_inverse",
+            "",
             encoding.prove_injectivity_from_left_inverse(),
             "(∀x. (∀y. ((decode(encode(x)) = x) → ((decode(encode(y)) = y) → ((encode(x) = encode(y)) → (x = y))))))",
         ),
         (
             "cairn_preimage_injectivity",
+            "",
             encoding.prove_cairn_preimage_injectivity(),
             "(∀x. (∀y. ((strip_domain(domain_prefix(encode(x))) = encode(x)) → ((strip_domain(domain_prefix(encode(y))) = encode(y)) → ((decode(encode(x)) = x) → ((decode(encode(y)) = y) → ((domain_prefix(encode(x)) = domain_prefix(encode(y))) → (x = y))))))))",
         ),
     ]
-    for name, thm, expected in encoding_thms:
+    for name, _note, thm, expected in theorems:
         verify_closed_theorem(name, thm, expected)
 
     print(
         f"checked {scanned} proof modules (0 admitted obligations, kernel guards verified, {n_fixtures} codec fixtures verified)"
     )
-    print(f"  [OK] ambient_soundness          ({len(calculus.HAS_TYPE.rules)} typing rules)   |- {t_amb.conclusion}")
-    print(f"  [OK] substitution_monotonicity  ({len(calculus.SUBST_DEPTH.rules)} subst rules)    |- {t_sub.conclusion}")
-    print(f"  [OK] soundness_of_bound         ({len(calculus.STEP_TYPED.rules)} step rules)     |- {t_mon.conclusion}")
-    for name, thm, _ in orpheus_thms:
-        print(f"  [OK] {name:42s} |- {thm.conclusion}")
-    for name, thm, _ in staging_thms:
-        print(f"  [OK] {name:42s} |- {thm.conclusion}")
-    for name, thm, _ in encoding_thms:
-        print(f"  [OK] {name:42s} |- {thm.conclusion}")
+    for name, note, thm, _ in theorems:
+        label = f"{name:26s} {note}" if note else name
+        print(f"  [OK] {label:42s} |- {thm.conclusion}")
     return 0
 
 

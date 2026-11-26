@@ -193,6 +193,12 @@ def icon() -> str:
     return "\n".join(rows + ["</svg>", ""])
 
 
+def _contrast_row(label: str, colour: str, ground: str) -> str:
+    ratio = contrast(colour, ground)
+    mark = "text" if ratio >= 4.5 else ("edge" if ratio >= 3 else "FAILS")
+    return f"{label} {colour}  {ratio:5.2f}  {mark}"
+
+
 def main() -> int:
     unknown = [a for a in sys.argv[1:] if a not in ("--css", "--check")]
     if unknown or ("--check" in sys.argv and "--css" not in sys.argv):
@@ -212,21 +218,17 @@ def main() -> int:
             print("design: stale " + ", ".join(stale) + "; run scripts/task design", file=sys.stderr)
         return int(bool(stale))
 
-    for label, table in (("the nether", NETHER), ("the surface", LIT)):
+    for label, mode, table in (("the nether", "nether", NETHER), ("the surface", "lit", LIT)):
         print(f"\n{label}")
         ground = table["ground"]
         for key, value in table.items():
             if key in ("sunk", "ground", "raised"):
                 print(f"  {key:8} {value}         ground")
                 continue
-            ratio = contrast(value, ground)
-            mark = "text" if ratio >= 4.5 else ("edge" if ratio >= 3 else "FAILS")
-            print(f"  {key:8} {value}  {ratio:5.2f}  {mark}")
+            print(_contrast_row(f"  {key:8}", value, ground))
         print("  strata")
-        for n, colour in enumerate(RAMPS["nether" if "nether" in label else "lit"]):
-            ratio = contrast(colour, ground)
-            mark = "text" if ratio >= 4.5 else ("edge" if ratio >= 3 else "FAILS")
-            print(f"    d{n}     {colour}  {ratio:5.2f}  {mark}")
+        for n, colour in enumerate(RAMPS[mode]):
+            print(_contrast_row(f"    d{n:<5}", colour, ground))
     return 0
 
 

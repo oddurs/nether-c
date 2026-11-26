@@ -18,6 +18,8 @@ import sys
 from pathlib import Path
 
 CHANGELOG = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
+_NEXT_SECTION = re.compile(r"^##\s")
+_LINK_DEF = re.compile(r"^\[[^\]]+\]:\s+\S+")
 
 
 def _fence_open(stripped: str) -> tuple[str, int] | None:
@@ -68,7 +70,7 @@ def notes(text: str, version: str) -> str | None:
             if head.match(line):
                 capturing = True
             continue
-        if re.match(r"^##\s", line) or re.match(r"^\[[^\]]+\]:\s+\S+", line):
+        if _NEXT_SECTION.match(line) or _LINK_DEF.match(line):
             break
         out.append(line)
     if not capturing:

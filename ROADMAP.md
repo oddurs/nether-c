@@ -489,7 +489,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 18 of 18 done
+`##########` 100% · 19 of 19 done
 
 ### buried
 
@@ -511,4 +511,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0323`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0323-speed-up-proof-checks-fix-test-leaks-and-harden-ci-and-tooling.md) Speed up proof checks, fix test leaks, and harden CI and tooling <sup>bug · p1</sup>
 - [x] [`0324`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0324-shrink-wasm-and-core-lines-and-harden-cli-ux.md) Shrink WASM and core lines and harden CLI UX <sup>chore · p1</sup>
 - [x] [`0325`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0325-refactor-nether-core-and-nether-syntax-for-clarity-and-decay.md) Refactor nether-core and nether-syntax for clarity and decay <sup>chore · p2</sup>
+- [x] [`0326`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0326-refactor-proof-site-scripts-necropolis-and-vim-for-clarity.md) Refactor proof, site, scripts, Necropolis, and Vim for clarity <sup>chore · p2</sup>
 

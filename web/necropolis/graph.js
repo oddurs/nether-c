@@ -1,9 +1,12 @@
 // Read the frozen ledger format (§7). This is a local WASM view, not an importer.
-const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+export const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+const displayUtf8 = new TextDecoder("utf-8", { ignoreBOM: true });
 const HEX = /^[0-9a-f]*$/;
+const CAIRN = /^[0-9a-f]{64}$/;
 export const PAGE_SIZE = 12;
 export const short = (id) => id.slice(0, 8);
 export const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+export const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 // Slice at most `limit` bytes without cutting inside a multi-byte UTF-8 sequence.
 export function utf8Prefix(bytes, limit) {
@@ -136,7 +139,7 @@ export function references(o) {
 
 export function preview(o, limit = 160) {
   let s;
-  if (o.call) return `${o.call.function}(${o.call.args.length} argument${o.call.args.length === 1 ? "" : "s"})`;
+  if (o.call) return `${o.call.function}(${plural(o.call.args.length, "argument")})`;
   if (o.kind === "Bytes") {
     const sample = utf8Prefix(o.data, limit);
     const suffix = `… (${o.data.length} bytes)`;
@@ -157,7 +160,7 @@ export function preview(o, limit = 160) {
   else if (o.kind === "Answer") s = `${o.data.kind === "Refusal" ? "refused" : "given"}: ${preview(o.data, limit)}`;
   else if (o.kind === "Literal") s = preview(o.value, limit);
   else if (o.kind === "Array" || o.kind === "Struct") s = `${o.name || "Array"} · ${o.data.length} entries`;
-  else if (o.kind === "Trace") s = `depth ${o.depth} · ${o.holes.length} hole${o.holes.length === 1 ? "" : "s"} · ${o.deposits.length} deposit${o.deposits.length === 1 ? "" : "s"}`;
+  else if (o.kind === "Trace") s = `depth ${o.depth} · ${plural(o.holes.length, "hole")} · ${plural(o.deposits.length, "deposit")}`;
   else s = String(o.data ?? o.kind);
   return s.length > limit ? s.slice(0, limit) + "…" : s;
 }
@@ -173,7 +176,7 @@ export class Graph {
     for (const pair of burial.objects) {
       if (!Array.isArray(pair) || pair.length !== 2) throw Error("Invalid object table");
       const [id, encoded] = pair;
-      if (!/^[0-9a-f]{64}$/.test(id) || typeof encoded !== "string" || this.encoded.has(id)) throw Error("Invalid object table");
+      if (!CAIRN.test(id) || typeof encoded !== "string" || this.encoded.has(id)) throw Error("Invalid object table");
       size += encoded.length;
       if (size > 32 * 1024 * 1024) throw Error("Graph limit: 16 MiB of canonical objects");
       this.encoded.set(id, encoded);
@@ -219,20 +222,10 @@ export function sourceExcerpt(graph, span) {
   // Slice bytes before decoding: JS string indices are not source offsets.
   let from = Math.max(0, start - 160);
   while (from < start && (o.data[from] & 0xC0) === 0x80) from++;
-  let to = Math.min(o.data.length, end + 160);
-  if (to < o.data.length) {
-    let lead = to;
-    while (lead > end && (o.data[lead] & 0xC0) === 0x80) lead--;
-    if (lead > end) {
-      const b = o.data[lead];
-      const w = b < 0x80 ? 1 : (b & 0xE0) === 0xC0 ? 2 : (b & 0xF0) === 0xE0 ? 3 : (b & 0xF8) === 0xF0 ? 4 : 1;
-      if (lead + w > to) to = lead;
-    }
-  }
+  const to = end + utf8Prefix(o.data.subarray(end), 160).length;
   const selectedBytes = utf8Prefix(o.data.subarray(start, end), 2048);
-  const display = new TextDecoder("utf-8", { ignoreBOM: true });
-  return { before: display.decode(o.data.subarray(from, start)),
-    selected: display.decode(selectedBytes),
-    after: end - start > selectedBytes.length ? "… (selection truncated)" : display.decode(o.data.subarray(end, to)),
+  return { before: displayUtf8.decode(o.data.subarray(from, start)),
+    selected: displayUtf8.decode(selectedBytes),
+    after: end - start > selectedBytes.length ? "… (selection truncated)" : displayUtf8.decode(o.data.subarray(end, to)),
     line: o.data.subarray(0, start).reduce((n, b) => n + (b === 10), 1) };
 }

@@ -35,7 +35,7 @@ from kernel import (
     Theorem,
     conj,
     elem,
-    gen,
+    gen_all,
     iff,
     imp,
     lattice_decide,
@@ -57,38 +57,26 @@ def prove_look_sufficiency_ambient() -> Theorem:
     """`∀d d' δ s. (d' <= max_set(δ ∪ g(s)) ∧ d ∈ δ) → max(d, d') <= max_set(δ ∪ g(s))`."""
     hyp = conj(le(d_p, max_set(s_union(δ, g_of(s)))), elem(d, δ))
     goal = imp(hyp, le(d_max(d, d_p), max_set(s_union(δ, g_of(s)))))
-    thm = lattice_decide(goal)
-    for b in ("s", "δ", "d_p", "d"):
-        thm = gen(b, thm)
-    return thm
+    return gen_all(("s", "δ", "d_p", "d"), lattice_decide(goal))
 
 
 def prove_look_sufficiency_confinement() -> Theorem:
     """`∀d δ s. (d ∈ δ) → ({d} ⊆ (δ ∪ g(s)))`."""
     goal = imp(elem(d, δ), subset(singleton(d), s_union(δ, g_of(s))))
-    thm = lattice_decide(goal)
-    for b in ("s", "δ", "d"):
-        thm = gen(b, thm)
-    return thm
+    return gen_all(("s", "δ", "d"), lattice_decide(goal))
 
 
 def prove_look_necessity_confinement() -> Theorem:
     """For a pure shade value (`g(s) = ∅_raw`), `{d} ⊆ (δ ∪ ∅_raw)` holds iff `d ∈ δ`."""
     goal = iff(subset(singleton(d), s_union(δ, EMPTY_RAW)), elem(d, δ))
-    thm = lattice_decide(goal)
-    for b in ("δ", "d"):
-        thm = gen(b, thm)
-    return thm
+    return gen_all(("δ", "d"), lattice_decide(goal))
 
 
 def prove_look_necessity_numeric() -> Theorem:
     """For a pure shade value (`g(s) = ∅_raw`, `d' = 0`), `max(d, 0) <= max_set(δ ∪ ∅_raw)`
     holds iff `d <= max_set(δ)`."""
     goal = iff(le(d_max(d, ZERO), max_set(s_union(δ, EMPTY_RAW))), le(d, max_set(δ)))
-    thm = lattice_decide(goal)
-    for b in ("δ", "d"):
-        thm = gen(b, thm)
-    return thm
+    return gen_all(("δ", "d"), lattice_decide(goal))
 
 
 def prove_numeric_vs_membership_counterexample() -> Theorem:
@@ -118,10 +106,7 @@ def prove_scope_restain_shifts_obligation_to_caller() -> Theorem:
         conj(subset(singleton(d), df_set), subset(df_set, δ_caller)),
         elem(d, δ_caller),
     )
-    thm = lattice_decide(goal)
-    for b in ("δ_caller", "δ_f", "d"):
-        thm = gen(b, thm)
-    return thm
+    return gen_all(("δ_caller", "δ_f", "d"), lattice_decide(goal))
 
 
 if __name__ == "__main__":

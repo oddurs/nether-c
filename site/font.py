@@ -80,6 +80,10 @@ def runs(rows: tuple[str, ...]) -> list[tuple[int, int, int]]:
     return out
 
 
+def pad(data: bytes) -> bytes:
+    return data + b"\x00" * (-len(data) % 4)
+
+
 def outline(rows: tuple[str, ...]) -> bytes:
     """One `glyf` entry: a simple glyph, one closed contour per run.
 
@@ -139,14 +143,10 @@ def outline(rows: tuple[str, ...]) -> bytes:
         px, py = x, y
 
     out += bytes(flags) + bytes(dxs) + bytes(dys)
-    return out + b"\x00" * (-len(out) % 4)
+    return pad(out)
 
 
 # ── the tables ──────────────────────────────────────────────────────────────
-
-
-def pad(data: bytes) -> bytes:
-    return data + b"\x00" * (-len(data) % 4)
 
 
 def checksum(data: bytes) -> int:
@@ -202,6 +202,30 @@ def cmap_table(codes: list[int]) -> bytes:
     return struct.pack(">HHHHI", 0, 1, 3, 1, 12) + sub
 
 
+def _os2_table(weight: int, codes: list[int]) -> bytes:
+    """`OS/2` version 4, ninety-six bytes, written a field at a time."""
+    bold = weight >= 700
+    os2 = struct.pack(">HhHHH", 4, ADVANCE, weight, 5, 0)       # version..fsType
+    os2 += struct.pack(">10h",                                # sub, super, strikeout
+                       UPEM // 2, UPEM // 2, 0, 0,
+                       UPEM // 2, UPEM // 2, 0, ASCENT // 2,
+                       PIXEL, 3 * PIXEL)
+    os2 += struct.pack(">h", 8)                               # sFamilyClass: monospace
+    os2 += bytes([2, 0, 5, 9, 0, 0, 0, 0, 0, 0])              # PANOSE: modern, monospaced
+    os2 += struct.pack(">4I", 0b11, 0, 0, 0)                  # Latin-1 and Latin Ext
+    os2 += b"NETH"                                            # achVendID
+    # fsSelection: bit 5 is bold and bit 6 is regular, and they are exclusive.
+    os2 += struct.pack(">HHH", 0b100000 if bold else 0b1000000, min(codes), max(codes))
+    os2 += struct.pack(">hhh", ASCENT, -DESCENT, 0)           # sTypo*
+    os2 += struct.pack(">HH", ASCENT, DESCENT)                # usWin*
+    os2 += struct.pack(">II", 1, 0)                           # ulCodePageRange: Latin-1
+    os2 += struct.pack(">hh", 5 * PIXEL, 7 * PIXEL)           # sxHeight, sCapHeight
+    os2 += struct.pack(">HHH", 0x20, 0x20, 1)                 # default, break, maxContext
+    if len(os2) != 96:
+        raise SystemExit(f"font: OS/2 is {len(os2)} bytes and should be 96")
+    return os2
+
+
 def build(glyphs: dict[str, tuple[str, ...]], weight: int = 400) -> bytes:
     """Every table, in one sfnt.
 
@@ -251,30 +275,8 @@ def build(glyphs: dict[str, tuple[str, ...]], weight: int = 400) -> bytes:
     # `post` version 3.0: no glyph names. isFixedPitch is 1, because it is.
     post = struct.pack(">IIhhIIIII", 0x00030000, 0, -PIXEL, PIXEL, 1, 0, 0, 0, 0)
 
-    # `OS/2` version 4, ninety-six bytes, written a field at a time. One long
-    # format string was wrong by one value and said so in a way nobody could
-    # read.
-    os2 = struct.pack(">HhHHH", 4, ADVANCE, weight, 5, 0)       # version..fsType
-    os2 += struct.pack(">10h",                                # sub, super, strikeout
-                       UPEM // 2, UPEM // 2, 0, 0,
-                       UPEM // 2, UPEM // 2, 0, ASCENT // 2,
-                       PIXEL, 3 * PIXEL)
-    os2 += struct.pack(">h", 8)                               # sFamilyClass: monospace
-    os2 += bytes([2, 0, 5, 9, 0, 0, 0, 0, 0, 0])              # PANOSE: modern, monospaced
-    os2 += struct.pack(">4I", 0b11, 0, 0, 0)                  # Latin-1 and Latin Ext
-    os2 += b"NETH"                                            # achVendID
-    # fsSelection: bit 5 is bold and bit 6 is regular, and they are exclusive.
-    os2 += struct.pack(">HHH", 0b100000 if bold else 0b1000000, min(codes), max(codes))
-    os2 += struct.pack(">hhh", ASCENT, -DESCENT, 0)           # sTypo*
-    os2 += struct.pack(">HH", ASCENT, DESCENT)                # usWin*
-    os2 += struct.pack(">II", 1, 0)                           # ulCodePageRange: Latin-1
-    os2 += struct.pack(">hh", 5 * PIXEL, 7 * PIXEL)           # sxHeight, sCapHeight
-    os2 += struct.pack(">HHH", 0x20, 0x20, 1)                 # default, break, maxContext
-    if len(os2) != 96:
-        raise SystemExit(f"font: OS/2 is {len(os2)} bytes and should be 96")
-
     tables = {
-        b"OS/2": os2,
+        b"OS/2": _os2_table(weight, codes),
         b"cmap": cmap_table(codes),
         b"glyf": data,
         b"head": head,
@@ -284,7 +286,7 @@ def build(glyphs: dict[str, tuple[str, ...]], weight: int = 400) -> bytes:
         b"maxp": maxp,
         b"name": name_table([
             (1, NAME), (2, style), (3, f"{NAME} {style} {VERSION}"),
-            (4, NAME if bold is False else f"{NAME} {style}"), (5, VERSION),
+            (4, NAME if not bold else f"{NAME} {style}"), (5, VERSION),
             (6, f"{NAME.replace(' ', '')}-{style}"),
         ]),
         b"post": post,
@@ -303,9 +305,10 @@ def sfnt(tables: dict[bytes, bytes]) -> bytes:
     body = b""
     for tag in sorted(tables):
         raw = tables[tag]
+        padded = pad(raw)
         directory += struct.pack(">4sIII", tag, checksum(raw), offset, len(raw))
-        body += pad(raw)
-        offset += len(pad(raw))
+        body += padded
+        offset += len(padded)
 
     font = directory + body
     # head.checkSumAdjustment, which is the whole file's checksum subtracted
@@ -339,9 +342,10 @@ def woff(font: bytes) -> bytes:
     directory = b""
     body = b""
     for tag, csum, raw, squeezed in entries:
+        padded = pad(squeezed)
         directory += struct.pack(">4sIIII", tag, offset, len(squeezed), len(raw), csum)
-        body += pad(squeezed)
-        offset += len(pad(squeezed))
+        body += padded
+        offset += len(padded)
 
     head = struct.pack(
         ">4sIIHHIHHIIIII",
@@ -371,9 +375,11 @@ def sheet(glyphs: dict[str, tuple[str, ...]]) -> str:
     return "\n".join(out)
 
 
-def specimen(glyphs: dict[str, tuple[str, ...]], mode: str = "nether"):
+def specimen(glyphs: dict[str, tuple[str, ...]], mode: str = "nether") -> bytes:
     """The specimen, drawn with the face itself, as a GIF for the site."""
-    sys.path.insert(0, str(ROOT / "site"))
+    site_dir = str(ROOT / "site")
+    if site_dir not in sys.path:
+        sys.path.insert(0, site_dir)
     import gfx  # noqa: E402  — a sibling, not a dependency
 
     items = sorted(glyphs.items(), key=lambda kv: ord(kv[0]))
@@ -388,10 +394,8 @@ def specimen(glyphs: dict[str, tuple[str, ...]], mode: str = "nether"):
         for r, bits in enumerate(rows):
             for c, on in enumerate(bits):
                 if on == "#":
-                    for dy in range(scale):
-                        for dx in range(scale):
-                            frame.set(ox + c * scale + dx, oy + r * scale + dy, colour)
-    return gfx.write_gif(OUT / "gfx" / "specimen.gif", [frame], [0], loop=False, mode=mode)
+                    frame.rect(ox + c * scale, oy + r * scale, scale, scale, colour)
+    return gfx.write_gif([frame], [0], loop=False, mode=mode)
 
 
 # ── the face ────────────────────────────────────────────────────────────────
@@ -405,13 +409,22 @@ def specimen(glyphs: dict[str, tuple[str, ...]], mode: str = "nether"):
 G: dict[str, tuple[str, ...]] = {}
 
 
+def _register(
+    table: dict[str, tuple[str, ...]],
+    label: str,
+    ch: str,
+    rows: tuple[str, ...],
+) -> None:
+    if len(rows) != CELL or any(len(r) != CELL for r in rows):
+        raise SystemExit(f"font: {label}{ch!r} is not {CELL} rows of {CELL}")
+    if any(set(r) - {"#", "."} for r in rows):
+        raise SystemExit(f"font: {label}{ch!r} has something that is not # or .")
+    table[ch] = rows
+
+
 def g(ch: str, *rows: str) -> None:
     """One glyph. Eight rows of eight, and it says so if they are not."""
-    if len(rows) != CELL or any(len(r) != CELL for r in rows):
-        raise SystemExit(f"font: {ch!r} is not {CELL} rows of {CELL}")
-    if any(set(r) - {"#", "."} for r in rows):
-        raise SystemExit(f"font: {ch!r} has something that is not # or .")
-    G[ch] = rows
+    _register(G, "", ch, rows)
 
 
 # ── space and punctuation ───────────────────────────────────────────────────
@@ -738,11 +751,7 @@ B: dict[str, tuple[str, ...]] = {}
 
 def b(ch: str, *rows: str) -> None:
     """One bold glyph, checked the way `g` checks a regular one."""
-    if len(rows) != CELL or any(len(r) != CELL for r in rows):
-        raise SystemExit(f"font: bold {ch!r} is not {CELL} rows of {CELL}")
-    if any(set(r) - {"#", "."} for r in rows):
-        raise SystemExit(f"font: bold {ch!r} has something that is not # or .")
-    B[ch] = rows
+    _register(B, "bold ", ch, rows)
 
 
 # ── space and punctuation, bold ───────────────────────────────────────────────

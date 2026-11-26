@@ -110,12 +110,26 @@ function! s:ShowScratch(lines) abort
   endif
 endfunction
 
-function! s:FailInspect(msg) abort
+function! s:Error(msg) abort
   let g:nether_last_error = a:msg
+  echohl ErrorMsg | echom g:nether_last_error | echohl None
+endfunction
+
+function! s:FieldStart(data, key) abort
+  let l:field = get(a:data, a:key, v:null)
+  return type(l:field) == v:t_dict ? l:field.start : -1
+endfunction
+
+function! s:GotoByte(byte) abort
+  let l:bom = &bomb ? 3 : 0
+  execute 'goto ' . max([1, a:byte - l:bom + 1])
+endfunction
+
+function! s:FailInspect(msg) abort
   let g:nether_last_lamp = []
   let g:nether_last_json = {}
   call s:ClearScratch()
-  echohl ErrorMsg | echom g:nether_last_error | echohl None
+  call s:Error(a:msg)
   return 0
 endfunction
 
@@ -168,8 +182,7 @@ endfunction
 
 function! s:BindTrace(cairn) abort
   if a:cairn !~# '^[0-9a-f]\{1,64\}$'
-    let g:nether_last_error = 'nether: invalid trace cairn: ' . a:cairn
-    echohl ErrorMsg | echom g:nether_last_error | echohl None
+    call s:Error('nether: invalid trace cairn: ' . a:cairn)
     return
   endif
   let b:nether_trace = a:cairn
@@ -190,13 +203,12 @@ function! s:Origin() abort
     return
   endif
   let l:data = get(g:, 'nether_last_json', {})
-  let l:bom = &bomb ? 3 : 0
-  let l:desc = type(get(l:data, 'descend', v:null)) == v:t_dict ? l:data.descend.start : -1
-  let l:call = type(get(l:data, 'call', v:null)) == v:t_dict ? l:data.call.start : -1
+  let l:desc = s:FieldStart(l:data, 'descend')
+  let l:call = s:FieldStart(l:data, 'call')
   if l:desc >= 0 && l:here != l:desc
-    execute 'goto ' . max([1, l:desc - l:bom + 1])
+    call s:GotoByte(l:desc)
   elseif l:call >= 0
-    execute 'goto ' . max([1, l:call - l:bom + 1])
+    call s:GotoByte(l:call)
   elseif l:desc >= 0
     echomsg 'nether: already at descend origin'
   else
@@ -209,10 +221,9 @@ function! s:Provenance() abort
     return
   endif
   let l:data = get(g:, 'nether_last_json', {})
-  let l:bom = &bomb ? 3 : 0
-  let l:call = type(get(l:data, 'call', v:null)) == v:t_dict ? l:data.call.start : -1
+  let l:call = s:FieldStart(l:data, 'call')
   if l:call >= 0
-    execute 'goto ' . max([1, l:call - l:bom + 1])
+    call s:GotoByte(l:call)
   else
     echomsg 'nether: no call origin at cursor'
   endif
