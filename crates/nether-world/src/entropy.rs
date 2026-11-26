@@ -92,6 +92,6 @@ impl Provider for Entropy {
             // grant and does not have one now.
             return Err(Refuse::Unavailable(format!("{SOURCE}: {e}")));
         }
-        into.record(call, Depth::ENTROPY, span, &given(&call.function, Value::Bytes(drawn)))
+        into.record(call, Depth::ENTROPY, span, &given(call.function(), Value::Bytes(drawn)))
     }
 }

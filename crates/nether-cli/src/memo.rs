@@ -140,23 +140,28 @@ impl Memo {
         if !nether_core::check(&unit).is_empty() {
             return None;
         }
-        let res_depth = unit.demands.iter().map(|d| d.value.depth.get()).max().unwrap_or(0);
+        let res_depth = unit
+            .demands
+            .iter()
+            .map(|d| crate::closing::stratum(d.value.depth))
+            .max()
+            .unwrap_or(nether_ledger::Stratum::ZERO);
         if (!holes.is_empty() || !deposits.is_empty() || !unit.demands.is_empty()) && steps == 0 {
             return None;
         }
         let mut seen = HashSet::new();
-        let mut max_hole_stratum = 0u8;
+        let mut max_hole_stratum = nether_ledger::Stratum::ZERO;
         for h in &holes {
             let Ok(Stored::Node(Node::Hole { call, stratum, span })) = store.get(*h) else {
                 return None;
             };
             if !crate::closing::valid_stratum(&call, stratum)
-                || !matches!(store.get(span.source), Ok(Stored::Value(Value::Bytes(_))))
+                || !matches!(store.get(span.source()), Ok(Stored::Value(Value::Bytes(_))))
             {
                 return None;
             }
             max_hole_stratum = max_hole_stratum.max(stratum);
-            for a in &call.args {
+            for a in call.args() {
                 let Ok(Stored::Value(v)) = store.get(*a) else { return None };
                 if !value_complete(store, &v, &mut seen) {
                     return None;
@@ -170,7 +175,7 @@ impl Memo {
             let Ok(Stored::Node(Node::Deposit { value, span })) = store.get(*d) else {
                 return None;
             };
-            if !matches!(store.get(span.source), Ok(Stored::Value(Value::Bytes(_)))) {
+            if !matches!(store.get(span.source()), Ok(Stored::Value(Value::Bytes(_)))) {
                 return None;
             }
             let Ok(Stored::Value(v)) = store.get(value) else { return None };

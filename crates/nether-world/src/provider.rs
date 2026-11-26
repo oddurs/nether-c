@@ -155,20 +155,17 @@ impl World {
     /// take what came back. Neither is the world saying no: a refusal comes
     /// back as an ordinary [`Recorded`]. §9.9.
     pub fn ask(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Unanswered> {
-        let Some(provider) = self.granted.iter().find(|p| p.answers(&call.function)) else {
-            return Err(Unanswered::Ungranted {
-                function: call.function.clone(),
-                wanted: wants(&call.function),
-            });
+        let func = call.function();
+        let Some(provider) = self.granted.iter().find(|p| p.answers(func)) else {
+            return Err(Unanswered::Ungranted { function: func.to_owned(), wanted: wants(func) });
         };
-        if let Some(prim) = Prim::from_name(&call.function)
-            && call.args.len() != prim.arity()
+        if let Some(prim) = Prim::from_name(func)
+            && call.args().len() != prim.arity()
         {
             return Err(Unanswered::Collapsed(format!(
-                "`{}` expects {} argument(s), got {}",
-                call.function,
+                "`{func}` expects {} argument(s), got {}",
                 prim.arity(),
-                call.args.len()
+                call.args().len()
             )));
         }
         provider.answer(call, span, into).map_err(|e| match e {
@@ -196,7 +193,7 @@ impl World {
         while i < asked.len() {
             let end = asked[i..]
                 .iter()
-                .position(|(c, _)| !Self::reads(&c.function))
+                .position(|(c, _)| !Self::reads(c.function()))
                 .map_or(asked.len(), |n| i + n);
             if end <= i + 1 {
                 let res = self.ask(&asked[i].0, asked[i].1, into);
@@ -255,8 +252,8 @@ impl World {
                 };
                 let res = match leader_res {
                     Ok(rec) if idx != leader && run[idx].1 != run[leader].1 => {
-                        let stratum =
-                            Prim::from_name(&run[idx].0.function).map_or(Depth::PURE, Prim::latent);
+                        let stratum = Prim::from_name(run[idx].0.function())
+                            .map_or(Depth::PURE, Prim::latent);
                         into.record_existing(&run[idx].0, stratum, run[idx].1, rec.answer())
                             .map_err(|e| match e {
                                 Refuse::NotRecorded(err) => {
@@ -305,15 +302,15 @@ impl World {
             };
             match into.store().get(hole) {
                 Ok(Stored::Node(Node::Hole { call, stratum, span })) => {
-                    if Prim::from_name(&call.function).is_none_or(|p| {
+                    if Prim::from_name(call.function()).is_none_or(|p| {
                         p.latent() == Depth::PURE
-                            || p.latent().get() != stratum
-                            || call.args.len() != p.arity()
+                            || p.latent().get() != stratum.as_u8()
+                            || call.args().len() != p.arity()
                     }) {
                         return Err(Unanswered::NotRecorded(format!(
                             "hole {hole} claims stratum {stratum} with {} arg(s) for `{}`",
-                            call.args.len(),
-                            call.function
+                            call.args().len(),
+                            call.function()
                         )));
                     }
                     asked.push((call, span));

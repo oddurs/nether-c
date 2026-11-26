@@ -42,8 +42,8 @@ fn a_fixed_guest_leaves_a_residue_that_does_not_name_the_interpreter() {
     // not read it again.
     assert_eq!(residue.holes.len(), 1);
     let Node::Hole { call, .. } = residue.questions()[0] else { panic!("read hole") };
-    assert_eq!(call.function, "read");
-    assert_eq!(residue.value(call.args[0]), Some(&Value::Str("main.nc".into())));
+    assert_eq!(call.function(), "read");
+    assert_eq!(residue.value(call.args()[0]), Some(&Value::Str("main.nc".into())));
 
     // The demand is a call to something burial minted, not to `interpret`.
     let ExprKind::Call { callee, args } = &residue.demands[0].kind else {

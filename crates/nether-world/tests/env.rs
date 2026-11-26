@@ -42,8 +42,8 @@ impl Asked {
 
     /// What was recorded, exactly as the program would receive it.
     fn said(&self, function: &str, args: Vec<Cairn>) -> Value {
-        let call = Call { function: function.to_owned(), args };
-        let span = Span { source: self.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+        let call = Call::try_new(function, args).unwrap();
+        let span = Span::new(self.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
         let recorded = self.world.ask(&call, span, &Recorder::new(&self.store)).expect("granted");
 
         // §1.4: the witness names the answer, and both were written first.
@@ -124,8 +124,8 @@ fn a_variable_that_was_never_declared_collapses() {
     // differently because a variable was absent is exactly the class of bug
     // this language exists to make impossible."
     let a = an_env("undeclared", Declared::none());
-    let call = Call { function: "env".into(), args: vec![a.arg(Value::Str("CC".into()))] };
-    let span = Span { source: a.arg(Value::Bytes(b"x.nc".to_vec())), start: 0, end: 1 };
+    let call = Call::try_new("env", vec![a.arg(Value::Str("CC".into()))]).unwrap();
+    let span = Span::new(a.arg(Value::Bytes(b"x.nc".to_vec())), 0, 1).unwrap();
     let no = a.world.ask(&call, span, &Recorder::new(&a.store)).expect_err("not an answer");
     let nether_world::Unanswered::Collapsed(why) = no else { panic!("{no:?} is not a collapse") };
     assert!(why.contains("never declared"), "{why}");

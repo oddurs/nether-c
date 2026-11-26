@@ -38,7 +38,7 @@ use nether_core::{
     Held, Literal, LocalDef, LocalId, Place, Prim, Refusal as RefusalCode, Rite, Span, Stmt, Type,
     UnOp, Unit, children, grouped,
 };
-use nether_ledger::{Cairn, Node, Stored, Value};
+use nether_ledger::{Cairn, Node, NonEmptyName, Stored, Stratum, Value};
 
 /// What a burial produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1480,14 +1480,14 @@ impl Burial<'_> {
         if shared && let Some(dug) = self.asked.get(&call) {
             return *dug;
         }
+        let start = u64::from(span.start);
+        let end = u64::from(span.end);
+        let ledger_span = nether_ledger::Span::new(self.source, start, end)
+            .unwrap_or_else(|_| nether_ledger::Span::point(self.source, start));
         let node = Node::Hole {
             call: call.clone(),
-            stratum: p.latent().get(),
-            span: nether_ledger::Span {
-                source: self.source,
-                start: u64::from(span.start),
-                end: u64::from(span.end),
-            },
+            stratum: Stratum::new(p.latent().get()).unwrap_or(Stratum::MAX),
+            span: ledger_span,
         };
         let cairn = self.remember(Stored::Node(node));
         if shared {
@@ -1509,14 +1509,11 @@ impl Burial<'_> {
     /// They differ by span, so they differ by cairn.
     fn deposit(&mut self, value: Value, span: Span) -> Cairn {
         let at = self.remember(Stored::Value(value));
-        let node = Node::Deposit {
-            value: at,
-            span: nether_ledger::Span {
-                source: self.source,
-                start: u64::from(span.start),
-                end: u64::from(span.end),
-            },
-        };
+        let start = u64::from(span.start);
+        let end = u64::from(span.end);
+        let ledger_span = nether_ledger::Span::new(self.source, start, end)
+            .unwrap_or_else(|_| nether_ledger::Span::point(self.source, start));
+        let node = Node::Deposit { value: at, span: ledger_span };
         self.remember(Stored::Node(node))
     }
 
@@ -2396,10 +2393,13 @@ impl Burial<'_> {
         let arg_bytes: usize =
             values.iter().map(Self::val_byte_work).fold(0usize, usize::saturating_add);
         self.burn_bytes(arg_bytes, x.span)?;
-        let asked = nether_ledger::Call {
-            function: p.name().to_string(),
-            args: args.into_iter().map(|v| self.remember(Stored::Value(v))).collect(),
+        let Ok(function) = NonEmptyName::new(p.name()) else {
+            return Ok(None);
         };
+        let asked = nether_ledger::Call::new(
+            function,
+            args.into_iter().map(|v| self.remember(Stored::Value(v))).collect(),
+        );
         let nth = if shared {
             0
         } else {
@@ -4606,7 +4606,10 @@ fn as_value(v: &Val) -> Option<Value> {
         // Only the origin and the name survive, which is what a shade is.
         Kind::Shade(inner) => {
             let Type::Shade { origin, .. } = &v.ty else { return None };
-            as_value(inner).map(|held| Value::Shade { origin: origin.get(), value: held.cairn() })
+            as_value(inner).map(|held| Value::Shade {
+                origin: Stratum::new(origin.get()).unwrap_or(Stratum::MAX),
+                value: held.cairn(),
+            })
         }
         // §5.1.1 gives a refusal and an answer each a tag, so both are values
         // the ledger can hold.

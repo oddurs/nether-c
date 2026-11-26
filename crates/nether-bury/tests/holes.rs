@@ -11,7 +11,7 @@ use nether_core::{
     BinOp, Capability, Demand, Depth, Expr, ExprKind, Held, Literal, Prim, Rite, Span, Type, Unit,
     check,
 };
-use nether_ledger::{Cairn, Node, Stored, Value};
+use nether_ledger::{Cairn, Node, Stored, Stratum, Value};
 
 // ── building ────────────────────────────────────────────────────────────────
 
@@ -99,10 +99,10 @@ fn a_question_the_world_can_answer_becomes_a_hole() {
     let [Node::Hole { call, stratum, span }] = r.questions()[..] else {
         panic!("not one hole: {:?}", r.questions())
     };
-    assert_eq!(call.function, "read");
-    assert_eq!(*stratum, 3);
-    assert_eq!(span.source, source(), "a span in a trace names its source by cairn");
-    assert_eq!((span.start, span.end), (40, 52));
+    assert_eq!(call.function(), "read");
+    assert_eq!(*stratum, Stratum::THREE);
+    assert_eq!(span.source(), source(), "a span in a trace names its source by cairn");
+    assert_eq!((span.start(), span.end()), (40, 52));
 
     // A hole does not record its dependents, and within one burial it records
     // no dependencies either: a hole is only formed once every argument is a
@@ -112,7 +112,7 @@ fn a_question_the_world_can_answer_becomes_a_hole() {
 
     // The argument is in the ledger beside it, so the question is readable
     // without the program that asked it.
-    assert_eq!(r.value(call.args[0]), Some(&Value::Str("main.nc".into())));
+    assert_eq!(r.value(call.args()[0]), Some(&Value::Str("main.nc".into())));
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn a_holes_arguments_are_finished() {
     let r = buried(&demanding(vec![descending(read_of(joined, Span::default()))]));
 
     let [Node::Hole { call, .. }] = r.questions()[..] else { panic!() };
-    assert_eq!(r.value(call.args[0]), Some(&Value::Bytes(b"lib/table.nc".to_vec())));
+    assert_eq!(r.value(call.args()[0]), Some(&Value::Bytes(b"lib/table.nc".to_vec())));
 }
 
 #[test]
@@ -164,7 +164,7 @@ fn one_question_asked_from_two_places_is_one_hole() {
         panic!("not one hole: {:?}", r.questions())
     };
     // The first place that asked, in the order §6.2 fixes.
-    assert_eq!((span.start, span.end), (10, 20));
+    assert_eq!((span.start(), span.end()), (10, 20));
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn two_different_questions_are_two_holes_in_the_order_they_were_found() {
         .questions()
         .iter()
         .map(|n| match n {
-            Node::Hole { call, .. } => match r.value(call.args[0]) {
+            Node::Hole { call, .. } => match r.value(call.args()[0]) {
                 Some(Value::Str(s)) => s.clone(),
                 other => panic!("{other:?}"),
             },
@@ -199,7 +199,7 @@ fn a_question_whose_argument_is_not_here_yet_is_not_a_question_yet() {
     let r = buried(&demanding(vec![descending(read_of(inner, Span::default()))]));
 
     let [Node::Hole { call, .. }] = r.questions()[..] else { panic!() };
-    assert_eq!(r.value(call.args[0]), Some(&Value::Str("dir".into())));
+    assert_eq!(r.value(call.args()[0]), Some(&Value::Str("dir".into())));
 }
 
 #[test]
@@ -258,7 +258,7 @@ fn sealing_a_shade_names_the_shade_and_not_what_is_inside_it() {
     let r = buried(&demanding(vec![sealed]));
 
     let inside = Value::Int(7).cairn();
-    let want = Value::Shade { origin: 0, value: inside }.cairn();
+    let want = Value::Shade { origin: Stratum::ZERO, value: inside }.cairn();
     assert_eq!(r.demands[0].kind, ExprKind::Literal(Literal::Cairn(*want.as_bytes())));
     assert_ne!(want, inside, "the shade and what it holds have the same name");
 }
@@ -380,7 +380,7 @@ fn asking(residue: &Residue) -> Vec<(String, u8, (u64, u64))> {
         .iter()
         .map(|node| {
             let Node::Hole { call, stratum, span } = node else { panic!("not a hole") };
-            (call.function.clone(), *stratum, (span.start, span.end))
+            (call.function().to_owned(), stratum.as_u8(), (span.start(), span.end()))
         })
         .collect()
 }
@@ -503,7 +503,7 @@ fn evaluation_goes_left_to_right_and_innermost_first() {
         .iter()
         .map(|node| {
             let Node::Hole { call, .. } = node else { panic!("not a hole") };
-            r.value(call.args[0]).cloned().expect("an argument that is here")
+            r.value(call.args()[0]).cloned().expect("an argument that is here")
         })
         .collect();
     assert_eq!(order, vec![Value::Str("a".into()), Value::Str("b".into())]);
@@ -518,7 +518,7 @@ fn evaluation_goes_left_to_right_and_innermost_first() {
         .iter()
         .map(|node| {
             let Node::Hole { call, .. } = node else { panic!("not a hole") };
-            r.value(call.args[0]).cloned().expect("an argument that is here")
+            r.value(call.args()[0]).cloned().expect("an argument that is here")
         })
         .collect();
     assert_eq!(order, vec![Value::Str("in".into()), Value::Str("out".into())]);
@@ -544,8 +544,8 @@ fn a_budget_that_binds_cuts_where_the_order_says() {
     assert_eq!(exact.holes.len(), 2);
     let Node::Hole { call: first_call, .. } = exact.questions()[0] else { panic!("not a hole") };
     let Node::Hole { call: second_call, .. } = exact.questions()[1] else { panic!("not a hole") };
-    assert_eq!(exact.value(first_call.args[0]), Some(&Value::Str("a".into())));
-    assert_eq!(exact.value(second_call.args[0]), Some(&Value::Str("b".into())));
+    assert_eq!(exact.value(first_call.args()[0]), Some(&Value::Str("a".into())));
+    assert_eq!(exact.value(second_call.args()[0]), Some(&Value::Str("b".into())));
 }
 
 /// §7.3.1: one entry per question left open, which is not one entry per node.

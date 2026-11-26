@@ -93,7 +93,7 @@ impl Provider for Unrecorded {
         // record of what was attempted without polluting `objects/` or `refs/`
         // with a phantom `Refused(Unreachable)` witness on successful calls.
         let attempt = Stored::Node(Node::Witness {
-            stratum: Depth::UNRECORDED.get(),
+            stratum: nether_ledger::Stratum::EIGHT,
             call: call.clone(),
             answer: refused(Refusal::Unreachable).cairn(),
             span,
@@ -112,7 +112,7 @@ impl Provider for Unrecorded {
         };
 
         let value = match code {
-            0 => given(&call.function, Value::Bytes(said)),
+            0 => given(call.function(), Value::Bytes(said)),
             other => refused(meant(other).unwrap_or(Refusal::Malformed)),
         };
         let recorded = into.record(call, Depth::UNRECORDED, span, &value)?;

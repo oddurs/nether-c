@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Cairn, Call, Span, Store, Stored, Value};
+use nether_ledger::{Cairn, Call, Span, Store, Stored, Stratum, Value};
 use nether_world::{Provider, Recorded, Recorder, Refuse, World};
 
 struct Scratch(PathBuf);
@@ -61,21 +61,21 @@ fn source() -> Cairn {
 }
 
 fn span() -> Span {
-    Span { source: source(), start: 0, end: 1 }
+    Span::new(source(), 0, 1).unwrap()
 }
 
 fn asking(function: &str) -> Call {
     let arity = nether_core::Prim::from_name(function).map_or(0, nether_core::Prim::arity);
     let args =
         (0..arity).map(|i| Cairn::of_encoded(format!("{function}:{i}").as_bytes())).collect();
-    Call { function: function.to_owned(), args }
+    Call::try_new(function, args).unwrap()
 }
 
 fn asking_tagged(function: &str, tag: u64) -> Call {
     let arity = nether_core::Prim::from_name(function).map_or(0, nether_core::Prim::arity);
     let args =
         (0..arity).map(|i| Cairn::of_encoded(format!("{function}:{tag}:{i}").as_bytes())).collect();
-    Call { function: function.to_owned(), args }
+    Call::try_new(function, args).unwrap()
 }
 
 /// A provider that answers, which is the ordinary case.
@@ -111,7 +111,7 @@ fn what_a_provider_returns_is_already_in_the_ledger() {
     else {
         panic!("a witness is not a witness")
     };
-    assert_eq!(stratum, 3);
+    assert_eq!(stratum, Stratum::THREE);
     assert_eq!(answer, recorded.answer());
 }
 
@@ -222,9 +222,9 @@ impl Provider for OutOfOrder {
     }
     fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
         use std::sync::atomic::Ordering::SeqCst;
-        let tag = span.start;
+        let tag = span.start();
         let num = i64::try_from(tag).unwrap_or(0);
-        if call.function == "write" {
+        if call.function() == "write" {
             self.events.lock().expect("lock").push(format!("write:{tag}"));
             return into.record(call, Depth::DISK_WRITE, span, &Value::Int(num));
         }
@@ -274,7 +274,7 @@ fn many_holes_answer_concurrently_and_keep_discovery_order() {
         events: std::sync::Mutex::new(Vec::new()),
     });
     let world = World::sealed().granting(Box::new(Shared(state.clone())));
-    let at = |start: u64| Span { source: source(), start, end: start + 1 };
+    let at = |start: u64| Span::new(source(), start, start + 1).unwrap();
     let asked = vec![
         (asking_tagged("read", 0), at(0)),
         (asking_tagged("read", 1), at(1)),
@@ -293,7 +293,7 @@ fn many_holes_answer_concurrently_and_keep_discovery_order() {
             else {
                 panic!("not a witness");
             };
-            span.start
+            span.start()
         })
         .collect();
     // Holes 1 and 2 finished and recorded before hole 0, yet the returned
@@ -328,7 +328,7 @@ fn concurrency_is_bounded_and_collapsing_cancels_later_holes() {
         fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
             let cur = self.active.fetch_add(1, SeqCst) + 1;
             self.peak.fetch_max(cur, SeqCst);
-            let tag = span.start;
+            let tag = span.start();
             let num = Value::Int(i64::try_from(tag).unwrap_or(0));
             let res = if tag >= 100 {
                 std::thread::sleep(std::time::Duration::from_millis(10));
@@ -376,7 +376,7 @@ fn concurrency_is_bounded_and_collapsing_cancels_later_holes() {
         after_cutoff: AtomicUsize::new(0),
     });
     let world = World::sealed().granting(Box::new(Ref(state.clone())));
-    let at = |start: u64| Span { source: source(), start, end: start + 1 };
+    let at = |start: u64| Span::new(source(), start, start + 1).unwrap();
 
     let sixteen: Vec<(Call, Span)> =
         (100..116).map(|n| (asking_tagged("read", n), at(n))).collect();
@@ -418,8 +418,8 @@ fn identical_read_holes_at_distinct_spans_contact_world_once_and_check_arity() {
     let calls = std::sync::Arc::new(AtomicUsize::new(0));
     let world = World::sealed().granting(Box::new(Counting(calls.clone())));
     let c = asking_tagged("read", 42);
-    let s0 = Span { source: source(), start: 0, end: 4 };
-    let s1 = Span { source: source(), start: 10, end: 14 };
+    let s0 = Span::new(source(), 0, 4).unwrap();
+    let s1 = Span::new(source(), 10, 14).unwrap();
     let out = world.ask_all(&[(c.clone(), s0), (c, s1)], &Recorder::new(&store));
     assert_eq!(calls.load(SeqCst), 1, "identical read calls across spans must contact world once");
     assert_eq!(out.len(), 2);
@@ -435,7 +435,7 @@ fn identical_read_holes_at_distinct_spans_contact_world_once_and_check_arity() {
     assert_eq!(ws1, s1);
 
     // L3: wrong arity is rejected before calling provider.
-    let bad = Call { function: "read".into(), args: Vec::new() };
+    let bad = Call::try_new("read", Vec::new()).unwrap();
     assert!(matches!(
         world.ask(&bad, s0, &Recorder::new(&store)),
         Err(nether_world::Unanswered::Collapsed(_))

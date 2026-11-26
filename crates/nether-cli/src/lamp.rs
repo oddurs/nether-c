@@ -228,15 +228,15 @@ fn node(store: &Store, n: &Node) -> String {
             format!("apply    {}({})  →  {}", function.short(), args.join(", "), result.short())
         }
         Node::Hole { call, stratum, .. } => {
-            format!("hole     {}   stratum {stratum}", said(store, &call.function, &call.args))
+            format!("hole     {}   stratum {stratum}", said(store, call.function(), call.args()))
         }
         Node::Witness { call, stratum, answer, .. } => format!(
             "witness  {}   stratum {stratum}   →  {}",
-            said(store, &call.function, &call.args),
+            said(store, call.function(), call.args()),
             answer.short()
         ),
         Node::Deposit { value: v, span } => match store.get(*v) {
-            Ok(Stored::Value(v)) => format!("deposit  {}   at {}", value(&v), span.start),
+            Ok(Stored::Value(v)) => format!("deposit  {}   at {}", value(&v), span.start()),
             _ => format!("deposit  {}", v.short()),
         },
         Node::Trace { residue, holes, witnesses, deposits, depth, unrecorded, .. } => {
@@ -511,8 +511,8 @@ fn print_at(r: &AtReport<'_>, wants_json: bool) {
                 format!(
                     "{{\"cairn\":\"{}\",\"start\":{},\"end\":{},\"provenance\":[{}]}}",
                     h.cairn,
-                    h.span.start,
-                    h.span.end,
+                    h.span.start(),
+                    h.span.end(),
                     prov.join(",")
                 )
             })
@@ -568,7 +568,7 @@ fn trace_hits(
         all.push((at, n.clone(), *span));
     }
     let direct =
-        |sp: &nether_ledger::Span| sp.source == source && sp.start <= byte && byte < sp.end;
+        |sp: &nether_ledger::Span| sp.source() == source && sp.start() <= byte && byte < sp.end();
     let mut matched: Vec<(Cairn, Node, nether_ledger::Span)> =
         all.iter().filter(|(_, _, sp)| direct(sp)).cloned().collect();
     if matched.is_empty()
@@ -577,9 +577,9 @@ fn trace_hits(
         matched = all
             .into_iter()
             .filter(|(_, _, sp)| {
-                sp.source == source
-                    && sp.start <= u64::from(cs.start)
-                    && u64::from(cs.end) <= sp.end
+                sp.source() == source
+                    && sp.start() <= u64::from(cs.start)
+                    && u64::from(cs.end) <= sp.end()
             })
             .collect();
     }

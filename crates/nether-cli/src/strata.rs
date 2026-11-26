@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::process::ExitCode;
 
 use nether_core::{Capability, Depth};
-use nether_ledger::{Cairn, Node, Span, Store, StoreError, Stored, Value};
+use nether_ledger::{Cairn, Node, Span, Store, StoreError, Stored, Stratum, Value};
 
 use crate::{bad_usage, code, json, lamp, split_flag, usage_error};
 
@@ -73,8 +73,8 @@ pub fn run(args: &[String]) -> ExitCode {
             };
         }
     };
-    let unrecorded = marked
-        || found.reaches.iter().any(|r| r.answered && r.stratum == nether_ledger::MAX_STRATUM);
+    let unrecorded =
+        marked || found.reaches.iter().any(|r| r.answered && r.stratum == Stratum::MAX);
     let told = Reading { cairn, depth, unrecorded, found };
     if wants_json {
         println!("{}", told.json(&store));
@@ -92,7 +92,7 @@ pub fn run(args: &[String]) -> ExitCode {
         eprintln!("nether: this trace is not marked unrecorded, and a witness under it reached 8");
         return ExitCode::from(code::MALFORMED);
     }
-    if marked && told.depth < nether_ledger::MAX_STRATUM {
+    if marked && told.depth < Stratum::MAX {
         eprintln!("nether: this trace is marked unrecorded, and records depth {}", told.depth);
         return ExitCode::from(code::MALFORMED);
     }
@@ -108,7 +108,7 @@ fn complain() -> ExitCode {
 
 /// One question put to the world, and how deep it went.
 struct Reach {
-    stratum: u8,
+    stratum: Stratum,
     /// Whether the world has answered.
     ///
     /// §7.3 makes the difference: a witness holds "the stratum that was
@@ -131,8 +131,8 @@ struct Survey {
 }
 
 /// Deepest, then where, then what: the order the report is read in.
-fn order(r: &Reach) -> (Reverse<u8>, [u8; 32], u64, bool, &str) {
-    (Reverse(r.stratum), *r.at.source.as_bytes(), r.at.start, r.answered, &r.call)
+fn order(r: &Reach) -> (Reverse<Stratum>, [u8; 32], u64, bool, &str) {
+    (Reverse(r.stratum), *r.at.source().as_bytes(), r.at.start(), r.answered, &r.call)
 }
 
 /// Validate each trace slot (`holes`, `witnesses`, `deposits`) against its
@@ -158,7 +158,7 @@ fn survey(
                     reaches.push(Reach {
                         stratum,
                         answered: false,
-                        call: lamp::said(store, &call.function, &call.args),
+                        call: lamp::said(store, call.function(), call.args()),
                         at: span,
                     });
                 }
@@ -168,7 +168,7 @@ fn survey(
                     reaches.push(Reach {
                         stratum,
                         answered: true,
-                        call: lamp::said(store, &call.function, &call.args),
+                        call: lamp::said(store, call.function(), call.args()),
                         at: span,
                     });
                 }
@@ -202,22 +202,28 @@ fn survey(
 /// A trace, read for depth.
 struct Reading {
     cairn: Cairn,
-    depth: u8,
+    depth: Stratum,
     unrecorded: bool,
     found: Survey,
 }
 
 impl Reading {
     /// The deepest stratum the world actually answered at.
-    fn deepest_answered(&self) -> u8 {
-        self.found.reaches.iter().filter(|r| r.answered).map(|r| r.stratum).max().unwrap_or(0)
+    fn deepest_answered(&self) -> Stratum {
+        self.found
+            .reaches
+            .iter()
+            .filter(|r| r.answered)
+            .map(|r| r.stratum)
+            .max()
+            .unwrap_or(Stratum::ZERO)
     }
 
     fn text(&self, store: &Store) -> String {
         use core::fmt::Write as _;
 
         let mut out = String::new();
-        let _ = writeln!(out, "depth {}   {}", self.depth, stratum_name(self.depth));
+        let _ = writeln!(out, "depth {}   {}", self.depth, stratum_name(self.depth.as_u8()));
         let _ = writeln!(out);
 
         if self.found.reaches.is_empty() {
@@ -258,7 +264,7 @@ impl Reading {
         if answered < self.depth {
             notes.push(format!(
                 "of that, {answered} ({}) has happened; the rest is what exhuming will cost.",
-                stratum_name(answered)
+                stratum_name(answered.as_u8())
             ));
         }
         if self.found.missing > 0 {
@@ -284,7 +290,7 @@ impl Reading {
             })
             .collect();
         let notes: Vec<String> = self.notes().iter().map(|n| json::string(n)).collect();
-        let s = json::string(stratum_name(self.depth));
+        let s = json::string(stratum_name(self.depth.as_u8()));
         let (cairn, depth, unrecorded, missing) =
             (self.cairn, self.depth, self.unrecorded, self.found.missing);
         let (reaches, notes) = (reaches.join(","), notes.join(","));
@@ -310,13 +316,13 @@ pub(crate) fn stratum_name(stratum: u8) -> &'static str {
 /// the offset becomes a line and a column; if it does not, the offset is the
 /// most that can honestly be said.
 fn place(store: &Store, at: Span) -> String {
-    let Some(text) = source(store, at.source) else {
-        return format!("{}:+{}", at.source.short(), at.start);
+    let Some(text) = source(store, at.source()) else {
+        return format!("{}:+{}", at.source().short(), at.start());
     };
     // An offset past the end of the source, or past what this machine can
     // index, is the end of the source: a span is a claim about bytes, and
     // those are all the bytes there are.
-    let mut start = usize::try_from(at.start).map_or(text.len(), |n| n.min(text.len()));
+    let mut start = usize::try_from(at.start()).map_or(text.len(), |n| n.min(text.len()));
     while !text.is_char_boundary(start) {
         start -= 1;
     }
@@ -324,7 +330,7 @@ fn place(store: &Store, at: Span) -> String {
     let line = before.matches('\n').count() + 1;
     let line_start = before.rfind('\n').map_or(0, |i| i + 1);
     let column = text[line_start..start].chars().count() + 1;
-    format!("{}:{line}:{column}", at.source.short())
+    format!("{}:{line}:{column}", at.source().short())
 }
 
 /// The source a span names, if the ledger still holds it as text.

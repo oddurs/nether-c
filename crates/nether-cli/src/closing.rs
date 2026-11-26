@@ -8,7 +8,7 @@ use std::process::ExitCode;
 
 use nether_bury::{Halt, HaltKind};
 use nether_core::{Unit, check, report};
-use nether_ledger::{Cairn, Node, Store, StoreError, Stored, Value};
+use nether_ledger::{Cairn, Node, Store, StoreError, Stored, Stratum, Value};
 use nether_syntax::{lower, parse};
 
 use crate::{FAILED, code};
@@ -91,18 +91,23 @@ pub fn residue_unit(
     Ok((text, unit))
 }
 
+/// Convert a validated `nether_core::Depth` (`0..=8`) to a ledger [`Stratum`].
+pub(crate) fn stratum(d: nether_core::Depth) -> Stratum {
+    Stratum::new(d.get()).unwrap_or(Stratum::MAX)
+}
+
 /// Whether `stratum` and argument count match the world-touching prelude
 /// primitive named by `call`.
-pub(crate) fn valid_stratum(call: &nether_ledger::Call, stratum: u8) -> bool {
-    nether_core::Prim::from_name(&call.function).is_some_and(|p| {
+pub(crate) fn valid_stratum(call: &nether_ledger::Call, stratum: Stratum) -> bool {
+    nether_core::Prim::from_name(call.function()).is_some_and(|p| {
         p.latent() > nether_core::Depth::PURE
-            && p.latent().get() == stratum
-            && call.args.len() == p.arity()
+            && p.latent().get() == stratum.as_u8()
+            && call.args().len() == p.arity()
     })
 }
 
 /// The stratum a hole or witness reached, or `Corrupt` if wrong kind or forged stratum.
-fn reached_node(store: &Store, node: Cairn, expect_witness: bool) -> Result<u8, StoreError> {
+fn reached_node(store: &Store, node: Cairn, expect_witness: bool) -> Result<Stratum, StoreError> {
     match store.get(node)? {
         Stored::Node(Node::Hole { call, stratum, .. })
             if !expect_witness && valid_stratum(&call, stratum) =>
@@ -122,10 +127,10 @@ fn reached_node(store: &Store, node: Cairn, expect_witness: bool) -> Result<u8, 
 /// reach, and what a witness reached.
 pub fn depth(
     store: &Store,
-    residue: u8,
+    residue: Stratum,
     holes: &[Cairn],
     witnesses: &[Cairn],
-) -> Result<u8, ExitCode> {
+) -> Result<Stratum, ExitCode> {
     let mut out = residue;
     for (nodes, expect_witness) in [(holes, false), (witnesses, true)] {
         for &node in nodes {
@@ -138,7 +143,7 @@ pub fn depth(
 /// §1.7: marked when something *reached* stratum 8, which a hole at 8 has not.
 pub fn unrecorded(store: &Store, witnesses: &[Cairn]) -> Result<bool, ExitCode> {
     for &w in witnesses {
-        if reached_node(store, w, true).map_err(|e| store_err(&e))? == nether_ledger::MAX_STRATUM {
+        if reached_node(store, w, true).map_err(|e| store_err(&e))? == Stratum::MAX {
             return Ok(true);
         }
     }
@@ -164,7 +169,7 @@ pub fn verify_trace_parts(
     deposits: &[Cairn],
     holes: &[Cairn],
     witnesses: &[Cairn],
-    orig_depth: u8,
+    orig_depth: Stratum,
     marked: bool,
 ) -> Result<bool, ExitCode> {
     if !matches!(store.get(source).map_err(|e| store_err(&e))?, Stored::Value(Value::Bytes(_))) {
@@ -187,11 +192,11 @@ pub fn verify_trace_parts(
         eprintln!("nether: this trace is not marked unrecorded, and a witness under it reached 8");
         return Err(ExitCode::from(code::MALFORMED));
     }
-    if marked && orig_depth < nether_ledger::MAX_STRATUM {
+    if marked && orig_depth < Stratum::MAX {
         eprintln!("nether: this trace is marked unrecorded, and records depth {orig_depth}");
         return Err(ExitCode::from(code::MALFORMED));
     }
-    let min_depth = depth(store, 0, holes, witnesses)?;
+    let min_depth = depth(store, Stratum::ZERO, holes, witnesses)?;
     if min_depth > orig_depth {
         eprintln!(
             "nether: this trace records depth {orig_depth}, and a hole or witness under it reaches {min_depth}"

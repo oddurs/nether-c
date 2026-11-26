@@ -97,9 +97,10 @@ impl Provider for Env {
     }
 
     fn answer(&self, call: &Call, span: Span, into: &Recorder) -> Result<Recorded, Refuse> {
-        let said = match call.function.as_str() {
-            "clock" => given(&call.function, Value::Int(self.clock)),
-            "target" => given(&call.function, Value::Str(self.target.clone())),
+        let func = call.function();
+        let said = match func {
+            "clock" => given(func, Value::Int(self.clock)),
+            "target" => given(func, Value::Str(self.target.clone())),
             // §9.4 distinguishes two mistakes, and this is the only place
             // that can tell them apart. Declared and unset is a refusal: the
             // world was asked and said no, and that is an answer. Never
@@ -112,7 +113,7 @@ impl Provider for Env {
                 };
                 match self.declared.of(&name) {
                     Some("") => refused(Refusal::Absent),
-                    Some(value) => given(&call.function, Value::Str(value.to_owned())),
+                    Some(value) => given(func, Value::Str(value.to_owned())),
                     None => {
                         return Err(Refuse::Collapse(format!(
                             "`{name}` was never declared, so there is nothing for `env` to say"

@@ -9,7 +9,9 @@ use core::fmt;
 
 use crate::cairn::Cairn;
 use crate::node::{Call, Node, Span, kind};
-use crate::value::{AnswerOf, MAX_REFUSAL, MAX_STRATUM, Refusal, Value, tag};
+use crate::value::{
+    AnswerOf, MAX_REFUSAL, MAX_STRATUM, NonEmptyName, Refusal, Stratum, Value, tag,
+};
 
 /// How deeply values may nest before a decoder gives up.
 ///
@@ -28,12 +30,14 @@ pub const MAX_DECODED_BYTES: usize = 256 * 1024 * 1024;
 // ── encoding ────────────────────────────────────────────────────────────────
 
 impl Value {
-    /// Checks every invariant `decode` enforces without allocating bytes.
+    /// Checks tree-level bounds `decode` enforces without allocating bytes.
+    ///
+    /// Single-field invariants (`Stratum`, `NonEmptyName`) are enforced at
+    /// construction; this verifies nesting depth and total decoded weight.
     ///
     /// # Errors
     ///
-    /// Returns [`DecodeError`] if any nested value exceeds [`MAX_DEPTH`], has
-    /// an out-of-range shade origin, has an empty struct name, or exceeds
+    /// Returns [`DecodeError`] if any nested value exceeds [`MAX_DEPTH`] or
     /// [`MAX_DECODED_BYTES`].
     pub fn validate(&self) -> Result<(), DecodeError> {
         let mut stack = vec![(self, 0usize)];
@@ -54,12 +58,6 @@ impl Value {
                 return Err(DecodeError::TooLarge { bytes: weight, limit: MAX_DECODED_BYTES });
             }
             match cur {
-                Self::Shade { origin, .. } if *origin > MAX_STRATUM => {
-                    return Err(DecodeError::NoSuchStratum(*origin));
-                }
-                Self::Struct { name, .. } if name.is_empty() => {
-                    return Err(DecodeError::EmptyStructName);
-                }
                 Self::Struct { fields, .. } => {
                     for field in fields.iter().rev() {
                         stack.push((field, depth + 1));
@@ -119,7 +117,7 @@ impl Value {
                 }
                 Self::Cairn(c) => out.extend_from_slice(c.as_bytes()),
                 Self::Shade { origin, value } => {
-                    out.push(*origin);
+                    out.push(origin.as_u8());
                     out.extend_from_slice(value.as_bytes());
                 }
                 Self::Struct { name, fields } => {
@@ -191,36 +189,23 @@ fn put_len(out: &mut dyn Sink, n: usize) {
 // ── nodes ───────────────────────────────────────────────────────────────────
 
 impl Node {
-    /// Checks every invariant `decode_node` enforces without allocating bytes.
+    /// Checks tree-level bounds `decode_node` enforces without allocating bytes.
+    ///
+    /// Single-field invariants (`Stratum`, `Call`, `Span`) are enforced at
+    /// construction; only `Literal` values can exceed tree-level bounds.
     ///
     /// # Errors
     ///
-    /// Returns [`DecodeError`] if any field violates §7.3.1 (empty call name,
-    /// backwards span, stratum past `MAX_STRATUM`, or invalid literal value).
+    /// Returns [`DecodeError`] if a `Literal` value exceeds [`MAX_DEPTH`] or
+    /// [`MAX_DECODED_BYTES`].
     pub fn validate(&self) -> Result<(), DecodeError> {
-        let check_span = |span: &Span| {
-            if span.end < span.start {
-                Err(DecodeError::BackwardsSpan { start: span.start, end: span.end })
-            } else {
-                Ok(())
-            }
-        };
-        let check_call = |call: &Call| {
-            if call.function.is_empty() { Err(DecodeError::EmptyCallName) } else { Ok(()) }
-        };
-        let check_stratum = |s: u8| {
-            if s > MAX_STRATUM { Err(DecodeError::NoSuchStratum(s)) } else { Ok(()) }
-        };
         match self {
             Self::Literal(v) => v.validate(),
-            Self::Apply { .. } => Ok(()),
-            Self::Hole { call, stratum, span } | Self::Witness { stratum, call, span, .. } => {
-                check_stratum(*stratum)?;
-                check_call(call)?;
-                check_span(span)
-            }
-            Self::Deposit { span, .. } => check_span(span),
-            Self::Trace { depth, .. } => check_stratum(*depth),
+            Self::Apply { .. }
+            | Self::Hole { .. }
+            | Self::Deposit { .. }
+            | Self::Witness { .. }
+            | Self::Trace { .. } => Ok(()),
         }
     }
 
@@ -255,7 +240,7 @@ impl Node {
             }
             Self::Hole { call, stratum, span } => {
                 put_call(out, call);
-                out.push(*stratum);
+                out.push(stratum.as_u8());
                 put_span(out, span);
             }
             Self::Deposit { value, span } => {
@@ -263,7 +248,7 @@ impl Node {
                 put_span(out, span);
             }
             Self::Witness { stratum, call, answer, span } => {
-                out.push(*stratum);
+                out.push(stratum.as_u8());
                 put_call(out, call);
                 out.extend_from_slice(answer.as_bytes());
                 put_span(out, span);
@@ -274,7 +259,7 @@ impl Node {
                 put_cairns(out, witnesses);
                 put_cairns(out, deposits);
                 out.extend_from_slice(source.as_bytes());
-                out.push(*depth);
+                out.push(depth.as_u8());
                 out.push(u8::from(*unrecorded));
             }
         }
@@ -289,15 +274,16 @@ fn put_cairns(out: &mut dyn Sink, cairns: &[Cairn]) {
 }
 
 fn put_span(out: &mut dyn Sink, span: &Span) {
-    out.extend_from_slice(span.source.as_bytes());
-    out.extend_from_slice(&span.start.to_be_bytes());
-    out.extend_from_slice(&span.end.to_be_bytes());
+    out.extend_from_slice(span.source().as_bytes());
+    out.extend_from_slice(&span.start().to_be_bytes());
+    out.extend_from_slice(&span.end().to_be_bytes());
 }
 
 fn put_call(out: &mut dyn Sink, call: &Call) {
-    put_len(out, call.function.len());
-    out.extend_from_slice(call.function.as_bytes());
-    put_cairns(out, &call.args);
+    let function = call.function();
+    put_len(out, function.len());
+    out.extend_from_slice(function.as_bytes());
+    put_cairns(out, call.args());
 }
 
 // ── decoding ────────────────────────────────────────────────────────────────
@@ -411,16 +397,36 @@ pub enum Stored {
 }
 
 impl Stored {
-    /// Validates invariants and returns the canonical encoding.
+    /// Checks tree-level bounds (`MAX_DEPTH`, `MAX_DECODED_BYTES`) without encoding.
     ///
     /// # Errors
     ///
-    /// Returns [`DecodeError`] if the value or node violates canonical encoding rules.
-    pub fn try_encode(&self) -> Result<Vec<u8>, DecodeError> {
+    /// Returns [`DecodeError`] if a nested value exceeds [`MAX_DEPTH`] or
+    /// [`MAX_DECODED_BYTES`].
+    pub fn validate(&self) -> Result<(), DecodeError> {
         match self {
-            Self::Value(v) => v.try_encode(),
-            Self::Node(n) => n.try_encode(),
+            Self::Value(v) => v.validate(),
+            Self::Node(n) => n.validate(),
         }
+    }
+
+    /// Forward cairn references of this object (empty for values).
+    #[must_use]
+    pub fn references(&self) -> Vec<Cairn> {
+        match self {
+            Self::Value(_) => Vec::new(),
+            Self::Node(n) => n.references(),
+        }
+    }
+
+    /// Validates tree-level bounds and returns the canonical encoding.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError`] if [`Self::validate`] rejects this object.
+    pub fn try_encode(&self) -> Result<Vec<u8>, DecodeError> {
+        self.validate()?;
+        Ok(self.encode())
     }
 
     /// The canonical encoding.
@@ -599,18 +605,12 @@ impl<'a> Reader<'a> {
         let source = self.cairn()?;
         let start = u64::from_be_bytes(self.take_array::<8>()?);
         let end = u64::from_be_bytes(self.take_array::<8>()?);
-        if end < start {
-            return Err(DecodeError::BackwardsSpan { start, end });
-        }
-        Ok(Span { source, start, end })
+        Span::new(source, start, end)
     }
 
     fn call(&mut self) -> Result<Call, DecodeError> {
-        let function = self.text()?;
-        if function.is_empty() {
-            return Err(DecodeError::EmptyCallName);
-        }
-        Ok(Call { function, args: self.cairns()? })
+        let function = NonEmptyName::new(self.text()?).map_err(|_| DecodeError::EmptyCallName)?;
+        Ok(Call::new(function, self.cairns()?))
     }
 
     fn refusal(&mut self) -> Result<Refusal, DecodeError> {
@@ -618,12 +618,8 @@ impl<'a> Reader<'a> {
         Refusal::from_code(code).ok_or(DecodeError::NoSuchRefusal(code))
     }
 
-    fn stratum(&mut self) -> Result<u8, DecodeError> {
-        let s = self.byte()?;
-        if s > MAX_STRATUM {
-            return Err(DecodeError::NoSuchStratum(s));
-        }
-        Ok(s)
+    fn stratum(&mut self) -> Result<Stratum, DecodeError> {
+        Stratum::new(self.byte()?)
     }
 
     fn node(&mut self) -> Result<Node, DecodeError> {
@@ -687,8 +683,8 @@ impl<'a> Reader<'a> {
                 let call = self.call()?;
                 let _ = self.stratum()?;
                 let span = self.span()?;
-                let mut references = call.args;
-                references.push(span.source);
+                let mut references = call.into_args();
+                references.push(span.source());
                 Ok(Scanned { is_node: true, is_trace: false, references, nodes: Vec::new() })
             }
             kind::DEPOSIT => {
@@ -697,7 +693,7 @@ impl<'a> Reader<'a> {
                 Ok(Scanned {
                     is_node: true,
                     is_trace: false,
-                    references: vec![value, span.source],
+                    references: vec![value, span.source()],
                     nodes: Vec::new(),
                 })
             }
@@ -706,9 +702,9 @@ impl<'a> Reader<'a> {
                 let call = self.call()?;
                 let answer = self.cairn()?;
                 let span = self.span()?;
-                let mut references = call.args;
+                let mut references = call.into_args();
                 references.push(answer);
-                references.push(span.source);
+                references.push(span.source());
                 Ok(Scanned { is_node: true, is_trace: false, references, nodes: Vec::new() })
             }
             kind::TRACE => {
@@ -837,19 +833,13 @@ impl<'a> Reader<'a> {
             }
             tag::CAIRN => Ok(Value::Cairn(self.cairn()?)),
             tag::SHADE => {
-                let origin = self.byte()?;
-                if origin > MAX_STRATUM {
-                    return Err(DecodeError::NoSuchStratum(origin));
-                }
+                let origin = self.stratum()?;
                 Ok(Value::Shade { origin, value: self.cairn()? })
             }
             tag::STRUCT => {
                 let name_str = self.text_str()?;
-                if name_str.is_empty() {
-                    return Err(DecodeError::EmptyStructName);
-                }
-                self.charge(name_str.len())?;
-                let name = name_str.to_owned();
+                let name = NonEmptyName::new(name_str).map_err(|_| DecodeError::EmptyStructName)?;
+                self.charge(name.len())?;
                 let count = self.len()?;
                 self.believable(count, 1)?;
                 // Grown, not reserved: a count is believable against the bytes
@@ -886,7 +876,13 @@ impl<'a> Reader<'a> {
 mod tests {
     use super::{DecodeError, MAX_DEPTH, decode};
     use crate::cairn::Cairn;
-    use crate::value::{AnswerOf, MAX_REFUSAL, Refusal, Value, tag};
+    use crate::value::{
+        AnswerOf, EmptyNameError, MAX_REFUSAL, NonEmptyName, Refusal, Stratum, Value, tag,
+    };
+
+    fn name(s: &str) -> NonEmptyName {
+        NonEmptyName::new(s).unwrap()
+    }
 
     fn sample() -> Vec<Value> {
         let c = Cairn::of_encoded(b"named");
@@ -903,8 +899,8 @@ mod tests {
             Value::Str(String::new()),
             Value::Str("café — 深い".to_owned()),
             Value::Cairn(c),
-            Value::Shade { origin: 0, value: c },
-            Value::Shade { origin: 8, value: c },
+            Value::Shade { origin: Stratum::ZERO, value: c },
+            Value::Shade { origin: Stratum::EIGHT, value: c },
             Value::Array(vec![]),
             Value::Array(vec![Value::Int(1), Value::Unit]),
             Value::Refusal(Refusal::Absent),
@@ -913,13 +909,13 @@ mod tests {
             Value::Answer(Box::new(AnswerOf::Given(Value::Bytes(b"main.nc".to_vec())))),
             Value::Answer(Box::new(AnswerOf::Refused(Refusal::Absent))),
             Value::Answer(Box::new(AnswerOf::Refused(Refusal::Unreachable))),
-            Value::Struct { name: "Header".to_owned(), fields: vec![] },
+            Value::Struct { name: name("Header"), fields: vec![] },
             Value::Struct {
-                name: "Header".to_owned(),
+                name: name("Header"),
                 fields: vec![Value::Int(3), Value::Bytes(b"nc".to_vec())],
             },
             Value::Array(vec![Value::Array(vec![Value::Struct {
-                name: "Deep".to_owned(),
+                name: name("Deep"),
                 fields: vec![Value::Cairn(c)],
             }])]),
         ]
@@ -953,8 +949,8 @@ mod tests {
     /// A struct's name is part of its value, so two shapes are two values.
     #[test]
     fn nominal_typing_reaches_the_encoding() {
-        let a = Value::Struct { name: "A".to_owned(), fields: vec![Value::Int(1)] };
-        let b = Value::Struct { name: "B".to_owned(), fields: vec![Value::Int(1)] };
+        let a = Value::Struct { name: name("A"), fields: vec![Value::Int(1)] };
+        let b = Value::Struct { name: name("B"), fields: vec![Value::Int(1)] };
         assert_ne!(a.cairn(), b.cairn());
     }
 
@@ -1040,12 +1036,28 @@ mod tests {
     #[test]
     fn a_shades_origin_is_part_of_its_name() {
         let inside = Cairn::of_encoded(b"the same bytes");
-        let from_disk = Value::Shade { origin: 3, value: inside };
-        let from_net = Value::Shade { origin: 5, value: inside };
+        let from_disk = Value::Shade { origin: Stratum::THREE, value: inside };
+        let from_net = Value::Shade { origin: Stratum::FIVE, value: inside };
         assert_ne!(from_disk.cairn(), from_net.cairn());
         // And neither is the name of what it holds: `seal` on a shade names
         // the shade. §1.5.
         assert_ne!(from_disk.cairn(), inside);
+    }
+
+    #[test]
+    fn safe_value_constructors_reject_invalid_strata_and_empty_names() {
+        for s in 0..=8 {
+            let valid = Stratum::new(s).unwrap();
+            assert_eq!(valid.as_u8(), s);
+        }
+        for bad in [9, 10, 200, u8::MAX] {
+            assert_eq!(Stratum::new(bad), Err(DecodeError::NoSuchStratum(bad)));
+        }
+        assert_eq!(NonEmptyName::new(""), Err(EmptyNameError));
+        assert_eq!(NonEmptyName::new(String::new()), Err(EmptyNameError));
+        let ok = NonEmptyName::new("Header").unwrap();
+        assert_eq!(ok.as_str(), "Header");
+        assert_eq!(ok.into_inner(), "Header");
     }
 
     #[test]
@@ -1184,18 +1196,18 @@ mod node_tests {
     use super::{DecodeError, Stored, decode, decode_node, decode_stored};
     use crate::cairn::Cairn;
     use crate::node::{Call, Node, Span, kind};
-    use crate::value::{Value, tag};
+    use crate::value::{EmptyNameError, NonEmptyName, Stratum, Value, tag};
 
     fn c(seed: &[u8]) -> Cairn {
         Cairn::of_encoded(seed)
     }
 
     fn span() -> Span {
-        Span { source: c(b"hello.nc"), start: 12, end: 31 }
+        Span::new(c(b"hello.nc"), 12, 31).unwrap()
     }
 
     fn call() -> Call {
-        Call { function: "read".to_owned(), args: vec![c(b"main.nc")] }
+        Call::try_new("read", vec![c(b"main.nc")]).unwrap()
     }
 
     fn sample() -> Vec<Node> {
@@ -1204,21 +1216,26 @@ mod node_tests {
             Node::Literal(Value::Array(vec![Value::Unit])),
             Node::Apply { function: c(b"f"), args: vec![], result: c(b"r") },
             Node::Apply { function: c(b"f"), args: vec![c(b"a"), c(b"b")], result: c(b"r") },
-            Node::Hole { call: call(), stratum: 3, span: span() },
+            Node::Hole { call: call(), stratum: Stratum::THREE, span: span() },
             Node::Hole {
-                call: Call { function: "draw".to_owned(), args: vec![] },
-                stratum: 7,
+                call: Call::try_new("draw", vec![]).unwrap(),
+                stratum: Stratum::SEVEN,
                 span: span(),
             },
             Node::Deposit { value: c(b"greeting"), span: span() },
-            Node::Witness { stratum: 3, call: call(), answer: c(b"bytes"), span: span() },
+            Node::Witness {
+                stratum: Stratum::THREE,
+                call: call(),
+                answer: c(b"bytes"),
+                span: span(),
+            },
             Node::Trace {
                 residue: c(b"residue"),
                 holes: vec![c(b"hole")],
                 witnesses: vec![c(b"witness")],
                 deposits: vec![c(b"obj")],
                 source: c(b"build.nc"),
-                depth: 3,
+                depth: Stratum::THREE,
                 unrecorded: false,
             },
             Node::Trace {
@@ -1227,7 +1244,7 @@ mod node_tests {
                 witnesses: vec![],
                 deposits: vec![],
                 source: c(b"x.nc"),
-                depth: 8,
+                depth: Stratum::EIGHT,
                 unrecorded: true,
             },
         ]
@@ -1297,7 +1314,7 @@ mod node_tests {
     /// The forward edge. Provenance is this, read backwards.
     #[test]
     fn references_names_every_cairn_the_node_holds() {
-        let hole = Node::Hole { call: call(), stratum: 3, span: span() };
+        let hole = Node::Hole { call: call(), stratum: Stratum::THREE, span: span() };
         assert_eq!(hole.references(), vec![c(b"main.nc"), c(b"hello.nc")]);
         assert!(Node::Literal(Value::Unit).references().is_empty());
 
@@ -1431,7 +1448,7 @@ mod node_tests {
             (Value::Refusal(Refusal::Absent), b"\x08\x00"),
             (
                 Value::Struct {
-                    name: "P".into(),
+                    name: NonEmptyName::new("P").unwrap(),
                     fields: vec![Value::Unit, Value::Bool(true)],
                 },
                 b"\x10\x00\x00\x00\x00\x00\x00\x00\x01P\x00\x00\x00\x00\x00\x00\x00\x02\x00\x01\x01",
@@ -1452,34 +1469,41 @@ mod node_tests {
 
         let mut expected_shade = vec![0x06, 0x03];
         expected_shade.extend_from_slice(&c0_raw);
-        assert_eq!(Value::Shade { origin: 3, value: c0 }.encode(), expected_shade);
+        assert_eq!(Value::Shade { origin: Stratum::THREE, value: c0 }.encode(), expected_shade);
 
-        // Invalid in-memory states excluded by §7.1.1 / §7.3.1 (pending 0115):
-        assert_eq!(
-            decode(&Value::Shade { origin: 9, value: c0 }.encode()),
-            Err(DecodeError::NoSuchStratum(9))
-        );
-        assert_eq!(
-            decode(&Value::Struct { name: String::new(), fields: vec![] }.encode()),
-            Err(DecodeError::EmptyStructName)
-        );
-        assert_eq!(
-            decode_node(
-                &Node::Hole {
-                    call: Call { function: String::new(), args: vec![] },
-                    stratum: 3,
-                    span: span(),
-                }
-                .encode()
-            ),
-            Err(DecodeError::EmptyCallName)
-        );
-        assert_eq!(
-            decode_node(
-                &Node::Deposit { value: c0, span: Span { source: c0, start: 5, end: 4 } }.encode()
-            ),
-            Err(DecodeError::BackwardsSpan { start: 5, end: 4 })
-        );
+        // 0115: Invalid states excluded by §7.1.1 / §7.3.1 are unconstructible
+        // via safe APIs, and hostile raw bytes still fail decoding.
+        assert_eq!(Stratum::new(9), Err(DecodeError::NoSuchStratum(9)));
+        assert_eq!(NonEmptyName::new(""), Err(EmptyNameError));
+        assert_eq!(Call::try_new("", vec![]), Err(DecodeError::EmptyCallName));
+        assert_eq!(Span::new(c0, 5, 4), Err(DecodeError::BackwardsSpan { start: 5, end: 4 }));
+        assert_eq!(Span::new(c0, 5, 5).unwrap().end(), 5);
+        assert_eq!(Span::point(c0, 5), Span::new(c0, 5, 5).unwrap());
+
+        let mut bad_shade = vec![tag::SHADE, 9];
+        bad_shade.extend_from_slice(&c0_raw);
+        assert_eq!(decode(&bad_shade), Err(DecodeError::NoSuchStratum(9)));
+
+        let mut bad_struct = vec![tag::STRUCT];
+        bad_struct.extend_from_slice(&0u64.to_be_bytes());
+        bad_struct.extend_from_slice(&0u64.to_be_bytes());
+        assert_eq!(decode(&bad_struct), Err(DecodeError::EmptyStructName));
+
+        let mut bad_call = vec![tag::NODE, kind::HOLE];
+        bad_call.extend_from_slice(&0u64.to_be_bytes());
+        bad_call.extend_from_slice(&0u64.to_be_bytes());
+        bad_call.push(3);
+        bad_call.extend_from_slice(&c0_raw);
+        bad_call.extend_from_slice(&0u64.to_be_bytes());
+        bad_call.extend_from_slice(&1u64.to_be_bytes());
+        assert_eq!(decode_node(&bad_call), Err(DecodeError::EmptyCallName));
+
+        let mut bad_span = vec![tag::NODE, kind::DEPOSIT];
+        bad_span.extend_from_slice(&c0_raw);
+        bad_span.extend_from_slice(&c0_raw);
+        bad_span.extend_from_slice(&5u64.to_be_bytes());
+        bad_span.extend_from_slice(&4u64.to_be_bytes());
+        assert_eq!(decode_node(&bad_span), Err(DecodeError::BackwardsSpan { start: 5, end: 4 }));
     }
 
     #[test]
@@ -1534,22 +1558,19 @@ mod node_tests {
             (Node::Apply { function: c0, args: vec![c1], result: c2 }, expected_apply),
             (
                 Node::Hole {
-                    call: Call { function: "read".to_owned(), args: vec![c1] },
-                    stratum: 3,
-                    span: Span { source: c0, start: 1, end: 5 },
+                    call: Call::try_new("read", vec![c1]).unwrap(),
+                    stratum: Stratum::THREE,
+                    span: Span::new(c0, 1, 5).unwrap(),
                 },
                 expected_hole,
             ),
-            (
-                Node::Deposit { value: c1, span: Span { source: c0, start: 0, end: 4 } },
-                expected_deposit,
-            ),
+            (Node::Deposit { value: c1, span: Span::new(c0, 0, 4).unwrap() }, expected_deposit),
             (
                 Node::Witness {
-                    stratum: 3,
-                    call: Call { function: "read".to_owned(), args: vec![c1] },
+                    stratum: Stratum::THREE,
+                    call: Call::try_new("read", vec![c1]).unwrap(),
                     answer: c2,
-                    span: Span { source: c0, start: 1, end: 5 },
+                    span: Span::new(c0, 1, 5).unwrap(),
                 },
                 expected_witness,
             ),
@@ -1560,7 +1581,7 @@ mod node_tests {
                     witnesses: vec![],
                     deposits: vec![c2],
                     source: c0,
-                    depth: 3,
+                    depth: Stratum::THREE,
                     unrecorded: false,
                 },
                 expected_trace,

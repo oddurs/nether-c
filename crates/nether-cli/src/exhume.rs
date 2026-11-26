@@ -11,7 +11,7 @@ use std::process::ExitCode;
 
 use nether_bury::{Answers, bury_with};
 use nether_core::{Capability, Depth, Prim};
-use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
+use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Stratum, Value};
 use nether_syntax::print;
 use nether_world::{
     Declared, Disk, Entropy, Env, Ledger, Net, Recorder, Replay, Unrecorded, World,
@@ -280,7 +280,7 @@ fn questions(store: &Store, holes: &[Cairn]) -> Result<Vec<(Call, Span)>, ExitCo
                 eprintln!(
                     "nether: hole {} claims stratum {stratum} for `{}`",
                     h.short(),
-                    call.function
+                    call.function()
                 );
                 Err(ExitCode::from(code::MALFORMED))
             }
@@ -347,7 +347,7 @@ fn gather_replay(store: &Store, witnesses: &[Cairn], holes: &[Cairn]) -> Result<
         // (prior witnesses were already consumed into `trace.residue`). Feeding
         // an earlier witness for the same `Call` into a new open hole would
         // fabricate an answer instead of refusing.
-        eprintln!("nether: nothing recorded answers `{}`", call.function);
+        eprintln!("nether: nothing recorded answers `{}`", call.function());
         eprintln!("        §6.7: replay serves the ledger and cannot reach the world.");
         return Err(FAILED);
     }
@@ -368,12 +368,12 @@ fn prior_read_answers(
             Ok(Stored::Node(Node::Witness { stratum, call, answer, .. }))
                 if crate::closing::valid_stratum(&call, stratum) =>
             {
-                if Depth::new(stratum).is_some_and(Depth::reads) {
+                if Depth::new(stratum.as_u8()).is_some_and(Depth::reads) {
                     if let Some(&prev) = prior.get(&call) {
                         if prev != answer {
                             eprintln!(
                                 "nether: contradictory prior read witnesses for `{}` ({} vs {})",
-                                call.function,
+                                call.function(),
                                 prev.short(),
                                 answer.short()
                             );
@@ -428,13 +428,13 @@ fn answer_holes(
                 return Err(FAILED);
             }
             Ok(answer) => {
-                if Prim::from_name(&call.function).is_some_and(|p| p.latent().reads()) {
+                if Prim::from_name(call.function()).is_some_and(|p| p.latent().reads()) {
                     if let Some(&prev) = prior_reads.get(&call)
                         && prev != answer.answer()
                     {
                         eprintln!(
                             "nether: `{}` returned {}, disagreeing with earlier read witness {}",
-                            call.function,
+                            call.function(),
                             answer.answer().short(),
                             prev.short()
                         );
@@ -443,7 +443,7 @@ fn answer_holes(
                     prior_reads.entry(call.clone()).or_insert(answer.answer());
                 }
                 let Ok(Stored::Value(value)) = store.get(answer.answer()) else {
-                    eprintln!("nether: the answer to `{}` is not readable back", call.function);
+                    eprintln!("nether: the answer to `{}` is not readable back", call.function());
                     return Err(FAILED);
                 };
                 said.push((call.clone(), answer.answer()));
@@ -461,7 +461,7 @@ struct TraceParts {
     witnesses: Vec<Cairn>,
     deposits: Vec<Cairn>,
     source: Cairn,
-    depth: u8,
+    depth: Stratum,
     unrecorded: bool,
 }
 
@@ -556,7 +556,7 @@ fn replay_trace(
     let unrecorded = orig.unrecorded || crate::closing::unrecorded(store, &recorded)?;
     // Replay verifies equality without mutating the store; compute depth
     // of any replayed holes from `buried_residue.named` rather than `store`.
-    let mut replay_hole_depth = buried_residue.depth.get();
+    let mut replay_hole_depth = crate::closing::stratum(buried_residue.depth);
     for (c, obj) in &buried_residue.named {
         if buried_residue.holes.contains(c)
             && let Stored::Node(Node::Hole { stratum, .. }) = obj
@@ -674,8 +674,12 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
         crate::kept(store, stored)?;
     }
     let next_residue = crate::kept(store, &residue_obj)?;
-    let deepest =
-        crate::closing::depth(store, buried_residue.depth.get(), &buried_residue.holes, &recorded)?;
+    let deepest = crate::closing::depth(
+        store,
+        crate::closing::stratum(buried_residue.depth),
+        &buried_residue.holes,
+        &recorded,
+    )?;
     let deeper = Node::Trace {
         residue: next_residue,
         holes: buried_residue.holes.clone(),
@@ -705,7 +709,7 @@ struct Sealed {
     was: Cairn,
     now: Cairn,
     said: Vec<(Call, Cairn)>,
-    depth: u8,
+    depth: Stratum,
     holes: Vec<Cairn>,
     /// §8.2: a rite reports what it spent, because that is where it is a fact.
     /// Not in the trace — a trace holding it could not be replayed (§6.7).
@@ -730,7 +734,7 @@ impl Sealed {
     fn text(&self, store: &Store) -> String {
         let mut out = String::new();
         for (n, (call, answer)) in self.said.iter().enumerate() {
-            let asked = crate::lamp::said(store, &call.function, &call.args);
+            let asked = crate::lamp::said(store, call.function(), call.args());
             let size = match store.get(*answer) {
                 Ok(Stored::Value(v)) => crate::bury::measure(&v),
                 _ => String::new(),
@@ -769,7 +773,7 @@ impl Sealed {
             .said
             .iter()
             .map(|(call, answer)| {
-                format!("{{\"call\":{},\"answer\":\"{answer}\"}}", json::string(&call.function))
+                format!("{{\"call\":{},\"answer\":\"{answer}\"}}", json::string(call.function()))
             })
             .collect();
         let named = format!(

@@ -8,7 +8,8 @@
 //! `spec/07-ledger.md` §7.3.
 
 use crate::cairn::Cairn;
-use crate::value::Value;
+use crate::codec::DecodeError;
+use crate::value::{NonEmptyName, Stratum, Value};
 
 /// Node kind bytes, fixed by `spec/07-ledger.md` §7.3.1.
 pub(crate) mod kind {
@@ -25,26 +26,108 @@ pub(crate) mod kind {
 /// The source is named by cairn rather than by path. A path is a fact about
 /// one machine at one moment, and a trace has to mean the same thing on a
 /// machine that has never seen that filesystem.
+///
+/// Private fields enforce `end >= start` (`spec/07-ledger.md` §7.3.1).
+///
+/// ```compile_fail
+/// use nether_ledger::{Cairn, Span};
+/// let _ = Span { source: Cairn::of_encoded(b"s"), start: 5, end: 3 };
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
+    source: Cairn,
+    start: u64,
+    end: u64,
+}
+
+impl Span {
+    /// Constructs a validated span with `end >= start`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError::BackwardsSpan`] if `end < start`.
+    pub const fn new(source: Cairn, start: u64, end: u64) -> Result<Self, DecodeError> {
+        if end < start {
+            Err(DecodeError::BackwardsSpan { start, end })
+        } else {
+            Ok(Self { source, start, end })
+        }
+    }
+
+    /// Constructs a zero-width span at byte offset `at`.
+    #[must_use]
+    pub const fn point(source: Cairn, at: u64) -> Self {
+        Self { source, start: at, end: at }
+    }
+
     /// The cairn of the source bytes.
-    pub source: Cairn,
+    #[must_use]
+    pub const fn source(self) -> Cairn {
+        self.source
+    }
+
     /// Byte offset of the first byte.
-    pub start: u64,
-    /// Byte offset one past the last. Never before `start`.
-    pub end: u64,
+    #[must_use]
+    pub const fn start(self) -> u64 {
+        self.start
+    }
+
+    /// Byte offset one past the last. Always `>= start()`.
+    #[must_use]
+    pub const fn end(self) -> u64 {
+        self.end
+    }
 }
 
 /// A question put to the world: a prelude function and its finished arguments.
 ///
 /// The arguments are already buried. `read(concat(dir, name))` is a call to
 /// `read` with the finished path, not a call containing a `concat`.
+///
+/// Private fields enforce a non-empty function name (`spec/07-ledger.md` §7.3.1).
+///
+/// ```compile_fail
+/// use nether_ledger::Call;
+/// let _ = Call { function: String::new(), args: Vec::new() };
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Call {
+    function: NonEmptyName,
+    args: Vec<Cairn>,
+}
+
+impl Call {
+    /// Constructs a call from an already-validated function name and argument cairns.
+    #[must_use]
+    pub const fn new(function: NonEmptyName, args: Vec<Cairn>) -> Self {
+        Self { function, args }
+    }
+
+    /// Constructs a call after verifying `function` is non-empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecodeError::EmptyCallName`] if `function` is empty.
+    pub fn try_new(function: impl Into<String>, args: Vec<Cairn>) -> Result<Self, DecodeError> {
+        let function = NonEmptyName::new(function).map_err(|_| DecodeError::EmptyCallName)?;
+        Ok(Self { function, args })
+    }
+
     /// The prelude function's name. Never empty.
-    pub function: String,
+    #[must_use]
+    pub fn function(&self) -> &str {
+        self.function.as_str()
+    }
+
     /// Cairns of the fully-evaluated arguments.
-    pub args: Vec<Cairn>,
+    #[must_use]
+    pub fn args(&self) -> &[Cairn] {
+        &self.args
+    }
+
+    pub(crate) fn into_args(self) -> Vec<Cairn> {
+        self.args
+    }
 }
 
 /// A node: the unit the ledger stores.
@@ -71,7 +154,7 @@ pub enum Node {
         /// What is being asked.
         call: Call,
         /// The stratum the call would reach.
-        stratum: u8,
+        stratum: Stratum,
         /// Where it was asked.
         span: Span,
     },
@@ -87,7 +170,7 @@ pub enum Node {
     /// A refusal is an ordinary witness. `spec/09-prelude.md` §9.9.
     Witness {
         /// The stratum that was reached.
-        stratum: u8,
+        stratum: Stratum,
         /// What was asked.
         call: Call,
         /// What came back.
@@ -122,7 +205,7 @@ pub enum Node {
         /// could never come back as itself. §8.2.
         source: Cairn,
         /// The deepest stratum reached.
-        depth: u8,
+        depth: Stratum,
         /// Whether this trace reached stratum 8.
         ///
         /// Permanent and transitive. A marked trace may never claim to be

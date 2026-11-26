@@ -22,7 +22,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Value, decode_stored};
+use nether_ledger::{Cairn, Call, Node, Span, Store, Stored, Stratum, Value, decode_stored};
 
 /// A stand-in for a burial, shaped like the thing it stands in for.
 ///
@@ -45,13 +45,13 @@ fn build(leaves: &[&[u8]]) -> Graph {
 
     let mut level: Vec<Cairn> = Vec::with_capacity(leaves.len());
     for (i, bytes) in leaves.iter().enumerate() {
-        let span = Span { source, start: i as u64, end: (i + 1) as u64 };
-        let call = Call { function: "read".to_owned(), args: vec![Cairn::of_encoded(b"path")] };
+        let span = Span::new(source, i as u64, (i + 1) as u64).unwrap();
+        let call = Call::try_new("read", vec![Cairn::of_encoded(b"path")]).unwrap();
 
         let literal = Node::Literal(Value::Bytes((*bytes).to_vec()));
         let answer = literal.cairn();
-        let witness = Node::Witness { stratum: 3, call: call.clone(), answer, span };
-        let hole = Node::Hole { call, stratum: 3, span };
+        let witness = Node::Witness { stratum: Stratum::THREE, call: call.clone(), answer, span };
+        let hole = Node::Hole { call, stratum: Stratum::THREE, span };
 
         level.push(witness.cairn());
         nodes.push(literal);
@@ -218,11 +218,11 @@ fn commit_subgraph(store: &Store, tag: &str, n: i64) -> Subgraph {
     let ans = store.put(&v_ans).expect("put ans");
     let res = store.put(&v_res).expect("put res");
 
-    let span = Span { source: src, start: 0, end: 8 };
-    let call = Call { function: "read".to_owned(), args: vec![arg] };
+    let span = Span::new(src, 0, 8).unwrap();
+    let call = Call::try_new("read", vec![arg]).unwrap();
 
-    let n_hole = Stored::Node(Node::Hole { call: call.clone(), stratum: 3, span });
-    let n_wit = Stored::Node(Node::Witness { stratum: 3, call, answer: ans, span });
+    let n_hole = Stored::Node(Node::Hole { call: call.clone(), stratum: Stratum::THREE, span });
+    let n_wit = Stored::Node(Node::Witness { stratum: Stratum::THREE, call, answer: ans, span });
     let n_dep = Stored::Node(Node::Deposit { value: res, span });
     let n_app = Stored::Node(Node::Apply { function: src, args: vec![arg, ans], result: res });
 
@@ -237,7 +237,7 @@ fn commit_subgraph(store: &Store, tag: &str, n: i64) -> Subgraph {
         witnesses: vec![wit],
         deposits: vec![dep],
         source: src,
-        depth: 3,
+        depth: Stratum::THREE,
         unrecorded: false,
     });
     let trace = store.put(&n_trace).expect("put trace");
@@ -726,7 +726,7 @@ fn chain(store: &Store, n: u32, source: Cairn) -> Vec<Cairn> {
                     witnesses: Vec::new(),
                     deposits: Vec::new(),
                     source,
-                    depth: u8::try_from(i % 9).expect("small"),
+                    depth: Stratum::new(u8::try_from(i % 9).expect("small")).expect("valid"),
                     unrecorded: false,
                 }))
                 .expect("put");

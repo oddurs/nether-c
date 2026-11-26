@@ -60,10 +60,10 @@ fn a_deposit_carries_its_span() {
     let Some(Stored::Node(Node::Deposit { span, .. })) = r.get(r.deposits[0]) else {
         panic!("not a Deposit node");
     };
-    assert_eq!(span.source, Cairn::of_encoded(src.as_bytes()));
-    assert!(span.end > span.start, "a span that ends before it starts");
-    let at = usize::try_from(span.start).expect("fits");
-    let to = usize::try_from(span.end).expect("fits");
+    assert_eq!(span.source(), Cairn::of_encoded(src.as_bytes()));
+    assert!(span.end() > span.start(), "a span that ends before it starts");
+    let at = usize::try_from(span.start()).expect("fits");
+    let to = usize::try_from(span.end()).expect("fits");
     assert_eq!(&src[at..to], "7", "the span does not cover what was deposited");
 }
 

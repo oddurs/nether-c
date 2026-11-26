@@ -3,10 +3,11 @@ id: 115
 uid: 0c7673f4-087f-4f7f-8ebe-adddc538d75d
 title: Make the encoding's invalid states unconstructible
 type: feature
-status: unmarked
+status: buried
 milestone: after
 created: 2026-09-11
-updated: 2026-09-15
+updated: 2026-11-26
+closed_at: 2026-11-26
 priority: p2
 effort: m
 area: crates/nether-ledger
@@ -71,3 +72,7 @@ Private constructors can make invalid values unrepresentable after construction;
 
 - [ ] No public safe API constructs an invalid encoded state, and hostile bytes still fail decoding. Record API churn and core-line cost; do not weaken validation to meet the allocation goal.
 - [ ] Record the tested commit, exact checks or observation, and any remaining limits here before closing.
+
+## 2026-11-26
+
+Stability trigger met (DOMAIN v4 unchanged across v0.1.0, v0.2.0, and HEAD). Enforced §7.1.1 invariants in private-field Stratum, NonEmptyName, Span, and Call types with 4 compile_fail doctests; dropped Store::put scan_stored round-trip in favor of Stored::validate() + Stored::references() while keeping decode_stored/scan_stored hostile-byte rejection. Core cost: +133 lines (17647 -> 17780); WASM 195736 / 200000 bytes. Tree-level MAX_DEPTH and MAX_OBJECT_BYTES remain checked by Stored::validate().

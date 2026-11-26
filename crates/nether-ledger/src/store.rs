@@ -19,7 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::cairn::Cairn;
 use crate::codec::{DecodeError, Stored, decode_stored, scan_stored};
 use crate::node::Node;
-use crate::value::Value;
+use crate::value::{NonEmptyName, Value};
 
 /// Why the store could not answer.
 #[derive(Debug)]
@@ -66,13 +66,11 @@ pub enum StoreError {
         /// How many bytes it holds, which is not a multiple of thirty-two.
         bytes: usize,
     },
-    /// Something was handed to `put` that `get` could never read back.
+    /// Something was handed to `put` that exceeds tree-level bounds (`MAX_DEPTH`,
+    /// `MAX_DECODED_BYTES`, `MAX_OBJECT_BYTES`).
     ///
-    /// `Value` and `Node` can express states the encoding forbids — an unnamed
-    /// struct, a stratum below the lattice, a backwards span. Writing one
-    /// produces an object that is permanently unreadable and, worse, is
-    /// reported afterwards as [`StoreError::Corrupt`], which is the store's
-    /// signal for bit rot. The store refuses at the door instead.
+    /// Single-field invariants are enforced at construction; this catches
+    /// graph-wide nesting or size limits before anything reaches disk.
     Invalid(DecodeError),
     /// A portable bundle (`spec/07-ledger.md` §7.5.4) failed framing or verification.
     Bundle(&'static str),
@@ -168,8 +166,8 @@ fn stored_weight(stored: &Stored, encoded_len: usize) -> usize {
             }
             Node::Hole { call, .. } | Node::Witness { call, .. } => {
                 weight = weight
-                    .saturating_add(call.function.len())
-                    .saturating_add(call.args.len().saturating_mul(32));
+                    .saturating_add(call.function().len())
+                    .saturating_add(call.args().len().saturating_mul(32));
             }
             Node::Deposit { .. } => {}
             Node::Trace { holes, witnesses, deposits, .. } => {
@@ -435,21 +433,17 @@ impl Store {
     /// [`MAX_OBJECT_BYTES`] — the store will not write something it could never
     /// read back or export — or [`StoreError::Io`] if they cannot be written.
     pub fn put(&self, stored: &Stored) -> Result<Cairn, StoreError> {
-        let bytes = stored.try_encode().map_err(StoreError::Invalid)?;
+        stored.validate().map_err(StoreError::Invalid)?;
+        let bytes = stored.encode();
         if bytes.len() > MAX_OBJECT_BYTES {
             return Err(StoreError::Invalid(DecodeError::TooLarge {
                 bytes: bytes.len(),
                 limit: MAX_OBJECT_BYTES,
             }));
         }
-
-        // The round trip, before anything reaches disk. Streaming validation
-        // checks the canonical grammar and extracts references without
-        // materializing a second `Value` tree in memory.
-        let scanned = scan_stored(&bytes).map_err(StoreError::Invalid)?;
-
         let cairn = Cairn::of_encoded(&bytes);
-        self.put_verified(cairn, &scanned.references, &bytes)
+        let references = stored.references();
+        self.put_verified(cairn, &references, &bytes)
     }
 
     fn create_temp(&self, hint: &str, read: bool) -> io::Result<(PathBuf, fs::File)> {
@@ -1369,15 +1363,19 @@ impl Package {
             }
         }
         let entrypoint = store.put(&Stored::Value(ep_val))?;
+        let dep_name = NonEmptyName::new("Dep")
+            .map_err(|_| StoreError::Invalid(DecodeError::EmptyStructName))?;
+        let pkg_name = NonEmptyName::new("Package")
+            .map_err(|_| StoreError::Invalid(DecodeError::EmptyStructName))?;
         let dep_items = sorted
             .into_iter()
             .map(|(alias, cairn)| Value::Struct {
-                name: "Dep".into(),
+                name: dep_name.clone(),
                 fields: vec![Value::Str(alias.into()), Value::Cairn(cairn)],
             })
             .collect();
         let pkg = Value::Struct {
-            name: "Package".into(),
+            name: pkg_name,
             fields: vec![
                 Value::Str(PACKAGE_DOMAIN.into()),
                 Value::Cairn(entrypoint),
@@ -1516,10 +1514,14 @@ impl Package {
 mod tests {
     use super::{PACKAGE_DOMAIN, Package, PackageError, Store, StoreError};
     use crate::cairn::Cairn;
-    use crate::codec::Stored;
+    use crate::codec::{DecodeError, Stored};
     use crate::node::{Call, Node, Span};
-    use crate::value::Value;
+    use crate::value::{EmptyNameError, NonEmptyName, Stratum, Value};
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn name(s: &str) -> NonEmptyName {
+        NonEmptyName::new(s).unwrap()
+    }
 
     /// A directory of our own, removed on drop. No dependency needed for this.
     struct Scratch(std::path::PathBuf);
@@ -1579,31 +1581,29 @@ mod tests {
         assert_eq!(cairn, value(42).cairn());
     }
 
-    /// Found by review. `Value` and `Node` can express states the encoding
-    /// forbids; writing one produced an object `get` could never read, and the
-    /// complaint it produced afterwards was `Corrupt`, which is supposed to
-    /// mean the disk lied.
+    /// 0115: single-field invalid states cannot be constructed via safe APIs,
+    /// and `Store::put` still refuses tree-level depth/size violations without
+    /// writing unreadable objects to disk.
     #[test]
     fn the_store_refuses_what_it_could_never_read_back() {
         let scratch = Scratch::new();
         let store = scratch.store();
         let c = Cairn::of_encoded(b"x");
 
+        assert_eq!(NonEmptyName::new(""), Err(EmptyNameError));
+        assert_eq!(Stratum::new(200), Err(DecodeError::NoSuchStratum(200)));
+        assert_eq!(Stratum::new(9), Err(DecodeError::NoSuchStratum(9)));
+        assert_eq!(Call::try_new("", vec![]), Err(DecodeError::EmptyCallName));
+        assert_eq!(Span::new(c, 9, 4), Err(DecodeError::BackwardsSpan { start: 9, end: 4 }));
+
+        let mut too_deep = Value::Unit;
+        for _ in 0..=crate::MAX_DEPTH {
+            too_deep = Value::Array(vec![too_deep]);
+        }
         let unwritable = [
-            Stored::Value(Value::Struct { name: String::new(), fields: vec![] }),
-            Stored::Value(Value::Shade { origin: 200, value: c }),
-            Stored::Node(Node::Witness {
-                stratum: 9,
-                call: Call { function: "read".to_owned(), args: vec![] },
-                answer: c,
-                span: Span { source: c, start: 0, end: 1 },
-            }),
-            Stored::Node(Node::Hole {
-                call: Call { function: String::new(), args: vec![] },
-                stratum: 3,
-                span: Span { source: c, start: 0, end: 1 },
-            }),
-            Stored::Node(Node::Deposit { value: c, span: Span { source: c, start: 9, end: 4 } }),
+            Stored::Value(too_deep.clone()),
+            Stored::Node(Node::Literal(too_deep)),
+            Stored::Value(Value::Bytes(vec![0u8; super::MAX_OBJECT_BYTES])),
         ];
 
         for stored in unwritable {
@@ -1805,9 +1805,9 @@ mod tests {
         let arg = store.put(&value(1)).unwrap();
 
         let hole = Node::Hole {
-            call: Call { function: "read".to_owned(), args: vec![arg] },
-            stratum: 3,
-            span: Span { source, start: 0, end: 1 },
+            call: Call::try_new("read", vec![arg]).unwrap(),
+            stratum: Stratum::THREE,
+            span: Span::new(source, 0, 1).unwrap(),
         };
         let cairn = store.put(&Stored::Node(hole)).unwrap();
 
@@ -2009,12 +2009,12 @@ mod tests {
         let src = store.put(&Stored::Value(Value::Bytes(format!("s{tag}").into_bytes()))).unwrap();
         let res = store.put(&Stored::Value(Value::Bytes(format!("r{tag}").into_bytes()))).unwrap();
         let val = store.put(&value(tag)).unwrap();
-        let span = Span { source: src, start: 0, end: 1 };
+        let span = Span::new(src, 0, 1).unwrap();
         let dep = store.put(&Stored::Node(Node::Deposit { value: val, span })).unwrap();
         let wit = store
             .put(&Stored::Node(Node::Witness {
-                stratum: 3,
-                call: Call { function: "read".to_owned(), args: vec![val] },
+                stratum: Stratum::THREE,
+                call: Call::try_new("read", vec![val]).unwrap(),
                 answer: val,
                 span,
             }))
@@ -2026,7 +2026,7 @@ mod tests {
                 witnesses: vec![wit],
                 deposits: vec![dep],
                 source: src,
-                depth: 3,
+                depth: Stratum::THREE,
                 unrecorded: false,
             }))
             .unwrap();
@@ -2108,9 +2108,9 @@ mod tests {
         let (t2, v2, d2, w2) = stored_trace(&src, 202);
         let hole = src
             .put(&Stored::Node(Node::Hole {
-                call: Call { function: "read".to_owned(), args: vec![v1] },
-                stratum: 3,
-                span: Span { source: v1, start: 0, end: 1 },
+                call: Call::try_new("read", vec![v1]).unwrap(),
+                stratum: Stratum::THREE,
+                span: Span::new(v1, 0, 1).unwrap(),
             }))
             .unwrap();
         let staged = src
@@ -2120,7 +2120,7 @@ mod tests {
                 witnesses: vec![w1],
                 deposits: vec![d1],
                 source: v1,
-                depth: 3,
+                depth: Stratum::THREE,
                 unrecorded: false,
             }))
             .unwrap();
@@ -2294,7 +2294,7 @@ mod tests {
             store.put(&Stored::Value(Value::Bytes(b"I64 h() { return 2; }\n".to_vec()))).unwrap();
         let v3_pkg = store
             .put(&Stored::Value(Value::Struct {
-                name: "Package".into(),
+                name: name("Package"),
                 fields: vec![
                     Value::Str("netherc/cairn/v3".into()),
                     Value::Cairn(ep),
@@ -2319,17 +2319,17 @@ mod tests {
         ));
         let unsorted_pkg = store
             .put(&Stored::Value(Value::Struct {
-                name: "Package".into(),
+                name: name("Package"),
                 fields: vec![
                     Value::Str(PACKAGE_DOMAIN.into()),
                     Value::Cairn(ep),
                     Value::Array(vec![
                         Value::Struct {
-                            name: "Dep".into(),
+                            name: name("Dep"),
                             fields: vec![Value::Str("z".into()), Value::Cairn(base)],
                         },
                         Value::Struct {
-                            name: "Dep".into(),
+                            name: name("Dep"),
                             fields: vec![Value::Str("a".into()), Value::Cairn(base)],
                         },
                     ]),
@@ -2357,10 +2357,7 @@ mod tests {
         let src = src_dir.store();
         let val = src.put(&Stored::Value(Value::Int(42))).unwrap();
         let dep = src
-            .put(&Stored::Node(Node::Deposit {
-                value: val,
-                span: Span { source: val, start: 0, end: 1 },
-            }))
+            .put(&Stored::Node(Node::Deposit { value: val, span: Span::new(val, 0, 1).unwrap() }))
             .unwrap();
 
         // Build a bundle with the referrer (`dep`) before its leaf (`val`).
@@ -2391,7 +2388,7 @@ mod tests {
         // Package with incompatible domain version and non-3 field shape returns Incompatible.
         let v3_short = src
             .put(&Stored::Value(Value::Struct {
-                name: "Package".into(),
+                name: name("Package"),
                 fields: vec![Value::Str("netherc/cairn/v3".into())],
             }))
             .unwrap();
@@ -2502,23 +2499,13 @@ mod tests {
 
     #[test]
     fn ledger_hardening_c8_h11_h25_m13_m15_and_l8() {
-        // H25: try_encode rejects invalid states before encoding.
-        assert!(matches!(
-            Value::Shade { origin: 9, value: Cairn::of_encoded(b"x") }.try_encode(),
-            Err(crate::DecodeError::NoSuchStratum(9))
-        ));
-        assert!(matches!(
-            Value::Struct { name: String::new(), fields: vec![] }.try_encode(),
-            Err(crate::DecodeError::EmptyStructName)
-        ));
-        assert!(matches!(
-            Node::Deposit {
-                value: Cairn::of_encoded(b"x"),
-                span: Span { source: Cairn::of_encoded(b"x"), start: 5, end: 2 }
-            }
-            .try_encode(),
-            Err(crate::DecodeError::BackwardsSpan { start: 5, end: 2 })
-        ));
+        // H25 / 0115: invalid single-field states are rejected at construction.
+        assert_eq!(Stratum::new(9), Err(DecodeError::NoSuchStratum(9)));
+        assert_eq!(NonEmptyName::new(""), Err(EmptyNameError));
+        assert_eq!(
+            Span::new(Cairn::of_encoded(b"x"), 5, 2),
+            Err(DecodeError::BackwardsSpan { start: 5, end: 2 })
+        );
 
         // H11: objects > 16 MiB (e.g. 17 MiB) round-trip cleanly through export/import,
         // while objects > MAX_OBJECT_BYTES are refused by Store::put.
@@ -2559,7 +2546,7 @@ mod tests {
             witnesses: vec![],
             deposits: vec![],
             source: v,
-            depth: 0,
+            depth: Stratum::ZERO,
             unrecorded: false,
         });
         let tc = ref_store.put(&trace_node).unwrap();

@@ -265,9 +265,9 @@ fn general_interpreter_build_starves_then_resumes() {
     let pending = guest(BUILD, &Answers::none());
     assert_eq!(pending.holes.len(), 1);
     let Node::Hole { call, .. } = pending.questions()[0] else { panic!("read hole") };
-    assert_eq!(call.function, "read");
-    assert_eq!(call.args.len(), 1);
-    assert_eq!(pending.value(call.args[0]), Some(&Value::Str("main.nc".into())));
+    assert_eq!(call.function(), "read");
+    assert_eq!(call.args().len(), 1);
+    assert_eq!(pending.value(call.args()[0]), Some(&Value::Str("main.nc".into())));
     let answers = Answers::none().and(
         call.clone(),
         Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(b"payload".to_vec())))),
@@ -311,8 +311,8 @@ fn a_demanded_legal_look_waits_for_its_network_answer() {
     let pending = guest(program, &Answers::none());
     assert_eq!(pending.holes.len(), 1);
     let Node::Hole { call, .. } = pending.questions()[0] else { panic!("network hole") };
-    assert_eq!(call.function, "get");
-    assert_eq!(pending.value(call.args[0]), Some(&Value::Str("https://data.invalid".into())));
+    assert_eq!(call.function(), "get");
+    assert_eq!(pending.value(call.args()[0]), Some(&Value::Str("https://data.invalid".into())));
     let answers = Answers::none().and(
         call.clone(),
         Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(b"five!".to_vec())))),
@@ -364,7 +364,7 @@ demand discard(content);
     let pending = guest(program, &Answers::none());
     assert_eq!(pending.holes.len(), 1);
     let Node::Hole { call, .. } = pending.questions()[0] else { panic!("read hole") };
-    assert_eq!(pending.value(call.args[0]), Some(&Value::Str("renamed.nc".into())));
+    assert_eq!(pending.value(call.args()[0]), Some(&Value::Str("renamed.nc".into())));
     let answers = Answers::none().and(
         call.clone(),
         Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(b"ignored".to_vec())))),
@@ -538,7 +538,7 @@ fn source_bytes_can_arrive_through_a_hole() {
     assert!(pending.deposits.is_empty());
     assert_eq!(pending.holes.len(), 1);
     let Node::Hole { call, .. } = pending.questions()[0] else { panic!("source hole") };
-    assert_eq!(call.function, "read");
+    assert_eq!(call.function(), "read");
     let answers = Answers::none().and(
         call.clone(),
         Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(
@@ -568,7 +568,7 @@ fn source_then_file_answers_survive_printed_residue_and_reburial() {
     let awaiting_file = bury_with(&unit, name, 100_000_000, &source_answer).unwrap();
     assert_eq!(awaiting_file.holes.len(), 1);
     let Node::Hole { call, .. } = awaiting_file.questions()[0] else { panic!("file hole") };
-    assert_eq!(awaiting_file.value(call.args[0]), Some(&Value::Str("main.nc".into())));
+    assert_eq!(awaiting_file.value(call.args()[0]), Some(&Value::Str("main.nc".into())));
     let answers = source_answer.and(
         call.clone(),
         Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(b"staged".to_vec())))),
@@ -758,10 +758,7 @@ fn round2_self_hosted_interpreter_soundness_and_parity() {
     // H13: `Bytes@0 id(Bytes x) { x }` called with depth-3 argument succeeds and returns depth 3.
     let id_prog = "Bytes@0 id(Bytes x) { x } demand id(must(descend disk { read(\"a.txt\") }));";
     let read_a = Answers::none().and(
-        nether_ledger::Call {
-            function: "read".into(),
-            args: vec![Value::Str("a.txt".into()).cairn()],
-        },
+        nether_ledger::Call::try_new("read", vec![Value::Str("a.txt".into()).cairn()]).unwrap(),
         Value::Answer(Box::new(nether_ledger::AnswerOf::Given(Value::Bytes(b"hi".to_vec())))),
     );
     let id_res = guest(id_prog, &read_a);

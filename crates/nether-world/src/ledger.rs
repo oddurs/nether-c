@@ -31,13 +31,14 @@ impl Provider for Ledger {
         // §6.3: a world-call whose argument is not finished cannot have become
         // a hole, and §04 types this one as a `Cairn`, so getting here means a
         // program the checker should have rejected.
+        let func = call.function();
         let Some(name) = into.arg_cairn(call, 0)? else {
-            if call.function == "has_node" {
+            if func == "has_node" {
                 return Err(Refuse::Collapse("`has_node` was not given a cairn".into()));
             }
             return into.record(call, Depth::STORE, span, &refused(Refusal::Malformed));
         };
-        let said = match call.function.as_str() {
+        let said = match func {
             // §7.2: the encoding is the node. Handing back the bytes rather
             // than a decoded value is what makes `fetch_node` the inverse of
             // `seal` — and `Store::get` has already checked that they hash to
@@ -51,13 +52,13 @@ impl Provider for Ledger {
                     if encoded.len().saturating_add(11) > nether_ledger::MAX_OBJECT_BYTES {
                         refused(Refusal::Exhausted)
                     } else {
-                        given(&call.function, Value::Bytes(encoded))
+                        given(func, Value::Bytes(encoded))
                     }
                 }
                 Err(StoreError::Absent(_)) => refused(Refusal::Absent),
                 Err(e) => return Err(Refuse::NotRecorded(e)),
             },
-            _ => given(&call.function, Value::Bool(into.store().has(name))),
+            _ => given(func, Value::Bool(into.store().has(name))),
         };
         into.record(call, Depth::STORE, span, &said)
     }
@@ -102,8 +103,8 @@ mod tests {
         let cairn = store.put(&big).expect("fits at exact MAX_OBJECT_BYTES");
         let arg = store.put(&Stored::Value(Value::Cairn(cairn))).unwrap();
         let src = store.put(&Stored::Value(Value::Bytes(b"x.nc".to_vec()))).unwrap();
-        let call = Call { function: "fetch_node".into(), args: vec![arg] };
-        let span = Span { source: src, start: 0, end: 1 };
+        let call = Call::try_new("fetch_node", vec![arg]).unwrap();
+        let span = Span::new(src, 0, 1).unwrap();
         let world = World::sealed().granting(Box::new(Ledger));
         let rec = world
             .ask(&call, span, &Recorder::new(&store))
