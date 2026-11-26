@@ -87,12 +87,12 @@ function inspect(object) {
   const detail = $("detail");
   detail.replaceChildren();
   const note = (text) => detail.append(element("p", text));
-  if (object.kind === "Hole") note(`Unanswered question. ${object.call.function} needs stratum ${object.stratum}. No answer is recorded; this is not an error.`);
+  if (object.kind === "Hole") note(`Unanswered question. ${object.call.function} needs stratum ${object.stratum}; this browser grants none. No answer is recorded; this is not an error.`);
   if (object.kind === "Trace") {
-    note(`Depth ${object.depth}. ${object.holes.length ? "Unanswered questions remain." : "No holes remain."} ${object.unrecorded ? "UNRECORDED: not replayable." : "No stratum-8 mark."}`);
+    note(`Depth ${object.depth}. ${object.holes.length ? "Unanswered questions remain." : "Sealed: the world owes nothing more."} ${object.unrecorded ? "UNRECORDED: not replayable." : "No stratum-8 mark."}`);
     note("Open a hole to see what the world still owes, or a deposit to see what happened already.");
   }
-  if (object.kind === "Deposit") note("A value the program left behind. Follow its value reference to read it.");
+  if (object.kind === "Deposit") note("A value the program left behind — deposited, not printed. Follow its value reference to read it.");
   if (object.call) {
     const args = object.call.args.map((id) => preview(graph.get(id), 120));
     detail.append(element("pre", `${object.call.function}(${args.join(", ")})`));
