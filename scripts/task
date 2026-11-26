@@ -114,6 +114,7 @@ case "${1:-}" in
     port=${2:-8000}
     echo "  site        http://localhost:$port/site/"
     echo "  necropolis  http://localhost:$port/web/necropolis/"
+    echo "  (static files only; still nothing running)"
     echo
     exec python3 -m http.server "$port" --bind 127.0.0.1
     ;;

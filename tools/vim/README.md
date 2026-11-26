@@ -1,6 +1,9 @@
 # `tools/vim/nether.vim`
 
 Thin Vim/Neovim adapter for [`nether lamp <cairn> --at <byte>`](../../spec/08-rites.md#841-inspecting-a-byte-offset-in-an-editor).
+There is no language server, no background daemon, and nothing running behind
+your cursor — Vim shells out to `nether lamp` and shows what the ledger already
+knows.
 
 ## Installation
 
@@ -51,4 +54,5 @@ into Neovim's plugin directory (`~/.config/nvim/plugin/nether.vim`).
      world-reaching call.
 
 If the buffer has been edited since the trace was buried, `nether lamp` refuses
-with exit code 1 naming both short cairns rather than guessing shifted offsets.
+with exit code 1, naming both short cairns rather than guessing where the lines
+moved. A stale trace does not get a polite approximation; bury the buffer again.
