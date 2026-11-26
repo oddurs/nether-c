@@ -298,13 +298,9 @@ An inspectable local trace, followed by a provenance walk and capability/answer 
 
 ## face — The Face
 
-`##########` 91% · 10 of 11 done · due 2027-08-01
+`##########` 100% · 11 of 11 done · due 2027-08-01
 
 Conservative completion of the font system: preserve regular glyph work and current metrics while adding a real weight, review surface and contribution path.
-
-### unmarked
-
-- [ ] [`0235`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0235-ship-the-face-as-something-somebody-else-can-use.md) Ship the face as something somebody else can use <sup>chore · p2 · 0</sup>
 
 ### buried
 
@@ -312,6 +308,7 @@ Conservative completion of the font system: preserve regular glyph work and curr
 - [x] [`0232`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0232-a-specimen-a-person-can-actually-read.md) A specimen a person can actually read <sup>feature · p1 · 0</sup>
 - [x] [`0233`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0233-a-contributor-can-add-a-glyph-without-reading-the-encoder.md) A contributor can add a glyph without reading the encoder <sup>docs · p0 · 0</sup>
 - [x] [`0234`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0234-read-the-face-at-the-sizes-it-is-read-at.md) Read the face at the sizes it is read at <sup>chore · p1 · 0</sup>
+- [x] [`0235`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0235-ship-the-face-as-something-somebody-else-can-use.md) Ship the face as something somebody else can use <sup>chore · p2 · 0</sup>
 - [x] [`0236`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0236-decide-whether-the-headings-are-the-same-face.md) Decide whether the headings are the same face <sup>spec · p2 · 0</sup>
 - [x] [`0239`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0239-give-nether-8-deliberate-side-bearings.md) Give Nether 8 deliberate side bearings <sup>bug · p0 · 0</sup>
 - [x] [`0246`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0246-recover-and-publish-the-site-and-both-bitmap-faces.md) Recover and publish the site and both bitmap faces <sup>chore · p2 · 0</sup>
@@ -426,13 +423,9 @@ A durable, inspectable store with measured retention costs. Export and integrity
 
 ## warden — The Warden
 
-`##########` 95% · 20 of 21 done · due 2028-07-15
+`##########` 100% · 21 of 21 done · due 2028-07-15
 
 A stated trust model and tested defenses across current entrypoints, not just the decoder.
-
-### descending
-
-- [ ] [`0221`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0221-build-the-binary-reproducibly.md) Build the binary reproducibly <sup>chore · p2 · 4</sup>
 
 ### buried
 
@@ -441,6 +434,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 - [x] [`0218`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0218-fuzz-every-parser-not-only-the-decoder.md) Fuzz every parser, not only the decoder <sup>chore · p0 · 0</sup>
 - [x] [`0219`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0219-a-bound-on-every-path-that-reads-a-stranger-s-bytes.md) A bound on every path that reads a stranger's bytes <sup>chore · p1 · 0</sup>
 - [x] [`0220`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0220-a-trace-s-claims-are-checkable-by-somebody-who-does-not-trust-it.md) A trace's claims are checkable by somebody who does not trust it <sup>feature · p1 · 1</sup>
+- [x] [`0221`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0221-build-the-binary-reproducibly.md) Build the binary reproducibly <sup>chore · p2 · 4</sup>
 - [x] [`0279`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0279-a-residue-can-print-deeper-than-it-may-be-read.md) A residue can print deeper than it may be read <sup>bug · p1 · 0</sup>
 - [x] [`0293`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0293-harden-hooks-decay-counter-ci-workflows-and-test-gates.md) Harden hooks, decay counter, CI workflows, and test gates <sup>bug · p1 · 0</sup>
 - [x] [`0296`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0296-harden-world-providers-foreign-loading-and-cli-rites.md) Harden world providers, foreign loading, and CLI rites <sup>feature · p2 · 8</sup>
