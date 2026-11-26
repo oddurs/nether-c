@@ -20,8 +20,8 @@ Stratum:
 
 ---
 
-- [ ] `scripts/task check` passes
+- [ ] `scripts/task check` passes (including `proof/check.py`, `design:check`, `font:check`, `wasm`, `browser:check`, `decay`, and `cairn check`)
 - [ ] Refs a cairn item, and that item has a `proof`
-- [ ] If the specification changed: `site/bake` was run and the result committed
+- [ ] If the specification, manual, design tokens, graphics, or face changed: the corresponding `scripts/task` generator (`site`, `design`, `gfx`, `font`) was run and the result committed
 - [ ] If a design question closed: the rejected alternative is in `spec/90-rationale.md`
-- [ ] If `.decay-ceiling` went up: the reason is stated above
+- [ ] If `.decay-ceiling` or `.wasm-ceiling` went up: the reason is stated above

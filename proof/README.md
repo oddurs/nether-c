@@ -1,6 +1,6 @@
 # Mechanized Proofs (`proof/`)
 
-This directory holds the machine-checked metatheory of NetherC.
+This directory holds the machine-checked metatheory of Nether C.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ This directory holds the machine-checked metatheory of NetherC.
   - `prove_substitution_monotonicity()`: `SubstDepth(e, d, d_a, d_sub) → d_sub <= max(d, d_a)`
     across all 13 substitution forms.
   - `prove_soundness_of_bound()`: `StepTyped(e, e', d, d') → d' <= d` across
-    all 17 reduction rules.
+    all 18 reduction rules.
 - **`orpheus.py`** — Formalization of `[LOOK]` (`spec/01-strata.md` §1.6,
   `spec/02-calculus.md` §2.2, `spec/90-rationale.md` §90.2), proving sufficiency
   (`look_sufficiency_ambient`, `look_sufficiency_confinement`), exact necessity

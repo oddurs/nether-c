@@ -2,7 +2,7 @@
 README.md § THE FIRST PROGRAM #1	c	pinned	d92d2096e7e25092
 README.md § THE FIRST PROGRAM #2	console	checked	7f9a7bf849a83e2b
 README.md § WHAT IS TRUE TODAY #1	console	checked	d838eaf97e53718b
-README.md § DEVELOPMENT #1	sh	pinned	7b99770b16361486
+README.md § DEVELOPMENT #1	sh	pinned	214215050e41ec38
 README.md § DEVELOPMENT #2	sh	pinned	20c2f6f56c3455a4
 README.md § DEVELOPMENT #3	sh	pinned	fb434d19d5a7b7b8
 site/src/index.html § The first program #1	hello.nc	pinned	d92d2096e7e25092
@@ -34,7 +34,7 @@ spec/04-grammar.md § 4.2 Declarations #1	ebnf	pinned	2a7a09dda03af328
 spec/04-grammar.md § 4.3 Types #1	ebnf	pinned	f3e5d72d58b38266
 spec/04-grammar.md § 4.3 Types #2	c	pinned	39c51d9906affdd0
 spec/04-grammar.md § 4.4 Statements #1	ebnf	pinned	30a4f3e68261c45a
-spec/04-grammar.md § 4.5 Expressions #1	ebnf	pinned	88eb88666b0c5b62
+spec/04-grammar.md § 4.5 Expressions #1	ebnf	pinned	89fc57a0e2c1b257
 spec/04-grammar.md § 4.7 The bare-expression statement #1	c	pinned	4fae387bf70b6809
 spec/05-types.md § 5.1.1 Answers and refusals #1	text	pinned	1de4c44f9b08a8ce
 spec/05-types.md § 5.1.1 Answers and refusals #2	c	pinned	0c96fcfac5c029b7

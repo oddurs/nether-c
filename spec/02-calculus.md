@@ -130,7 +130,7 @@ That is the whole system: eleven rules.
 **[LIT]** is why pure code disappears at burial. A literal is at depth 0, and
 by [PRIM] anything built only from literals is at depth 0, and by
 [section 06](06-evaluation.md) anything at depth 0 is fully evaluated before
-the artifact exists.
+the trace exists.
 
 **[PRIM]** ranges over every primitive operation, and a conditional is one of
 them: `if`, `while`, `&&` and `||` take their condition and their arms as
@@ -218,8 +218,9 @@ itself fetched over the network is deep for two independent reasons.
 
 ## 2.4 Metatheory
 
-Two properties an implementation MUST preserve. Both are stated here and
-tested generatively by the roadmap item *Property test: depth is monotone*.
+Two properties an implementation MUST preserve. Both are mechanized over the
+core calculus in `proof/calculus.py` and tested generatively by
+`crates/nether-bury/tests/monotone.rs` (item 0052, buried).
 
 > **Soundness of the bound.** If `Γ ; δ ⊢ e : τ@d` and `e ⟶ e′` with
 > `Γ ; δ ⊢ e′ : τ@d′`, then `d′ ≤ d` — never more.

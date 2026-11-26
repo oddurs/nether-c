@@ -102,20 +102,20 @@ it. Against `build.nc`, with `read("main.nc")` unanswered:
 
 | | Unspecialised | Specialised |
 | --- | ---: | ---: |
-| Residue | 1,163 lines | 1,433 lines |
+| Residue | 1,163 lines | 1,735 lines |
 | Minted functions | 0 | 21 |
-| Steps | 4,993,540 | 4,993,540 |
+| Steps | 4,993,540 | 5,421,481 |
 
-The demand is `interpret__98()` and not `interpret(b"…build.nc…")`. The guest's
+The demand is `interpret__107()` and not `interpret(b"…build.nc…")`. The guest's
 question survives with its path resolved, so the syntax read to find it is not
 read again, and `world_request` has come out as `read("main.nc")`.
 
-It is specialised up to that question and no further. An `if` whose condition
-waits on the world residualises with both arms unreduced, so the interpreter
-goes on interpreting from there — `block_value` still calls the general
-`block_value`. Reducing inside an arm that may not be taken is item 0251, and
-`crates/nether-bury/tests/projection.rs` asserts the boundary so that it
-cannot move without a test changing.
+Speculative reduction under undecided branches and past starved statements
+(`§6.5`, items 0251, 0270, and 0281, all buried) is implemented and asserted by
+`crates/nether-bury/tests/projection.rs`. Minted functions specialise the guest
+source, environment, and cursor into statements and branches after the starved
+binding (`Bytes r = expression__...();`), while still calling `evaluate_program`
+where the next cursor and memory wait on the packed result record `r`.
 
 ## Boundary
 

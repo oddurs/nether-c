@@ -63,8 +63,9 @@ Exhausting it is a diagnostic naming a span.
 **Graft** — to substitute a subtrace by cairn and re-bury only what changed.
 [§8.7](08-rites.md#87-graft)
 
-**Hole** — a suspended world-question: the call, its stratum, its span, and
-the nodes waiting on it. Identical calls are one hole.
+**Hole** — a suspended world-question: the call, its stratum, and its span. A
+hole does not record its dependents. Identical calls at a read stratum
+(1, 2, 3, 5) are one hole; calls at act strata (4, 6, 7, 8) are never merged.
 [§6.3](06-evaluation.md#63-holes)
 
 **Lamp** — the rite that renders a value or walks its provenance. A tool the
@@ -108,8 +109,9 @@ the witness so that the value stays portable.
 answer from the ledger. Produces the same cairn, or reports the first node
 that differs. [§6.7](06-evaluation.md#67-replay)
 
-**Residue** — what survives a burial: the unreduced nodes, the holes, and the
-edges between them. Itself a complete program.
+**Residue** — what survives a burial: a complete program in source form
+([§4](04-grammar.md)), not a set of nodes, held in the ledger as `Bytes` so it
+can be buried again.
 [§6.5](06-evaluation.md#65-residue)
 
 **Rite** — one of the six commands: `bury`, `exhume`, `lamp`, `cairn`,

@@ -51,7 +51,7 @@ nether: granting `env` means pinning it: `--clock` and `--target`.
 That message is worth stopping on. Granting the environment means the rite has
 to say what the environment *is* — including the time and the target triple —
 because a default would quietly be this machine's, and then the trace would
-depend on which machine happened to run it. There is no convenience here on
+depend on which machine happened to exhume it. There is no convenience here on
 purpose. Somewhere there is a reproducible build that is only reproducible on
 the laptop it was invented on, and this is that bug, refused at the door.
 
@@ -103,4 +103,4 @@ If you built something for two customers and one of them says the wrong thing
 shipped, the question "which world did this come out of" has an answer, and the
 answer is not "let me check the CI logs".
 
-[Next](07-the-replay.md): asking a trace whether the world has moved.
+[Next](07-the-replay.md): replaying a trace with the world switched off.

@@ -34,9 +34,11 @@ That is the entire language. Everything below is consequence.
 ## THE NINE THINGS THAT ARE TRUE
 
 **1. There is no `run`.**
-`nether run` exits 64 and tells you what to use instead. This is the only
-frozen requirement in the entire specification. Everything else is a draft.
-This is not.
+`nether run` exits 64 and tells you what to use instead. It is frozen
+([§8.0](spec/08-rites.md#80-there-is-no-run)) alongside the canonical value and
+node encodings ([§7.1](spec/07-ledger.md#71-canonical-encoding),
+[§7.3.1](spec/07-ledger.md#731-node-encoding)). Everything else in the
+specification is a draft. These are not.
 
 **2. Depth only ever increases.**
 Every value carries a number from 0 to 8: how far into the world its history
@@ -159,12 +161,14 @@ modes; the pair changes if it fails, not the standard.
 
 ## WHAT IS TRUE TODAY
 
-**Nothing is implemented.** The specification comes first. Deliberately. The
-compiler will not be started until the specification stops moving.
-
-What exists: twelve sections of specification, a static site baked out of it, a
-roadmap of 82 items across nine descents, and one binary that refuses
-correctly.
+**The specification comes first, and the implementation follows it.** What
+exists today: twelve sections of specification, an 8-crate Rust workspace
+implementing all nine strata providers and all six rites (`bury`, `exhume`,
+`lamp`, `cairn`, `strata`, `graft`), a browser WebAssembly build and local
+Necropolis trace browser (`web/necropolis/`), an in-tree LCF proof kernel
+(`proof/`), a thin Vim/Neovim adapter (`tools/vim/`), a sample-program
+bootstrap interpreter (`lib/`), a static site baked from the specification and
+manual, and a roadmap of 309 cairn items with 7 of 9 core descents buried.
 
 ```console
 $ nether run hello.nc
@@ -177,8 +181,8 @@ nether: there is no `run`.
   [...]
 ```
 
-That is the one behaviour the language will never change. It seemed like the
-honest thing to build first.
+That is the one behaviour the language will never change, and it was the first
+thing built.
 
 ---
 
@@ -191,6 +195,7 @@ empty directory.
 
 | | | |
 |---|---|---|
+| 00 | [A way in](docs/manual/00-a-way-in.md) | what you need and what nothing running means |
 | 01 | [The first burial](docs/manual/01-the-first-burial.md) | a deposit is not a print |
 | 02 | [A name that holds](docs/manual/02-a-name-that-holds.md) | the name is the thing |
 | 03 | [The hole](docs/manual/03-the-hole.md) | what the world has not said is written down |
@@ -199,6 +204,7 @@ empty directory.
 | 06 | [Two worlds](docs/manual/06-two-worlds.md) | one burial, as many worlds as you like |
 | 07 | [The replay](docs/manual/07-the-replay.md) | a question about the past, not a second run |
 | 08 | [The Orpheus rule](docs/manual/08-the-orpheus-rule.md) | carry it up, go back down to look |
+| 09 | [Where to go from here](docs/manual/09-where-to-go-from-here.md) | the map |
 
 Every command on those pages is executed on every build, against the binary in
 this repository, by `tests/transcripts/run`. The output printed underneath is
@@ -233,20 +239,24 @@ There is no markdown library.
 
 There is no web framework.
 
-The Rust workspace has no third-party crates in it today.
+The Rust workspace has three direct third-party crates: `blake3` in
+`nether-ledger`, and `unicode-ident` and `unicode-normalization` in
+`nether-syntax`.
 
 A dependency is forever. The part you actually need is usually fewer lines than
 you think, and then you understand it.
 
-The rule has one stated exception, and it is deliberately narrow:
+The rule has a deliberately narrow boundary:
 
 > **Write your own encoders, parsers, renderers and formats. Do not write your
 > own cryptography.**
 
-`blake3` is permitted, when the ledger needs it. An encoder that is subtly
-wrong produces a file somebody notices. A hash function that is subtly wrong
-produces cairns that collide, and the failure surfaces years later underneath
-every reproducibility claim in the specification.
+`blake3` is permitted because a hash function that is subtly wrong produces
+cairns that collide, and the failure surfaces years later underneath every
+reproducibility claim in the specification. `unicode-ident` and
+`unicode-normalization` are permitted for §3.3 Unicode identifier and NFC rules
+([§90.2](spec/90-rationale.md#unicode-and-the-line-the-rule-is-actually-drawn-on)).
+Any other dependency needs an entry in `spec/90-rationale.md` first.
 
 ---
 
@@ -257,7 +267,7 @@ git clone https://github.com/oddurs/nether-c
 cd nether-c
 scripts/setup            # once per clone: wires the git hooks
 scripts/agent doctor     # check the environment
-scripts/task check       # fmt, lint, test, build, site, gfx, decay
+scripts/task check       # fmt, lint, test, build, site, gfx, design, font, wasm, browser, decay, cairn
 ```
 
 One unit of work. One worktree. One branch. One pull request.

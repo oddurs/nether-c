@@ -19,9 +19,12 @@ are roadmap targets, not commitments. Large research items must identify and
 file missing prerequisites before implementation, rather than hide them in an
 unbounded PR.
 
-Start with the security boundary inventory (0216) and the font contribution
-path (0233); both are bounded and unblock later work. Arrange the outstanding
-browser observation (0075) separately. The current editor and interpreter
-bootstrap are already delivered; their remaining items name the actual gaps.
-The year-long store studies, independent conformance implementation and human
-studies remain external evidence gates, not things a passing build can settle.
+Start with making the encoding's invalid states unconstructible (0115) and
+finishing the release/specimen path for the face (0235); both are bounded and
+unblocked. Implementation-neutral conformance prep (0105) is also ready, while
+burying it waits on an independent second implementation. Arrange the
+outstanding browser observation (0075) separately. The current editor and
+interpreter bootstrap are already delivered; their remaining items name the
+actual gaps. The year-long store study (0210), independent conformance
+implementation (0105) and human studies remain external evidence gates, not
+things a passing build can settle.

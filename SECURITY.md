@@ -57,7 +57,7 @@ arrives as bytes and is parsed before anything else knows what it is.
 | Checked | the decoder rejects non-canonical forms, over-long strata, malformed spans and trailing bytes; a decoder that accepted two byte strings as one value would break every reproducibility claim in the specification |
 | Checked | a trace naming a hole this ledger does not hold is reported rather than skipped |
 | Checked | decoding allocates at most 128 times the object at its peak and 192 times in all, in the same file. A count is believed only against the bytes left and nothing is reserved on its word, because every enclosing level is believed against the same bytes |
-| Assumed | that `blake3` is collision-resistant. It is the only dependency in the tree and the only place this assumption is made |
+| Assumed | that `blake3` is collision-resistant. It is the only cryptographic dependency in the tree (the other two direct dependencies are Unicode identifier and normalisation tables in `nether-syntax`) |
 | Not promised | that a trace is *true*. It says what some machine recorded. Whether that machine was honest is boundary 3 |
 
 ### 3. The machine a burial runs on
@@ -70,12 +70,12 @@ that answers, and the invocation says which providers exist.
 | | |
 | --- | --- |
 | Crosses | file contents, HTTP responses, a pinned clock and target, drawn bytes |
-| Checked | `disk` resolves every path under a root and refuses to climb out, textually and then through the filesystem, so a symlink already inside the root cannot point out of it |
+| Checked | `disk` resolves every path under a root and refuses to climb out. On Linux, it traverses each component with directory-FD pinning (`/proc/self/fd/<fd>/<name>` with `O_NOFOLLOW | O_NONBLOCK | O_DIRECTORY`) and uses atomic `create_new` / `rename` on Unix, closing the symlink-race window between check and open |
 | Checked | `net` opens a socket only to a host named by `--reach`, decided **before** the socket; responses are capped at 64 MiB of body and 64 KiB of headers, with a 30-second patience |
 | Checked | `entropy` refuses a draw past 16 MiB and collapses on a negative one |
 | Checked | every answer is written to the ledger **before** it reaches the program ([§1.4](spec/01-strata.md)), and the type of `Recorder::record` is the only way to make the proof a provider must return |
 | Assumed | the filesystem, the clock and `/dev/urandom` are what they claim. A burial cannot check its own machine |
-| Not promised | protection against a path that appears between the check and the act. The disk root is a check before an act, and a link created in that window wins. It stops a link that was already there, which is the one a program being buried can arrange for itself |
+| Not promised | directory-FD pinning on non-Linux Unix systems: those systems still apply `O_NOFOLLOW` and atomic `create_new` / `rename`, so a symlink already inside the root is stopped, while a symlink swapped in between path check and open can still race |
 
 ### 4. The author of a shared object
 
@@ -102,9 +102,11 @@ A store shared between people who do not trust each other.
 | --- | --- |
 | Crosses | objects, and the reverse index under `refs/` |
 | Checked | the store is append-only and content-addressed, so a writer can add but cannot revise; everything read is verified against the name it was asked for |
-| Assumed | that the filesystem gives each writer a whole write. Concurrency across processes is not yet settled — that is 0207 |
+| Checked | concurrent writers across processes are settled (0207): objects are written to unique temporary files and atomically renamed into `objects/`, and reverse-index records in `refs/` are appended with `O_APPEND` and verified on read (tested under 16-process contention and killed writers) |
+| Checked | single-object reads and transfers are bounded (0219): `MAX_OBJECT_BYTES` is `64 MiB + 64 KiB`, store bundles cap at `1,000,000` objects and `512 MiB`, and `disk` caps reads at `64 MiB` and directory listings at `65,536` entries |
+| Assumed | that the filesystem honours atomic same-directory `rename` and atomic small `O_APPEND` writes |
 | Checked | a reverse-index edge is believed only when the node it names is read, verified, and refers to the target, so a forged edge is ignored rather than reported |
-| Not promised | availability. Anyone who can write to a shared store can fill it, and can make a read refuse: replace an object's bytes, plant a prefix that makes a short name ambiguous, or leave an object too large to read. A writer can make a reader see nothing; it cannot make a reader see something else. Bounding what one read may cost is 0219 |
+| Not promised | availability. Anyone who can write to a shared store can fill it, replace an object's bytes so `get` refuses it, or plant a prefix that makes a short name ambiguous. A writer can make a reader see nothing; it cannot make a reader see something else |
 
 ### 6. The page a browser loads
 
@@ -122,10 +124,10 @@ A store shared between people who do not trust each other.
 
 | | |
 | --- | --- |
-| Crosses | one dependency: `blake3` |
+| Crosses | three direct dependencies: `blake3`, `unicode-ident`, `unicode-normalization` |
 | Checked | nothing is downloaded at build time. There is no image library, no font library, no markdown library and no framework; the encoders, the face, the HTTP client and the loader are in the tree |
 | Checked | `unsafe` is `forbid` for the workspace and allowed in exactly two crates — `nether-foreign`, where Nether C calls out, and `nether-wasm`, where something else calls in |
-| Assumed | the toolchain and `blake3` are what they claim |
+| Assumed | the toolchain and those three dependencies are what they claim |
 
 ## What counts
 
@@ -157,22 +159,18 @@ A store shared between people who do not trust each other.
 Named because a threat model that lists only defences is the security version
 of a design document that lists only advantages.
 
-- **`nether-foreign` allocates whatever a callee asks for.** On return code `1`
-  the caller allocates `*out_len` bytes with no cap, so a hostile or buggy
-  callee can abort the process by asking for more memory than exists.
-  `net` and `entropy` both bound their answers; this one does not.
-- **`nether-wasm` frees with an assumed capacity.** `nether_free` reconstructs
-  a `Vec` with `capacity == len`, which holds for `Vec::with_capacity` today
-  but is not guaranteed by its contract. Freeing with a layout other than the
-  one allocated is undefined.
 - **`nether-wasm` trusts its caller's lengths.** `nether_bury` builds a slice
   from a pointer and length the page supplies. A page that lies has its own
   module's memory, and nothing else.
-- **`unrecorded` records a refusal it has not received.** The pre-call witness
-  §9.8.1 asks for is written as `Refusal::Unreachable`, so a foreign call that
-  then *succeeds* leaves a permanent witness saying the world said unreachable
-  — content-identical to a genuine one. The ledger is append-only, so it stays.
-- **Concurrent writers to one store are unsettled.** 0207.
+- **Non-Linux Unix disk traversal lacks directory-FD pinning.** On Linux, `disk`
+  traverses components via pinned directory file descriptors under
+  `/proc/self/fd/<fd>/<name>` with `O_NOFOLLOW | O_NONBLOCK | O_DIRECTORY`. On
+  other Unix systems, `O_NOFOLLOW` and atomic `create_new` / `rename` stop
+  existing symlinks, while a symlink raced into place between check and open can
+  still win.
+- **Shared-store availability is undefended.** Any writer with filesystem
+  permission on a shared store can exhaust disk space or overwrite an object's
+  bytes so reads refuse it; integrity holds and availability does not.
 
 ## Where the boundaries are tested
 

@@ -778,9 +778,10 @@ def specimen_page(font=None) -> str:
     nav_items = [
         ("scale", "1.", "The four sizes"),
         ("samples", "2.", "In use and in pairs"),
+        ("using", "3.", "Using the face"),
         *[
             (slug_id, f"{n}.", f"{title} ({len(chars)})")
-            for n, (slug_id, title, chars) in enumerate(groups, 3)
+            for n, (slug_id, title, chars) in enumerate(groups, 4)
         ],
     ]
     directory = (
@@ -853,13 +854,35 @@ def specimen_page(font=None) -> str:
     )
 
     sections_html = []
-    for n, (slug_id, title, chars) in enumerate(groups, 3):
+    for n, (slug_id, title, chars) in enumerate(groups, 4):
         cards = "".join(card(c) for c in chars)
         sections_html.append(
             f'<h2 id="{slug_id}"><a href="#{slug_id}">{n}. {esc(title)}</a></h2>'
             f'<p class="small">{len(chars)} glyph(s) in this range.</p>'
             f'<div class="glyph-catalogue">{cards}</div>'
         )
+
+    using_css = esc(
+        '@font-face {\n'
+        '  font-family: "Nether 8";\n'
+        '  src: url("nether.woff") format("woff");\n'
+        '  font-weight: 400;\n'
+        '  font-style: normal;\n'
+        '  font-display: block;\n'
+        '}\n\n'
+        '@font-face {\n'
+        '  font-family: "Nether 8";\n'
+        '  src: url("nether-bold.woff") format("woff");\n'
+        '  font-weight: 700;\n'
+        '  font-style: normal;\n'
+        '  font-display: block;\n'
+        '}\n\n'
+        'body {\n'
+        '  font-family: "Nether 8", monospace;\n'
+        '  font-size: 16px;\n'
+        '  font-synthesis: none;\n'
+        '}'
+    )
 
     drawn_twice = len(reg) - len(same)
     body = (
@@ -917,6 +940,21 @@ def specimen_page(font=None) -> str:
         f"<span class=\"d4\">@4</span> <span class=\"d5\">@5</span> "
         f"<span class=\"d6\">@6</span> <span class=\"d7\">@7</span> "
         f"<span class=\"d8\">@8</span>) share the same seven-pixel advance.</p>"
+        f'<h2 id="using"><a href="#using">3. Using the face</a></h2>'
+        f"<p><strong>{esc(font.NAME)}</strong> is dedicated to the public domain "
+        f"under the <a href=\"{REPO}/blob/main/LICENSE\">Unlicense</a>. Take "
+        f"both weights, self-host them, and drop them into any page without "
+        f"attribution or a font service.</p>"
+        f"<p>Download versioned <code>nether.woff</code> (weight 400) and "
+        f"<code>nether-bold.woff</code> (weight 700) files with "
+        f"<code>SHA256SUMS</code> from "
+        f"<a href=\"{REPO}/releases\">GitHub Releases</a>, or fetch the current "
+        f"site copies directly (<a href=\"nether.woff\">nether.woff</a>, "
+        f"<a href=\"nether-bold.woff\">nether-bold.woff</a>). Set text at whole "
+        f"multiples of eight pixels (<code>8px</code>, <code>16px</code>, "
+        f"<code>24px</code>, <code>32px</code>) with <code>font-synthesis: none</code>:</p>"
+        f'<figure class="listing"><figcaption>css</figcaption>'
+        f"<pre><code>{using_css}</code></pre></figure>"
         + "".join(sections_html)
     )
     return page(

@@ -1,6 +1,6 @@
 [package]
 name = "nether-syntax"
-description = "The lexer: UTF-8 in, tokens with byte spans out"
+description = "Lexer, parser, lowering, and printer for Nether C"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

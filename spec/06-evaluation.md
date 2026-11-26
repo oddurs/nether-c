@@ -303,7 +303,7 @@ function whose specialised form would be larger than its general one.
 
 `opaque` has a typing rule ([OPAQUE], [section 02](02-calculus.md)) rather than
 being a compiler flag, because whether an expression is burned through changes
-the artifact, and anything that changes the artifact belongs in the language.
+the trace, and anything that changes the trace belongs in the language.
 
 This is **settled**. The rejected alternative — leaving both the budget and the
 barrier to the command line — is recorded in
