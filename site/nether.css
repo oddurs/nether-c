@@ -40,6 +40,10 @@
   --bevel-hi: var(--dim);
   --bevel-lo: var(--dimmer);
 }
+:root[data-lamp="lit"] {
+  --bevel-hi: var(--dimmer);
+  --bevel-lo: var(--ink);
+}
 
 /* --------------------------------------------------------------------------
    The page is capped at ninety-six spacing cells. The font keeps its own fixed
@@ -218,18 +222,98 @@ body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
 .reading-pane { min-width: 0; }
 .pane-title { border-bottom: 1px solid var(--dim); color: var(--dim); overflow-wrap: anywhere; }
 .terminal main { padding: 1.25rem; }
+.terminal main > h1:first-child { margin-top: .25rem; }
 .terminal main :is(h1, h2, h3, h4) { scroll-margin-top: 1rem; }
-.terminal nav.bar { border: 1px solid var(--dim); border-top: 0; align-items: center; gap: .25rem; padding: .35rem; }
-.terminal nav.bar a { display: inline-block; padding: .45rem .6rem; text-decoration: none; }
+.terminal nav.bar { border: 1px solid var(--dim); border-top: 0; align-items: center; gap: .15rem .25rem; padding: .3rem .4rem; }
+.terminal nav.bar a { display: inline-block; padding: .35rem .5rem; text-decoration: none; }
 .terminal .lamp { min-height: 40px; }
 .terminal-status { border: 1px solid var(--dim); border-top: 0; color: var(--dim); }
-.arrival { border: 1px solid var(--dim); text-align: center; margin-bottom: 1rem; }
-.arrival .panel-label { padding: .5rem; background: var(--raised); color: var(--dim); text-align: left; }
+.arrival {
+  border: 2px solid;
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+  text-align: center;
+  margin-bottom: 1rem;
+}
+.arrival .panel-label {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: .25rem 1ch;
+  padding: .5rem;
+  background: var(--raised);
+  border-bottom: 1px solid var(--dimmer);
+  color: var(--dim);
+  text-align: left;
+}
 .arrival h1 { margin: 0 0 1rem; }
 .arrival h1::before { content: none; }
 .arrival > p:not(.panel-label) { padding: 0 .75rem; }
 .arrival-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; }
 .arrival-actions a { padding: .5rem 0; }
+.arrival-actions a.btn { padding: .45rem .85rem; }
+.btn {
+  display: inline-block;
+  padding: .45rem .85rem;
+  border: 2px solid;
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+  background: var(--raised);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:hover, .btn:focus-visible { background: var(--accent); color: var(--ground); text-decoration: none; }
+.btn:active { border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo); }
+.btn-primary { background: var(--accent); color: var(--ground); }
+.btn-primary:hover, .btn-primary:focus-visible { background: var(--ink); color: var(--ground); }
+.pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--dim);
+  background: var(--sunk);
+  color: var(--ink);
+  font-size: var(--type-fine);
+  line-height: 1.5;
+  letter-spacing: .125em;
+  text-transform: uppercase;
+}
+.pill-accent { border-color: var(--accent); color: var(--accent); }
+.pill-good { border-color: var(--good); color: var(--good); }
+.pill-warn { border-color: var(--warn); color: var(--warn); }
+.release-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .25rem 1ch;
+}
+.meta-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem 1ch;
+}
+.chapter-pager {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--dimmer);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .desk-notice { color: var(--dim); }
 .complaints { border: 1px dashed var(--dim); padding: .75rem; margin: 1rem 0 2rem; }
 .complaints summary { cursor: pointer; color: var(--alt); }
@@ -377,7 +461,8 @@ h1::before, h2::before, h3::before { margin-right: .5ch; }
 
 h2 {
   margin: 2.25rem 0 .75rem;
-  padding: .15rem .6rem;
+  padding: .3rem .6rem;
+  line-height: 1.25;
   background: var(--accent);
   color: var(--ground);
   font-size: var(--type-head);
@@ -405,6 +490,9 @@ h1.memorial::before { content: none; }
 
 h1 a, h2 a, h3 a, h4 a { color: inherit; text-decoration: none; }
 h1 a:hover, h2 a:hover, h3 a:hover, h4 a:hover { text-decoration: underline; background: none; color: inherit; }
+main :is(h2, h3)[id] > a::after { content: " #"; opacity: 0; }
+main :is(h2, h3)[id]:hover > a::after,
+main :is(h2, h3)[id] > a:focus-visible::after { opacity: 1; }
 
 /* --- text ----------------------------------------------------------------- */
 
@@ -448,6 +536,10 @@ figure.listing {
   border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
 }
 figure.listing figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
   padding: .25rem .6rem;
   background: var(--dim);
   color: var(--ground);
@@ -455,10 +547,26 @@ figure.listing figcaption {
   letter-spacing: .125em;
   text-transform: uppercase;
 }
+.copy-btn {
+  padding: 4px 8px;
+  border: 2px solid;
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+  background: var(--ground);
+  color: var(--ink);
+  font-size: var(--type-fine);
+  line-height: 1;
+  letter-spacing: .125em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.copy-btn:hover, .copy-btn:focus-visible { background: var(--accent); color: var(--ground); }
+.copy-btn:active { border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo); }
+.copy-btn[data-copied] { background: var(--good); color: var(--ground); }
 figure.listing pre {
   overflow-x: auto;
   overflow-y: hidden;
   padding: .7rem .9rem;
+  background: var(--sunk);
   /* Was 1.45, which is twenty-three and a fifth. The body's leading, for the
      reason written beside it. */
   line-height: 1.375;
@@ -487,7 +595,7 @@ figure.listing pre code { color: var(--ink); white-space: pre; }
 
 /* --- tables --------------------------------------------------------------- */
 
-div.scroll { overflow-x: auto; overflow-y: hidden; margin: 0 0 1.1rem; }
+div.scroll { overflow-x: auto; overflow-y: hidden; margin: 0 0 1.1rem; padding-bottom: 2px; }
 
 table {
   width: 100%;
@@ -500,7 +608,7 @@ caption {
   text-align: left;
 }
 th {
-  padding: .2rem .7rem;
+  padding: .45rem .75rem;
   border: 1px solid var(--dim);
   background: var(--dim);
   color: var(--ground);
@@ -508,13 +616,14 @@ th {
   white-space: nowrap;
 }
 td {
-  padding: .25rem .7rem;
+  padding: .45rem .75rem;
   border: 1px solid var(--dim);
   vertical-align: top;
 }
 .align-left   { text-align: left; }
 .align-center { text-align: center; }
 .align-right  { text-align: right; }
+tbody tr:nth-child(even) td { background: var(--sunk); }
 /* Full inversion on hover. Twenty-one to one, and period-appropriate. */
 tbody tr:hover td { background: var(--ink); color: var(--ground); }
 tbody tr:hover td :is(a, code, strong, em) { color: var(--ground); }
@@ -526,14 +635,16 @@ div.box {
   padding: .7rem .9rem;
   border: 2px solid;
   border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+  background: var(--raised);
 }
 div.box > :last-child { margin-bottom: 0; }
 div.box.shout { border-color: var(--warn); color: var(--warn); }
 
 p.small { color: var(--dim); }
 div.box.shout strong { color: var(--warn); }
+div.box.shout strong code { color: inherit; }
 
-dl.swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(14ch, 1fr)); gap: .75rem; margin: 1rem 0; }
+dl.swatches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
 dl.swatches div { padding: .75rem; color: var(--ink); background: var(--raised); border: 1px solid var(--dim); }
 dl.swatches div::before { content: ""; display: block; height: 2rem; margin-bottom: .75rem; background: var(--swatch); border: 1px solid var(--dim); }
 dl.swatches dt { font-weight: bold; }
@@ -565,6 +676,12 @@ footer {
   color: var(--dim);
   font-size: var(--type-fine);
   text-align: center;
+}
+footer p {
+  max-width: 68ch;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
 }
 footer a { color: var(--dim); }
 
@@ -660,8 +777,8 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .necropolis pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; overflow-y: hidden; max-width: 100%; margin: var(--hair) 0; padding: var(--tight); background: var(--sunk); border: 1px solid var(--dimmer); }
 .necropolis code { background: transparent; padding: 0; }
 .nc-header { border-bottom: 1px solid var(--dimmer); padding-bottom: var(--tight); margin-bottom: var(--tight); }
-.nc-header-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--hair) var(--tight); margin-bottom: var(--hair); }
-.nc-header-bar .nc-eyebrow { margin: 0; }
+.necropolis nav.bar { border: 1px solid var(--dim); border-top: 0; gap: .15rem .25rem; padding: .3rem .4rem; margin-bottom: var(--tight); }
+.necropolis nav.bar a { display: inline-block; padding: .35rem .5rem; text-decoration: none; }
 .necropolis button.nc-lamp {
   min-height: 44px;
   padding: 0 12px;
@@ -680,12 +797,47 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .necropolis button.nc-lamp:active {
   border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
 }
+.necropolis .nc-navigation button,
+.necropolis #bury,
+.necropolis #copy,
+.necropolis #cancel {
+  border: 2px solid;
+  border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
+  background: var(--raised);
+  color: var(--ink);
+  text-align: center;
+}
+.necropolis .nc-inspector #copy { background: var(--ground); }
+.necropolis .nc-navigation button:hover:not(:disabled),
+.necropolis #bury:hover:not(:disabled),
+.necropolis #copy:hover:not(:disabled),
+.necropolis #cancel:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--ground);
+}
+.necropolis .nc-navigation button:active:not(:disabled),
+.necropolis #bury:active:not(:disabled),
+.necropolis #copy:active:not(:disabled),
+.necropolis #cancel:active:not(:disabled) {
+  border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
+}
+.necropolis .nc-navigation button:disabled,
+.necropolis #bury:disabled,
+.necropolis #copy:disabled,
+.necropolis #cancel:disabled {
+  border-style: dotted;
+  border-color: var(--dimmer);
+  background: var(--ground);
+  color: var(--dim);
+}
 .nc-eyebrow, .nc-private, .nc-caption, .nc-footer { color: var(--dim); }
 .necropolis .nc-eyebrow { font-size: var(--type-body); letter-spacing: .125em; }
 .nc-header h1 { color: var(--accent); }
 .necropolis .nc-private, .necropolis .nc-caption { margin-top: var(--tight); }
 .nc-source { border: 1px solid var(--dimmer); padding: var(--hair) var(--tight); background: var(--sunk); }
-.nc-source summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--code); }
+.nc-source summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--code); list-style: none; }
+.nc-source summary::-webkit-details-marker { display: none; }
 .nc-source summary::before { content: "\25B8"; display: inline-block; margin-right: 1ch; color: var(--accent); }
 .nc-source[open] summary::before { transform: rotate(90deg); }
 .nc-source label { display: block; margin-top: var(--hair); }
@@ -728,6 +880,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .nc-footer { margin-top: var(--step); padding-top: var(--tight); border-top: 1px solid var(--dimmer); font-size: var(--type-body); }
 @media (max-width: 760px) {
   body.necropolis { padding: var(--tight) var(--hair) var(--step); }
+  .necropolis h1 { font-size: var(--type-head); }
   .nc-neighbourhood { grid-template-columns: minmax(0, 1fr); gap: var(--tight); }
   .nc-selected { order: -1; }
   .nc-wires { display: none; }
@@ -758,16 +911,20 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
   .terminal-title { font-size: var(--type-fine); padding: .4rem .5rem; }
   .terminal-header { padding: .6rem .5rem; }
   .terminal-header p.tagline { margin-top: .4rem; }
-  .terminal nav.bar { gap: .2rem; padding: .3rem; }
-  .terminal nav.bar a { padding: .35rem .45rem; }
-  .terminal .lamp { min-height: 36px; }
+  .terminal nav.bar, .necropolis nav.bar { gap: .2rem .3rem; padding: .25rem .35rem; }
+  .terminal nav.bar a, .necropolis nav.bar a { padding: .35rem .45rem; }
+  .terminal .lamp, .necropolis button.nc-lamp { min-height: 36px; }
   .directory { padding: .3rem .5rem; }
   .directory summary { padding: .35rem 0; }
   .pane-title { padding: .4rem .5rem; }
   .arrival .panel-label { font-size: var(--type-fine); padding: .35rem .5rem; overflow-wrap: anywhere; }
   .arrival h1 { margin: 0 0 .5rem; }
   img.hero { margin: 0 auto .75rem; }
+  dl.swatches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chapters { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 380px) {
+  dl.swatches { grid-template-columns: minmax(0, 1fr); }
 }
 a.chapter {
   display: flex;
@@ -781,7 +938,8 @@ a.chapter {
 }
 a.chapter .n { color: var(--dim); }
 a.chapter:hover, a.chapter:focus-visible { background: var(--accent); color: var(--ground); }
-a.chapter:hover .n, a.chapter:focus-visible .n { color: var(--ground); }
+a.chapter:hover .n, a.chapter:focus-visible .n,
+a.chapter:hover .t, a.chapter:focus-visible .t { color: var(--ground); }
 
 /* --- the face specimen ---------------------------------------------------- */
 
@@ -896,13 +1054,14 @@ pre.glyph-grid[data-weight="bold"] { color: var(--accent); }
 }
 
 @media print {
-  html, body, .terminal-header, .terminal-workspace, figure.listing, blockquote {
+  html, body, .terminal-header, .terminal-workspace, figure.listing, figure.listing pre, div.box, blockquote {
     background: white !important;
     color: black !important;
   }
   body, body.terminal { max-width: none; padding: 0; }
   .terminal-title, .directory, nav.bar, .terminal-status, footer,
-  .complaints, a.skip, .gauge, img.rule { display: none !important; }
+  .complaints, a.skip, .gauge, img.rule, .copy-btn { display: none !important; }
+  main :is(h2, h3)[id] > a::after { content: none; }
   .terminal-workspace { display: block; border: 0; }
   .terminal-header { border: 0; padding: 0 0 .5rem; }
   .pane-title { border-bottom: 1px solid black; color: black; }
