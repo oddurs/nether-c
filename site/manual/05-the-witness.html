@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The witness &mdash; Nether C</title>
-<meta name="description" content="chapter 05 draft edit the source">
+<meta name="description" content="One idea: what the world said is kept beside what it made.">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/manual/05-the-witness.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="The witness &mdash; Nether C">
-<meta property="og:description" content="chapter 05 draft edit the source">
+<meta property="og:description" content="One idea: what the world said is kept beside what it made.">
 <meta property="og:url" content="https://netherc.org/manual/05-the-witness.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -61,9 +61,9 @@ try {
 </details>
 </aside>
 <div class="reading-pane">
-<div class="pane-title"><span>The witness</span><span aria-hidden="true">[text]</span></div>
+<div class="pane-title"><span>manual/05-the-witness.md</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c meta-bar"><span>chapter 05</span> <span>draft</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/05-the-witness.md">edit the source</a></span></p><h1 id="the-witness"><a href="#the-witness">The witness</a></h1><blockquote><p>One idea: <strong>what the world said is kept beside what it made.</strong></p></blockquote><p>Pick up where <a href="04-the-grant.html">chapter 4</a> left off:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk --root .
+<p class="c meta-bar"><span>chapter 05</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/05-the-witness.md">edit the source</a></span></p><h1 id="the-witness"><a href="#the-witness">The witness</a></h1><blockquote><p>One idea: <strong>what the world said is kept beside what it made.</strong></p></blockquote><p>Pick up where <a href="04-the-grant.html">chapter 4</a> left off:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk --root .
   ①  read(&quot;who.txt&quot;)  →  6 bytes  <span class="h">4395a792</span>
 sealed   <span class="h">4fc5e660</span> + <span class="h">4395a792</span> → <span class="h">49df3bdc</span>   depth 3   holes 0</code></pre></figure><p>That <code>4395a792</code> in the middle of the seal line was not decoration. It is the name of the answer, and the answer is in the ledger:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> 4395a792
 given world</code></pre></figure><p><em>Given</em>, as opposed to refused. Six bytes, named, stored, and attached to the trace they went into. The disk said this, at this moment, to this rite, and nothing else in the program could have said it instead.</p><p>The node that records that is a <strong>witness</strong>, and a rite cannot skip making one. The provider that answers a question in this implementation hands back a value that only the recorder can construct, and the recorder writes to the ledger before it returns. There is no code path where the world answers and nothing is written down, because there is no way to produce the answer without writing it. That is what <a href="../spec/01-strata.html">§1.4</a> means, expressed as a type rather than as a rule to remember.</p><h2 id="reading-it-back"><a href="#reading-it-back">Reading it back</a></h2><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> 49df3bdc --provenance
@@ -102,7 +102,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">the face</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>

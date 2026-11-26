@@ -3,7 +3,7 @@
 <img class="hero" src="gfx/hero.gif" width="600" height="192" alt="An obsidian cairn over a shaft. A trace cube circles an unanswered hole.">
 <h1>Nothing runs.</h1>
 <p>A programming language. An unusually permanent filing system.</p>
-<p class="arrival-actions"><a class="btn btn-primary" href="#install">Install &amp; bury</a><a class="btn" href="manual/index.html">Open the manual</a><a class="btn" href="releases.html">Releases</a></p>
+<p class="arrival-actions"><a class="btn btn-primary" href="#install">Install &amp; bury</a><a class="btn" href="manual/index.html">Open the manual</a><a class="btn" href="spec/index.html">Read the spec</a></p>
 <p class="desk-notice">Please keep all limbs inside the current stratum.</p>
 </div>
 
@@ -18,23 +18,21 @@
 
 <p><strong>A Nether C program is never executed.</strong></p>
 
-<p>It is <strong>buried</strong>. Burial evaluates it as far as the world will
-currently allow, and then it stops. What is left behind is a
-<strong>trace</strong>: a complete, immutable, content-addressed record of
-everything that happened, and the <strong>holes</strong> where the program put a
-question to the world that nobody has answered yet.</p>
+<p>It is <strong>buried</strong>. Burial evaluates the program as far as the
+world permits, then stops. What remains is a <strong>trace</strong>: an
+immutable, content-addressed record of everything computed, plus the
+<strong>holes</strong> where the program asked the world a question nobody has
+answered yet.</p>
 
-<p>Answering a hole is a separate act. It happens later. Somebody has to decide
-to do it. It is called <strong>exhumation</strong>, and it produces a new trace.
-It does not touch the old one.</p>
+<p>Answering a hole is a separate act called <strong>exhumation</strong>.
+Somebody chooses when and what to grant. Exhumation emits a new trace and never
+touches the old one.</p>
 
 <p><em>Nothing in the ledger is ever revised.</em></p>
 
 <p>That is the entire language. Everything after this is consequence.</p>
 
-<img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
-
-<h2 id="install"><a href="#install">Get nether &amp; bury a program</a></h2>
+<h2 id="install"><a href="#install">Install &amp; bury</a></h2>
 
 <p>Take a verified prebuilt <code>{{LATEST_TAG}}</code> archive (Linux
 <code>x86_64</code>, macOS <code>arm64</code>/<code>x86_64</code>) and
@@ -71,87 +69,67 @@ buried   hello.nc &rarr; <span class="h">efed9b2a</span>   depth 0   holes 0   4
 Hello from the nether</code></pre>
 </figure>
 
-<p>Burial said nothing about the greeting. It cannot. The program has no way to
-reach your terminal and would not know whether anybody was watching if it did.
-It left a deposit. Reading it is a second act, and a person had to choose to
-perform it.</p>
-
-<p>Two commands. Every time. Forever.</p>
-
 <div class="plaque">
 <h3>THIS IS THE POINT, NOT THE PRICE</h3>
 <div>
-<p>A bare string leaves a deposit, not a line on your terminal. Reading it takes
-a second command. That is the single largest tax the design charges, and it
-lands in the first thirty seconds of everybody's first program.</p>
-<p>Here is what it buys. A Nether C program holds <em>no capability that reaches
-a log</em>. Not one it is discouraged from using. Not one behind a flag. There is
-no code path from a running program to your terminal, so there is no such thing
-as a leak, an accidental debug line left in for a year, or a secret printed at
-three in the morning by a branch nobody has read since 2021.</p>
-<p>You cannot get that by being careful. You get it by not having the door.</p>
+<p>Burial printed nothing. A bare string leaves a deposit in the ledger, not a
+line on your terminal; reading it takes a <code>lamp</code>. Two commands,
+every time, starting thirty seconds into your first program.</p>
+<p>What that buys: a Nether C program holds <em>no capability that reaches a
+terminal or a log</em>. Not behind a flag, not discouraged &mdash; absent. There
+is no code path from a buried program to stdout, so there is no accidental debug
+line and no secret leaked at three in the morning by a branch nobody has read
+since 2021. You cannot get that by being careful. You get it by not having the
+door (<a href="spec/90-rationale.html#901-core-design-choices">&sect;90.1</a>).</p>
 </div>
 </div>
 
-<img class="rule" src="gfx/rule-strata.gif" width="396" height="9" alt="">
+<h2 id="holes"><a href="#holes">Holes, exhumation &amp; replay</a></h2>
 
-<h2 id="nine-things"><a href="#nine-things">The nine things that are true</a></h2>
+<p class="center"><img class="diagram" src="gfx/hole.gif" width="600" height="116" alt="Burial leaves a hole. Exhumation fills it and the trace is renamed."></p>
+
+<p>When burial reaches a question only the world can answer, it stops and leaves
+a <strong>hole</strong> in the trace with all its arguments already buried.
+<code>read(concat(dir, name))</code> does not leave a hole containing
+<code>concat</code>; it leaves a hole holding the finished path.</p>
+
+<figure class="listing">
+<figcaption>shell</figcaption>
+<pre><code><span class="p">$</span> nether <span class="k">bury</span> build.nc
+buried   build.nc &rarr; <span class="h">76c4b655</span>   depth 3   holes 1   4 nodes
+  hole ①  read(<span class="s">"main.nc"</span>)                stratum 3  disk
+
+<span class="p">$</span> nether <span class="k">exhume</span> <span class="h">76c4b655</span> --grant disk --root .
+  ①  read(<span class="s">"main.nc"</span>)  &rarr;  29 bytes  <span class="h">6940fecb</span>
+sealed   <span class="h">76c4b655</span> + <span class="h">6940fecb</span> &rarr; <span class="h">bb9ed429</span>   depth 3   holes 0
+
+<span class="p">$</span> nether <span class="k">exhume</span> <span class="h">bb9ed429</span> --replay
+identical.</code></pre>
+</figure>
+
+<p>Notice two things. First, the cairn changed: answering hole ① emitted
+<code>bb9ed429</code> and left <code>76c4b655</code> intact. Second,
+<code>--replay</code> holds <em>no capabilities at all</em>. A trace that
+fetched from disk or the network replays offline because every answer was
+recorded as a witness
+(<a href="spec/06-evaluation.html#67-replay">&sect;6.7</a>).</p>
 
 <ol class="doctrine">
-<li><b>The program has already run.</b><span>You are not going to start it. You
-are going to read what is left of it. There is no <code>run</code>, there is
-never going to be a <code>run</code>, and it is the one requirement in the whole
-draft that is frozen &mdash;
-<a href="spec/08-rites.html#80-there-is-no-run">&sect;8.0</a>.</span></li>
-
-<li><b>Depth only ever increases.</b><span>Every value carries a number from 0
-to 8: how far into the world its history reaches. Nothing lowers it. Descent is
-a decision, and it is the last one you get to make about that value. There is no
-<code>ascend</code> &mdash;
-<a href="spec/01-strata.html#12-the-monotonicity-law">&sect;1.2</a>.</span></li>
-
-<li><b>Nothing down here changes.</b><span>The ledger is shared, but its
-contents cannot be revised. This is not
-a safety feature bolted on. It is what the word <em>nether</em> means &mdash;
-<a href="spec/05-types.html#54-mutation">&sect;5.4</a>.</span></li>
-
-<li><b>You do not make a value. You find it.</b><span>Every value already exists
-at its content address. Allocation is a thing other languages do because they
-have not worked out that the value was always there. Two programs that compute
-the same value write the same bytes to the same place and never have to agree
-about it first &mdash;
+<li><b>You do not make a value. You find it.</b><span>Every value lives at its
+content address (its <strong>cairn</strong>). Two burials that compute the same
+value write the same bytes to the same place without agreeing first &mdash;
 <a href="spec/07-ledger.html#72-cairns">&sect;7.2</a>.</span></li>
 
-<li><b>Nothing is printed.</b><span>A bare expression is deposited into the
-ledger. A program holds no capability that reaches a terminal, a log, or you. If
-you want to see what it left, carry a lamp down and look. This costs you two
-commands instead of one, forever, starting thirty seconds into your first
-program. We charge it anyway, and
-<a href="spec/90-rationale.html#901-core-design-choices">&sect;90.1</a> says
-so.</span></li>
-
-<li><b>Entropy is the deepest recordable sin.</b><span>Stratum 7. Second from
-the bottom. Drawn bytes must be recorded: the source alone cannot tell you what
-they were. You can replay the answer, but you cannot derive it again &mdash;
-<a href="spec/09-prelude.html#97-stratum-7-entropy">&sect;9.7</a>.</span></li>
-
 <li><b>The world's answer is written down before you get it.</b><span>Not
-afterwards. Not usually. <strong>Before.</strong> A witness recorded after the
-value was returned is a witness that can be lost, and a ledger with a gap in it
-supports nothing at all &mdash;
+afterwards. <strong>Before.</strong> A witness recorded after a value returns
+can be lost, and a ledger with a gap supports nothing &mdash;
 <a href="spec/01-strata.html#14-what-the-trace-records">&sect;1.4</a>.</span></li>
 
-<li><b>A refusal is an answer. A mistake is not.</b><span>The file is missing,
-nothing replied, the bytes are not text &mdash; those are things the world
-<em>said</em>, so they are values, and replay serves them back. Calling
-<code>must</code> on one is a bug in your program, and a burial that hits one
-stops. There is no way to catch it, and there is not going to be one: a mistake
-you can catch is a mistake you will ignore &mdash;
+<li><b>A refusal is an answer. A mistake is not.</b><span>A missing file or bad
+bytes are things the world <em>said</em>, so they are values that replay.
+Calling <code>must</code> on a refusal is a bug and stops burial; there is no
+catch, because a mistake you can catch is a mistake you will ignore &mdash;
 <a href="spec/09-prelude.html#99-failure-and-the-difference-between-two-of-them">&sect;9.9</a>.</span></li>
-
-<li><b>You may carry a shade up. You may not look at it on the way.</b><span>Orpheus
-could have kept her &mdash;
-<a href="spec/01-strata.html#16-shade-and-the-orpheus-rule">&sect;1.6</a>.</span></li>
 </ol>
 
 <img class="rule" src="gfx/rule-descend.gif" width="396" height="9" alt="">
@@ -172,29 +150,23 @@ answer.</p>
 you froze in advance. <strong>3</strong> reads the disk. <strong>4</strong>
 writes it. <strong>5</strong> reads the network. <strong>6</strong> writes it.</p>
 
-<p><strong>7</strong> is entropy.</p>
+<p><strong>7</strong> is entropy &mdash; the deepest recordable sin. Drawn bytes
+must be written down because source alone cannot re-derive them; replay returns
+the same bytes, never fresh ones
+(<a href="spec/09-prelude.html#97-stratum-7-entropy">&sect;9.7</a>).</p>
 
 <p><strong>8</strong> is foreign code, whose history the ledger cannot keep. A
 trace that reaches 8 is marked, permanently, and everything downstream of it is
 marked too. It may never again claim to be replayable.</p>
 
-<p>Stratum 8 is in the lattice because a language that cannot call C cannot be
-adopted, and an unadopted language proves nothing about whether its ideas were
-any good. It is at the bottom because it is the only stratum that breaks the
-promise rather than deepening it. It is the weakest part of this design and
+<p>Stratum 8 exists because a language that cannot call C cannot be adopted, and
+sits at the bottom because it breaks replay rather than deepening it. It is the
+weakest part of the design, and
 <a href="spec/90-rationale.html#902-rejected-alternatives">&sect;90.2</a> says
-that in those words.</p>
+so. No step ever lowers a depth; there is no <code>ascend</code>
+(<a href="spec/01-strata.html#12-the-monotonicity-law">&sect;1.2</a>).</p>
 
-<p>Watch the picture. The marker falls and the bands it has passed stay lit
-behind it. That is the whole of
-<a href="spec/01-strata.html#12-the-monotonicity-law">&sect;1.2</a>: no step
-ever lowers a depth. Read <a href="spec/01-strata.html">&sect;01</a> for what
-each stratum grants, what it costs, and what the implementation is obliged to
-write down the moment you reach it.</p>
-
-<img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
-
-<h2 id="orpheus"><a href="#orpheus">The Orpheus rule</a></h2>
+<h3 id="orpheus"><a href="#orpheus">The Orpheus rule</a></h3>
 
 <p class="center"><img class="diagram" src="gfx/orpheus.gif" width="600" height="192" alt="A value at stratum 5. Its name rises freely. A shade of it rises opaque. Looking at that shade from depth 0 is refused."></p>
 
@@ -229,53 +201,11 @@ it on. You may not look inside it.</p>
 <p class="center"><strong>YOU MAY CARRY A SHADE UP OUT OF ANY STRATUM.<br>
 YOU MAY ONLY LOOK AT IT BY GOING BACK DOWN.</strong></p>
 
-<p>It is one comparison. The check is local, it does not spread, and the error
-names both depths and the exact <code>descend</code> that would fix it. Two more
-dramatic versions of this rule were written down and thrown out; both are
-recorded in
-<a href="spec/90-rationale.html#902-rejected-alternatives">&sect;90.2</a>,
-because a design document that lists only its advantages is marketing.</p>
-
-<img class="rule" src="gfx/rule-cairn.gif" width="396" height="9" alt="">
-
-<h2 id="holes"><a href="#holes">What a hole is</a></h2>
-
-<p class="center"><img class="diagram" src="gfx/hole.gif" width="600" height="116" alt="Burial leaves a hole. Exhumation fills it and the trace is renamed."></p>
-
-<p>Burial evaluates everything it can and stops at the first thing it has to ask
-the world. That question becomes a <strong>hole</strong>, and the hole is carried
-in the trace along with the whole dependency graph that leads to it.</p>
-
-<p>A hole is always a question the world can answer immediately. Its arguments
-are already buried: <code>read(concat(dir, name))</code> does not leave a hole
-containing a <code>concat</code>. It leaves a hole containing the finished
-path.</p>
-
-<figure class="listing">
-<figcaption>shell</figcaption>
-<pre><code><span class="p">$</span> nether <span class="k">bury</span> build.nc
-buried   build.nc &rarr; <span class="h">76c4b655</span>   depth 3   holes 1   4 nodes
-  hole ①  read(<span class="s">"main.nc"</span>)                stratum 3  disk
-
-<span class="p">$</span> nether <span class="k">exhume</span> <span class="h">76c4b655</span> --grant disk --root .
-  ①  read(<span class="s">"main.nc"</span>)  &rarr;  29 bytes  <span class="h">6940fecb</span>
-sealed   <span class="h">76c4b655</span> + <span class="h">6940fecb</span> &rarr; <span class="h">bb9ed429</span>   depth 3   holes 0
-
-<span class="p">$</span> nether <span class="k">exhume</span> <span class="h">bb9ed429</span> --replay
-identical.</code></pre>
-</figure>
-
-<p>Look at the last line of that. Replay holds <em>no capabilities at all</em>.
-It does not prefer the ledger over the world. It cannot reach the world. A
-program that fetched something over the network replays on a machine with no
-network, because the answer was written down before the program ever saw it
-&mdash; <a href="spec/06-evaluation.html#67-replay">&sect;6.7</a>.</p>
-
-<p>And notice that the name changed. Answering a hole does not revise the old
-trace. The old trace still exists, still has its hole, and still means what it
-meant.</p>
-
-<img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
+<p>One depth comparison, checked locally. The diagnostic names both strata and
+the exact <code>descend</code> that resolves it. Orpheus could have kept her
+(<a href="spec/01-strata.html#16-shade-and-the-orpheus-rule">&sect;1.6</a>;
+rejected forms in
+<a href="spec/90-rationale.html#902-rejected-alternatives">&sect;90.2</a>).</p>
 
 <h2 id="six-rites"><a href="#six-rites">The six rites</a></h2>
 
@@ -301,17 +231,28 @@ directly for editors
 
 <div class="box shout">
 <p class="center"><strong class="blink">THERE IS NO <code>NETHER RUN</code></strong></p>
-<p>It exits 64 and tells you what to use instead. It is frozen alongside
+<p>It exits 64 and tells you what to use instead. It is frozen in
+<a href="spec/08-rites.html#80-there-is-no-run">&sect;8.0</a> alongside
 <a href="spec/07-ledger.html#71-canonical-encoding">&sect;7.1</a> and
-<a href="spec/07-ledger.html#731-node-encoding">&sect;7.3.1</a>, and written into
-<a href="spec/08-rites.html#80-there-is-no-run">&sect;8.0</a> so that it is a
-rule and not a joke, and so that anybody proposing to add it has something to
-argue against.</p>
+<a href="spec/07-ledger.html#731-node-encoding">&sect;7.3.1</a> so it is a rule
+and not a joke:</p>
 </div>
+
+<figure class="listing">
+<figcaption>shell</figcaption>
+<pre><code><span class="p">$</span> nether <span class="k">run</span> hello.nc
+<span class="e">nether:</span> there is no `run`.
+
+  A Nether C program is not executed. It is buried &mdash; evaluated as far as the
+  world allows &mdash; and what remains is a trace and the holes the world still
+  owes an answer to.
+
+  [...]</code></pre>
+</figure>
 
 <img class="rule" src="gfx/rule-cairn.gif" width="396" height="9" alt="">
 
-<h2 id="tooling"><a href="#tooling">Tools, proofs &amp; trust</a></h2>
+<h2 id="tooling"><a href="#tooling">Tools, proofs &amp; status</a></h2>
 
 <ul>
 <li><strong>The Necropolis</strong> (<a href="https://github.com/oddurs/nether-c/tree/main/web/necropolis">web/necropolis/</a>):
@@ -340,11 +281,73 @@ and known gaps in
 runner (<a href="releases.html#reproduce">reproducible builds</a>), and the
 release compatibility contract
 (<a href="spec/00-overview.html#061-what-a-release-promises">&sect;0.6.1</a>).</li>
+<li><strong>The decay ceiling</strong> (<code>.decay-ceiling</code>): the build
+fails if the line count of <code>crates/</code> grows. Lowering the ceiling is
+an ordinary commit; raising it requires editing the file and justifying it in
+public. Below, things only decay.</li>
 </ul>
+
+<h3 id="status"><a href="#status">Where it actually is</a></h3>
+
+<p>Status is never hand-written here &mdash; prose rots, and a GIF banner does
+not even change colour when it stops being true. Both blocks below are baked
+from <code>cairn/items/</code>, and the build fails if they drift.</p>
+
+{{DESCENT}}
+
+<p>Every stratum in <a href="spec/09-prelude.html">&sect;09</a> has a provider
+and every rite in <a href="spec/08-rites.html">&sect;08</a> is built. A
+stratum-7 trace replays byte for byte; a stratum-8 trace refuses to claim it
+can. What remains is tracked below:</p>
+
+{{HOLES}}
+
+<h2 id="reading"><a href="#reading">Manual &amp; specification</a></h2>
+
+<p><strong><a href="manual/index.html">The manual</a></strong> answers
+<em>what do I type</em>: ten short chapters from first burial to offline replay,
+with every command checked against the compiler on every build.</p>
+
+<p><strong><a href="spec/index.html">The specification</a></strong> answers
+<em>what is the rule</em>, written ahead of the compiler in
+<a href="https://github.com/oddurs/nether-c/tree/main/spec">spec/</a>. Four
+sections carry the design:</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>&sect;</th><th>Section</th><th>What it carries</th></tr></thead>
+<tbody>{{START_SPEC}}</tbody>
+</table>
+</div>
+
+<p class="small">See <a href="spec/index.html">all twelve sections</a> with
+computed depth bars, or open <a href="manual/00-a-way-in.html">chapter 00</a>
+to start typing.</p>
 
 <img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
 
-<h2 id="palette"><a href="#palette">On the palette</a></h2>
+<h2 id="craft"><a href="#craft">Who made this</a></h2>
+
+<p>Oddur Sigurdsson.</p>
+
+<p><strong>Written from scratch, with three deliberate exceptions.</strong>
+Encoders, parsers, renderers and formats are written in-tree; cryptography and
+Unicode tables are not. The whole tree holds three small crates
+(<code>blake3</code> and the Unicode identifier/normalisation tables, argued in
+<a href="spec/90-rationale.html#902-rejected-alternatives">&sect;90.2</a>) and
+zero build-time downloads. Everything else is short enough to inspect:</p>
+
+<ul>
+<li>the compiler, the ledger, the burial and the six rites</li>
+<li>the in-tree LCF proof kernel in <a href="https://github.com/oddurs/nether-c/tree/main/proof">proof/</a></li>
+<li>a GIF89a encoder, an LZW compressor and a PNG encoder</li>
+<li id="the-face"><a href="specimen.html">the face this page is set in</a>, drawn glyph by glyph, and the TrueType
+    tables and WOFF container that ship it</li>
+<li>an HTTP/1.1 client, and the loader for the one stratum that calls out</li>
+<li>the markdown renderer that made this page</li>
+</ul>
+
+<h3 id="palette"><a href="#palette">On the palette</a></h3>
 
 <p><strong>Bruise and bloom.</strong> Indigo rooms, rose signals, and a little
 cold light where the world gets in. The nine strata move from periwinkle
@@ -359,141 +362,11 @@ through violet to pink; their numbers carry the meaning, even without colour.</p
 <div style="--swatch:var(--good)"><dt>ECTOPLASM</dt><dd>A favourable answer</dd></div>
 </dl>
 
-<p>The lamp opens a different room: rose porcelain, lavender paper, plum ink.
-Not a photographic negative. The same roles remain recognisable, but every
-colour is composed for its own ground. Even the GIFs change their ink.</p>
-
-<p>One source, <a href="https://github.com/oddurs/nether-c/blob/main/site/design.py">site/design.py</a>,
-feeds the interface, graphics, and depth labels. Contrast is checked in both
-modes. The afterlife has paperwork; it need not have eyestrain.</p>
-
-<img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
-
-<h2 id="manual"><a href="#manual">The manual</a></h2>
-
-<p>The specification answers <em>what is the rule</em>. It says each rule
-exactly once, in the order a rule needs the ones above it, and it is not a
-tutorial and will not become one.</p>
-
-<p><a href="manual/index.html">The manual</a> is the other document. Ten short
-chapters with one idea in each: bury a program, read back what it left, watch
-it starve on a question the world has not answered, grant the thing it asked
-for, and then replay the trace from its recorded witnesses with the world
-switched off.</p>
-
-<p>Every command on those pages is executed on every build of this project,
-against the binary in this repository, and the output printed underneath is the
-output that came back. Documentation that lies fails the build. Writing it
-found two bugs.</p>
-
-<img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
-
-<h2 id="specification"><a href="#specification">The specification</a></h2>
-
-<p>Written before the compiler, and kept ahead of it. New behaviour goes into
-the specification first.</p>
-
-<p>It is Markdown in
-<a href="https://github.com/oddurs/nether-c/tree/main/spec">spec/</a> and it is
-canonical there. These pages are baked from it by
-<a href="https://github.com/oddurs/nether-c/blob/main/site/bake">site/bake</a>,
-one file of standard library Python with no dependencies. If the two ever
-disagree, the Markdown is right and continuous integration is broken.</p>
-
-<div class="scroll">
-<table>
-<thead><tr><th>&sect;</th><th>Section</th><th>Depth</th><th>Status</th></tr></thead>
-<tbody>{{TOC}}</tbody>
-</table>
-</div>
-
-<p>Start at <a href="spec/00-overview.html">&sect;00</a>. Sections
-<a href="spec/01-strata.html">01</a>, <a href="spec/02-calculus.html">02</a> and
-<a href="spec/06-evaluation.html">06</a> carry the design. The rest can wait
-until you need it.</p>
-
-<p>Section 02 is eleven typing rules on one page. That is a constraint and not
-an observation: a depth system that cannot be stated on one page cannot be
-taught, and a lattice nobody can hold in their head gets worked around instead
-of used.</p>
-
-<div class="plaque">
-<h3>THE CORE ONLY EVER SHRINKS</h3>
-<div>
-<p>A fixed size limit keeps a system from sprawling; a ceiling that only moves
-down is more demanding. A file called <code>.decay-ceiling</code> holds a
-number, and the build fails if the trusted core exceeds it.</p>
-<p>Lowering that number is an ordinary commit. Raising it means editing the file
-on purpose and arguing for it in public, where somebody can disagree.</p>
-<p>Below, things only decay.</p>
-</div>
-</div>
-
-<img class="rule" src="gfx/rule-descend.gif" width="396" height="9" alt="">
-
-<h2 id="status"><a href="#status">Where it actually is</a></h2>
-
-<p>Not written down here. A sentence about a moving thing is true until it is
-not &mdash; this page used to say the compiler did not exist, and it said so in
-a GIF, so it did not even change colour when it stopped being true. The two
-blocks below are read out of <code>cairn/items/</code> when the page is baked,
-and the build fails the day the board moves and the page does not.</p>
-
-{{DESCENT}}
-
-<p>Every stratum in <a href="spec/09-prelude.html">&sect;09</a> has a provider.
-Every rite in <a href="spec/08-rites.html">&sect;08</a> is built. A trace that
-reached stratum 7 replays byte for byte, and one that reached stratum 8 refuses
-to claim it can. What is left is tracked below: the browser graph, self-burial
-projections, store studies, conformance, and the human proofs that cannot be
-automated.</p>
-
-{{HOLES}}
-
-<p>Those are holes in the ordinary sense of the word here: the work is
-specified, the shape of the answer is known, and nobody has gone down and got
-it yet. It is what the language does to a <code>read</code> it has no
-capability for, and it is the honest state of any unfinished thing.</p>
-
-<p>One behaviour will never change, so it was the first one built:</p>
-
-<figure class="listing">
-<figcaption>shell</figcaption>
-<pre><code><span class="p">$</span> nether <span class="k">run</span> hello.nc
-<span class="e">nether:</span> there is no `run`.
-
-  A Nether C program is not executed. It is buried &mdash; evaluated as far as the
-  world allows &mdash; and what remains is a trace and the holes the world still
-  owes an answer to.
-
-  [...]</code></pre>
-</figure>
-
-<img class="rule" src="gfx/rule-quiet.gif" width="396" height="9" alt="">
-
-<h2 id="craft"><a href="#craft">Who made this</a></h2>
-
-<p>Oddur Sigurdsson.</p>
-
-<p><strong>Nothing in this repository was imported.</strong> Not "mostly" and
-not "apart from the hard parts" &mdash; the list is short enough to print, and
-you can check every line of it:</p>
-
-<ul>
-<li>the compiler, the ledger, the burial and the six rites</li>
-<li>the in-tree LCF proof kernel in <a href="https://github.com/oddurs/nether-c/tree/main/proof">proof/</a></li>
-<li>a GIF89a encoder, an LZW compressor and a PNG encoder</li>
-<li id="the-face"><a href="specimen.html">the face this page is set in</a>, drawn glyph by glyph, and the TrueType
-    tables and WOFF container that ship it</li>
-<li>an HTTP/1.1 client, and the loader for the one stratum that calls out</li>
-<li>the markdown renderer that made this page</li>
-</ul>
-
-<p>Nothing here downloads anything at build time. There are three small
-dependencies in the tree &mdash; a hash function (<code>blake3</code>) and the
-Unicode identifier/normalisation tables &mdash; and each exception is written
-down in <a href="spec/90-rationale.html">&sect;90.2</a> where it can be argued
-with.</p>
+<p>Lighting the lamp opens a second palette composed for rose porcelain,
+lavender paper and plum ink &mdash; never a raw inversion. Even the GIFs switch
+ink. One file, <a href="https://github.com/oddurs/nether-c/blob/main/site/design.py">site/design.py</a>,
+feeds CSS, graphics and depth labels, with contrast checked in both modes. The
+afterlife has paperwork; it need not have eyestrain.</p>
 
 <p class="small">That is a claim about what the code is made of, which is
 checkable. It is deliberately not a claim about how it came to be written,
