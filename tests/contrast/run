@@ -59,17 +59,18 @@ PAIRS = [
     ("cursor",             "accent",  "ground", 3.0),
     ("rules and borders",  "dim",     "ground", 3.0),
     ("excerpt highlight",  "sunk",    "accent", 4.5),
+    ("copied button",      "ground",  "good",   4.5),
 ]
 
 # Every depth label and raised or sunk panel uses the same readable semantic tokens.
 PAIRS += [(f"stratum {n} on {bg}", f"d{n}", bg, 4.5)
-          for n in range(9) for bg in ("ground", "raised")]
+          for n in range(9) for bg in ("ground", "raised", "sunk")]
 PAIRS += [(f"ground on stratum {n}", "ground", f"d{n}", 4.5)
           for n in range(9)]
 PAIRS += [(f"{fg} on raised", fg, "raised", 4.5)
           for fg in ("ink", "dim", "accent", "alt", "warn", "good", "code", "quote")]
 PAIRS += [(f"{fg} on sunk", fg, "sunk", 4.5)
-          for fg in ("ink", "dim", "code", "accent")]
+          for fg in ("ink", "dim", "accent", "alt", "warn", "good", "code", "quote")]
 PAIRS += [("focus and control edges", "dimmer", "ground", 3.0)]
 
 
