@@ -15,13 +15,17 @@ With one exception. There is no `run`. There is not going to be a `run`.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.3.0] - 2026-11-26
+
 ### Mechanized metatheory and differential checking
 
 - Added an in-tree LCF proof kernel in `proof/` (`kernel.py`, `calculus.py`,
   `orpheus.py`, `staging.py`, `encoding.py`, `check.py`) with zero external
   dependencies, proving depth-lattice soundness, Orpheus premise sufficiency
   and necessity, core residual round-trip and staging equivalence, and canonical
-  encoding injectivity.
+  encoding injectivity (`proof/check.py` runs in under 0.2s).
 - Checked `nether-core` against a clean-room transcription of the calculus over
   10,000,000 seeded programs (`scripts/task fuzz`, with 50,000 on every
   `cargo test`), and added [§90.7](spec/90-rationale.md#907-what-is-proved-what-is-tested-and-what-is-believed)
@@ -38,8 +42,12 @@ With one exception. There is no `run`. There is not going to be a `run`.
   deterministically without world capabilities
   ([§6.6](spec/06-evaluation.md#answering-across-machines)).
 
-### Ledger bundles, reconciliation, audit, and packages
+### Ledger encoding, bundles, reconciliation, audit, and packages
 
+- Made invalid §7.1.1 encoding states unconstructible in `nether-ledger` via
+  private-field `Stratum`, `NonEmptyName`, `Span`, and `Call` types (0115),
+  dropping `Store::put`'s decode round-trip while keeping full hostile-byte
+  rejection on decode.
 - Added portable store export/import bundles ([§7.5.4](spec/07-ledger.md#754-moving-a-store)),
   top-down store reconciliation ([§7.5.3](spec/07-ledger.md#753-a-second-store-and-what-they-owe-each-other)),
   and read-only store `fsck` auditing ([§7.5.2](spec/07-ledger.md#752-what-a-damaged-store-can-still-tell-you)).
@@ -60,8 +68,10 @@ With one exception. There is no `run`. There is not going to be a `run`.
   demand-order deposits ([§8.4](spec/08-rites.md#84-lamp)), hole depth in trace
   depth ([§7.3.2](spec/07-ledger.md#732-what-a-decoder-cannot-check)), and
   `graft` refusal on already-given answers ([§8.7](spec/08-rites.md#87-graft)).
-- Added stateless editor inspection (`nether lamp <cairn> --at <byte> [--source <path>]`,
-  [§8.4.1](spec/08-rites.md#841-inspecting-a-byte-offset-in-an-editor)) and a
+- Added `--help`/`-h` and `--flag=value` across all six rites, named unknown
+  identifiers in lowering diagnostics, stateless editor inspection
+  (`nether lamp <cairn> --at <byte> [--source <path>]`,
+  [§8.4.1](spec/08-rites.md#841-inspecting-a-byte-offset-in-an-editor)), and a
   thin Vim/Neovim adapter in `tools/vim/nether.vim`.
 
 ### Manual, site, face, and releases
@@ -69,22 +79,27 @@ With one exception. There is no `run`. There is not going to be a `run`.
 - Wrote the ten-chapter executable manual in `docs/manual/` (every `$ nether`
   transcript executed on every build by `tests/transcripts/run`) and the threat
   model in [SECURITY.md](SECURITY.md).
-- Added the inspectable glyph specimen page (`site/specimen.html`) in both
-  weights, aligned site and Necropolis typography to the 1/8-em grid
-  ([§90.6](spec/90-rationale.md#906-one-face-and-where-the-lettering-is-not-type)),
-  and hardened the site and Necropolis UI.
+- Published at `https://netherc.org` with the inspectable glyph specimen page
+  (`site/specimen.html`, licence and `@font-face` usage), seamless joining
+  block/box glyphs, 1/8-em typography grid, daylight-lit graphics, reduced-motion
+  stills for every animated GIF, and Necropolis theme/UX parity.
 - Added reproducible release builds (`scripts/task release:build` with
   `--remap-path-prefix` and `--locked`, verified by the second-runner
-  `reproduce` job in `.github/workflows/release.yml`) and the release
-  compatibility contract ([§0.6.1](spec/00-overview.md#061-what-a-release-promises)).
+  `reproduce` job in `.github/workflows/release.yml`), deterministic tarballs,
+  standalone `LICENSE` alongside `.woff` assets, and the release compatibility
+  contract ([§0.6.1](spec/00-overview.md#061-what-a-release-promises)).
 
-### Hardening
+### Hardening and decay
 
 - Completed multi-pass security and soundness hardening across the depth
   checker, parser, lowering, burier, ledger bounds, Linux directory-FD disk
   traversal, foreign FFI (`MAX_OUTPUT = 64 MiB`, temporary `AttemptGuard`),
   HTTP client framing, WASM allocator layout, CLI rites, proof kernel, and CI
-  gates.
+  gates, while eliminating `/tmp/nether-*` test leaks.
+- Decomposed monoliths across all eight crates, eliminated all lint pragmas and
+  production panics/`unreachable!()`, shrank compressed `nether.wasm` to
+  ~194.7 KiB (under a `200,000`-byte budget), and lowered `.decay-ceiling` to
+  `17,335` lines.
 
 ## [0.2.0] - 2026-09-17
 
