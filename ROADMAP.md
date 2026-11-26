@@ -483,7 +483,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 30 of 30 done
+`##########` 100% · 31 of 31 done
 
 ### buried
 
@@ -517,4 +517,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0335`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0335-website-visual-rhythm-typographic-grace-and-necropolis-copy-clarity.md) Website visual rhythm, typographic grace, and Necropolis copy clarity <sup>chore · p1 · 0</sup>
 - [x] [`0336`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0336-website-conceptual-arc-copy-clarity-and-page-structure.md) Website conceptual arc, copy clarity, and page structure <sup>chore · p1 · 0</sup>
 - [x] [`0337`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0337-cli-doctrinal-refusals-and-tooling-voice.md) CLI doctrinal refusals and tooling voice <sup>chore · p1 · 0</sup>
+- [x] [`0338`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0338-site-and-necropolis-personality-touches.md) Site and Necropolis personality touches <sup>chore · p1 · 0</sup>
 

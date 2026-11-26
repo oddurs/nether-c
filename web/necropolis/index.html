@@ -1,4 +1,9 @@
 <!doctype html>
+<!--
+  NETHER C / THE NECROPOLIS (local WASM, no server)
+  Every burial happens in a Web Worker inside this tab.
+  Nothing leaves the browser, and the world is not granted any doors.
+-->
 <html lang="en" data-lamp="out">
 <head>
 <meta charset="utf-8">
@@ -14,17 +19,18 @@
 <body class="necropolis">
 <a class="skip" href="#explorer">Skip to the trace</a>
 <div class="terminal-title"><span>NETHER C / THE NECROPOLIS</span><span>LOCAL WASM &middot; NO SERVER</span></div>
-<nav class="bar" aria-label="Primary"><a href="../../site/index.html">front desk</a><a href="../../site/manual/index.html">manual</a><a href="../../site/spec/index.html">spec</a><a href="../../site/releases.html">releases</a><a href="../../site/specimen.html">the face</a><button class="lamp nc-lamp" type="button" data-lamp-toggle aria-pressed="false">lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../../site/index.html">front desk</a><a href="../../site/manual/index.html">manual</a><a href="../../site/spec/index.html">spec</a><a href="../../site/releases.html">releases</a><a href="../../site/specimen.html">the face</a><button class="lamp nc-lamp" type="button" data-lamp-toggle aria-pressed="false" title="The nether is unlit by default. Carrying a lamp is optional.">lamp: <span data-lamp-state>out</span></button></nav>
 <header class="nc-header">
   <h1>What remains.</h1>
   <p>A sample program was just buried in your browser. Inspect its trace, holes, and deposits below, or open the source to bury your own.</p>
-  <p class="nc-private">Runs locally in WebAssembly. No source leaves this page, and no world capabilities are granted.</p>
+  <p class="nc-private">Buried locally in WebAssembly. No source leaves this page, no server exists to receive it, and no world capabilities are granted.</p>
 </header>
 <main>
   <details class="nc-source">
     <summary>Edit source and bury again</summary>
     <label for="source">Nether C source</label>
-    <textarea id="source" spellcheck="false">Bytes@3 src = must(descend disk { read("main.nc") });
+    <textarea id="source" spellcheck="false">// A browser holds no disk. Expect one deposit and one unanswered hole.
+Bytes@3 src = must(descend disk { read("main.nc") });
 
 U0 note()
 {

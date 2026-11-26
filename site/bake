@@ -657,8 +657,8 @@ def load_sections() -> list[Section]:
 
 
 _CHAPTER_IDEAS = {
-    "00": "Setup, verification guarantee, and how to read this manual.",
-    "09": "Spec reading order, graft, and the local Necropolis browser.",
+    "00": "An empty directory, one binary, and no daemon.",
+    "09": "The rest of the map: the spec, graft, and the Necropolis.",
 }
 
 
@@ -857,7 +857,9 @@ def navbar(current: str, depth: int, *, exact: bool = True) -> str:
     body = "".join(items)
     return (
         f'<nav class="bar" aria-label="Primary">{body}'
-        f'<button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>'
+        f'<button class="lamp" type="button" data-lamp-toggle '
+        f'title="The nether is unlit by default. Carrying a lamp is optional.">'
+        f'lamp: <span data-lamp-state>out</span></button></nav>'
     )
 
 
@@ -892,8 +894,10 @@ DEFAULT_DESCRIPTION = (
 )
 ANIMATED_GIFS = frozenset({
     "badge-80col.gif",
+    "badge-cookies.gif",
     "badge-decay.gif",
     "badge-handmade.gif",
+    "badge-noascend.gif",
     "badge-norun.gif",
     "badge-public.gif",
     "badge-unlit.gif",
@@ -1223,6 +1227,11 @@ def specimen_page(font=None) -> str:
         f'<figure class="listing"><figcaption>css</figcaption>'
         f"<pre><code>{using_css}</code></pre></figure>"
         + "".join(sections_html)
+        + f'<p class="small">{plural(len(reg), "glyph")}, drawn for the exact '
+        f"characters this site prints. If a new sentence asks for a glyph not "
+        f"listed above, the build refuses it until somebody draws both weights "
+        f"on an 8&times;8 grid. There is no italic, and there is not going to "
+        f"be one.</p>"
     )
     return page(
         "The face",
@@ -1368,6 +1377,8 @@ def releases_page() -> str:
 
     latest_anchor = release_anchor(tag)
     body = (
+        f'<p class="c meta-bar"><span>DESK 03 / ARCHIVE</span> '
+        f'<span>BACKPORTS: NONE</span></p>'
         f'<h1 id="latest">Releases</h1>'
         f'<p>Tagged builds of <code>nether</code>, the <strong>Nether 8</strong> font '
         f'files, and the full changelog. Every release binary is built reproducibly '
@@ -1420,7 +1431,8 @@ def releases_page() -> str:
         f'rebuilt. <code>scripts/task release:build</code> builds with '
         f'<code>--locked</code>, remaps <code>$CARGO_HOME</code> and the checkout '
         f'path with <code>--remap-path-prefix</code>, and packs deterministic archives '
-        f'(<code>uid=gid=mtime=0</code>).</p>'
+        f'(<code>uid=gid=mtime=0</code>, dated to the start of Unix time so two builds '
+        f'never disagree about when they happened).</p>'
         f'<p>Before a tag is published, a second cacheless runner in '
         f'<a href="{REPO}/blob/main/.github/workflows/release.yml">release.yml</a> '
         f'rebuilds the Linux binary and fails unless the SHA-256 digest matches byte '
@@ -1493,6 +1505,8 @@ def _build_front_page(sections: list[Section]) -> dict[Path, str]:
 
     memorial = (SITE / "src" / "in-memoriam.html").read_text(encoding="utf-8")
     not_found = (
+        '<p class="c meta-bar"><span>DESK 00 / REFUSAL</span> '
+        '<span>STATUS 404</span> <span>ABSENT</span></p>'
         "<h1>Not in the ledger</h1>"
         "<p>Nothing was buried at this address. A name that is not in the "
         "store does not invent a value to stand in for it.</p>"
@@ -1504,6 +1518,8 @@ def _build_front_page(sections: list[Section]) -> dict[Path, str]:
         '<li><a href="releases.html">Releases</a> &mdash; prebuilt binaries, checksums and changelog</li>'
         '<li><a href="specimen.html">The face</a> &mdash; Nether 8 in both weights</li>'
         "</ul></div>"
+        '<p class="small">A missing page is a refusal, not a mistake. The ledger '
+        "did not lose it; it was never deposited here.</p>"
     )
     quiet_dir = site_directory()
     return {
@@ -1541,6 +1557,8 @@ def _build_manual(chapters: list[Chapter]) -> dict[Path, str]:
         for c in chapters
     )
     manual_body = (
+        '<p class="c meta-bar"><span>DESK 01 / ORIENTATION</span> '
+        '<span>10 CHAPTERS</span> <span>CHECKED ON EVERY BUILD</span></p>'
         "<h1>The manual</h1>"
         "<p>Ten short chapters, one idea in each. Start from an empty directory, "
         "bury four programs, grant a capability, and replay a trace with the "
@@ -1616,6 +1634,8 @@ def _build_spec(sections: list[Section]) -> dict[Path, str]:
         for s in sections
     )
     index_body = (
+        '<p class="c meta-bar"><span>DESK 02 / STATUTES</span> '
+        '<span>12 SECTIONS</span> <span>AHEAD OF THE COMPILER</span></p>'
         "<h1>The specification</h1>"
         "<p>Every rule of Nether C, stated once, ahead of the compiler. Start at "
         '<a href="00-overview.html">&sect;00 Overview</a>; sections '
@@ -1623,6 +1643,7 @@ def _build_spec(sections: list[Section]) -> dict[Path, str]:
         '(eleven rules on one page) and <a href="06-evaluation.html">06</a> carry '
         'the design. Looking for a walkthrough? Start with '
         '<a href="../manual/index.html">the manual</a>.</p>'
+        '<img class="rule" src="../gfx/rule-strata.gif" width="396" height="9" alt="">'
         '<div class="scroll"><table><thead><tr><th>&sect;</th><th>Section</th>'
         f"<th>Depth</th><th>Status</th></tr></thead><tbody>{rows}</tbody></table></div>"
         '<div class="box shout"><p><strong>Draft specification:</strong> '
