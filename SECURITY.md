@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-`v0.2.0` is the current release and the only one. Nothing is supported for
+`v0.3.0` is the current release and the only one. Nothing is supported for
 backports yet: the specification is a draft that changes without notice, the
 crates are not published, and the tag is the version. When that changes it will
 be said here and in `CHANGELOG.md`, and not before.
