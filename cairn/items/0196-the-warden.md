@@ -4,9 +4,10 @@ uid: 68a415c9-6fe3-4fb3-b4df-ad56459cdcf0
 key: warden
 title: The Warden
 type: milestone
-status: marked
+status: buried
 created: 2026-09-13
-updated: 2026-09-15
+updated: 2026-11-26
+closed_at: 2026-11-26
 priority: p2
 due: 2028-07-15
 proof: Each declared boundary has explicit assumptions and corresponding evidence. Integrity is not availability; current depth checks are credited; soak and independent-build claims require actual observations.
@@ -25,3 +26,7 @@ A stated trust model and tested defenses across current entrypoints, not just th
 Each declared boundary has explicit assumptions and corresponding evidence. Integrity is not availability; current depth checks are credited; soak and independent-build claims require actual observations.
 
 The due date is a planning target, not a commitment or a replacement for evidence.
+
+## 2026-11-26
+
+All 21 items under warden are buried, ending with 0221 proved on release tag v0.3.0 (commit c48d163fd8dfc5ed16cbbd45d8077f0527550b8f, Release workflow run 45859548225).
