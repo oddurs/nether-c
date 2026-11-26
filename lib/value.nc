@@ -20,6 +20,7 @@ I64 number_from(Bytes s, I64 p, I64 n)
   if (p == len(s)) { return n; }
   I64 d = seek(b"0123456789", 0, slice(s, p, p + 1));
   if (d == 10) { return malformed_source(s); }
+  // I64::MIN / 10 = -922337203685477580; final digit must be <= 8.
   if (n < -922337203685477580 || (n == -922337203685477580 && d > 8)) {
     return malformed_source(s);
   }
@@ -33,6 +34,7 @@ I64 number(Bytes s)
   if (start == len(s)) { return malformed_source(s); }
   I64 n = number_from(s, start, 0);
   if (negative) { return n; }
+  // Reject I64::MIN (-9223372036854775808) when no leading '-' was present (-I64::MAX).
   if (n < -9223372036854775807) { return malformed_source(s); }
   return -n;
 }

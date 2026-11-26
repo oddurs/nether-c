@@ -21,6 +21,7 @@ Bool white(Bytes source, I64 from)
 I64 skip(Bytes source, I64 from)
 {
   I64 p = from;
+  // Pass `p + 0` rather than `p` so §5.4 does not freeze mutable loop cursors.
   while (p < len(source)) {
     if (white(source, p + 0)) {
       p += 1;
@@ -47,9 +48,13 @@ I64 skip_line(Bytes source, I64 from)
 
 // Malformed syntax collapses through an invalid slice. Semantic errors have
 // typed records in evaluate.nc; a syntax failure must not become a valid EOF.
+Bytes malformed_bytes(Bytes source)
+{
+  return slice(source, -1, 0);
+}
 I64 malformed_source(Bytes source)
 {
-  return len(slice(source, -1, 0));
+  return len(malformed_bytes(source));
 }
 
 I64 skip_block(Bytes source, I64 from)
@@ -124,6 +129,7 @@ Bytes unescape(Bytes source, I64 from, I64 until)
   I64 cut = plain_end(source, from, until);
   if (cut >= until) { return slice(source, from, until); }
   I64 n = escape_count(source, cut, until);
+  // Split once a literal has > 8 escapes to keep recursion depth O(log N).
   if (n > 8) {
     I64 mid = nth_escape(source, cut, until, n / 2);
     return concat(unescape(source, from, mid), unescape(source, mid, until));
@@ -136,7 +142,7 @@ Bytes unescape(Bytes source, I64 from, I64 until)
   else if (at(source, cut, b"\\\"")) { esc = b"\""; }
   else if (at(source, cut, b"\\\\")) { esc = b"\\"; }
   else if (at(source, cut, b"\\0")) { esc = b"\0"; }
-  else { return slice(source, -1, 0); }
+  else { return malformed_bytes(source); }
   return concat(head_chunk, concat(esc, unescape(source, cut + 2, until)));
 }
 
@@ -169,7 +175,7 @@ Bytes text(Bytes source, I64 from)
 {
   I64 start = skip(source, from);
   if (!at(source, start, b"\"")) {
-    return slice(source, -1, 0);
+    return malformed_bytes(source);
   }
   I64 end = quote_end(source, start + 1);
   return unescape(source, start + 1, end);

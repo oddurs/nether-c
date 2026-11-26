@@ -1,6 +1,14 @@
 // The language layer. The cursor reads syntax; value.nc owns records.
 // Checking and evaluation share traversal, but never memory or world effects.
 
+// `ambient` bit layout (I64):
+//   bits 0..=8 (1 << d): held strata (bit 0 = pure is always set)
+//   bit 16 (65536):      callee received a non-pure argument (skip local @d asserts)
+//   bit 17 (131072):     inside a function body (`return` is allowed)
+I64 AMBIENT_PURE = 1;
+I64 FLAG_DEEP_ARG = 65536;
+I64 FLAG_IN_FN = 131072;
+
 // Structural scans consume balanced groups, treating strings and comments as
 // indivisible tokens. An unexpected closing delimiter is never skipped.
 I64 group_end(Bytes s, I64 p, Bytes close)
@@ -53,12 +61,13 @@ I64 latent_suffix(Bytes s, I64 p)
     I64 cur = token_end(s, start);
     I64 prev = 0;
     I64 count = 0;
+    // Pass `cur + 0` so §5.4 does not freeze the mutable loop cursor.
     while (true) {
       I64 dpos = skip(s, cur + 0);
       if (!digit(s, dpos)) { return malformed_source(s); }
       I64 d = number(token(s, dpos));
       if (d < 1 || d > 8 || d <= prev) { return malformed_source(s); }
-      prev = d + 0;
+      prev = d;
       count += 1;
       I64 after_d = token_end(s, dpos);
       if (token(s, after_d) == b",") { cur = token_end(s, after_d); }
@@ -219,7 +228,7 @@ Bytes global_value(Bytes s, Bytes name, I64 p, Bytes memory, Bool checking)
     return result(p, problem(b"function requires a call", p), memory);
   }
   Bytes pending = remember(memory, name, value(b"Pending", 0, b""));
-  Bytes r = expression(s, token_end(s, after), b"", 1, pending, checking);
+  Bytes r = expression(s, token_end(s, after), b"", AMBIENT_PURE, pending, checking);
   if (!failed(found(r)) && token(s, cursor(r)) != b";") {
     return result(p, problem(b"expected ;", cursor(r)), memory_of(r));
   }
@@ -379,13 +388,9 @@ Bytes invoke(Bytes s, Bytes name, Bytes args, I64 ambient,
   if ((callee_ambient & ambient) != callee_ambient) {
     return result(p, problem(b"call requires a deeper ambient stratum", p), memory);
   }
-  // `ambient` bit layout (I64):
-  //   bits 0..=8  (1 << d): held strata (bit 0 = pure is always set)
-  //   bit 16      (65536):  callee received a non-pure argument (skip local @d asserts)
-  //   bit 17      (131072): inside a function body (`return` is allowed)
   I64 arg_d = argument_depth(args);
-  I64 body_ambient = callee_ambient | 131072;
-  if (arg_d > 0) { body_ambient = body_ambient | 65536; }
+  I64 body_ambient = callee_ambient | FLAG_IN_FN;
+  if (arg_d > 0) { body_ambient = body_ambient | FLAG_DEEP_ARG; }
   I64 body = expect(s, latent_suffix(s, after), b"{");
   Bytes r = block_value(s, body, data(found(bound)), b"", body_ambient, memory, checking);
   Bytes v = check_binding(s, f, unwrap_return(found(r)), arg_d == 0);
@@ -489,15 +494,14 @@ Bytes block_value(Bytes s, I64 p, Bytes env, Bytes locals, I64 ambient, Bytes me
       return finish_return(s, relocate(r, expect(s, cursor(r), b";")),
                            check_env, bind(locals, lname, unit_value()), ambient, checking);
     }
-    // Bit 16 (65536): deep-arg flag; bit 17 (131072): inside-function flag.
-    Bytes v = check_binding(s, p, found(r), (ambient & 65536) == 0);
+    Bytes v = check_binding(s, p, found(r), (ambient & FLAG_DEEP_ARG) == 0);
     if (failed(v)) { return result(group_end(s, cursor(r), b"}"), v, memory_of(r)); }
     I64 next = expect(s, cursor(r), b";");
     return block_value(s, next, bind(env, lname, v), bind(locals, lname, unit_value()),
                        ambient, memory_of(r), checking);
   }
   if (t == b"return") {
-    if ((ambient & 131072) == 0) {
+    if ((ambient & FLAG_IN_FN) == 0) {
       return result(group_end(s, p, b"}"), problem(b"return outside function", p), memory);
     }
     I64 next = token_end(s, p);
@@ -556,13 +560,13 @@ Bytes placeholder_parameters(Bytes s, I64 p)
   I64 next = name_end(s, type_end(s, p));
   if (token(s, next) == b")") { return packet(v); }
   I64 following = expect(s, next, b",");
-  if (token(s, following) == b")") { return slice(s, -1, 0); }
+  if (token(s, following) == b")") { return malformed_bytes(s); }
   return concat(packet(v), placeholder_parameters(s, following));
 }
 I64 function_ambient(Bytes s, I64 p)
 {
-  I64 mask = 1;
-  if (token(s, p) != b"@") { return mask + 0; }
+  I64 mask = AMBIENT_PURE;
+  if (token(s, p) != b"@") { return AMBIENT_PURE; }
   I64 start = skip(s, token_end(s, p));
   if (token(s, start) == b"{") {
     I64 cur = token_end(s, start);
@@ -584,8 +588,7 @@ Bytes check_latent_exact(Bytes s, I64 f, Bytes bound_env, I64 body, I64 declared
   while (d <= 8) {
     I64 bit = 1 << d;
     if ((declared & bit) != 0) {
-      // Keep bit 17 (131072, inside-function) set while probing without `bit`.
-      I64 without = (declared ^ bit) | 131072;
+      I64 without = (declared ^ bit) | FLAG_IN_FN;
       Bytes probe = block_value(s, body, bound_env, b"", without, memory, true);
       if (!failed(found(probe))) {
         return problem(b"latent depth assertion mismatch", f);
@@ -600,7 +603,7 @@ Bytes validate_program(Bytes s, I64 p, Bytes memory)
 {
   if (skip(s, p) >= len(s)) { return result(p, unit_value(), memory); }
   if (token(s, p) == b"demand") {
-    Bytes r = expression(s, token_end(s, p), b"", 1, memory, true);
+    Bytes r = expression(s, token_end(s, p), b"", AMBIENT_PURE, memory, true);
     if (failed(found(r))) { return r; }
     return validate_program(s, expect(s, cursor(r), b";"), memory_of(r));
   }
@@ -613,7 +616,7 @@ Bytes validate_program(Bytes s, I64 p, Bytes memory)
     I64 declared_ambient = function_ambient(s, signature_end);
     Bytes r = invoke(s, name, args, declared_ambient, memory, true, p);
     if (failed(found(r))) { return r; }
-    if (declared_ambient > 1) {
+    if (declared_ambient > AMBIENT_PURE) {
       Bytes bound = parameters(s, token_end(s, after), args, b"", memory);
       I64 body = expect(s, latent_suffix(s, signature_end), b"{");
       Bytes exact = check_latent_exact(s, p, data(found(bound)), body, declared_ambient, memory);
@@ -629,7 +632,7 @@ Bytes evaluate_program(Bytes s, I64 p, Bytes memory)
 {
   if (skip(s, p) >= len(s)) { return b""; }
   if (token(s, p) == b"demand") {
-    Bytes r = expression(s, token_end(s, p), b"", 1, memory, false);
+    Bytes r = expression(s, token_end(s, p), b"", AMBIENT_PURE, memory, false);
     if (failed(found(r))) { return packet(found(r)); }
     I64 next = expect(s, cursor(r), b";");
     return concat(packet(found(r)), evaluate_program(s, next, memory_of(r)));
