@@ -483,7 +483,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 24 of 24 done
+`##########` 100% · 25 of 25 done
 
 ### buried
 
@@ -511,4 +511,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0329`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0329-fill-bearing-column-on-joining-block-and-box-glyphs.md) Fill bearing column on joining block and box glyphs <sup>bug · p2</sup>
 - [x] [`0330`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0330-update-repo-url-to-netherc-org-improve-metadata-and-tighten-lineage-nod.md) Update repo URL to netherc.org, improve metadata, and tighten lineage nod <sup>chore · p2</sup>
 - [x] [`0331`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0331-prepare-v0-3-0-changelog-and-security-version.md) Prepare v0.3.0 changelog and security version <sup>chore · p2</sup>
+- [x] [`0332`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0332-restore-missing-serifs-stems-and-symmetry-on-bold-nether-8-glyphs.md) Restore missing serifs, stems, and symmetry on bold Nether 8 glyphs <sup>bug · p1</sup>
 
