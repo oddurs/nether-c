@@ -483,7 +483,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 27 of 27 done
+`##########` 100% · 28 of 28 done
 
 ### buried
 
@@ -514,4 +514,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0332`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0332-restore-missing-serifs-stems-and-symmetry-on-bold-nether-8-glyphs.md) Restore missing serifs, stems, and symmetry on bold Nether 8 glyphs <sup>bug · p1</sup>
 - [x] [`0333`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0333-website-visual-craft-css-fixes-and-necropolis-continuity.md) Website visual craft, CSS fixes, and Necropolis continuity <sup>feature · p1 · 0</sup>
 - [x] [`0334`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0334-releases-page-front-page-quickstart-tooling-discoverability-and-copy-buttons.md) Releases page, front-page quickstart, tooling discoverability, and copy buttons <sup>feature · p1 · 0</sup>
+- [x] [`0335`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0335-website-visual-rhythm-typographic-grace-and-necropolis-copy-clarity.md) Website visual rhythm, typographic grace, and Necropolis copy clarity <sup>chore · p1 · 0</sup>
 
