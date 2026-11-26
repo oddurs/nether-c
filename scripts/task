@@ -6,6 +6,11 @@ set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 
+clear_stamp() {
+  rm -f "$1"
+  trap - EXIT INT TERM
+}
+
 case "${1:-}" in
   fmt)
     cargo fmt --all
@@ -193,13 +198,10 @@ case "${1:-}" in
     trap 'rm -f "$stamp"' EXIT INT TERM
     printf '%s\n' "$head" > "$stamp"
     git tag -a "$version" -m "$version"
-    if ! git push origin "$version"; then
-      rm -f "$stamp"
-      trap - EXIT INT TERM
-      exit 1
-    fi
-    rm -f "$stamp"
-    trap - EXIT INT TERM
+    rc=0
+    git push origin "$version" || rc=$?
+    clear_stamp "$stamp"
+    [ "$rc" -eq 0 ] || exit 1
     echo "tagged $version and pushed it; the Release workflow takes it from here"
     ;;
 

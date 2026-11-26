@@ -15,12 +15,51 @@ repository's own. They default to what you would expect.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CFG_TEST = re.compile(r"#\[\s*cfg\s*\(\s*test\s*\)\s*\]")
+
+
+def _raw_string_start(raw: str, i: int) -> tuple[int, int] | None:
+    """If `raw[i:]` starts a Rust raw string (`r"..."`, `br#"..."#`, `cr#"..."#`),
+    return `(hash_count, body_start_index)`."""
+    n = len(raw)
+    if raw[i] == "r":
+        j = i + 1
+    elif raw[i] in ("b", "c") and i + 1 < n and raw[i + 1] == "r":
+        j = i + 2
+    else:
+        return None
+    if i > 0 and (raw[i - 1].isalnum() or raw[i - 1] == "_"):
+        return None
+    hashes = 0
+    while j < n and raw[j] == "#":
+        hashes += 1
+        j += 1
+    if j < n and raw[j] == '"':
+        return hashes, j + 1
+    return None
+
+
+def _char_literal_end(raw: str, i: int) -> int | None:
+    """If `raw[i:]` starts a Rust char literal (rather than a lifetime `'a`),
+    return the index immediately after its closing quote."""
+    n = len(raw)
+    # An escaped char literal starts with `'\` followed by at least one escaped
+    # character (e.g. `'\\'`, `'\''`, `'\n'`, `'\x7f'`, `'\u{...}'`), so scan
+    # for the closing `'` starting at `i + 3`.
+    if i + 2 < n and raw[i + 1] == "\\":
+        j = i + 3
+        while j < n and raw[j] != "'":
+            j += 1
+        return j + 1 if j < n else n
+    if i + 2 < n and raw[i + 2] == "'":
+        return i + 3
+    return None
 
 
 def scan_rust(text: str) -> list[tuple[str, str]]:
@@ -78,20 +117,11 @@ def scan_rust(text: str) -> list[tuple[str, str]]:
                 i += 2
                 continue
 
-            # Raw strings: r"...", r#"..."#, br#"..."#, cr#"..."#
-            if raw[i] == "r" or (raw[i] in ("b", "c") and i + 1 < n and raw[i + 1] == "r"):
-                prev_ok = i == 0 or not (raw[i - 1].isalnum() or raw[i - 1] == "_")
-                if prev_ok:
-                    j = i + (2 if raw[i] in ("b", "c") else 1)
-                    hashes = 0
-                    while j < n and raw[j] == "#":
-                        hashes += 1
-                        j += 1
-                    if j < n and raw[j] == '"':
-                        buf.append("_")
-                        raw_hashes = hashes
-                        i = j + 1
-                        continue
+            raw_start = _raw_string_start(raw, i)
+            if raw_start is not None:
+                buf.append("_")
+                raw_hashes, i = raw_start
+                continue
 
             if raw[i] == '"':
                 buf.append("_")
@@ -100,23 +130,13 @@ def scan_rust(text: str) -> list[tuple[str, str]]:
                 continue
 
             if raw[i] == "'":
-                # Character literal vs Rust lifetime (`'a`, `'static`, `'_`).
-                # An escaped char literal starts with `'\` followed by at least
-                # one escaped character (e.g. `'\\'`, `'\''`, `'\n'`, `'\x7f'`,
-                # `'\u{...}'`), so scan for the closing `'` starting at `i + 3`.
-                if i + 2 < n and raw[i + 1] == "\\":
-                    j = i + 3
-                    while j < n and raw[j] != "'":
-                        j += 1
+                end = _char_literal_end(raw, i)
+                if end is not None:
                     buf.append("_")
-                    i = j + 1 if j < n else n
-                    continue
-                if i + 2 < n and raw[i + 2] == "'":
-                    buf.append("_")
-                    i += 3
-                    continue
-                buf.append("'")
-                i += 1
+                    i = end
+                else:
+                    buf.append("'")
+                    i += 1
                 continue
 
             buf.append(raw[i])
@@ -129,19 +149,113 @@ def scan_rust(text: str) -> list[tuple[str, str]]:
 _ITEM_HEAD = re.compile(r"\b(use|static|type|const|fn|mod|struct|enum|union|trait|impl|extern|macro_rules)\b")
 
 
+@dataclass
+class _SkipState:
+    """Tracks the item attached to a `#[cfg(test)]` attribute until its terminator."""
+
+    pending: bool = True
+    semi_item: bool = False
+    saw_const: bool = False
+    seen_eq: bool = False
+    head_tokens: list[str] = field(default_factory=list)
+    depth: int = 0
+    bracket_depth: int = 0
+    angle_depth: int = 0
+    angle_brace_depth: int = 0
+
+    def classify_head(self, bare: str, pos: int) -> tuple[int, bool]:
+        """Identify whether the skipped item terminates at `;` or a matching `}`."""
+        if not (
+            self.pending
+            and self.depth == 0
+            and self.bracket_depth == 0
+            and self.angle_depth == 0
+            and not self.semi_item
+            and not self.head_tokens
+        ):
+            return pos, False
+
+        n = len(bare)
+        if bare[pos].isspace():
+            return pos + 1, True
+        if bare[pos : pos + 2] == "#[":
+            self.bracket_depth = 1
+            return pos + 2, True
+        if bare[pos].isalpha() or bare[pos] == "_":
+            j = pos
+            while j < n and (bare[j].isalnum() or bare[j] == "_"):
+                j += 1
+            word = bare[pos:j]
+            if self.saw_const:
+                self.saw_const = False
+                if word in ("fn", "unsafe"):
+                    self.head_tokens.append("fn")
+                else:
+                    self.semi_item = True
+                    self.head_tokens.append("const")
+                return j, True
+            if word in ("pub", "unsafe", "async", "default"):
+                return j, True
+            if word in ("use", "static", "type", "let"):
+                self.semi_item = True
+                self.head_tokens.append(word)
+                return j, True
+            if word in ("if", "match", "while", "for", "loop"):
+                self.seen_eq = True
+                self.head_tokens.append(word)
+                return j, True
+            if word == "const":
+                self.saw_const = True
+                return j, True
+            if _ITEM_HEAD.fullmatch(word):
+                self.head_tokens.append(word)
+                return j, True
+            return j, j == n
+        if self.saw_const:
+            self.saw_const = False
+            self.semi_item = True
+            self.head_tokens.append("const")
+        return pos, False
+
+    def step_char(self, bare: str, pos: int) -> bool:
+        """Advance over `bare[pos]`; return True when the skipped item ends."""
+        ch = bare[pos]
+        if ch in "([":
+            self.bracket_depth += 1
+        elif ch in ")]" and self.bracket_depth > 0:
+            self.bracket_depth -= 1
+        elif self.angle_depth > 0 and self.bracket_depth == 0:
+            if ch == "{":
+                self.angle_brace_depth += 1
+            elif ch == "}" and self.angle_brace_depth > 0:
+                self.angle_brace_depth -= 1
+            elif self.angle_brace_depth == 0:
+                if ch == "<":
+                    self.angle_depth += 1
+                elif ch == ">" and (pos == 0 or bare[pos - 1] != "-"):
+                    self.angle_depth -= 1
+        elif self.semi_item and self.depth == 0 and self.bracket_depth == 0 and ch == "=":
+            self.seen_eq = True
+        elif self.pending and self.bracket_depth == 0 and not self.seen_eq and ch == "<":
+            self.angle_depth += 1
+            self.angle_brace_depth = 0
+        elif ch == "{" and self.bracket_depth == 0:
+            if not self.semi_item:
+                self.pending = False
+            self.depth += 1
+        elif ch == "}" and self.bracket_depth == 0:
+            self.depth -= 1
+            if self.depth <= 0 and not self.pending and not self.semi_item:
+                return True
+        elif ch == ";" and self.depth == 0 and self.bracket_depth == 0 and (self.pending or self.semi_item):
+            return True
+        return False
+
+
 def core_lines(path: Path) -> int:
     """Count core lines in one Rust file, excluding `#[cfg(test)]` items."""
     text = path.read_text(encoding="utf-8")
-    skip = False
-    pending = False
-    semi_item = False
-    saw_const = False
-    seen_eq = False
-    head_tokens: list[str] = []
-    depth = 0
-    bracket_depth = 0
-    angle_depth = 0
-    angle_brace_depth = 0
+    skip: _SkipState | None = None
     count = 0
 
     for _raw, bare in scan_rust(text):
@@ -150,7 +264,7 @@ def core_lines(path: Path) -> int:
         has_core = False
 
         while pos < n:
-            if not skip:
+            if skip is None:
                 m = CFG_TEST.search(bare, pos)
                 if m is None:
                     if bare[pos:].strip():
@@ -158,95 +272,16 @@ def core_lines(path: Path) -> int:
                     break
                 if bare[pos : m.start()].strip():
                     has_core = True
-                skip = True
-                pending = True
-                semi_item = False
-                saw_const = False
-                seen_eq = False
-                head_tokens = []
-                depth = 0
-                bracket_depth = 0
-                angle_depth = 0
-                angle_brace_depth = 0
+                skip = _SkipState()
                 pos = m.end()
                 continue
 
-            # Identify whether the skipped item terminates at `;` (use/static/type/const value/let)
-            # or at a matching `}` (fn/mod/struct/enum/union/trait/impl/extern/macro_rules/if/match/loop).
-            if pending and depth == 0 and bracket_depth == 0 and angle_depth == 0 and not semi_item and not head_tokens:
-                if bare[pos].isspace():
-                    pos += 1
-                    continue
-                if bare[pos : pos + 2] == "#[":
-                    bracket_depth = 1
-                    pos += 2
-                    continue
-                if bare[pos].isalpha() or bare[pos] == "_":
-                    j = pos
-                    while j < n and (bare[j].isalnum() or bare[j] == "_"):
-                        j += 1
-                    word = bare[pos:j]
-                    pos = j
-                    if saw_const:
-                        saw_const = False
-                        if word in ("fn", "unsafe"):
-                            head_tokens.append("fn")
-                        else:
-                            semi_item = True
-                            head_tokens.append("const")
-                        continue
-                    if word in ("pub", "unsafe", "async", "default"):
-                        continue
-                    if word in ("use", "static", "type", "let"):
-                        semi_item = True
-                        head_tokens.append(word)
-                        continue
-                    if word in ("if", "match", "while", "for", "loop"):
-                        seen_eq = True
-                        head_tokens.append(word)
-                        continue
-                    if word == "const":
-                        saw_const = True
-                        continue
-                    if _ITEM_HEAD.fullmatch(word):
-                        head_tokens.append(word)
-                        continue
-                elif saw_const:
-                    saw_const = False
-                    semi_item = True
-                    head_tokens.append("const")
-
-            ch = bare[pos]
+            pos, consumed = skip.classify_head(bare, pos)
+            if consumed:
+                continue
+            if skip.step_char(bare, pos):
+                skip = None
             pos += 1
-            if ch in "([":
-                bracket_depth += 1
-            elif ch in ")]" and bracket_depth > 0:
-                bracket_depth -= 1
-            elif angle_depth > 0 and bracket_depth == 0:
-                if ch == "{":
-                    angle_brace_depth += 1
-                elif ch == "}" and angle_brace_depth > 0:
-                    angle_brace_depth -= 1
-                elif angle_brace_depth == 0:
-                    if ch == "<":
-                        angle_depth += 1
-                    elif ch == ">" and (pos < 2 or bare[pos - 2] != "-"):
-                        angle_depth -= 1
-            elif semi_item and depth == 0 and bracket_depth == 0 and ch == "=":
-                seen_eq = True
-            elif pending and bracket_depth == 0 and not seen_eq and ch == "<":
-                angle_depth += 1
-                angle_brace_depth = 0
-            elif ch == "{" and bracket_depth == 0:
-                if not semi_item:
-                    pending = False
-                depth += 1
-            elif ch == "}" and bracket_depth == 0:
-                depth -= 1
-                if depth <= 0 and not pending and not semi_item:
-                    skip = False
-            elif ch == ";" and depth == 0 and bracket_depth == 0 and (pending or semi_item):
-                skip = False
 
         if has_core:
             count += 1

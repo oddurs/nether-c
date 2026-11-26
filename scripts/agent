@@ -27,11 +27,26 @@ default_branch() {
   fi
 }
 
+current_branch() { git symbolic-ref --quiet --short HEAD; }
+
+pr_state() {
+  if [ "${2:-}" = "--with-draft" ]; then
+    gh pr view "$1" --json state,headRefOid,isDraft --jq '[.state,.headRefOid,.isDraft] | @tsv'
+  else
+    gh pr view "$1" --json state,headRefOid --jq '[.state,.headRefOid] | @tsv'
+  fi
+}
+
+clear_stamp() {
+  rm -f "$1"
+  trap - EXIT INT TERM
+}
+
 die() { echo "agent: $*" >&2; exit 1; }
 say() { printf '\033[2m→\033[0m %s\n' "$*"; }
 
 cmd_guard() {
-  branch=$(git symbolic-ref --quiet --short HEAD) || die "detached HEAD; use a feature worktree"
+  branch=$(current_branch) || die "detached HEAD; use a feature worktree"
   [ "$branch" != "$(default_branch)" ] || die "no commits or branch pushes on $(default_branch); start a worktree"
   [ "$root" != "$primary" ] || die "the primary checkout is not a workspace; use scripts/agent start"
 }
@@ -125,7 +140,7 @@ cmd_pr() {
   cmd_guard
   cmd_clean
   base=$(default_branch)
-  branch=$(git rev-parse --abbrev-ref HEAD)
+  branch=$(current_branch)
   head=$(git rev-parse HEAD)
   [ "$(git config --get core.hooksPath)" = .githooks ] || die "install hooks with scripts/setup"
   cmd_policy
@@ -160,13 +175,8 @@ cmd_pr() {
   say "pushing $branch"
   rc=0
   git push -u origin "$branch" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    rm -f "$stamp"
-    trap - EXIT INT TERM
-    die "push of $branch failed (exit $rc); nothing was opened or armed"
-  fi
-  rm -f "$stamp"
-  trap - EXIT INT TERM
+  clear_stamp "$stamp"
+  [ "$rc" -eq 0 ] || die "push of $branch failed (exit $rc); nothing was opened or armed"
   # `--fill-first`, not `--fill`. With one commit they agree; with more than
   # one, `--fill` titles the pull request after the *branch* — and a squash
   # merge takes its subject from the title, so what lands on `main` is
@@ -203,9 +213,9 @@ cmd_pr() {
 cmd_wait() {
   cmd_guard
   cmd_clean
-  branch=$(git symbolic-ref --short HEAD)
+  branch=$(current_branch)
   head=$(git rev-parse HEAD)
-  state=$(gh pr view "$branch" --json state,headRefOid,isDraft --jq '[.state,.headRefOid,.isDraft] | @tsv')
+  state=$(pr_state "$branch" --with-draft)
   [ "$state" = "$(printf 'MERGED\t%s\tfalse' "$head")" ] && { say "merged $head"; return; }
   [ "$state" = "$(printf 'OPEN\t%s\tfalse' "$head")" ] || die "PR is not ready at local HEAD: $state"
   wait_try=0
@@ -213,7 +223,7 @@ cmd_wait() {
     rc=0
     gh pr checks "$branch" --watch --fail-fast --interval 10 || rc=$?
     [ "$rc" -eq 0 ] && break
-    state=$(gh pr view "$branch" --json state,headRefOid --jq '[.state,.headRefOid] | @tsv')
+    state=$(pr_state "$branch")
     [ "$state" = "$(printf 'MERGED\t%s' "$head")" ] && { say "merged $head"; return; }
     # Newly pushed PRs can briefly report no checks before Actions registers the run.
     if [ "$wait_try" -lt 5 ] && [ "$state" = "$(printf 'OPEN\t%s' "$head")" ]; then
@@ -230,7 +240,7 @@ cmd_wait() {
   # apply auto-merge, but never claim completion just because checks passed.
   attempt=0
   while [ "$attempt" -lt 24 ]; do
-    state=$(gh pr view "$branch" --json state,headRefOid --jq '[.state,.headRefOid] | @tsv')
+    state=$(pr_state "$branch")
     [ "$state" = "$(printf 'MERGED\t%s' "$head")" ] && { say "merged $head"; return; }
     [ "$state" = "$(printf 'OPEN\t%s' "$head")" ] || die "PR changed while waiting: $state"
     sleep 5
@@ -253,12 +263,12 @@ cmd_done() {
   cmd_guard
   cmd_clean
   [ ! -e "$root/.nether" ] || die "this worktree holds a ledger; preserve .nether before cleanup"
-  branch=$(git rev-parse --abbrev-ref HEAD)
+  branch=$(current_branch)
   base=$(default_branch)
   [ "$branch" = "$base" ] && die "nothing to finish: already on $base"
 
   head=$(git rev-parse HEAD)
-  state=$(gh pr view "$branch" --json state,headRefOid --jq '[.state,.headRefOid] | @tsv')
+  state=$(pr_state "$branch")
   [ "$state" = "$(printf 'MERGED\t%s' "$head")" ] || die "local HEAD is not the merged PR head: $state"
 
   dest=$(git rev-parse --show-toplevel)
@@ -276,7 +286,7 @@ cmd_done() {
   git worktree prune
   git fetch --prune --quiet origin
   if [ -z "$(git status --porcelain --untracked-files=all)" ] \
-    && [ "$(git symbolic-ref --quiet --short HEAD)" = "$base" ]; then
+    && [ "$(current_branch)" = "$base" ]; then
     git merge --ff-only --quiet "origin/$base"
   else
     say "primary checkout left untouched: it is dirty or not on $base"

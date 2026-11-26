@@ -28,8 +28,6 @@ Explicit assumptions modeled in this file:
 """
 from __future__ import annotations
 
-from typing import Dict, Tuple
-
 from kernel import (
     Formula,
     InductiveRelation,
@@ -42,7 +40,7 @@ from kernel import (
     disj,
     elem,
     eq,
-    gen,
+    gen_all,
     iff,
     imp,
     inst_all,
@@ -154,11 +152,6 @@ ROUND_TRIP = InductiveRelation(
 )
 
 
-def _rt_prop(args: Tuple[Term, ...]) -> Formula:
-    expr, res = args
-    return eq(res, expr)
-
-
 def prove_roundtrip_identity() -> Theorem:
     """`∀e out. RoundTrip(e, out) → out = e` across all 12 residual constructors."""
     cases = {
@@ -184,19 +177,13 @@ def prove_roundtrip_identity() -> Theorem:
 def prove_hole_set_union_law() -> Theorem:
     """`∀s_k δ_A δ_B. ((s_k ∈ δ_A) ∨ (s_k ∈ δ_B)) ↔ (s_k ∈ (δ_A ∪ δ_B))`."""
     goal = iff(disj(elem(s_k, A), elem(s_k, B)), elem(s_k, s_union(A, B)))
-    thm = lattice_decide(goal)
-    for b in ("δ_B", "δ_A", "s_k"):
-        thm = gen(b, thm)
-    return thm
+    return gen_all(("δ_B", "δ_A", "s_k"), lattice_decide(goal))
 
 
 def prove_staging_idempotence_set() -> Theorem:
     """`∀s_k δ_A. ((s_k ∈ δ_A) ∨ (s_k ∈ δ_A)) ↔ (s_k ∈ δ_A)`."""
     goal = iff(disj(elem(s_k, A), elem(s_k, A)), elem(s_k, A))
-    thm = lattice_decide(goal)
-    for b in ("δ_A", "s_k"):
-        thm = gen(b, thm)
-    return thm
+    return gen_all(("δ_A", "s_k"), lattice_decide(goal))
 
 
 # ── 3. Full structural staging law across all expression forms ───────────────
@@ -376,11 +363,6 @@ STAGED_EVAL = InductiveRelation(
 )
 
 
-def _staged_prop(args: Tuple[Term, ...]) -> Formula:
-    _expr, _cap_a, _cap_b, res_staged, res_direct = args
-    return eq(res_staged, res_direct)
-
-
 def prove_staging_law() -> Theorem:
     """`∀e δ_A δ_B r_staged r_direct. StagedEval(e, δ_A, δ_B, r_staged, r_direct) → r_staged = r_direct`."""
     rt_thm = prove_roundtrip_identity()
@@ -445,10 +427,7 @@ def prove_cumulative_dependent_hole_law() -> Theorem:
     )
     direct_resolves = conj(elem(d_in, s_union(A, B)), elem(d_out, s_union(A, B)))
     goal = imp(subset(A, B), iff(staged_resolves, direct_resolves))
-    thm = lattice_decide(goal)
-    for b in ("δ_B", "δ_A", "d_out", "d_in"):
-        thm = gen(b, thm)
-    return thm
+    return gen_all(("δ_B", "δ_A", "d_out", "d_in"), lattice_decide(goal))
 
 
 if __name__ == "__main__":
