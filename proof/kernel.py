@@ -790,10 +790,7 @@ def _eval_depth(t: Term, env_d: Dict[Term, int], env_s: Dict[Term, int]) -> int:
         return max(_eval_depth(a, env_d, env_s) for a in t.args)
     if t.op == "max_set":
         mask = _eval_set(t.args[0], env_d, env_s)
-        for bit in range(8, -1, -1):
-            if mask & (1 << bit):
-                return bit
-        return 0
+        return mask.bit_length() - 1 if mask else 0
     return env_d[t]
 
 
@@ -946,6 +943,111 @@ def _eval_lattice_formula(f: Formula, env_d: Dict[Term, int], env_s: Dict[Term, 
     raise ProofFault(f"non-lattice formula `{f}` in lattice_decide")
 
 
+def _compile_lattice(
+    d_idx: Dict[Term, int],
+    s_idx: Dict[Term, int],
+    d_vals: List[int],
+    s_vals: List[int],
+):
+    """Compile lattice terms and formulas into flat-array closures over `d_vals`/`s_vals`."""
+
+    def cd(t: Term) -> Callable[[], int]:
+        if not t.args:
+            if _is_ascii_digits(t.op):
+                v = int(t.op)
+                _require(0 <= v <= 8, f"depth literal {v} out of range 0..8")
+                return lambda v=v: v
+            i = d_idx[t]
+            return lambda i=i: d_vals[i]
+        if t.op == "max":
+            fns = tuple(cd(a) for a in t.args)
+            if len(fns) == 2:
+                f0, f1 = fns
+
+                def _max2(f0=f0, f1=f1) -> int:
+                    a = f0()
+                    b = f1()
+                    return a if a >= b else b
+
+                return _max2
+            return lambda fns=fns: max(fn() for fn in fns)
+        if t.op == "max_set":
+            fs = cs(t.args[0])
+
+            def _max_set(fs=fs) -> int:
+                m = fs()
+                return m.bit_length() - 1 if m else 0
+
+            return _max_set
+        i = d_idx[t]
+        return lambda i=i: d_vals[i]
+
+    def cs(t: Term) -> Callable[[], int]:
+        if not t.args:
+            if t.op == "∅":
+                return lambda: 1
+            if t.op == "∅_raw":
+                return lambda: 0
+            i = s_idx[t]
+            return lambda i=i: s_vals[i]
+        if t.op == "singleton":
+            fd = cd(t.args[0])
+            return lambda fd=fd: 1 << fd()
+        if t.op == "∪":
+            fns = tuple(cs(a) for a in t.args)
+            acc = fns[0]
+            for fn in fns[1:]:
+                acc = lambda a=acc, b=fn: a() | b()
+            return acc
+        i = s_idx[t]
+        return lambda i=i: s_vals[i]
+
+    def cf(f: Formula) -> Callable[[], bool]:
+        k = f.kind
+        if k == "<=":
+            a, b = cd(f.terms[0]), cd(f.terms[1])
+            return lambda a=a, b=b: a() <= b()
+        if k == "<":
+            a, b = cd(f.terms[0]), cd(f.terms[1])
+            return lambda a=a, b=b: a() < b()
+        if k == "=_d":
+            a, b = cd(f.terms[0]), cd(f.terms[1])
+            return lambda a=a, b=b: a() == b()
+        if k == "!=_d":
+            a, b = cd(f.terms[0]), cd(f.terms[1])
+            return lambda a=a, b=b: a() != b()
+        if k == "∈":
+            a, b = cd(f.terms[0]), cs(f.terms[1])
+            return lambda a=a, b=b: bool(b() & (1 << a()))
+        if k == "∉":
+            a, b = cd(f.terms[0]), cs(f.terms[1])
+            return lambda a=a, b=b: not bool(b() & (1 << a()))
+        if k == "⊆":
+            a, b = cs(f.terms[0]), cs(f.terms[1])
+            return lambda a=a, b=b: (a() & ~b()) == 0
+        if k == "⊈":
+            a, b = cs(f.terms[0]), cs(f.terms[1])
+            return lambda a=a, b=b: (a() & ~b()) != 0
+        if k == "¬":
+            s0 = cf(f.subs[0])
+            return lambda s0=s0: not s0()
+        if k == "∧":
+            s0, s1 = cf(f.subs[0]), cf(f.subs[1])
+            return lambda s0=s0, s1=s1: s0() and s1()
+        if k == "∨":
+            s0, s1 = cf(f.subs[0]), cf(f.subs[1])
+            return lambda s0=s0, s1=s1: s0() or s1()
+        if k == "→":
+            s0, s1 = cf(f.subs[0]), cf(f.subs[1])
+            return lambda s0=s0, s1=s1: (not s0()) or s1()
+        if k == "↔":
+            s0, s1 = cf(f.subs[0]), cf(f.subs[1])
+            return lambda s0=s0, s1=s1: s0() == s1()
+        raise ProofFault(f"non-lattice formula `{f}` in lattice_decide")
+
+    return cd, cf
+
+
 def _split_conj(f: Formula) -> List[Formula]:
     if f.kind == "∧":
         return _split_conj(f.subs[0]) + _split_conj(f.subs[1])
@@ -956,6 +1058,66 @@ def _has_set_rel(f: Formula) -> bool:
     if f.kind in {"∈", "∉", "⊆", "⊈"}:
         return True
     return any(_has_set_rel(s) for s in f.subs)
+
+
+def _scan_bit_projection(formulas: Sequence[Formula]) -> Tuple[bool, bool, List[Term], int]:
+    """Scan lattice formulas for exact bit-projection eligibility.
+
+    When `max_set` does not appear anywhere, every set operation (`∅`, `∅_raw`,
+    `singleton`, `∪`) is purely bitwise and every set relation (`∈`, `∉`, `⊆`,
+    `⊈`) depends only on the pinned bit positions (bit `0` if `∅` appears, plus
+    each depth term inside `∈`/`∉`/`singleton`) and at most one witness bit per
+    `⊆`/`⊈` atom from the remaining symmetric bits.
+    """
+    has_max_set = False
+    uses_empty = False
+    d_terms: List[Term] = []
+    subset_atoms = 0
+
+    def scan_d(t: Term) -> None:
+        nonlocal has_max_set
+        if not t.args:
+            return
+        if t.op == "max_set":
+            has_max_set = True
+            scan_s(t.args[0])
+        elif t.op == "max":
+            for a in t.args:
+                scan_d(a)
+
+    def scan_s(t: Term) -> None:
+        nonlocal uses_empty
+        if not t.args:
+            if t.op == "∅":
+                uses_empty = True
+            return
+        if t.op == "singleton":
+            d_terms.append(t.args[0])
+            scan_d(t.args[0])
+        elif t.op == "∪":
+            for a in t.args:
+                scan_s(a)
+
+    def scan_f(f: Formula) -> None:
+        nonlocal subset_atoms
+        if f.kind in {"<=", "<", "=_d", "!=_d"}:
+            scan_d(f.terms[0])
+            scan_d(f.terms[1])
+        elif f.kind in {"∈", "∉"}:
+            d_terms.append(f.terms[0])
+            scan_d(f.terms[0])
+            scan_s(f.terms[1])
+        elif f.kind in {"⊆", "⊈"}:
+            subset_atoms += 1
+            scan_s(f.terms[0])
+            scan_s(f.terms[1])
+        elif f.kind in {"¬", "∧", "∨", "→", "↔"}:
+            for s in f.subs:
+                scan_f(s)
+
+    for form in formulas:
+        scan_f(form)
+    return has_max_set, uses_empty, d_terms, subset_atoms
 
 
 def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
@@ -998,13 +1160,18 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
     _require(orig_d.isdisjoint(orig_s), f"variable used at both depth and set sort: {orig_d & orig_s}")
 
     # Sound weakening: if `check_goal` has no set relations, weaken positive
-    # top-level `A ⊆ B` antecedents to `max_set(A) <= max_set(B)` so pure
-    # depth-bound proofs (`APP`) do not explode over unrelated set masks.
+    # top-level `A ⊆ B` antecedents to `max_set(A) <= max_set(B)` and (when all
+    # antecedents are positive atomic relations) `d ∈ S` to `d <= max_set(S)`
+    # (both implications hold universally over {0..8}), so pure depth-bound
+    # proofs (`APP`, `LOOK`) do not explode over unrelated set masks.
     antecedents: List[Formula] = []
     if not _has_set_rel(check_goal):
+        all_pos_atoms = all(a.kind in {"<=", "<", "=_d", "!=_d", "⊆", "∈"} for a in raw_antecedents)
         for ant in raw_antecedents:
             if ant.kind == "⊆":
                 antecedents.append(le(app("max_set", ant.terms[0]), app("max_set", ant.terms[1])))
+            elif all_pos_atoms and ant.kind == "∈" and ant.terms[1] != Term("∅_raw", ()):
+                antecedents.append(le(ant.terms[0], app("max_set", ant.terms[1])))
             else:
                 antecedents.append(ant)
     else:
@@ -1042,9 +1209,17 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
         _collect_lattice_vars(ant, dv, sv, set())
         ant_vars.append((ant, dv, sv))
 
-    # If antecedents constrain set-only pairs (e.g. `δ_A ⊆ δ_B`), order sets first.
+    # Exact bit-projection for `max_set`-free formulas: once depth variables are
+    # fixed, only the pinned bit positions and at most one symmetric witness bit
+    # per `⊆`/`⊈` atom can affect truth values. Any counterexample over 2^{0..8}
+    # projects to a counterexample over the active bit subset, and vice versa.
+    has_max_set, uses_empty, d_terms, subset_atoms = _scan_bit_projection([*antecedents, check_goal])
+    use_bit_proj = bool(full_s and not has_max_set)
+
+    # If antecedents constrain set-only pairs (e.g. `δ_A ⊆ δ_B`), order sets first
+    # unless bit-projection needs depth variables bound first.
     s_only_ants = [item for item in ant_vars if not item[1] and item[2]]
-    sets_first = bool(s_only_ants and full_s)
+    sets_first = bool(s_only_ants and full_s and not use_bit_proj)
 
     def _term_key(t: Term) -> Tuple[str, int, str]:
         return (t.op, len(t.args), repr(t))
@@ -1070,102 +1245,168 @@ def lattice_decide(goal: Formula, hyps: Sequence[Theorem] = ()) -> Theorem:
     def _domain_for_set(atom: Term) -> List[int]:
         if atom in full_s:
             return list(range(512))
-        return [0] + [(1 << (m + 1)) - 1 for m in range(chain_len)]
+        # A set variable observed solely through `max_set` and `∪` is completely
+        # determined by its maximum bit (`max_set(A ∪ B) = max(max_set(A), max_set(B))`).
+        return [0] + [1 << m for m in range(1, chain_len)]
 
     s_doms = [_domain_for_set(v) for v in s_list]
-    env_d: Dict[Term, int] = {}
-    env_s: Dict[Term, int] = {}
+    d_idx = {v: i for i, v in enumerate(d_list)}
+    s_idx = {v: i for i, v in enumerate(s_list)}
+    d_vals = [0] * len(d_list)
+    s_vals = [0] * len(s_list)
+    compile_d, compile_f = _compile_lattice(d_idx, s_idx, d_vals, s_vals)
+    goal_fn = compile_f(check_goal)
+
+    def _fail() -> None:
+        env_d = {v: d_vals[i] for i, v in enumerate(d_list)}
+        env_s = {v: s_vals[i] for i, v in enumerate(s_list)}
+        raise ProofFault(
+            f"lattice_decide counterexample for `{goal}`:\n"
+            f"  depths: {env_d}\n  sets:   {env_s}"
+        )
 
     if sets_first:
         s_bound_at = [set(s_list[: i + 1]) for i in range(len(s_list))]
-        ants_at_s: List[List[Formula]] = [[] for _ in range(len(s_list))]
+        ants_at_s_f: List[List[Formula]] = [[] for _ in range(len(s_list))]
         placed: Set[int] = set()
         for i, bound in enumerate(s_bound_at):
             for a_idx, (ant, dv, sv) in enumerate(ant_vars):
                 if a_idx not in placed and not dv and sv <= bound:
-                    ants_at_s[i].append(ant)
+                    ants_at_s_f[i].append(ant)
                     placed.add(a_idx)
         d_bound_at = [set(d_list[: i + 1]) for i in range(len(d_list))]
-        ants_at_d: List[List[Formula]] = [[] for _ in range(len(d_list))]
+        ants_at_d_f: List[List[Formula]] = [[] for _ in range(len(d_list))]
         for i, bound in enumerate(d_bound_at):
             for a_idx, (ant, dv, _sv) in enumerate(ant_vars):
                 if a_idx not in placed and dv <= bound:
-                    ants_at_d[i].append(ant)
+                    ants_at_d_f[i].append(ant)
                     placed.add(a_idx)
-        ants_before = [ant for a_idx, (ant, _dv, _sv) in enumerate(ant_vars) if a_idx not in placed]
+        ants_before_fns = tuple(
+            compile_f(ant) for a_idx, (ant, _dv, _sv) in enumerate(ant_vars) if a_idx not in placed
+        )
+        ants_at_s_fns = [tuple(compile_f(c) for c in cs) for cs in ants_at_s_f]
+        ants_at_d_fns = [tuple(compile_f(c) for c in cs) for cs in ants_at_d_f]
+        n_d = len(d_list)
+        n_s = len(s_list)
 
         def check_d(idx: int) -> None:
-            if idx == len(d_list):
-                if not _eval_lattice_formula(check_goal, env_d, env_s):
-                    raise ProofFault(
-                        f"lattice_decide counterexample for `{goal}`:\n"
-                        f"  depths: {env_d}\n  sets:   {env_s}"
-                    )
+            if idx == n_d:
+                if not goal_fn():
+                    _fail()
                 return
-            name = d_list[idx]
-            checks = ants_at_d[idx]
-            for val in range(chain_len):
-                env_d[name] = val
-                if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
+            checks = ants_at_d_fns[idx]
+            if not checks:
+                for val in range(chain_len):
+                    d_vals[idx] = val
                     check_d(idx + 1)
+            else:
+                for val in range(chain_len):
+                    d_vals[idx] = val
+                    if all(c() for c in checks):
+                        check_d(idx + 1)
 
         def check_s(idx: int) -> None:
-            if idx == len(s_list):
-                if all(_eval_lattice_formula(c, env_d, env_s) for c in ants_before):
+            if idx == n_s:
+                if all(c() for c in ants_before_fns):
                     check_d(0)
                 return
-            name = s_list[idx]
-            checks = ants_at_s[idx]
-            for val in s_doms[idx]:
-                env_s[name] = val
-                if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
+            checks = ants_at_s_fns[idx]
+            if not checks:
+                for val in s_doms[idx]:
+                    s_vals[idx] = val
                     check_s(idx + 1)
+            else:
+                for val in s_doms[idx]:
+                    s_vals[idx] = val
+                    if all(c() for c in checks):
+                        check_s(idx + 1)
 
         check_s(0)
     else:
         d_bound_at = [set(d_list[: i + 1]) for i in range(len(d_list))]
-        ants_at_d = [[] for _ in range(len(d_list))]
+        ants_at_d_f = [[] for _ in range(len(d_list))]
         placed = set()
         for i, bound in enumerate(d_bound_at):
             for a_idx, (ant, dv, sv) in enumerate(ant_vars):
                 if a_idx not in placed and not sv and dv <= bound:
-                    ants_at_d[i].append(ant)
+                    ants_at_d_f[i].append(ant)
                     placed.add(a_idx)
         s_bound_at = [set(s_list[: i + 1]) for i in range(len(s_list))]
-        ants_at_s = [[] for _ in range(len(s_list))]
+        ants_at_s_f = [[] for _ in range(len(s_list))]
         for i, bound in enumerate(s_bound_at):
             for a_idx, (ant, _dv, sv) in enumerate(ant_vars):
                 if a_idx not in placed and sv <= bound:
-                    ants_at_s[i].append(ant)
+                    ants_at_s_f[i].append(ant)
                     placed.add(a_idx)
-        ants_before = [ant for a_idx, (ant, _dv, _sv) in enumerate(ant_vars) if a_idx not in placed]
+        ants_before_fns = tuple(
+            compile_f(ant) for a_idx, (ant, _dv, _sv) in enumerate(ant_vars) if a_idx not in placed
+        )
+        ants_at_d_fns = [tuple(compile_f(c) for c in cs) for cs in ants_at_d_f]
+        ants_at_s_fns = [tuple(compile_f(c) for c in cs) for cs in ants_at_s_f]
+        d_term_fns = tuple(compile_d(dt) for dt in d_terms) if use_bit_proj else ()
+        n_d = len(d_list)
+        n_s = len(s_list)
 
         def check_s(idx: int) -> None:
-            if idx == len(s_list):
-                if not _eval_lattice_formula(check_goal, env_d, env_s):
-                    raise ProofFault(
-                        f"lattice_decide counterexample for `{goal}`:\n"
-                        f"  depths: {env_d}\n  sets:   {env_s}"
-                    )
+            if idx == n_s:
+                if not goal_fn():
+                    _fail()
                 return
-            name = s_list[idx]
-            checks = ants_at_s[idx]
-            for val in s_doms[idx]:
-                env_s[name] = val
-                if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
+            checks = ants_at_s_fns[idx]
+            if not checks:
+                for val in s_doms[idx]:
+                    s_vals[idx] = val
                     check_s(idx + 1)
+            else:
+                for val in s_doms[idx]:
+                    s_vals[idx] = val
+                    if all(c() for c in checks):
+                        check_s(idx + 1)
+
+        def check_s_proj(idx: int, masks: List[int]) -> None:
+            if idx == n_s:
+                if not goal_fn():
+                    _fail()
+                return
+            checks = ants_at_s_fns[idx]
+            if not checks:
+                for val in masks:
+                    s_vals[idx] = val
+                    check_s_proj(idx + 1, masks)
+            else:
+                for val in masks:
+                    s_vals[idx] = val
+                    if all(c() for c in checks):
+                        check_s_proj(idx + 1, masks)
 
         def check_d(idx: int) -> None:
-            if idx == len(d_list):
-                if all(_eval_lattice_formula(c, env_d, env_s) for c in ants_before):
+            if idx == n_d:
+                if not all(c() for c in ants_before_fns):
+                    return
+                if use_bit_proj:
+                    pinned: Set[int] = {0} if uses_empty else set()
+                    for dt_fn in d_term_fns:
+                        pinned.add(dt_fn())
+                    free_bits = [b for b in range(9) if b not in pinned]
+                    active_bits = sorted(pinned) + free_bits[:subset_atoms]
+                    proj_masks = [0]
+                    for bit in active_bits:
+                        m = 1 << bit
+                        proj_masks.extend([x | m for x in proj_masks])
+                    check_s_proj(0, proj_masks)
+                else:
                     check_s(0)
                 return
-            name = d_list[idx]
-            checks = ants_at_d[idx]
-            for val in range(chain_len):
-                env_d[name] = val
-                if all(_eval_lattice_formula(c, env_d, env_s) for c in checks):
+            checks = ants_at_d_fns[idx]
+            if not checks:
+                for val in range(chain_len):
+                    d_vals[idx] = val
                     check_d(idx + 1)
+            else:
+                for val in range(chain_len):
+                    d_vals[idx] = val
+                    if all(c() for c in checks):
+                        check_d(idx + 1)
 
         check_d(0)
 

@@ -185,9 +185,21 @@ fn the_codec_is_linear_in_its_input() {
 /// at most what it read.
 #[test]
 fn a_store_read_is_linear_in_the_object() {
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     let _one = alone();
-    let root = std::env::temp_dir().join(format!("nether-bound-{}", std::process::id()));
-    let store = Store::open(&root).expect("a scratch store");
+    let root = Scratch(std::env::temp_dir().join(format!(
+        "nether-bound-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    )));
+    let store = Store::open(&root.0).expect("a scratch store");
     let n = 1 << 18;
     let units = Stored::Value(Value::Array(vec![Value::Unit; n]));
     let cairn = store.put(&units).expect("put");
@@ -202,5 +214,4 @@ fn a_store_read_is_linear_in_the_object() {
         let _ = "0".repeat(64).parse::<Cairn>();
     });
     within("resolve and a cairn's name", 64, spent, (0, 0));
-    let _ = std::fs::remove_dir_all(root);
 }

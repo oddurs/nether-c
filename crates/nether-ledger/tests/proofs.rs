@@ -740,8 +740,8 @@ fn chain(store: &Store, n: u32, source: Cairn) -> Vec<Cairn> {
 /// and bundles are compared across machines, so the bytes may not move.
 #[test]
 fn export_order_is_the_order_rounds_of_ready_objects_gave() {
-    let root = std::env::temp_dir().join(format!("nether-rounds-{}", std::process::id()));
-    let store = Store::open(&root).expect("a store");
+    let root = Scratch::new("rounds");
+    let store = Store::open(&root.0).expect("a store");
     let a = store.put(&Stored::Value(Value::Bytes(b"a".to_vec()))).expect("put");
     let b = store.put(&Stored::Value(Value::Str("b".into()))).expect("put");
     let tip = chain(&store, 30, a)[29];
@@ -770,7 +770,6 @@ fn export_order_is_the_order_rounds_of_ready_objects_gave() {
         rounds.extend(ready);
     }
     assert_eq!(got, rounds);
-    fs::remove_dir_all(&root).expect("clean up");
 }
 
 /// Export orders a twenty-thousand-link chain with everything before what
@@ -780,8 +779,8 @@ fn export_order_is_the_order_rounds_of_ready_objects_gave() {
 #[test]
 #[ignore = "twenty thousand objects written to disk; run with scripts/task proofs"]
 fn a_long_chain_exports_with_everything_before_what_references_it() {
-    let root = std::env::temp_dir().join(format!("nether-chain-{}", std::process::id()));
-    let store = Store::open(&root).expect("a store");
+    let root = Scratch::new("chain");
+    let store = Store::open(&root.0).expect("a store");
     let source = store.put(&Stored::Value(Value::Bytes(b"s".to_vec()))).expect("put");
     let links = chain(&store, 20_000, source);
     let mut bundle = Vec::new();
@@ -789,5 +788,4 @@ fn a_long_chain_exports_with_everything_before_what_references_it() {
     let got = bundle_order(&bundle);
     assert_eq!(got[0], source);
     assert_eq!(&got[1..], &links[..]);
-    fs::remove_dir_all(&root).expect("clean up");
 }

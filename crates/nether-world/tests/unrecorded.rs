@@ -6,11 +6,55 @@
 //! nothing about the one thing this stratum is: a call the implementation
 //! cannot see inside.
 
-use std::path::PathBuf;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use nether_core::{Capability, Depth};
 use nether_ledger::{AnswerOf, Cairn, Call, Node, Refusal, Span, Store, Stored, Value};
 use nether_world::{Provider, Recorder, Unanswered, Unrecorded, World};
+
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new(tag: &str) -> Self {
+        static N: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "nether-{tag}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        Self(dir)
+    }
+}
+
+impl Deref for Scratch {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+struct BuiltObject {
+    path: String,
+    _dir: Scratch,
+}
+
+impl Deref for BuiltObject {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.path
+    }
+}
 
 /// Build the shared object into a directory this test alone owns.
 ///
@@ -21,34 +65,32 @@ use nether_world::{Provider, Recorder, Unanswered, Unrecorded, World};
 /// `cc` is not a dependency of this repository; it is how a C file becomes a
 /// shared object, and a test about calling C that could not compile any would
 /// be testing something else.
-fn object(what: &str) -> Option<String> {
+fn object(what: &str) -> Option<BuiltObject> {
     let at = std::env::var("CARGO_MANIFEST_DIR").ok()?;
     let build = PathBuf::from(&at).join("../../tests/foreign/build");
-    let out = std::env::temp_dir().join(format!("nether-foreign-proof-{what}"));
-    std::fs::create_dir_all(&out).ok()?;
-    let said = std::process::Command::new(&build).arg(&out).output().ok()?;
+    let out = Scratch::new(&format!("foreign-proof-{what}"));
+    let said = std::process::Command::new(&build).arg(&*out).output().ok()?;
     if !said.status.success() {
         return None;
     }
-    Some(String::from_utf8(said.stdout).ok()?.trim().to_owned())
+    let path = String::from_utf8(said.stdout).ok()?.trim().to_owned();
+    Some(BuiltObject { path, _dir: out })
 }
 
 struct Asked {
     store: Store,
     world: World,
+    _dir: Scratch,
 }
 
 impl Asked {
-    fn loading(what: &str, paths: &[String]) -> Self {
-        let at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos());
-        let root = std::env::temp_dir().join(format!("nether-foreign-{what}-{at}"));
-        std::fs::create_dir_all(&root).expect("a directory");
+    fn loading(what: &str, paths: &[&str]) -> Self {
+        let root = Scratch::new(&format!("foreign-{what}"));
         let store = Store::open(root.join("ledger")).expect("a store");
+        let owned: Vec<String> = paths.iter().map(|p| (*p).to_owned()).collect();
         let foreign: Box<dyn Provider> =
-            Box::new(Unrecorded::loading(paths).expect("the object loads"));
-        Self { store, world: World::sealed().granting(foreign) }
+            Box::new(Unrecorded::loading(&owned).expect("the object loads"));
+        Self { store, world: World::sealed().granting(foreign), _dir: root }
     }
 
     fn arg(&self, v: Value) -> Cairn {
@@ -80,7 +122,7 @@ impl Asked {
 #[test]
 fn foreign_code_is_called_and_what_it_said_is_recorded() {
     let Some(path) = object("calls") else { return };
-    let a = Asked::loading("calls", &[path]);
+    let a = Asked::loading("calls", &[&path]);
     assert_eq!(
         a.call("said", b"hello there").expect("granted"),
         AnswerOf::Given(Value::Bytes(b"HELLO THERE".to_vec()))
@@ -97,7 +139,7 @@ fn the_attempt_is_written_before_the_call_without_polluting_objects() {
     // so successful calls never pollute `objects/` or `refs/` with a phantom
     // `Refused(Unreachable)` witness (M12).
     let Some(path) = object("attempt") else { return };
-    let a = Asked::loading("attempt", &[path]);
+    let a = Asked::loading("attempt", &[&path]);
     a.call("said", b"x").expect("granted");
 
     let call = Call {
@@ -132,7 +174,7 @@ fn a_callee_that_asks_twice_for_more_room_is_not_asked_a_third_time() {
     // §9.8.1. `greedy` always wants one more byte than it was given, so a
     // caller that kept obliging would never stop.
     let Some(path) = object("greedy") else { return };
-    let a = Asked::loading("greedy", &[path]);
+    let a = Asked::loading("greedy", &[&path]);
     let no = a.call("greedy", b"x").expect_err("not an answer");
     let Unanswered::Unavailable(why) = no else { panic!("{no:?}") };
     assert!(why.contains("twice"), "{why}");
@@ -142,7 +184,7 @@ fn a_callee_that_asks_twice_for_more_room_is_not_asked_a_third_time() {
 fn a_return_value_is_the_refusal_section_five_gives_it() {
     // §9.8.1's table: 3 is `denied`, in the order §5.1.1 lists them.
     let Some(path) = object("refuses") else { return };
-    let a = Asked::loading("refuses", &[path]);
+    let a = Asked::loading("refuses", &[&path]);
     assert_eq!(a.call("forbidden", b"").expect("granted"), AnswerOf::Refused(Refusal::Denied));
 }
 
@@ -152,7 +194,7 @@ fn a_symbol_in_nothing_loaded_is_denied() {
     // and a symbol found in nothing named is denied rather than looked for on
     // the machine.
     let Some(path) = object("absent") else { return };
-    let a = Asked::loading("absent", &[path]);
+    let a = Asked::loading("absent", &[&path]);
     assert_eq!(
         a.call("nothing_defines_this", b"").expect("granted"),
         AnswerOf::Refused(Refusal::Denied)
@@ -176,7 +218,7 @@ fn a_symbol_in_nothing_loaded_is_denied() {
 #[test]
 fn calls_into_one_object_take_turns_across_threads() {
     let Some(path) = object("turns") else { return };
-    let loaded = nether_foreign::Object::open(std::path::Path::new(&path)).expect("loads");
+    let loaded = nether_foreign::Object::open(Path::new(&*path)).expect("loads");
     let overlapped = std::sync::atomic::AtomicUsize::new(0);
     std::thread::scope(|s| {
         for _ in 0..8 {
@@ -196,8 +238,8 @@ fn calls_into_one_object_take_turns_across_threads() {
 #[test]
 fn duplicate_open_handles_still_serialize_concurrent_calls() {
     let Some(path) = object("turns-dup") else { return };
-    let first = nether_foreign::Object::open(std::path::Path::new(&path)).expect("loads first");
-    let second = nether_foreign::Object::open(std::path::Path::new(&path)).expect("loads second");
+    let first = nether_foreign::Object::open(Path::new(&*path)).expect("loads first");
+    let second = nether_foreign::Object::open(Path::new(&*path)).expect("loads second");
     let overlapped = std::sync::atomic::AtomicUsize::new(0);
     std::thread::scope(|s| {
         for handle in [&first, &second] {
@@ -219,20 +261,18 @@ fn duplicate_open_handles_still_serialize_concurrent_calls() {
 #[test]
 fn atomic_replacement_of_loaded_object_preserves_symbol_ownership() {
     let Some(built) = object("replace") else { return };
-    let dir = std::env::temp_dir().join(format!("nether-foreign-replace-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = Scratch::new("foreign-replace");
     let live = dir.join("liblive.so");
     let replacement = dir.join("liblive.so.new");
-    std::fs::copy(&built, &live).unwrap();
+    std::fs::copy(&*built, &live).unwrap();
 
     let loaded = nether_foreign::Object::open(&live).expect("opens initial copy");
     // Atomically replace the on-disk file with a fresh inode.
-    std::fs::copy(&built, &replacement).unwrap();
+    std::fs::copy(&*built, &replacement).unwrap();
     std::fs::rename(&replacement, &live).unwrap();
 
     assert!(loaded.has("said"), "symbol ownership must survive atomic .so replacement");
     assert!(!loaded.has("system"), "DT_NEEDED symbol must remain quarantined");
     let (code, out) = loaded.call("said", b"ok").expect("call succeeds after replacement");
     assert_eq!((code, out), (0, b"OK".to_vec()));
-    let _ = std::fs::remove_dir_all(&dir);
 }

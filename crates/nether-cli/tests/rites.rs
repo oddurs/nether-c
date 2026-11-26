@@ -3,19 +3,52 @@
 //! The binary is invoked, not the functions, because §08 is about a command
 //! line: its exit codes, its stdout, and the one thing it refuses.
 
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use nether_ledger::{Cairn, Node, Store, Stored, Value};
 
+/// A directory nothing else is using, removed on drop.
+struct Scratch(PathBuf);
+
+impl Deref for Scratch {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for Scratch {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for Scratch {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        self.0.as_os_str()
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// A directory nothing else is using, named after the test that asked.
-fn scratch(what: &str) -> PathBuf {
-    let at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    let dir = std::env::temp_dir().join(format!("nether-{what}-{at}"));
+fn scratch(what: &str) -> Scratch {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "nether-{what}-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&dir).expect("a scratch directory");
-    dir
+    Scratch(dir)
 }
 
 fn nether(store: Option<&Path>, args: &[&str]) -> Output {
@@ -110,7 +143,7 @@ fn a_file_that_is_not_there_fails_for_a_stated_reason() {
 
 // ── §8.5 `--verify` ─────────────────────────────────────────────────────────
 
-fn with_object(what: &str, value: Value) -> (PathBuf, Cairn) {
+fn with_object(what: &str, value: Value) -> (Scratch, Cairn) {
     let dir = scratch(what);
     let store = Store::open(&dir).expect("a store");
     let cairn = store.put(&Stored::Value(value)).expect("put");
@@ -372,7 +405,7 @@ use nether_ledger::{Call, Span};
 
 /// A store holding `build.nc`'s shape: a hole asking for a file, the witness
 /// that answered it, the bytes that came back, and a deposit of a greeting.
-fn a_small_trace(what: &str) -> (PathBuf, Cairn, Cairn, Cairn) {
+fn a_small_trace(what: &str) -> (Scratch, Cairn, Cairn, Cairn) {
     let dir = scratch(what);
     let store = Store::open(&dir).expect("a store");
     let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
@@ -543,7 +576,7 @@ const BUILD: &str = "demand src;\n\nBytes@3 src = must(descend disk { read(\"mai
 
 /// A store holding one burial of `BUILD`: the source, one witness at `stratum`,
 /// and the trace over it.
-fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (PathBuf, Cairn, Cairn) {
+fn a_trace_of(what: &str, stratum: u8, depth: u8, unrecorded: bool) -> (Scratch, Cairn, Cairn) {
     let dir = scratch(what);
     let store = Store::open(&dir).expect("a store");
     let put = |v: Value| store.put(&Stored::Value(v)).expect("put");
@@ -1100,7 +1133,7 @@ fn bury_says_where_the_residue_is() {
 
 /// A directory holding `build.nc` and the file it reads, with a ledger of its
 /// own. §6.6's example, as a person would have it on disk.
-fn a_build(what: &str) -> PathBuf {
+fn a_build(what: &str) -> Scratch {
     let dir = scratch(what);
     std::fs::copy(
         format!("{}/../../tests/programs/build.nc", env!("CARGO_MANIFEST_DIR")),
@@ -1627,7 +1660,7 @@ fn a_residue_that_seals_something_is_a_program() {
 const ASKS: &str = "Str@2 cc = must(descend env { env(\"CC\") });\n\
                     U0 note()\n{\n  raw(cc);\n}\n\ndemand note();\n";
 
-fn asking(what: &str) -> PathBuf {
+fn asking(what: &str) -> Scratch {
     let dir = a_build(what);
     std::fs::write(dir.join("asks.nc"), ASKS).expect("a program that asks");
     dir
@@ -1933,19 +1966,32 @@ fn drawing_fewer_than_no_bytes_collapses() {
 
 // ── §9.8 the Unrecorded, and §1.7's mark ────────────────────────────────────
 
+struct ForeignObject {
+    path: String,
+    _dir: Scratch,
+}
+
+impl Deref for ForeignObject {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.path
+    }
+}
+
 /// Build `tests/foreign/said.c`, or `None` on a machine with no `cc`.
 ///
 /// Into a directory named after the caller. These run in parallel, and `cc`
 /// writing the file while another test loads it is `file too short`. 0176.
-fn foreign(what: &str) -> Option<String> {
+fn foreign(what: &str) -> Option<ForeignObject> {
     let build = format!("{}/../../tests/foreign/build", env!("CARGO_MANIFEST_DIR"));
-    let out = std::env::temp_dir().join(format!("nether-foreign-rites-{what}"));
-    std::fs::create_dir_all(&out).ok()?;
-    let said = Command::new(&build).arg(&out).output().ok()?;
+    let out = scratch(&format!("foreign-rites-{what}"));
+    let said = Command::new(&build).arg(&*out).output().ok()?;
     if !said.status.success() {
         return None;
     }
-    Some(String::from_utf8(said.stdout).ok()?.trim().to_owned())
+    let path = String::from_utf8(said.stdout).ok()?.trim().to_owned();
+    Some(ForeignObject { path, _dir: out })
 }
 
 #[test]
@@ -2262,7 +2308,7 @@ const UNDECIDED: &str = "Bytes@3 src = must(descend disk { read(\"main.nc\") });
                          Bytes@3 more = must(descend disk { read(\"other.nc\") });\n    k;\n  \
                          } else {\n    slice(b\"abc\", 0, 9);\n  }\n}\n\ndemand go();\n";
 
-fn undecided(what: &str) -> (PathBuf, String) {
+fn undecided(what: &str) -> (Scratch, String) {
     let dir = a_build(what);
     std::fs::write(dir.join("undecided.nc"), UNDECIDED).expect("undecided.nc");
     let out = there(&dir, &["bury", "undecided.nc", "--json"]);
@@ -2350,7 +2396,8 @@ fn worker_bundle(
     holes: &[Cairn],
     slots: &[usize],
 ) -> (Vec<(usize, Cairn)>, Vec<u8>) {
-    let store = Store::open(scratch(tag)).unwrap();
+    let worker_dir = scratch(tag);
+    let store = Store::open(&worker_dir).unwrap();
     store.import(&mut &base[..]).unwrap();
     let world = nether_world::World::sealed()
         .granting(Box::new(nether_world::Disk::reading(dir)))
@@ -2418,7 +2465,8 @@ fn two_machines_each_answer_half_a_traces_holes_and_seal_byte_identically_to_one
     h1.join().unwrap();
     h2.join().unwrap();
 
-    let coord_store_path = scratch("coord-merge").join(".nether");
+    let coord_dir = scratch("coord-merge");
+    let coord_store_path = coord_dir.join(".nether");
     let coord_store = Store::open(&coord_store_path).unwrap();
     coord_store.import(&mut &base_bundle[..]).unwrap();
     coord_store.import(&mut &west_bundle[..]).unwrap();

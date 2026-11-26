@@ -49,14 +49,16 @@ def notes(text: str, version: str) -> str | None:
     capturing = False
     out: list[str] = []
     for line in text.splitlines(keepends=True):
-        stripped = line.lstrip()
+        # CommonMark fenced code blocks allow at most 3 leading spaces and no tabs.
+        indent = len(line) - len(line.lstrip(" "))
+        stripped = line[indent:] if indent <= 3 and not line.startswith("\t") else ""
         if fence is not None:
-            if _fence_close(stripped, fence):
+            if stripped and _fence_close(stripped, fence):
                 fence = None
             if capturing:
                 out.append(line)
             continue
-        opened = _fence_open(stripped)
+        opened = _fence_open(stripped) if stripped else None
         if opened is not None:
             fence = opened
             if capturing:
@@ -66,7 +68,7 @@ def notes(text: str, version: str) -> str | None:
             if head.match(line):
                 capturing = True
             continue
-        if re.match(r"^##\s", line):
+        if re.match(r"^##\s", line) or re.match(r"^\[[^\]]+\]:\s+\S+", line):
             break
         out.append(line)
     if not capturing:

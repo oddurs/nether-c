@@ -19,7 +19,16 @@ if args[0] == "api":
     else:
         print(json.dumps(state["repo"]))
 elif args[:2] == ["pr", "list"]:
-    print(state.get("existing", ""))
+    want_state = args[args.index("--state") + 1] if "--state" in args else "open"
+    entries = state.get("existing_list")
+    if entries is None:
+        raw = state.get("existing", "")
+        entries = [raw] if raw else []
+    if want_state == "open":
+        matched = [e for e in entries if " OPEN " in e]
+        print(matched[0] if matched else "")
+    else:
+        print(entries[0] if entries else "")
 elif args[:2] == ["pr", "create"]:
     state["existing"] = "1 OPEN " + str("--draft" in args).lower()
     path.write_text(json.dumps(state))

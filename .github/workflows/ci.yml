@@ -26,7 +26,6 @@ jobs:
       - name: Install the pinned toolchain
         run: |
           rustup show active-toolchain || rustup toolchain install
-          rustup component add rustfmt clippy
           # The Necropolis ships the core to a browser, and `scripts/task
           # check` builds for it. `scripts/setup` installs the same target.
           rustup target add wasm32-unknown-unknown
@@ -63,6 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install the pinned toolchain
@@ -71,15 +71,32 @@ jobs:
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
       - name: cargo test --workspace
         run: cargo test --workspace
 
-      - name: Hook portability check (BSD sed)
+      - name: Hook portability check (BSD sed/grep/awk)
         run: |
           tmp=$(mktemp)
+          trap 'rm -f "$tmp"' EXIT
           printf 'fix(hooks): check CLAUDE.md scrub on macos\n' > "$tmp"
           .githooks/commit-msg "$tmp"
-          rm -f "$tmp"
+          printf 'fix(hooks): reject trailer on macos\n\n%s%s Bot <bot@example.invalid>\n' 'Co-authored-' 'by:' > "$tmp"
+          if .githooks/commit-msg "$tmp" 2>/dev/null; then
+            echo "::error::commit-msg failed to reject banned trailer on macos"
+            exit 1
+          fi
+
+      - name: Python test harnesses on macos
+        run: |
+          python3 tests/workflow/run
+          python3 tests/decay/run
+          python3 tests/notes/run
+          python3 tests/attribution/run
+          python3 tests/transcripts/run
 
   required:
     name: required

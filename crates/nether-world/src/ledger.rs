@@ -68,13 +68,33 @@ mod tests {
     use super::Ledger;
     use crate::{Recorder, World};
     use nether_ledger::{AnswerOf, Call, MAX_OBJECT_BYTES, Refusal, Span, Store, Stored, Value};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new() -> Self {
+            static N: AtomicU64 = AtomicU64::new(0);
+            let dir = std::env::temp_dir().join(format!(
+                "nether-ledger-fetch-bound-{}-{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::Relaxed)
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            Self(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
 
     #[test]
     fn fetch_node_within_eleven_bytes_of_limit_refuses_exhausted() {
-        let dir =
-            std::env::temp_dir().join(format!("nether-ledger-fetch-bound-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let store = Store::open(&dir).unwrap();
+        let dir = Scratch::new();
+        let store = Store::open(&dir.0).unwrap();
         // `Value::Bytes(b)` encodes as 1 + 8 + b.len(); setting b.len() = MAX_OBJECT_BYTES - 9
         // produces an encoded object of exact size MAX_OBJECT_BYTES, so wrapping it in
         // `Answer::Given(Value::Bytes(..))` (+11 bytes) would exceed MAX_OBJECT_BYTES.
@@ -92,6 +112,5 @@ mod tests {
             store.get(rec.answer()).unwrap(),
             Stored::Value(Value::Answer(Box::new(AnswerOf::Refused(Refusal::Exhausted))))
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

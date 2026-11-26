@@ -9,6 +9,7 @@ heading's date as their first line, or `Unreleased` going out as a release.
 import importlib.machinery
 import importlib.util
 import sys
+import tempfile
 from pathlib import Path
 
 sys.dont_write_bytecode = True
@@ -59,6 +60,12 @@ Preamble that is not a release.
 ### Added
 
 - The first thing.
+
+    ```
+    4-space indented code block is not a fence
+
+[0.2.0]: https://example.invalid/releases/tag/v0.2.0
+[0.1.0]: https://example.invalid/releases/tag/v0.1.0
 """
 
 CASES = [
@@ -67,8 +74,9 @@ CASES = [
      and "A thing that was wrong." in r and "The first thing." not in r),
     ("the date on the heading is not part of the notes",
      "v0.2.0", lambda r: not r.startswith("-") and "2027-01-02" not in r),
-    ("the oldest version runs to the end of the file",
-     "v0.1.0", lambda r: "The first thing." in r and "The second thing." not in r),
+    ("the oldest version stops before EOF reference links",
+     "v0.1.0", lambda r: "The first thing." in r and "The second thing." not in r
+     and "[0.1.0]:" not in r and "[0.2.0]:" not in r),
     ("a leading v is optional",
      "0.2.0", lambda r: r is not None and "The second thing." in r),
     ("unreleased content never leaks into a release",
@@ -95,6 +103,20 @@ def main() -> int:
         if not passed:
             bad.append((name, got))
 
+    # A 4-space indented ``` must not toggle fence state and swallow the next section.
+    indented_sample = (
+        "## [0.2.0] - 2027-01-02\n\n"
+        "    ```\n"
+        "    indented code block\n\n"
+        "## [0.1.0] - 2026-12-01\n\n"
+        "- Old note.\n"
+    )
+    got_ind = notes(indented_sample, "v0.2.0")
+    ok_ind = got_ind is not None and "Old note." not in got_ind
+    print(f"  {'ok  ' if ok_ind else 'FAIL'}  4-space indented fence does not swallow next heading")
+    if not ok_ind:
+        bad.append(("4-space indented fence does not swallow next heading", got_ind))
+
     # `Unreleased` is refused by the command, not by the function: the function
     # would happily find that section, and the guard is one line above it.
     if notes(SAMPLE, "Unreleased") is None:
@@ -103,6 +125,27 @@ def main() -> int:
         bad.append(("CLI refuses Unreleased", None))
     if _notes.main(["scripts/notes", "v9.9.9"]) != 1:
         bad.append(("CLI refuses missing version", None))
+    if _notes.main(["scripts/notes"]) != 2:
+        bad.append(("CLI exits 2 on missing version arg", None))
+    if _notes.main(["scripts/notes", "v0.1.0", "extra"]) != 2:
+        bad.append(("CLI exits 2 on extra arg", None))
+
+    # Real CHANGELOG.md must yield non-empty notes for shipped releases.
+    for shipped in ("v0.1.0", "v0.2.0"):
+        if _notes.main(["scripts/notes", shipped]) != 0:
+            bad.append((f"real CHANGELOG.md has notes for {shipped}", None))
+
+    # Empty section in a changelog must be refused with exit 1.
+    orig_changelog = _notes.CHANGELOG
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            empty_log = Path(tmp) / "CHANGELOG.md"
+            empty_log.write_text("# Changelog\n\n## [0.3.0] - 2027-01-03\n\n## [0.2.0]\n\n- ok\n", encoding="utf-8")
+            _notes.CHANGELOG = empty_log
+            if _notes.main(["scripts/notes", "v0.3.0"]) != 1:
+                bad.append(("CLI exits 1 on empty version section", None))
+    finally:
+        _notes.CHANGELOG = orig_changelog
 
     if bad:
         print("\nnotes: the release notes would have been wrong:", file=sys.stderr)

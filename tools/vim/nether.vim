@@ -125,20 +125,27 @@ function! s:Inspect() abort
   endif
   let l:byte = s:ByteOffset()
   let l:tmp = tempname()
+  let l:err = tempname()
   let l:out = ''
+  let l:err_text = ''
   try
     call s:WriteBuffer(l:tmp)
     let l:cmd = shellescape(s:Bin()) . ' lamp --at ' . l:byte
           \ . ' --source ' . shellescape(l:tmp)
           \ . ' --json -- ' . shellescape(b:nether_trace)
+          \ . ' 2>' . shellescape(l:err)
     let l:out = system(l:cmd)
   catch
     return s:FailInspect(v:exception)
   finally
     call delete(l:tmp)
+    if filereadable(l:err)
+      let l:err_text = join(readfile(l:err), "\n")
+      call delete(l:err)
+    endif
   endtry
   if v:shell_error != 0
-    return s:FailInspect(trim(l:out))
+    return s:FailInspect(trim(!empty(l:err_text) ? l:err_text : l:out))
   endif
   try
     let l:data = json_decode(l:out)
@@ -166,9 +173,11 @@ function! s:BindTrace(cairn) abort
     return
   endif
   let b:nether_trace = a:cairn
-  nnoremap <buffer> <silent> K :NetherHover<CR>
-  nnoremap <buffer> <silent> gd :NetherOrigin<CR>
-  nnoremap <buffer> <silent> gp :NetherProvenance<CR>
+  if !get(g:, 'nether_no_maps', 0)
+    nnoremap <buffer> <silent> K :NetherHover<CR>
+    nnoremap <buffer> <silent> gd :NetherOrigin<CR>
+    nnoremap <buffer> <silent> gp :NetherProvenance<CR>
+  endif
 endfunction
 
 function! s:Hover() abort
@@ -188,6 +197,10 @@ function! s:Origin() abort
     execute 'goto ' . max([1, l:desc - l:bom + 1])
   elseif l:call >= 0
     execute 'goto ' . max([1, l:call - l:bom + 1])
+  elseif l:desc >= 0
+    echomsg 'nether: already at descend origin'
+  else
+    echomsg 'nether: no descend or call origin at cursor'
   endif
 endfunction
 
@@ -200,6 +213,8 @@ function! s:Provenance() abort
   let l:call = type(get(l:data, 'call', v:null)) == v:t_dict ? l:data.call.start : -1
   if l:call >= 0
     execute 'goto ' . max([1, l:call - l:bom + 1])
+  else
+    echomsg 'nether: no call origin at cursor'
   endif
 endfunction
 

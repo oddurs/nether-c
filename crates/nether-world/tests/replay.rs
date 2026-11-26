@@ -5,21 +5,55 @@
 //! socket — and there is no method that takes one. The compiler checks the
 //! last part: see `Replay`'s `compile_fail` example.
 
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use nether_core::Depth;
 use nether_ledger::{Call, Node, Span, Store, StoreError, Stored, Value};
 use nether_world::{Disk, MergeError, Recorder, Replay, World};
+
+struct Scratch(PathBuf);
+
+impl Deref for Scratch {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for Scratch {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for Scratch {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        self.0.as_os_str()
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
 
 fn asking(function: &str) -> Call {
     Call { function: function.to_owned(), args: Vec::new() }
 }
 
-fn temp_dir(tag: &str) -> std::path::PathBuf {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    let dir = std::env::temp_dir().join(format!("nether-replay-{tag}-{nanos}"));
+fn temp_dir(tag: &str) -> Scratch {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "nether-replay-{tag}-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&dir).expect("temp dir");
-    dir
+    Scratch(dir)
 }
 
 #[test]

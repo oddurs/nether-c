@@ -5,23 +5,58 @@
 //! a root nothing may reach out of, and a directory listing that is sorted
 //! because a filesystem's order would not replay.
 
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use nether_core::{Capability, Depth};
 use nether_ledger::{AnswerOf, Cairn, Call, Node, Refusal, Span, Store, Stored, Value};
 use nether_world::{Disk, Recorder, World};
 
-fn scratch(what: &str) -> std::path::PathBuf {
-    let at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    let dir = std::env::temp_dir().join(format!("nether-disk-{what}-{at}"));
+struct Scratch(PathBuf);
+
+impl Deref for Scratch {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for Scratch {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<std::ffi::OsStr> for Scratch {
+    fn as_ref(&self) -> &std::ffi::OsStr {
+        self.0.as_os_str()
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn scratch(what: &str) -> Scratch {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "nether-disk-{what}-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&dir).expect("a scratch directory");
-    dir
+    Scratch(dir)
 }
 
 struct Asked {
     store: Store,
-    root: std::path::PathBuf,
+    root: PathBuf,
     world: World,
+    _dir: Scratch,
 }
 
 impl Asked {
@@ -34,6 +69,7 @@ impl Asked {
             store: Store::open(&ledger).expect("a store"),
             root,
             world: World::sealed().granting(Box::new(disk)),
+            _dir: dir,
         }
     }
 

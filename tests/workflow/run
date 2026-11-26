@@ -221,6 +221,13 @@ class Workflow(unittest.TestCase):
         self.agent("pr", ok=False)
         self.assertFalse((self.base / "checks").exists())
 
+    def test_earlier_closed_pr_does_not_shadow_open_pr(self):
+        self.state["existing_list"] = ["1 CLOSED false", "2 OPEN false"]
+        self.save()
+        self.agent("pr")
+        self.assertFalse(any(args[:2] == ["pr", "create"] for args in self.log()))
+        self.assertTrue(any(args[:2] == ["pr", "merge"] for args in self.log()))
+
     def test_merge_failure_is_reported(self):
         self.state["fail"] = ["pr", "merge"]
         self.save()

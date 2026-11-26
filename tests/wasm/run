@@ -19,6 +19,7 @@ then that many entries of (name, kind, index), and reading it is thirty lines.
 """
 
 import gzip
+import re
 import sys
 from pathlib import Path
 
@@ -132,7 +133,13 @@ def main():
     if missing:
         raise SystemExit(f"wasm: missing or wrong-kind export(s): {', '.join(sorted(missing))}")
 
-    ceiling = int(CEILING.read_text().strip())
+    try:
+        raw_ceiling = CEILING.read_text(encoding="utf-8").strip()
+    except OSError as error:
+        raise SystemExit(f"wasm: cannot read {CEILING}: {error}")
+    if not re.fullmatch(r"[0-9]+", raw_ceiling):
+        raise SystemExit(f"wasm: {CEILING} holds no valid number, so there is no ceiling.")
+    ceiling = int(raw_ceiling)
     size = len(gzip.compress(data, 9))
     print(f"wasm: {len(found)} export(s), all promised names present")
     if size > ceiling:
