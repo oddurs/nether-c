@@ -153,14 +153,14 @@ advantages is marketing.
 ## NEVER
 
 - **Never edit `ROADMAP.md`.** Generated. Change items, run `cairn render`.
-- **Never edit generated site assets:** `site/index.html`, `site/spec/*.html`,
-  `site/manual/*.html`, `site/specimen.html`, `site/404.html`,
+- **Never edit generated site assets:** `site/index.html`, `site/releases.html`,
+  `site/spec/*.html`, `site/manual/*.html`, `site/specimen.html`, `site/404.html`,
   `site/in-memoriam.html`, `site/tokens.css`, `site/gfx/*.gif`,
   `site/nether.woff`, or `site/nether-bold.woff`. Change `spec/*.md`,
-  `docs/manual/*.md`, `site/src/index.html`, `site/design.py`, `site/gfx.py`,
-  or `site/font.py`, run the corresponding verbs separately (`scripts/task
-  design`, `scripts/task gfx`, `scripts/task font`, `scripts/task site`), and
-  commit what comes out.
+  `docs/manual/*.md`, `CHANGELOG.md`, `SECURITY.md`, `site/src/index.html`,
+  `site/design.py`, `site/gfx.py`, or `site/font.py`, run the corresponding verbs
+  separately (`scripts/task design`, `scripts/task gfx`, `scripts/task font`,
+  `scripts/task site`), and commit what comes out.
 - **Never commit `web/necropolis/nether.wasm`.** Built by `scripts/task wasm`,
   and ignored. A Rust release build is not byte-reproducible across machines,
   so a committed copy could only be checked by rebuilding it. `.wasm-ceiling`

@@ -276,10 +276,12 @@ body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
   line-height: 1.5;
   letter-spacing: .125em;
   text-transform: uppercase;
+  text-decoration: none;
 }
 .pill-accent { border-color: var(--accent); color: var(--accent); }
 .pill-good { border-color: var(--good); color: var(--good); }
 .pill-warn { border-color: var(--warn); color: var(--warn); }
+a.pill:hover, a.pill:focus-visible { background: var(--accent); color: var(--ground); text-decoration: none; }
 .release-head {
   display: flex;
   flex-wrap: wrap;
@@ -490,9 +492,8 @@ h1.memorial::before { content: none; }
 
 h1 a, h2 a, h3 a, h4 a { color: inherit; text-decoration: none; }
 h1 a:hover, h2 a:hover, h3 a:hover, h4 a:hover { text-decoration: underline; background: none; color: inherit; }
-main :is(h2, h3)[id] > a::after { content: " #"; opacity: 0; }
 main :is(h2, h3)[id]:hover > a::after,
-main :is(h2, h3)[id] > a:focus-visible::after { opacity: 1; }
+main :is(h2, h3)[id] > a:focus-visible::after { content: " #"; }
 
 /* --- text ----------------------------------------------------------------- */
 
@@ -529,6 +530,8 @@ code {
   white-space: pre-wrap;
 }
 a code { color: inherit; }
+main :is(h1, h2, h3, h4, p, li) { overflow-wrap: break-word; }
+main :not(pre) > code, main p a, main li a { overflow-wrap: anywhere; }
 
 figure.listing {
   margin: 0 0 1.1rem;

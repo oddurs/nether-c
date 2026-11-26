@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>02 The calculus of depth &mdash; Nether C</title>
-<meta name="description" content="This section is the formal core. It fits on one page, and that is a constraint rather than an observation: a depth system that cannot be stated on one page...">
+<meta name="description" content="§ 02 draft depth 3 edit the source">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/spec/02-calculus.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="02 The calculus of depth &mdash; Nether C">
-<meta property="og:description" content="This section is the formal core. It fits on one page, and that is a constraint rather than an observation: a depth system that cannot be stated on one page...">
+<meta property="og:description" content="§ 02 draft depth 3 edit the source">
 <meta property="og:url" content="https://netherc.org/spec/02-calculus.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@ try {
 
 <a class="skip" href="#main">Skip to the text</a>
 
-<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>v0.3.0 &middot; READ ONLY</span></div>
 <header class="terminal-header">
 <pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -50,7 +50,7 @@ try {
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html">manual</a><a href="../spec/index.html" class="current">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html">manual</a><a href="../spec/index.html" class="current">spec</a><a href="../releases.html">releases</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
@@ -63,7 +63,7 @@ try {
 <div class="reading-pane">
 <div class="pane-title"><span>02 The calculus of depth</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">&sect; 02 &middot; draft &middot; <span class="d3">depth 3</span> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/02-calculus.md">edit the source</a></p><div class="gauge" aria-hidden="true"><span class="d0 lit"></span><span class="d1 lit"></span><span class="d2 lit"></span><span class="d3 lit"></span><span class="d4"></span><span class="d5"></span><span class="d6"></span><span class="d7"></span><span class="d8"></span></div><h1 id="the-calculus-of-depth"><a href="#the-calculus-of-depth">The calculus of depth</a></h1><p>This section is the formal core. It fits on one page, and that is a constraint rather than an observation: a depth system that cannot be stated on one page cannot be taught, and a lattice nobody can hold in their head will be worked around rather than used.</p><h2 id="21-judgement-form"><a href="#21-judgement-form">2.1 Judgement form</a></h2><figure class="listing"><pre><code>Γ ; δ ⊢ e : τ @ d</code></pre></figure><p>Read: <em>in context Γ, holding the capabilities δ, the expression e has type τ and depth d.</em></p><ul><li><strong>Γ</strong> maps identifiers to depth-annotated types, <code>x : τ@d</code>.</li><li><strong>δ</strong> is the <strong>ambient capabilities</strong>: the set of strata whose capabilities are currently held. It holds 0 and nothing else at the top level of a file, and is added to only by <code>descend</code>.</li><li><strong>d</strong> is the <strong>value depth</strong>: how far into the world this value&#x27;s history reaches.</li></ul><p>δ is a set and d is a number, and the two are different kinds of thing on purpose. A value&#x27;s depth is <em>how far it went</em>, which composes by maximum and fits in a byte. Authority is <em>which doors are open</em>, which does not: the capabilities are in bijection with the strata <a href="09-prelude.html#91-capabilities">§9.1</a> names them for, and holding one holds no other. §1.8 orders the strata by how much of the world has been disturbed, and an order fit for comparing two histories is not one fit for implying one permission from another — under it <code>net</code> would imply <code>disk!</code>, and <em>may fetch a URL</em> would mean <em>may delete a file</em>.</p><p>Stratum 0 is in δ always. Nothing grants it and nothing needs it, and having it there is what lets [APP] and [LOOK] be stated without a special case.</p><p><code>dƒ ⊆ δ</code> and <code>d ∈ δ</code> are required where they are written, which is the premises of [APP] and [LOOK], and an implementation MUST reject any program in which either fails. Neither is a property of every judgement: [DESCEND] is precisely the rule that concludes outside the capabilities it added, so <code>descend disk { read(p) }</code> has depth 3 in a scope holding nothing. What holds everywhere is <a href="#24-metatheory">§2.4</a>.</p><p>Function types carry a latent set and a return depth, written <code>τ₁ --dƒ--&gt; τ₂@d_r</code>.</p><ul><li><strong>dƒ</strong> is the <strong>latent set</strong>: the capabilities a caller must already hold to apply it. In source syntax it is the trailing annotation on the signature — <code>Bytes read(Str path) @3</code> for one, <code>@{3,5}</code> for two, <code>@0</code> for none (<a href="03-lexical.html#35-depth-annotations">§3.5</a>).</li><li><strong>d_r</strong> is the depth of what comes back. It rides on the return type, where it is written at all (<code>Bytes@3 load(Str path)</code>), and like every other depth it is inferred unless written.</li></ul><p>Both are needed, because they are different numbers. A function that does its own descending asks its caller for nothing and still hands back something deep.</p><h2 id="22-the-rules"><a href="#22-the-rules">2.2 The rules</a></h2><figure class="listing"><pre><code>                x : τ@d ∈ Γ
+<p class="c meta-bar"><span>&sect; 02</span> <span>draft</span> <span class="d3">depth 3</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/spec/02-calculus.md">edit the source</a></span></p><div class="gauge" aria-hidden="true"><span class="d0 lit"></span><span class="d1 lit"></span><span class="d2 lit"></span><span class="d3 lit"></span><span class="d4"></span><span class="d5"></span><span class="d6"></span><span class="d7"></span><span class="d8"></span></div><h1 id="the-calculus-of-depth"><a href="#the-calculus-of-depth">The calculus of depth</a></h1><p>This section is the formal core. It fits on one page, and that is a constraint rather than an observation: a depth system that cannot be stated on one page cannot be taught, and a lattice nobody can hold in their head will be worked around rather than used.</p><h2 id="21-judgement-form"><a href="#21-judgement-form">2.1 Judgement form</a></h2><figure class="listing"><pre><code>Γ ; δ ⊢ e : τ @ d</code></pre></figure><p>Read: <em>in context Γ, holding the capabilities δ, the expression e has type τ and depth d.</em></p><ul><li><strong>Γ</strong> maps identifiers to depth-annotated types, <code>x : τ@d</code>.</li><li><strong>δ</strong> is the <strong>ambient capabilities</strong>: the set of strata whose capabilities are currently held. It holds 0 and nothing else at the top level of a file, and is added to only by <code>descend</code>.</li><li><strong>d</strong> is the <strong>value depth</strong>: how far into the world this value&#x27;s history reaches.</li></ul><p>δ is a set and d is a number, and the two are different kinds of thing on purpose. A value&#x27;s depth is <em>how far it went</em>, which composes by maximum and fits in a byte. Authority is <em>which doors are open</em>, which does not: the capabilities are in bijection with the strata <a href="09-prelude.html#91-capabilities">§9.1</a> names them for, and holding one holds no other. §1.8 orders the strata by how much of the world has been disturbed, and an order fit for comparing two histories is not one fit for implying one permission from another — under it <code>net</code> would imply <code>disk!</code>, and <em>may fetch a URL</em> would mean <em>may delete a file</em>.</p><p>Stratum 0 is in δ always. Nothing grants it and nothing needs it, and having it there is what lets [APP] and [LOOK] be stated without a special case.</p><p><code>dƒ ⊆ δ</code> and <code>d ∈ δ</code> are required where they are written, which is the premises of [APP] and [LOOK], and an implementation MUST reject any program in which either fails. Neither is a property of every judgement: [DESCEND] is precisely the rule that concludes outside the capabilities it added, so <code>descend disk { read(p) }</code> has depth 3 in a scope holding nothing. What holds everywhere is <a href="#24-metatheory">§2.4</a>.</p><p>Function types carry a latent set and a return depth, written <code>τ₁ --dƒ--&gt; τ₂@d_r</code>.</p><ul><li><strong>dƒ</strong> is the <strong>latent set</strong>: the capabilities a caller must already hold to apply it. In source syntax it is the trailing annotation on the signature — <code>Bytes read(Str path) @3</code> for one, <code>@{3,5}</code> for two, <code>@0</code> for none (<a href="03-lexical.html#35-depth-annotations">§3.5</a>).</li><li><strong>d_r</strong> is the depth of what comes back. It rides on the return type, where it is written at all (<code>Bytes@3 load(Str path)</code>), and like every other depth it is inferred unless written.</li></ul><p>Both are needed, because they are different numbers. A function that does its own descending asks its caller for nothing and still hands back something deep.</p><h2 id="22-the-rules"><a href="#22-the-rules">2.2 The rules</a></h2><figure class="listing"><pre><code>                x : τ@d ∈ Γ
   [VAR]     ───────────────────
               Γ ; δ ⊢ x : τ@d
 
@@ -148,7 +148,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>
@@ -206,6 +206,52 @@ There is no image library in this repository. There is not going to be one.</p>
   }
   paint();
   motion.addEventListener("change", paintImages);
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    var listings = document.querySelectorAll("figure.listing");
+    if (listings.length) {
+      var live = document.createElement("span");
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+      listings.forEach(function (fig) {
+        var cap = fig.querySelector("figcaption");
+        var code = fig.querySelector("pre code");
+        if (!cap || !code) return;
+        var copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.type = "button";
+        copyBtn.textContent = "copy";
+        var timer = null;
+        copyBtn.addEventListener("click", function () {
+          var raw = (code.textContent || "").replace(/\n$/, "");
+          var text = raw;
+          if (code.querySelector("span.p")) {
+            var cmds = raw.split("\n").filter(function (line) {
+              return /^\s*\$ /.test(line);
+            }).map(function (line) {
+              return line.replace(/^\s*\$ /, "");
+            });
+            if (cmds.length) text = cmds.join("\n");
+          }
+          navigator.clipboard.writeText(text).then(function () {
+            if (timer) clearTimeout(timer);
+            copyBtn.setAttribute("data-copied", "");
+            copyBtn.textContent = "copied";
+            live.textContent = "";
+            live.textContent = "Copied to clipboard.";
+            timer = setTimeout(function () {
+              copyBtn.removeAttribute("data-copied");
+              copyBtn.textContent = "copy";
+              timer = null;
+            }, 1600);
+          }, function () {});
+        });
+        cap.appendChild(copyBtn);
+      });
+    }
+  }
 })();
 </script>
 

@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Orpheus rule &mdash; Nether C</title>
-<meta name="description" content="One idea: you may carry a value up; you must go back down to look at it.">
+<meta name="description" content="chapter 08 draft edit the source">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/manual/08-the-orpheus-rule.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="The Orpheus rule &mdash; Nether C">
-<meta property="og:description" content="One idea: you may carry a value up; you must go back down to look at it.">
+<meta property="og:description" content="chapter 08 draft edit the source">
 <meta property="og:url" content="https://netherc.org/manual/08-the-orpheus-rule.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@ try {
 
 <a class="skip" href="#main">Skip to the text</a>
 
-<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>v0.3.0 &middot; READ ONLY</span></div>
 <header class="terminal-header">
 <pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -50,7 +50,7 @@ try {
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">spec</a><a href="../releases.html">releases</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
@@ -63,7 +63,7 @@ try {
 <div class="reading-pane">
 <div class="pane-title"><span>The Orpheus rule</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">chapter 08 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/08-the-orpheus-rule.md">edit the source</a></p><h1 id="the-orpheus-rule"><a href="#the-orpheus-rule">The Orpheus rule</a></h1><blockquote><p>One idea: <strong>you may carry a value up; you must go back down to look at it.</strong></p></blockquote><p>Nine strata, and depth composes upwards: a thing built from parts is exactly as deep as its deepest part. That is <a href="../spec/01-strata.html">§1.1</a>, and on its own it would make deep values useless — one network call and everything downstream of it is at stratum 5 forever, including the integer you got by counting its bytes.</p><p>So there is a way out, and there is a price. A <strong>shade</strong> is a deep value carried up to the surface. Sealing one, naming it, passing it around, storing it: all fine, all at depth 0. Looking at what is inside it is not.</p><p>Write <code>stamp.nc</code>:</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// stamp.nc — the Orpheus rule, and the error spec/01-strata.md §1.6 prints.</span>
+<p class="c meta-bar"><span>chapter 08</span> <span>draft</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/08-the-orpheus-rule.md">edit the source</a></span></p><h1 id="the-orpheus-rule"><a href="#the-orpheus-rule">The Orpheus rule</a></h1><blockquote><p>One idea: <strong>you may carry a value up; you must go back down to look at it.</strong></p></blockquote><p>Nine strata, and depth composes upwards: a thing built from parts is exactly as deep as its deepest part. That is <a href="../spec/01-strata.html">§1.1</a>, and on its own it would make deep values useless — one network call and everything downstream of it is at stratum 5 forever, including the integer you got by counting its bytes.</p><p>So there is a way out, and there is a price. A <strong>shade</strong> is a deep value carried up to the surface. Sealing one, naming it, passing it around, storing it: all fine, all at depth 0. Looking at what is inside it is not.</p><p>Write <code>stamp.nc</code>:</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="c">// stamp.nc — the Orpheus rule, and the error spec/01-strata.md §1.6 prints.</span>
 <span class="c">//</span>
 <span class="c">// A shade may be carried up out of any stratum. It may only be looked at by</span>
 <span class="c">// going back down, and this does not: the look is at the top level of a file,</span>
@@ -83,7 +83,7 @@ try {
 14 | I64   n       = len(look(reply));
    |                     ^^^^^^^^^^^ this shade came from `get` at stratum 5
    |
-   = the value is here, but you are not. Wrap the look in `descend net { … }`.</code></pre></figure><p><em>The value is here, but you are not.</em></p><p><code>seal reply</code> on the line above is fine. You may name the thing you brought back without going down for it, and the name is at depth 0 like any other name. It is the <code>look</code> that is refused, and it is refused where it stands rather than where the value came from.</p><h2 id="why-not-just-let-it-through"><a href="#why-not-just-let-it-through">Why not just let it through</a></h2><p>Because the alternative is a language where a <code>Bytes</code> might have come from the network and might not, and nothing in the type says which. Then every function that takes <code>Bytes</code> is a function that might be handling something a stranger sent, and knowing which ones is a code review rather than a burial.</p><p>Here, looking inside a shade is a syntactic act at a known depth. Every place in a program where deep data becomes ordinary data is a <code>look</code> inside a <code>descend</code>, and you can find all of them with a grep.</p><h2 id="the-name"><a href="#the-name">The name</a></h2><p>Orpheus was allowed to bring her up. He was not allowed to turn around and check. He did, at the threshold, and that was that.</p><p>The rule is the same shape and it is meant as a joke you can also use: carrying is free, looking has a place where it is legal, and the place is further down than where you want to be standing.</p><h2 id="where-it-bites-in-practice"><a href="#where-it-bites-in-practice">Where it bites in practice</a></h2><p>It will bite on a length. You have a response, you want its size, and <code>len</code> is pure — so you reach for it at the top level and get this error. The fix is always the same and always one line: do the looking inside a <code>descend</code> and carry the <em>result</em> up.</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">I64</span><span class="d5">@5</span> n = <span class="k">descend</span> net { len(<span class="k">look</span>(reply)) };</code></pre></figure><p>Which is a stratum-5 integer, and honest, because the only reason you know that number is that somebody answered a network call.</p><p><a href="09-where-to-go-from-here.html">Next</a>: the map.</p>
+   = the value is here, but you are not. Wrap the look in `descend net { … }`.</code></pre></figure><p><em>The value is here, but you are not.</em></p><p><code>seal reply</code> on the line above is fine. You may name the thing you brought back without going down for it, and the name is at depth 0 like any other name. It is the <code>look</code> that is refused, and it is refused where it stands rather than where the value came from.</p><h2 id="why-not-just-let-it-through"><a href="#why-not-just-let-it-through">Why not just let it through</a></h2><p>Because the alternative is a language where a <code>Bytes</code> might have come from the network and might not, and nothing in the type says which. Then every function that takes <code>Bytes</code> is a function that might be handling something a stranger sent, and knowing which ones is a code review rather than a burial.</p><p>Here, looking inside a shade is a syntactic act at a known depth. Every place in a program where deep data becomes ordinary data is a <code>look</code> inside a <code>descend</code>, and you can find all of them with a grep.</p><h2 id="the-name"><a href="#the-name">The name</a></h2><p>Orpheus was allowed to bring her up. He was not allowed to turn around and check. He did, at the threshold, and that was that.</p><p>The rule is the same shape and it is meant as a joke you can also use: carrying is free, looking has a place where it is legal, and the place is further down than where you want to be standing.</p><h2 id="where-it-bites-in-practice"><a href="#where-it-bites-in-practice">Where it bites in practice</a></h2><p>It will bite on a length. You have a response, you want its size, and <code>len</code> is pure — so you reach for it at the top level and get this error. The fix is always the same and always one line: do the looking inside a <code>descend</code> and carry the <em>result</em> up.</p><figure class="listing"><figcaption>nether c</figcaption><pre><code><span class="t">I64</span><span class="d5">@5</span> n = <span class="k">descend</span> net { len(<span class="k">look</span>(reply)) };</code></pre></figure><p>Which is a stratum-5 integer, and honest, because the only reason you know that number is that somebody answered a network call.</p><p><a href="09-where-to-go-from-here.html">Next</a>: the map.</p><nav class="chapter-pager" aria-label="Chapter navigation"><a class="btn" href="07-the-replay.html">&larr; 07 The replay</a><a class="btn" href="09-where-to-go-from-here.html">09 Where to go from here &rarr;</a></nav>
 </main>
 </div>
 </div>
@@ -112,7 +112,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>
@@ -170,6 +170,52 @@ There is no image library in this repository. There is not going to be one.</p>
   }
   paint();
   motion.addEventListener("change", paintImages);
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    var listings = document.querySelectorAll("figure.listing");
+    if (listings.length) {
+      var live = document.createElement("span");
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+      listings.forEach(function (fig) {
+        var cap = fig.querySelector("figcaption");
+        var code = fig.querySelector("pre code");
+        if (!cap || !code) return;
+        var copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.type = "button";
+        copyBtn.textContent = "copy";
+        var timer = null;
+        copyBtn.addEventListener("click", function () {
+          var raw = (code.textContent || "").replace(/\n$/, "");
+          var text = raw;
+          if (code.querySelector("span.p")) {
+            var cmds = raw.split("\n").filter(function (line) {
+              return /^\s*\$ /.test(line);
+            }).map(function (line) {
+              return line.replace(/^\s*\$ /, "");
+            });
+            if (cmds.length) text = cmds.join("\n");
+          }
+          navigator.clipboard.writeText(text).then(function () {
+            if (timer) clearTimeout(timer);
+            copyBtn.setAttribute("data-copied", "");
+            copyBtn.textContent = "copied";
+            live.textContent = "";
+            live.textContent = "Copied to clipboard.";
+            timer = setTimeout(function () {
+              copyBtn.removeAttribute("data-copied");
+              copyBtn.textContent = "copy";
+              timer = null;
+            }, 1600);
+          }, function () {});
+        });
+        cap.appendChild(copyBtn);
+      });
+    }
+  }
 })();
 </script>
 

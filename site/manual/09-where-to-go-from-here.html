@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Where to go from here &mdash; Nether C</title>
-<meta name="description" content="You have buried four programs, given one of them a disk, given another two different environments, replayed a trace with the world switched off, and been...">
+<meta name="description" content="chapter 09 draft edit the source">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/manual/09-where-to-go-from-here.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="Where to go from here &mdash; Nether C">
-<meta property="og:description" content="You have buried four programs, given one of them a disk, given another two different environments, replayed a trace with the world switched off, and been...">
+<meta property="og:description" content="chapter 09 draft edit the source">
 <meta property="og:url" content="https://netherc.org/manual/09-where-to-go-from-here.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@ try {
 
 <a class="skip" href="#main">Skip to the text</a>
 
-<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>v0.3.0 &middot; READ ONLY</span></div>
 <header class="terminal-header">
 <pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -50,7 +50,7 @@ try {
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">spec</a><a href="../releases.html">releases</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
@@ -63,7 +63,7 @@ try {
 <div class="reading-pane">
 <div class="pane-title"><span>Where to go from here</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">chapter 09 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/09-where-to-go-from-here.md">edit the source</a></p><h1 id="where-to-go-from-here"><a href="#where-to-go-from-here">Where to go from here</a></h1><p>You have buried four programs, given one of them a disk, given another two different environments, replayed a trace with the world switched off, and been refused by the type system for looking at something from the wrong depth.</p><p>That is the short path. Here is the rest of the map.</p><h2 id="the-specification-in-a-useful-order"><a href="#the-specification-in-a-useful-order">The specification, in a useful order</a></h2><p>It is not long and it is not a reference manual you dip into. Read these four, in this order, and you have the language:</p><div class="scroll"><table><tbody><tr><td class="align-left"><a href="../spec/00-overview.html">§0</a></td><td class="align-left">Overview</td><td class="align-left">the argument, in two pages</td></tr><tr><td class="align-left"><a href="../spec/01-strata.html">§1</a></td><td class="align-left">Strata</td><td class="align-left">the nine, and why depth composes</td></tr><tr><td class="align-left"><a href="../spec/02-calculus.html">§2</a></td><td class="align-left">Calculus</td><td class="align-left">eleven rules, one page</td></tr><tr><td class="align-left"><a href="../spec/06-evaluation.html">§6</a></td><td class="align-left">Evaluation</td><td class="align-left">what burial actually does</td></tr></tbody></table></div><p><a href="../spec/02-calculus.html">§2</a> is the one to sit with. Everything the language does is a consequence of eleven rules that fit on a page, and the page being one page is a constraint the project holds itself to rather than a thing that happened to work out.</p><p>Then, as you need them:</p><ul><li><a href="../spec/05-types.html">§5</a> — types, shades, refusals, and why a loop body comes after itself</li><li><a href="../spec/07-ledger.html">§7</a> — what a node is, what a trace holds, how provenance is read backwards</li><li><a href="../spec/08-rites.html">§8</a> — every rite, every flag, every exit code</li><li><a href="../spec/09-prelude.html">§9</a> — the prelude, function by function, with the stratum of each</li><li><a href="../spec/10-glossary.html">§10</a> — the vocabulary, which is not decoration</li><li><a href="../spec/90-rationale.html">§90</a> — the rejected alternatives, which is the only honest part of any design document</li></ul><h2 id="rites-this-manual-did-not-use"><a href="#rites-this-manual-did-not-use">Rites this manual did not use</a></h2><p><code>nether graft</code> substitutes an answer for an open hole in a trace and re-buries only what changed, which is the operation a build system wants and the reason content addressing earns its keep. It is <a href="../spec/08-rites.html#87-graft">§8.7</a>: <code>--replace</code> names a hole the trace still has, and refuses an answer already given because that answer belongs to the earlier trace before exhumation.</p><h2 id="the-three-questions-people-ask"><a href="#the-three-questions-people-ask">The three questions people ask</a></h2><p><strong>Where is <code>main</code>?</strong> There isn&#x27;t one. There is <code>demand</code>, and a program is the set of things that were demanded and whatever those need. See <a href="../spec/04-grammar.html">§4</a>.</p><p><strong>How do I print something?</strong> You do not. You deposit it and somebody lamps it afterwards. If that feels like a missing feature, <a href="01-the-first-burial.html">chapter 1</a> is the argument for why it is the point.</p><p><strong>How do I run it?</strong> You do not, and <code>nether run</code> exists solely to say so and exit 64. It is frozen in <a href="../spec/08-rites.html#80-there-is-no-run">§8.0</a> alongside the canonical value and node encodings (<a href="../spec/07-ledger.html#71-canonical-encoding">§7.1</a> and <a href="../spec/07-ledger.html#731-node-encoding">§7.3.1</a>). Everything else in this draft may change without a version bump. Those will not.</p><h2 id="inspecting-a-trace-in-the-browser"><a href="#inspecting-a-trace-in-the-browser">Inspecting a trace in the browser</a></h2><p>The repository includes the Necropolis, a local WebAssembly trace browser under <code>web/necropolis/</code> that buries source inside the browser with no server and no world capabilities. From a checkout, run <code>scripts/task wasm &amp;&amp; scripts/task serve</code> and open <code>/web/necropolis/</code>.</p><h2 id="if-you-want-to-work-on-it"><a href="#if-you-want-to-work-on-it">If you want to work on it</a></h2><p><a href="https://github.com/oddurs/nether-c/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer noopener">CONTRIBUTING.md</a> is the process and <a href="https://github.com/oddurs/nether-c/blob/main/CLAUDE.md" target="_blank" rel="noreferrer noopener">CLAUDE.md</a> is the standard. The roadmap is generated from <code>cairn/items/</code>, one Markdown file per item, and every item carries a <em>proof</em> — the observable fact that settles whether it is finished. &quot;The code exists&quot; is not a proof.</p><p>The specification comes before the compiler. If you are about to implement something <code>spec/</code> does not describe, the section is the first pull request.</p><h2 id="one-last-thing"><a href="#one-last-thing">One last thing</a></h2><p>Everything you read in this manual was executed to produce it. Every <code>$</code> line on these ten pages runs on every build of this project, in a scratch directory with these programs in it, and the output underneath is compared to what came back. Two bugs were found writing it, and they are 0273 and 0274.</p><p>Documentation that lies fails the build. That is not a policy; it is <code>tests/transcripts/run</code>, a single standard-library Python harness that runs on every build.</p>
+<p class="c meta-bar"><span>chapter 09</span> <span>draft</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/09-where-to-go-from-here.md">edit the source</a></span></p><h1 id="where-to-go-from-here"><a href="#where-to-go-from-here">Where to go from here</a></h1><p>You have buried four programs, given one of them a disk, given another two different environments, replayed a trace with the world switched off, and been refused by the type system for looking at something from the wrong depth.</p><p>That is the short path. Here is the rest of the map.</p><h2 id="the-specification-in-a-useful-order"><a href="#the-specification-in-a-useful-order">The specification, in a useful order</a></h2><p>It is not long and it is not a reference manual you dip into. Read these four, in this order, and you have the language:</p><div class="scroll"><table><tbody><tr><td class="align-left"><a href="../spec/00-overview.html">§0</a></td><td class="align-left">Overview</td><td class="align-left">the argument, in two pages</td></tr><tr><td class="align-left"><a href="../spec/01-strata.html">§1</a></td><td class="align-left">Strata</td><td class="align-left">the nine, and why depth composes</td></tr><tr><td class="align-left"><a href="../spec/02-calculus.html">§2</a></td><td class="align-left">Calculus</td><td class="align-left">eleven rules, one page</td></tr><tr><td class="align-left"><a href="../spec/06-evaluation.html">§6</a></td><td class="align-left">Evaluation</td><td class="align-left">what burial actually does</td></tr></tbody></table></div><p><a href="../spec/02-calculus.html">§2</a> is the one to sit with. Everything the language does is a consequence of eleven rules that fit on a page, and the page being one page is a constraint the project holds itself to rather than a thing that happened to work out.</p><p>Then, as you need them:</p><ul><li><a href="../spec/05-types.html">§5</a> — types, shades, refusals, and why a loop body comes after itself</li><li><a href="../spec/07-ledger.html">§7</a> — what a node is, what a trace holds, how provenance is read backwards</li><li><a href="../spec/08-rites.html">§8</a> — every rite, every flag, every exit code</li><li><a href="../spec/09-prelude.html">§9</a> — the prelude, function by function, with the stratum of each</li><li><a href="../spec/10-glossary.html">§10</a> — the vocabulary, which is not decoration</li><li><a href="../spec/90-rationale.html">§90</a> — the rejected alternatives, which is the only honest part of any design document</li></ul><h2 id="rites-this-manual-did-not-use"><a href="#rites-this-manual-did-not-use">Rites this manual did not use</a></h2><p><code>nether graft</code> substitutes an answer for an open hole in a trace and re-buries only what changed, which is the operation a build system wants and the reason content addressing earns its keep. It is <a href="../spec/08-rites.html#87-graft">§8.7</a>: <code>--replace</code> names a hole the trace still has, and refuses an answer already given because that answer belongs to the earlier trace before exhumation.</p><h2 id="the-three-questions-people-ask"><a href="#the-three-questions-people-ask">The three questions people ask</a></h2><p><strong>Where is <code>main</code>?</strong> There isn&#x27;t one. There is <code>demand</code>, and a program is the set of things that were demanded and whatever those need. See <a href="../spec/04-grammar.html">§4</a>.</p><p><strong>How do I print something?</strong> You do not. You deposit it and somebody lamps it afterwards. If that feels like a missing feature, <a href="01-the-first-burial.html">chapter 1</a> is the argument for why it is the point.</p><p><strong>How do I run it?</strong> You do not, and <code>nether run</code> exists solely to say so and exit 64. It is frozen in <a href="../spec/08-rites.html#80-there-is-no-run">§8.0</a> alongside the canonical value and node encodings (<a href="../spec/07-ledger.html#71-canonical-encoding">§7.1</a> and <a href="../spec/07-ledger.html#731-node-encoding">§7.3.1</a>). Everything else in this draft may change without a version bump. Those will not.</p><h2 id="inspecting-a-trace-in-the-browser"><a href="#inspecting-a-trace-in-the-browser">Inspecting a trace in the browser</a></h2><p>The repository includes the Necropolis, a local WebAssembly trace browser under <code>web/necropolis/</code> that buries source inside the browser with no server and no world capabilities. From a checkout, run <code>scripts/task wasm &amp;&amp; scripts/task serve</code> and open <code>/web/necropolis/</code>.</p><h2 id="if-you-want-to-work-on-it"><a href="#if-you-want-to-work-on-it">If you want to work on it</a></h2><p><a href="https://github.com/oddurs/nether-c/blob/main/CONTRIBUTING.md" target="_blank" rel="noreferrer noopener">CONTRIBUTING.md</a> is the process and <a href="https://github.com/oddurs/nether-c/blob/main/CLAUDE.md" target="_blank" rel="noreferrer noopener">CLAUDE.md</a> is the standard. The roadmap is generated from <code>cairn/items/</code>, one Markdown file per item, and every item carries a <em>proof</em> — the observable fact that settles whether it is finished. &quot;The code exists&quot; is not a proof.</p><p>The specification comes before the compiler. If you are about to implement something <code>spec/</code> does not describe, the section is the first pull request.</p><h2 id="one-last-thing"><a href="#one-last-thing">One last thing</a></h2><p>Everything you read in this manual was executed to produce it. Every <code>$</code> line on these ten pages runs on every build of this project, in a scratch directory with these programs in it, and the output underneath is compared to what came back. Two bugs were found writing it, and they are 0273 and 0274.</p><p>Documentation that lies fails the build. That is not a policy; it is <code>tests/transcripts/run</code>, a single standard-library Python harness that runs on every build.</p><nav class="chapter-pager" aria-label="Chapter navigation"><a class="btn" href="08-the-orpheus-rule.html">&larr; 08 The Orpheus rule</a><a class="btn" href="index.html">All chapters &rarr;</a></nav>
 </main>
 </div>
 </div>
@@ -92,7 +92,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>
@@ -150,6 +150,52 @@ There is no image library in this repository. There is not going to be one.</p>
   }
   paint();
   motion.addEventListener("change", paintImages);
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    var listings = document.querySelectorAll("figure.listing");
+    if (listings.length) {
+      var live = document.createElement("span");
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+      listings.forEach(function (fig) {
+        var cap = fig.querySelector("figcaption");
+        var code = fig.querySelector("pre code");
+        if (!cap || !code) return;
+        var copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.type = "button";
+        copyBtn.textContent = "copy";
+        var timer = null;
+        copyBtn.addEventListener("click", function () {
+          var raw = (code.textContent || "").replace(/\n$/, "");
+          var text = raw;
+          if (code.querySelector("span.p")) {
+            var cmds = raw.split("\n").filter(function (line) {
+              return /^\s*\$ /.test(line);
+            }).map(function (line) {
+              return line.replace(/^\s*\$ /, "");
+            });
+            if (cmds.length) text = cmds.join("\n");
+          }
+          navigator.clipboard.writeText(text).then(function () {
+            if (timer) clearTimeout(timer);
+            copyBtn.setAttribute("data-copied", "");
+            copyBtn.textContent = "copied";
+            live.textContent = "";
+            live.textContent = "Copied to clipboard.";
+            timer = setTimeout(function () {
+              copyBtn.removeAttribute("data-copied");
+              copyBtn.textContent = "copy";
+              timer = null;
+            }, 1600);
+          }, function () {});
+        });
+        cap.appendChild(copyBtn);
+      });
+    }
+  }
 })();
 </script>
 

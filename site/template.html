@@ -37,7 +37,7 @@ try {
 
 <a class="skip" href="#main">Skip to the text</a>
 
-<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>{{VERSION}} &middot; READ ONLY</span></div>
 <header class="terminal-header">
 <pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -92,7 +92,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="{{UP}}releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="{{UP}}specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>
@@ -150,6 +150,52 @@ There is no image library in this repository. There is not going to be one.</p>
   }
   paint();
   motion.addEventListener("change", paintImages);
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    var listings = document.querySelectorAll("figure.listing");
+    if (listings.length) {
+      var live = document.createElement("span");
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+      listings.forEach(function (fig) {
+        var cap = fig.querySelector("figcaption");
+        var code = fig.querySelector("pre code");
+        if (!cap || !code) return;
+        var copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.type = "button";
+        copyBtn.textContent = "copy";
+        var timer = null;
+        copyBtn.addEventListener("click", function () {
+          var raw = (code.textContent || "").replace(/\n$/, "");
+          var text = raw;
+          if (code.querySelector("span.p")) {
+            var cmds = raw.split("\n").filter(function (line) {
+              return /^\s*\$ /.test(line);
+            }).map(function (line) {
+              return line.replace(/^\s*\$ /, "");
+            });
+            if (cmds.length) text = cmds.join("\n");
+          }
+          navigator.clipboard.writeText(text).then(function () {
+            if (timer) clearTimeout(timer);
+            copyBtn.setAttribute("data-copied", "");
+            copyBtn.textContent = "copied";
+            live.textContent = "";
+            live.textContent = "Copied to clipboard.";
+            timer = setTimeout(function () {
+              copyBtn.removeAttribute("data-copied");
+              copyBtn.textContent = "copy";
+              timer = null;
+            }, 1600);
+          }, function () {});
+        });
+        cap.appendChild(copyBtn);
+      });
+    }
+  }
 })();
 </script>
 

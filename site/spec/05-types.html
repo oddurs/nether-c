@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>05 Types and the data model &mdash; Nether C</title>
-<meta name="description" content="I64 is the only integer type. There is no unsigned type, no char, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT...">
+<meta name="description" content="§ 05 draft depth 0 edit the source">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/spec/05-types.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="05 Types and the data model &mdash; Nether C">
-<meta property="og:description" content="I64 is the only integer type. There is no unsigned type, no char, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT...">
+<meta property="og:description" content="§ 05 draft depth 0 edit the source">
 <meta property="og:url" content="https://netherc.org/spec/05-types.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@ try {
 
 <a class="skip" href="#main">Skip to the text</a>
 
-<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>v0.3.0 &middot; READ ONLY</span></div>
 <header class="terminal-header">
 <pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -50,7 +50,7 @@ try {
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html">manual</a><a href="../spec/index.html" class="current">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html">manual</a><a href="../spec/index.html" class="current">spec</a><a href="../releases.html">releases</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
@@ -63,7 +63,7 @@ try {
 <div class="reading-pane">
 <div class="pane-title"><span>05 Types and the data model</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">&sect; 05 &middot; draft &middot; <span class="d0">depth 0</span> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/spec/05-types.md">edit the source</a></p><div class="gauge" aria-hidden="true"><span class="d0 lit"></span><span class="d1"></span><span class="d2"></span><span class="d3"></span><span class="d4"></span><span class="d5"></span><span class="d6"></span><span class="d7"></span><span class="d8"></span></div><h1 id="types-and-the-data-model"><a href="#types-and-the-data-model">Types and the data model</a></h1><h2 id="51-base-types"><a href="#51-base-types">5.1 Base types</a></h2><div class="scroll"><table><thead><tr><th class="align-left">Type</th><th class="align-left">Values</th><th class="align-left">Canonical encoding</th></tr></thead><tbody><tr><td class="align-left"><code>U0</code></td><td class="align-left">exactly one, written <code>()</code></td><td class="align-left">the empty sequence</td></tr><tr><td class="align-left"><code>Bool</code></td><td class="align-left"><code>true</code>, <code>false</code></td><td class="align-left">one byte, <code>0x00</code> or <code>0x01</code></td></tr><tr><td class="align-left"><code>I64</code></td><td class="align-left">−2⁶³ … 2⁶³−1</td><td class="align-left">fixed 8 bytes, two&#x27;s complement, big-endian</td></tr><tr><td class="align-left"><code>Bytes</code></td><td class="align-left">any finite byte string</td><td class="align-left">length prefix, then the bytes</td></tr><tr><td class="align-left"><code>Str</code></td><td class="align-left">any well-formed UTF-8 string</td><td class="align-left">as <code>Bytes</code>, over the bytes as given</td></tr><tr><td class="align-left"><code>Cairn</code></td><td class="align-left">a content address</td><td class="align-left">32 bytes</td></tr><tr><td class="align-left"><code>Shadeᵈ⟨T⟩</code></td><td class="align-left">an opaque <code>T</code> from depth <code>d</code></td><td class="align-left">one byte origin stratum, then the 32-byte cairn of the value</td></tr><tr><td class="align-left"><code>Answer⟨T⟩</code></td><td class="align-left">what the world said: a <code>T</code>, or a refusal</td><td class="align-left"><code>0x07</code>: one discriminant byte, then the <code>T</code> or the <code>Refusal</code></td></tr><tr><td class="align-left"><code>Refusal</code></td><td class="align-left">one of six codes, and nothing else</td><td class="align-left"><code>0x08</code>: one byte, in the order §5.1.1 lists them</td></tr></tbody></table></div><p><code>I64</code> is the only integer type. There is no unsigned type, no <code>char</code>, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT make overflow undefined, because a canonical encoding cannot be built on top of behaviour that varies by compiler.</p><blockquote><p>One integer width does not mean one interchangeable type. Conversions must be explicit; the language does not silently reinterpret a value.</p></blockquote><h2 id="511-answers-and-refusals"><a href="#511-answers-and-refusals">5.1.1 Answers and refusals</a></h2><p>Nether C has no exceptions and no error type. It has <code>Answer⟨T⟩</code>, which is what a function returns when the world is entitled to say no.</p><figure class="listing"><pre><code>Answer⟨T⟩  ::=  Given T  |  Refused Refusal
+<p class="c meta-bar"><span>&sect; 05</span> <span>draft</span> <span class="d0">depth 0</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/spec/05-types.md">edit the source</a></span></p><div class="gauge" aria-hidden="true"><span class="d0 lit"></span><span class="d1"></span><span class="d2"></span><span class="d3"></span><span class="d4"></span><span class="d5"></span><span class="d6"></span><span class="d7"></span><span class="d8"></span></div><h1 id="types-and-the-data-model"><a href="#types-and-the-data-model">Types and the data model</a></h1><h2 id="51-base-types"><a href="#51-base-types">5.1 Base types</a></h2><div class="scroll"><table><thead><tr><th class="align-left">Type</th><th class="align-left">Values</th><th class="align-left">Canonical encoding</th></tr></thead><tbody><tr><td class="align-left"><code>U0</code></td><td class="align-left">exactly one, written <code>()</code></td><td class="align-left">the empty sequence</td></tr><tr><td class="align-left"><code>Bool</code></td><td class="align-left"><code>true</code>, <code>false</code></td><td class="align-left">one byte, <code>0x00</code> or <code>0x01</code></td></tr><tr><td class="align-left"><code>I64</code></td><td class="align-left">−2⁶³ … 2⁶³−1</td><td class="align-left">fixed 8 bytes, two&#x27;s complement, big-endian</td></tr><tr><td class="align-left"><code>Bytes</code></td><td class="align-left">any finite byte string</td><td class="align-left">length prefix, then the bytes</td></tr><tr><td class="align-left"><code>Str</code></td><td class="align-left">any well-formed UTF-8 string</td><td class="align-left">as <code>Bytes</code>, over the bytes as given</td></tr><tr><td class="align-left"><code>Cairn</code></td><td class="align-left">a content address</td><td class="align-left">32 bytes</td></tr><tr><td class="align-left"><code>Shadeᵈ⟨T⟩</code></td><td class="align-left">an opaque <code>T</code> from depth <code>d</code></td><td class="align-left">one byte origin stratum, then the 32-byte cairn of the value</td></tr><tr><td class="align-left"><code>Answer⟨T⟩</code></td><td class="align-left">what the world said: a <code>T</code>, or a refusal</td><td class="align-left"><code>0x07</code>: one discriminant byte, then the <code>T</code> or the <code>Refusal</code></td></tr><tr><td class="align-left"><code>Refusal</code></td><td class="align-left">one of six codes, and nothing else</td><td class="align-left"><code>0x08</code>: one byte, in the order §5.1.1 lists them</td></tr></tbody></table></div><p><code>I64</code> is the only integer type. There is no unsigned type, no <code>char</code>, no integer promotion and no implicit narrowing. Arithmetic wraps; an implementation MUST NOT make overflow undefined, because a canonical encoding cannot be built on top of behaviour that varies by compiler.</p><blockquote><p>One integer width does not mean one interchangeable type. Conversions must be explicit; the language does not silently reinterpret a value.</p></blockquote><h2 id="511-answers-and-refusals"><a href="#511-answers-and-refusals">5.1.1 Answers and refusals</a></h2><p>Nether C has no exceptions and no error type. It has <code>Answer⟨T⟩</code>, which is what a function returns when the world is entitled to say no.</p><figure class="listing"><pre><code>Answer⟨T⟩  ::=  Given T  |  Refused Refusal
 
 Refusal    ::=  absent       the thing is not there
              |  denied       it is there and you may not have it
@@ -115,7 +115,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>
@@ -173,6 +173,52 @@ There is no image library in this repository. There is not going to be one.</p>
   }
   paint();
   motion.addEventListener("change", paintImages);
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    var listings = document.querySelectorAll("figure.listing");
+    if (listings.length) {
+      var live = document.createElement("span");
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+      listings.forEach(function (fig) {
+        var cap = fig.querySelector("figcaption");
+        var code = fig.querySelector("pre code");
+        if (!cap || !code) return;
+        var copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.type = "button";
+        copyBtn.textContent = "copy";
+        var timer = null;
+        copyBtn.addEventListener("click", function () {
+          var raw = (code.textContent || "").replace(/\n$/, "");
+          var text = raw;
+          if (code.querySelector("span.p")) {
+            var cmds = raw.split("\n").filter(function (line) {
+              return /^\s*\$ /.test(line);
+            }).map(function (line) {
+              return line.replace(/^\s*\$ /, "");
+            });
+            if (cmds.length) text = cmds.join("\n");
+          }
+          navigator.clipboard.writeText(text).then(function () {
+            if (timer) clearTimeout(timer);
+            copyBtn.setAttribute("data-copied", "");
+            copyBtn.textContent = "copied";
+            live.textContent = "";
+            live.textContent = "Copied to clipboard.";
+            timer = setTimeout(function () {
+              copyBtn.removeAttribute("data-copied");
+              copyBtn.textContent = "copy";
+              timer = null;
+            }, 1600);
+          }, function () {});
+        });
+        cap.appendChild(copyBtn);
+      });
+    }
+  }
 })();
 </script>
 

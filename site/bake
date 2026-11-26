@@ -27,6 +27,9 @@ SPEC = ROOT / "spec"
 MANUAL = ROOT / "docs" / "manual"
 BOARD = ROOT / "cairn" / "items"
 SITE = ROOT / "site"
+CHANGELOG = ROOT / "CHANGELOG.md"
+SECURITY = ROOT / "SECURITY.md"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 REPO = "https://github.com/oddurs/nether-c"
 
 
@@ -42,6 +45,13 @@ class Section(Chapter):
     depth: int
 
 
+class Release(TypedDict):
+    version: str
+    tag: str
+    date: str
+    body_md: str
+
+
 # ── the little markdown ────────────────────────────────────────────────────
 
 KEYWORDS = {
@@ -55,7 +65,11 @@ _RE_TAGS = re.compile(r"<[^>]+>")
 _RE_SLUG_DROP = re.compile(r"[^\w\s-]")
 _RE_WS = re.compile(r"\s+")
 _RE_SPEC_HREF = re.compile(r"\.\./\.\./spec/([\w.-]+)\.md(#.*)?")
+_RE_TOP_SPEC_HREF = re.compile(r"spec/([\w.-]+)\.md(#.*)?")
 _RE_ROOT_HREF = re.compile(r"\.\./\.\./([\w.-]+\.md)")
+_ROOT_REPO_FILES = frozenset({
+    "SECURITY.md", "LICENSE", "CONTRIBUTING.md", "ROADMAP.md", "CHANGELOG.md", "README.md",
+})
 _RE_LOCAL_MD = re.compile(r"[\w.-]+\.md(#.*)?")
 _RE_CODE_SPAN = re.compile(r"(`+)((?:(?!\1).)+?)\1")
 _RE_LINK = re.compile(r"\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)")
@@ -81,9 +95,14 @@ _RE_TASK_DONE = re.compile(r"^\[x\]\s*")
 _RE_STRATUM = re.compile(r"[0-8]")
 _RE_DEPTH_CLASS = re.compile(r'class="d([0-8])"')
 _RE_PARA = re.compile(r"<p(?:\s+([^>]*))?>(.*?)</p>", re.S)
-_RE_TPL_SLOT = re.compile(r"\{\{(?:TITLE|FULLTITLE|DESCRIPTION|URL|UP|NAV|DIRECTORY|BODY)\}\}")
+_RE_TPL_SLOT = re.compile(r"\{\{(?:TITLE|FULLTITLE|DESCRIPTION|URL|UP|VERSION|NAV|DIRECTORY|BODY)\}\}")
 _RE_GIF_IMG = re.compile(r'<img\b([^>]*?)src="([^"]+\.gif)"([^>]*)>')
-_RE_FRONT_SLOT = re.compile(r"\{\{(TOC|DESCENT|HOLES)\}\}")
+_RE_FRONT_SLOT = re.compile(r"\{\{(TOC|DESCENT|HOLES|LATEST_RELEASE|LATEST_TAG)\}\}")
+_RE_RELEASE_HEAD = re.compile(r"^##\s+\[([^\]]+)\](?:\s*-\s*(\d{4}-\d{2}-\d{2}))?\s*$")
+_RE_NEXT_H2 = re.compile(r"^##\s")
+_RE_LINK_DEF = re.compile(r"^\[[^\]]+\]:\s+\S+")
+_RE_SUPPORTED_TAG = re.compile(r"`(v\d+\.\d+\.\d+[^`]*)`")
+_RE_WORKFLOW_TARGET = re.compile(r"^\s*-\s*target:\s*([A-Za-z0-9_-]+)\s*$")
 
 
 def esc(s: str) -> str:
@@ -106,11 +125,18 @@ def rewrite_href(href: str) -> str:
     m = _RE_SPEC_HREF.fullmatch(href)
     if m:
         return f"../spec/{m.group(1)}.html{m.group(2) or ''}"
+    # Root-level documents like CHANGELOG.md and SECURITY.md are baked at
+    # depth 0, where `spec/08-rites.md` maps straight to `spec/08-rites.html`.
+    m = _RE_TOP_SPEC_HREF.fullmatch(href)
+    if m:
+        return f"spec/{m.group(1)}.html{m.group(2) or ''}"
     # Anything else it reaches for at the root of the repository is a file
     # nothing bakes, such as CONTRIBUTING, so send the reader to the source.
     m = _RE_ROOT_HREF.fullmatch(href)
     if m:
         return f"{REPO}/blob/main/{m.group(1)}"
+    if href.split("#", 1)[0] in _ROOT_REPO_FILES:
+        return f"{REPO}/blob/main/{href}"
     if _RE_LOCAL_MD.fullmatch(href):
         return href.replace(".md", ".html", 1)
     return href
@@ -642,14 +668,154 @@ def load_chapters() -> list[Chapter]:
     return out
 
 
+def _fence_open(stripped: str) -> tuple[str, int] | None:
+    for ch in ("`", "~"):
+        if stripped.startswith(ch * 3):
+            n = len(stripped) - len(stripped.lstrip(ch))
+            rest = stripped[n:]
+            if ch == "`" and "`" in rest:
+                return None
+            return (ch, n)
+    return None
+
+
+def _fence_close(stripped: str, fence: tuple[str, int]) -> bool:
+    ch, n = fence
+    if not stripped.startswith(ch * n):
+        return False
+    return stripped.lstrip(ch).strip() == ""
+
+
+def release_anchor(tag: str) -> str:
+    return tag.lower().replace(".", "-")
+
+
+@functools.lru_cache(maxsize=1)
+def load_releases() -> list[Release]:
+    """Every released version in CHANGELOG.md, parsed outside code fences."""
+    text = CHANGELOG.read_text(encoding="utf-8")
+    fence: tuple[str, int] | None = None
+    releases: list[Release] = []
+    current: tuple[str, str, list[str]] | None = None
+
+    def flush() -> None:
+        nonlocal current
+        if current is None:
+            return
+        version, date, body_lines = current
+        body_md = "".join(body_lines).strip()
+        if not body_md:
+            raise RuntimeError(f"bake: CHANGELOG.md section for {version} is empty")
+        releases.append({
+            "version": version,
+            "tag": f"v{version}",
+            "date": date,
+            "body_md": body_md,
+        })
+        current = None
+
+    for line in text.splitlines(keepends=True):
+        indent = len(line) - len(line.lstrip(" "))
+        stripped = line[indent:] if indent <= 3 and not line.startswith("\t") else ""
+        if fence is not None:
+            if stripped and _fence_close(stripped, fence):
+                fence = None
+            if current is not None:
+                current[2].append(line)
+            continue
+        opened = _fence_open(stripped) if stripped else None
+        if opened is not None:
+            fence = opened
+            if current is not None:
+                current[2].append(line)
+            continue
+        if _RE_LINK_DEF.match(line):
+            flush()
+            break
+        m = _RE_RELEASE_HEAD.match(line)
+        if m:
+            flush()
+            version = m.group(1).strip()
+            date = (m.group(2) or "").strip()
+            if version.lower() != "unreleased":
+                current = (version, date, [])
+            continue
+        if _RE_NEXT_H2.match(line):
+            flush()
+            continue
+        if current is not None:
+            current[2].append(line)
+
+    flush()
+    if not releases:
+        raise RuntimeError("bake: CHANGELOG.md has no released versions")
+    return releases
+
+
+def load_supported_version(expected_tag: str) -> str:
+    """`## Supported versions` from SECURITY.md, checked against the latest release."""
+    text = SECURITY.read_text(encoding="utf-8")
+    fence: tuple[str, int] | None = None
+    capturing = False
+    out: list[str] = []
+    for line in text.splitlines(keepends=True):
+        indent = len(line) - len(line.lstrip(" "))
+        stripped = line[indent:] if indent <= 3 and not line.startswith("\t") else ""
+        if fence is not None:
+            if stripped and _fence_close(stripped, fence):
+                fence = None
+            if capturing:
+                out.append(line)
+            continue
+        opened = _fence_open(stripped) if stripped else None
+        if opened is not None:
+            fence = opened
+            if capturing:
+                out.append(line)
+            continue
+        if not capturing:
+            if line.strip() == "## Supported versions":
+                capturing = True
+            continue
+        if _RE_NEXT_H2.match(line):
+            break
+        out.append(line)
+    prose = "".join(out).strip()
+    if not prose:
+        raise RuntimeError("bake: SECURITY.md has no `## Supported versions` section")
+    m = _RE_SUPPORTED_TAG.search(prose)
+    if not m:
+        raise RuntimeError("bake: SECURITY.md `## Supported versions` names no release tag")
+    if m.group(1) != expected_tag:
+        raise RuntimeError(
+            f"bake: SECURITY.md names {m.group(1)} as supported, "
+            f"but CHANGELOG.md latest release is {expected_tag}"
+        )
+    return prose
+
+
+def load_release_targets() -> list[str]:
+    """Build targets from `.github/workflows/release.yml` so the site never drifts."""
+    text = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+    targets = [
+        m.group(1)
+        for line in text.splitlines()
+        if (m := _RE_WORKFLOW_TARGET.match(line))
+    ]
+    if not targets:
+        raise RuntimeError("bake: no release targets found in .github/workflows/release.yml")
+    return targets
+
+
 def navbar(current: str, depth: int, *, exact: bool = True) -> str:
     up = "../" if depth else ""
-    # Four documents, named for what they are. The specification used to be
+    # Five documents, named for what they are. The specification used to be
     # labelled "manual", which it is not and says so in its first paragraph.
     links = [
         ("index", f"{up}index.html", "front desk"),
         ("manual", f"{up}manual/index.html", "manual"),
-        ("spec", f"{up}spec/index.html", "specification"),
+        ("spec", f"{up}spec/index.html", "spec"),
+        ("releases", f"{up}releases.html", "releases"),
         ("specimen", f"{up}specimen.html", "the face"),
     ]
     items = []
@@ -756,21 +922,28 @@ def page(
     canonical = f"{SITE_URL}/{url_path.lstrip('/')}"
     if not directory:
         entries = [
-            ("start", "Start here"), ("first-program", "First burial"),
-            ("nine-strata", "Nine strata"), ("six-rites", "The six rites"),
-            ("manual", "The manual"), ("specification", "Specification"),
-            ("status", "Project status"), ("the-face", "The face"),
+            ("start", "Start here"),
+            ("install", "Install & bury"),
+            ("nine-strata", "Nine strata"),
+            ("six-rites", "The six rites"),
+            ("tooling", "Tools & trust"),
+            ("manual", "The manual"),
+            ("specification", "Specification"),
+            ("status", "Project status"),
+            ("craft", "Craft & source"),
         ]
         directory = '<nav class="desk-directory" aria-label="Front desk contents">' + "".join(
-            f'<a href="{up}index.html#{anchor}"><span class="dir-num" aria-hidden="true">{n:02}</span><span>{label}</span></a>'
+            f'<a href="{up}index.html#{anchor}"><span class="dir-num" aria-hidden="true">{n:02}</span><span>{esc(label)}</span></a>'
             for n, (anchor, label) in enumerate(entries)
         ) + "</nav>"
+    latest_tag = load_releases()[0]["tag"]
     subs = {
         "{{TITLE}}": safe_title,
         "{{FULLTITLE}}": full,
         "{{DESCRIPTION}}": desc,
         "{{URL}}": canonical,
         "{{UP}}": up,
+        "{{VERSION}}": esc(latest_tag),
         "{{NAV}}": navbar(current, depth, exact=exact),
         "{{DIRECTORY}}": directory,
         "{{BODY}}": body,
@@ -931,10 +1104,13 @@ def specimen_page(font=None) -> str:
 
     drawn_twice = len(reg) - len(same)
     body = (
-        f'<p class="c">{esc(font.NAME)} &middot; {esc(font.VERSION)} &middot; '
-        f'{font.CELL}&times;{font.CELL} cell &middot; {font.ADVANCE_COLS}-column mono advance '
-        f'&middot; {len(reg)} glyphs &middot; '
-        f'<a href="{REPO}/blob/main/site/font.py">edit the source</a></p>'
+        f'<p class="c meta-bar">'
+        f'<span>{esc(font.NAME)}</span> '
+        f'<span>{esc(font.VERSION)}</span> '
+        f'<span>{font.CELL}&times;{font.CELL} cell</span> '
+        f'<span>{font.ADVANCE_COLS}-column mono advance</span> '
+        f'<span>{len(reg)} glyphs</span> '
+        f'<span><a href="{REPO}/blob/main/site/font.py">edit the source</a></span></p>'
         f"<h1>The face</h1>"
         f"<p>Every page on this site is set in <strong>{esc(font.NAME)}</strong>, an "
         f"{font.CELL}&times;{font.CELL} bitmap face drawn in "
@@ -992,7 +1168,8 @@ def specimen_page(font=None) -> str:
         f"attribution or a font service.</p>"
         f"<p>Download versioned <code>nether.woff</code> (weight 400) and "
         f"<code>nether-bold.woff</code> (weight 700) files with "
-        f"<code>SHA256SUMS</code> from "
+        f"<code>SHA256SUMS</code> and standalone <code>LICENSE</code> from "
+        f'<a href="releases.html#assets">Releases</a> or '
         f"<a href=\"{REPO}/releases\">GitHub Releases</a>, or fetch the current "
         f"site copies directly (<a href=\"nether.woff\">nether.woff</a>, "
         f"<a href=\"nether-bold.woff\">nether-bold.woff</a>). Set text at whole "
@@ -1013,6 +1190,212 @@ def specimen_page(font=None) -> str:
     )
 
 
+TARGET_LABELS = {
+    "x86_64-unknown-linux-gnu": "Linux x86_64",
+    "aarch64-apple-darwin": "macOS arm64",
+    "x86_64-apple-darwin": "macOS x86_64",
+}
+
+
+def releases_page() -> str:
+    """Deterministic Releases page baked from CHANGELOG.md, SECURITY.md and release.yml."""
+    releases = load_releases()
+    latest = releases[0]
+    tag = latest["tag"]
+    ver = latest["version"]
+    date = latest["date"]
+    supported_md = load_supported_version(tag)
+    targets = load_release_targets()
+    dl = f"{REPO}/releases/download/{tag}"
+
+    nav_items = [
+        ("latest", "01", f"Latest ({tag})"),
+        ("install", "02", "Install & verify"),
+        ("assets", "03", "Release assets & face"),
+        ("reproduce", "04", "Reproducible builds"),
+        ("security", "05", "Support & compatibility"),
+        *[
+            (release_anchor(r["tag"]), f"{n:02}", r["tag"])
+            for n, r in enumerate(releases, 6)
+        ],
+    ]
+    directory = (
+        '<nav class="contents" aria-label="Releases contents"><p>releases</p><ol role="list">'
+        + "".join(
+            f'<li><a href="#{s}"><span class="dir-num">{esc(num)}</span><span>{esc(label)}</span></a></li>'
+            for s, num, label in nav_items
+        )
+        + "</ol></nav>"
+    )
+
+    seen_anchors: dict[str, int] = {
+        s: 1 for s, _, _ in nav_items
+    }
+    supported_html = render(supported_md, seen_anchors)
+
+    linux_target = "x86_64-unknown-linux-gnu" if "x86_64-unknown-linux-gnu" in targets else targets[0]
+    macos_target = "aarch64-apple-darwin" if "aarch64-apple-darwin" in targets else targets[0]
+
+    linux_cmd = esc(
+        f"curl -fsSLO {dl}/nether-{tag}-{linux_target}.tar.gz\n"
+        f"curl -fsSLO {dl}/SHA256SUMS\n"
+        f"sha256sum -c --ignore-missing SHA256SUMS\n"
+        f"tar -xzf nether-{tag}-{linux_target}.tar.gz\n"
+        f"./nether-{tag}-{linux_target}/nether --version"
+    )
+    macos_cmd = esc(
+        f"# Use x86_64-apple-darwin on Intel Macs\n"
+        f"curl -fsSLO {dl}/nether-{tag}-{macos_target}.tar.gz\n"
+        f"curl -fsSLO {dl}/SHA256SUMS\n"
+        f"shasum -a 256 -c --ignore-missing SHA256SUMS\n"
+        f"tar -xzf nether-{tag}-{macos_target}.tar.gz\n"
+        f"./nether-{tag}-{macos_target}/nether --version"
+    )
+    source_cmd = esc(
+        f"git clone {REPO}\n"
+        f"cd nether-c\n"
+        f"git checkout {tag}\n"
+        f"cargo build --release --locked --bin nether"
+    )
+    reproduce_cmd = esc(
+        f"NETHER_VERSION={ver} scripts/task release:build {linux_target}"
+    )
+
+    target_rows = "".join(
+        f'<tr><td><a href="{dl}/nether-{esc(tag)}-{esc(t)}.tar.gz" target="_blank" '
+        f'rel="noreferrer noopener"><code>nether-{esc(tag)}-{esc(t)}.tar.gz</code></a></td>'
+        f'<td><code>nether</code>, <code>README.md</code>, <code>LICENSE</code>, <code>CHANGELOG.md</code></td>'
+        f'<td>{esc(TARGET_LABELS.get(t, t))}</td></tr>'
+        for t in targets
+    )
+    asset_rows = (
+        target_rows
+        + f'<tr><td><a href="{dl}/nether-{esc(tag)}.woff" target="_blank" '
+        f'rel="noreferrer noopener"><code>nether-{esc(tag)}.woff</code></a></td>'
+        f'<td>Nether 8 regular (weight 400)</td>'
+        f'<td><a href="specimen.html#using">Using the face</a></td></tr>'
+        + f'<tr><td><a href="{dl}/nether-bold-{esc(tag)}.woff" target="_blank" '
+        f'rel="noreferrer noopener"><code>nether-bold-{esc(tag)}.woff</code></a></td>'
+        f'<td>Nether 8 bold (weight 700)</td>'
+        f'<td><a href="specimen.html#using">Using the face</a></td></tr>'
+        + f'<tr><td><a href="{dl}/LICENSE" target="_blank" '
+        f'rel="noreferrer noopener"><code>LICENSE</code></a></td>'
+        f'<td>Standalone Unlicense</td>'
+        f'<td>Shipped beside the <code>.woff</code> face assets</td></tr>'
+        + f'<tr><td><a href="{dl}/netherc-spec-{esc(tag)}.tar.gz" target="_blank" '
+        f'rel="noreferrer noopener"><code>netherc-spec-{esc(tag)}.tar.gz</code></a></td>'
+        f'<td><code>spec/</code> and <code>docs/manual/</code></td>'
+        f'<td>Deterministic GNU tar/gzip archive</td></tr>'
+        + f'<tr><td><a href="{dl}/SHA256SUMS" target="_blank" '
+        f'rel="noreferrer noopener"><code>SHA256SUMS</code></a></td>'
+        f'<td>SHA-256 digests</td>'
+        f'<td><code>LC_ALL=C sha256sum *</code> over every release file</td></tr>'
+    )
+
+    changelog_sections = []
+    for r in releases:
+        r_anchor = release_anchor(r["tag"])
+        r_tag = esc(r["tag"])
+        r_date = esc(r["date"])
+        heading = f"{r_tag} &mdash; {r_date}" if r["date"] else r_tag
+        meta_date = f"<span>{r_date}</span> " if r["date"] else ""
+        changelog_sections.append(
+            f'<h2 id="{r_anchor}"><a href="#{r_anchor}">{heading}</a></h2>'
+            f'<p class="c meta-bar">'
+            f'<span>release {r_tag}</span> '
+            f'{meta_date}'
+            f'<span><a href="{REPO}/releases/tag/{r_tag}" target="_blank" '
+            f'rel="noreferrer noopener">GitHub tag</a></span></p>'
+            + render(r["body_md"], seen_anchors)
+        )
+
+    latest_anchor = release_anchor(tag)
+    body = (
+        f'<p class="c meta-bar">'
+        f'<span>current release {esc(tag)}</span> '
+        f'<span>{esc(date)}</span> '
+        f'<span>{len(targets)} binary targets</span> '
+        f'<span><a href="{REPO}/blob/main/CHANGELOG.md">CHANGELOG.md</a></span></p>'
+        f'<h1>Releases</h1>'
+        f'<h2 id="latest"><a href="#latest">Latest release</a></h2>'
+        f'<div class="box">'
+        f'<div class="release-head">'
+        f'<strong>{esc(tag)}</strong>'
+        f'<span><span class="pill pill-accent">latest</span> '
+        f'<span class="pill">{esc(date)}</span></span>'
+        f'</div>'
+        f'{supported_html}'
+        f'<p class="meta-bar">'
+        f'<a href="{REPO}/releases/tag/{esc(tag)}" target="_blank" rel="noreferrer noopener">GitHub release {esc(tag)}</a> '
+        f'<a href="{dl}/SHA256SUMS" target="_blank" rel="noreferrer noopener">SHA256SUMS</a> '
+        f'<a href="#{latest_anchor}">release notes</a> '
+        f'<a href="spec/00-overview.html#061-what-a-release-promises">&sect;0.6.1 compatibility contract</a>'
+        f'</p>'
+        f'</div>'
+        f'<h2 id="install"><a href="#install">Install &amp; verify</a></h2>'
+        f'<h3>Prebuilt binary</h3>'
+        f'<p>Each release publishes deterministic tarballs for {len(targets)} targets '
+        f'({", ".join(f"<code>{esc(t)}</code>" for t in targets)}) alongside '
+        f'<code>SHA256SUMS</code>. Every archive holds <code>nether</code>, '
+        f'<code>README.md</code>, <code>LICENSE</code> and <code>CHANGELOG.md</code>, '
+        f'and <code>nether --version</code> prints <code>nether {esc(ver)}</code>.</p>'
+        f'<figure class="listing"><figcaption>sh (linux x86_64)</figcaption>'
+        f'<pre><code>{linux_cmd}</code></pre></figure>'
+        f'<figure class="listing"><figcaption>sh (macos arm64 / x86_64)</figcaption>'
+        f'<pre><code>{macos_cmd}</code></pre></figure>'
+        f'<h3>Build from source</h3>'
+        f'<p><code>rust-toolchain.toml</code> pins Rust <code>1.98</code> '
+        f'(MSRV <code>1.85</code> in <code>Cargo.toml</code>). Build with the '
+        f'committed lockfile:</p>'
+        f'<figure class="listing"><figcaption>sh (source)</figcaption>'
+        f'<pre><code>{source_cmd}</code></pre></figure>'
+        f'<p class="small">A plain <code>cargo build</code> prints '
+        f'<code>nether (not a release build)</code>: the workspace version is '
+        f'<code>0.0.0</code>, the crates are not published, and the tag is the '
+        f'version. Set <code>NETHER_VERSION</code> through '
+        f'<code>scripts/task release:build</code> below for a tagged binary.</p>'
+        f'<h2 id="assets"><a href="#assets">Release assets &amp; face</a></h2>'
+        f'<p>Every file shipped on <a href="{REPO}/releases/tag/{esc(tag)}" '
+        f'target="_blank" rel="noreferrer noopener">{esc(tag)}</a> is read from '
+        f'<a href="{REPO}/blob/main/.github/workflows/release.yml">.github/workflows/release.yml</a> '
+        f'and listed in <code>SHA256SUMS</code>:</p>'
+        f'<div class="scroll"><table>'
+        f'<thead><tr><th>Asset</th><th>Contents</th><th>Notes</th></tr></thead>'
+        f'<tbody>{asset_rows}</tbody></table></div>'
+        f'<h2 id="reproduce"><a href="#reproduce">Reproducible builds</a></h2>'
+        f'<p><code>scripts/task release:build</code> remaps <code>$CARGO_HOME</code> '
+        f'to <code>/cargo</code> and the checkout root to <code>/nether</code> with '
+        f'<code>--remap-path-prefix</code>, builds with <code>--locked</code>, and '
+        f'the workflow packs deterministic GNU tar/gzip archives '
+        f'(<code>uid=gid=mtime=0</code>). On every release tag, a second cacheless '
+        f'runner rebuilds the Linux binary in the <code>reproduce</code> job of '
+        f'<a href="{REPO}/blob/main/.github/workflows/release.yml">release.yml</a> '
+        f'and requires a byte-identical SHA-256 digest before publishing.</p>'
+        f'<figure class="listing"><figcaption>sh (reproduce)</figcaption>'
+        f'<pre><code>{reproduce_cmd}</code></pre></figure>'
+        f'<h2 id="security"><a href="#security">Support &amp; compatibility</a></h2>'
+        f'<p><a href="spec/00-overview.html#061-what-a-release-promises">&sect;0.6.1 '
+        f'What a release promises</a> states the four claims an older trace keeps '
+        f'(readable, verifiable, replayable, true) and how post-1.0 versioning binds '
+        f'them. Before 1.0, &sect;7.1 canonical encoding, &sect;7.3.1 node layout and '
+        f'&sect;8.0 (there is no <code>run</code>) are frozen.</p>'
+        f'<p>Read the threat model, seven trust boundaries and known gaps in '
+        f'<a href="{REPO}/blob/main/SECURITY.md">SECURITY.md</a>. Report security '
+        f'issues privately through '
+        f'<a href="{REPO}/security/advisories/new">GitHub Security Advisories</a>.</p>'
+        + "".join(changelog_sections)
+    )
+    return page(
+        "Releases",
+        body,
+        current="releases",
+        depth=0,
+        directory=directory,
+        url_path="releases.html",
+        description=f"Nether C releases: verified prebuilt binaries, SHA256SUMS, Nether 8 WOFF assets, reproducible builds and full changelog from {tag}.",
+    )
+
+
 def _build_front_page(sections: list[Section]) -> dict[Path, str]:
     body = (SITE / "src" / "index.html").read_text(encoding="utf-8")
     toc = "".join(
@@ -1023,10 +1406,18 @@ def _build_front_page(sections: list[Section]) -> dict[Path, str]:
         for s in sections
     )
     milestones, owed = load_board()
+    latest = load_releases()[0]
+    latest_date = f' &middot; {esc(latest["date"])}' if latest["date"] else ""
+    latest_pill = (
+        f'<a class="pill pill-accent" href="releases.html">'
+        f'{esc(latest["tag"])}{latest_date}</a>'
+    )
     slots = {
         "TOC": toc,
         "DESCENT": descent_block(milestones, owed),
         "HOLES": holes_block(owed),
+        "LATEST_RELEASE": latest_pill,
+        "LATEST_TAG": esc(latest["tag"]),
     }
     body = _RE_FRONT_SLOT.sub(lambda m: slots[m.group(1)], body)
 
@@ -1040,6 +1431,7 @@ def _build_front_page(sections: list[Section]) -> dict[Path, str]:
         '<li><a href="index.html">Front desk</a> &mdash; overview, strata and project status</li>'
         '<li><a href="manual/index.html">The manual</a> &mdash; ten short chapters, every command checked</li>'
         '<li><a href="spec/index.html">The specification</a> &mdash; the canonical draft</li>'
+        '<li><a href="releases.html">Releases</a> &mdash; prebuilt binaries, checksums and changelog</li>'
         '<li><a href="specimen.html">The face</a> &mdash; Nether 8 in both weights</li>'
         "</ul></div>"
     )
@@ -1048,6 +1440,7 @@ def _build_front_page(sections: list[Section]) -> dict[Path, str]:
             "Nether C", body, current="index", depth=0, url_path="",
             description=DEFAULT_DESCRIPTION,
         ),
+        SITE / "releases.html": releases_page(),
         SITE / "in-memoriam.html": page(
             "Terry A. Davis", memorial, current="", depth=0,
             url_path="in-memoriam.html",
@@ -1076,6 +1469,8 @@ def _build_manual(chapters: list[Chapter]) -> dict[Path, str]:
         "chapters with one idea in each, starting from an empty directory and "
         "ending with a trace you can hand to somebody who does not have your "
         "disk.</p>"
+        '<p>Need <code>nether</code> first? Take a verified prebuilt binary or '
+        'build from source on <a href="../releases.html#install">Releases</a>.</p>'
         '<div class="box"><strong>Every command on these pages is executed on '
         "every build of this project</strong>, against the binary in the "
         f'repository, by <a href="{REPO}/blob/main/tests/transcripts/run">'
@@ -1098,15 +1493,32 @@ def _build_manual(chapters: list[Chapter]) -> dict[Path, str]:
             description="The Nether C manual: ten short chapters, every command executed and checked against the compiler on every build.",
         )
     }
-    for c in chapters:
+    for idx, c in enumerate(chapters):
         head = (
-            f'<p class="c">chapter {esc(c["section"])} &middot; '
-            f'{esc(c["status"])} &middot; '
-            f'<a href="{REPO}/blob/main/docs/manual/{c["slug"]}.md">edit the source</a></p>'
+            f'<p class="c meta-bar">'
+            f'<span>chapter {esc(c["section"])}</span> '
+            f'<span>{esc(c["status"])}</span> '
+            f'<span><a href="{REPO}/blob/main/docs/manual/{c["slug"]}.md">edit the source</a></span></p>'
+        )
+        prev_link = (
+            f'<a class="btn" href="{chapters[idx - 1]["slug"]}.html">&larr; '
+            f'{esc(chapters[idx - 1]["section"])} {esc(chapters[idx - 1]["title"])}</a>'
+            if idx > 0
+            else '<a class="btn" href="index.html">&larr; All chapters</a>'
+        )
+        next_link = (
+            f'<a class="btn" href="{chapters[idx + 1]["slug"]}.html">'
+            f'{esc(chapters[idx + 1]["section"])} {esc(chapters[idx + 1]["title"])} &rarr;</a>'
+            if idx + 1 < len(chapters)
+            else '<a class="btn" href="index.html">All chapters &rarr;</a>'
+        )
+        pager = (
+            '<nav class="chapter-pager" aria-label="Chapter navigation">'
+            f"{prev_link}{next_link}</nav>"
         )
         files[SITE / "manual" / f'{c["slug"]}.html'] = page(
             c["title"],
-            head + c["html"],
+            head + c["html"] + pager,
             current="manual",
             depth=1,
             directory=contents_nav(chapters, c["slug"], label="Manual contents", heading="manual/"),
@@ -1140,6 +1552,9 @@ def _build_spec(sections: list[Section]) -> dict[Path, str]:
         "§7.1 canonical encoding, §7.3.1 node layout, and §8.0 (there is no "
         "<code>run</code>) are frozen. Everything else is a draft and may "
         "change without a version bump.</div>"
+        '<p class="small">For tagged release binaries, checksums and changelog '
+        'history see <a href="../releases.html">Releases</a> and '
+        '<a href="00-overview.html#061-what-a-release-promises">&sect;0.6.1 What a release promises</a>.</p>'
     )
     files: dict[Path, str] = {
         SITE / "spec" / "index.html": page(
@@ -1160,9 +1575,11 @@ def _build_spec(sections: list[Section]) -> dict[Path, str]:
     # reader choose the section they need.
     for s in sections:
         head = (
-            f'<p class="c">&sect; {esc(s["section"])} &middot; {esc(s["status"])} '
-            f'&middot; <span class="d{s["depth"]}">depth {s["depth"]}</span> '
-            f'&middot; <a href="{REPO}/blob/main/spec/{s["slug"]}.md">edit the source</a></p>'
+            f'<p class="c meta-bar">'
+            f'<span>&sect; {esc(s["section"])}</span> '
+            f'<span>{esc(s["status"])}</span> '
+            f'<span class="d{s["depth"]}">depth {s["depth"]}</span> '
+            f'<span><a href="{REPO}/blob/main/spec/{s["slug"]}.md">edit the source</a></span></p>'
             f'<div class="gauge" aria-hidden="true">'
             + "".join(
                 f'<span class="d{n}{" lit" if n <= s["depth"] else ""}"></span>'

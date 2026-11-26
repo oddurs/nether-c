@@ -63,7 +63,7 @@ Nothing yet.
   statements, plus depth preservation on residues so reduced code never breaks
   `[LOOK]` ([§6.5](spec/06-evaluation.md#65-residue)).
 - Added burial memoization ([§8.2.1](spec/08-rites.md#821-burying-what-is-already-buried)),
-  required `--root` for `disk`/`disk!` ([§8.3.4](spec/08-rites.md#834-rooting-the-disk)),
+  required `--root` for `disk`/`disk!` ([§8.3.4](spec/08-rites.md#834-declaring-a-root)),
   `answered` and `refused` constructors ([§9.2](spec/09-prelude.md#92-depth-0)),
   demand-order deposits ([§8.4](spec/08-rites.md#84-lamp)), hole depth in trace
   depth ([§7.3.2](spec/07-ledger.md#732-what-a-decoder-cannot-check)), and
