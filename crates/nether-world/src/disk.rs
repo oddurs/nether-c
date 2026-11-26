@@ -31,6 +31,9 @@ const MOST: u64 = 64 * 1024 * 1024;
 /// `nether_ledger::MAX_OBJECT_BYTES`.
 const MAX_LIST_ENTRIES: usize = 65_536;
 
+/// Maximum symlink expansions allowed across one path resolution.
+const MAX_SYMLINK_HOPS: u8 = 40;
+
 /// Per-OS/architecture `O_NOFOLLOW`, `O_NONBLOCK`, `O_DIRECTORY`, and `ELOOP`.
 /// Unverified Unix targets fail to compile rather than silently disabling them.
 #[cfg(unix)]
@@ -134,22 +137,7 @@ impl Disk {
     /// was already there — which is the one a program being buried can arrange
     /// for itself, by writing at stratum 4 and reading at stratum 3.
     fn resolve(&self, path: &str, follow_final: bool) -> Result<PathBuf, Refusal> {
-        if path.is_empty() || path.contains('\0') {
-            return Err(Refusal::Malformed);
-        }
-        let mut rel = Vec::new();
-        for part in Path::new(path).components() {
-            match part {
-                Component::Normal(name) => rel.push(name),
-                Component::CurDir => {}
-                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                    return Err(Refusal::Denied);
-                }
-            }
-        }
-        if !follow_final && rel.is_empty() {
-            return Err(Refusal::Denied);
-        }
+        let rel = parse_rel_path(path, follow_final)?;
         let Ok(root) = self.root.canonicalize() else { return Err(Refusal::Denied) };
         let mut cur = root.clone();
         let mut hops = 0u8;
@@ -167,11 +155,50 @@ impl Disk {
             // Do not dereference the final component on `remove`, so removing a
             // symlink (including a dangling one) removes the link itself rather
             // than deleting its target.
-            cur.push(rel[rel.len() - 1]);
-            return Ok(cur);
+            cur.push(&rel[rel.len() - 1]);
         }
         Ok(cur)
     }
+}
+
+fn parse_rel_path(path: &str, follow_final: bool) -> Result<Vec<OsString>, Refusal> {
+    if path.is_empty() || path.contains('\0') {
+        return Err(Refusal::Malformed);
+    }
+    let mut rel = Vec::new();
+    for part in Path::new(path).components() {
+        match part {
+            Component::Normal(name) => rel.push(name.to_os_string()),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(Refusal::Denied);
+            }
+        }
+    }
+    if !follow_final && rel.is_empty() {
+        return Err(Refusal::Denied);
+    }
+    Ok(rel)
+}
+
+/// Canonicalize a symlinked ancestor of `root` itself (e.g., macOS
+/// `/tmp -> /private/tmp`) while refusing symlinks outside `root` that point
+/// elsewhere.
+fn expand_ancestor_symlink(root: &Path, path: &mut PathBuf, hops: &mut u8) -> bool {
+    let Ok(m) = std::fs::symlink_metadata(&*path) else { return true };
+    if !m.file_type().is_symlink() {
+        return true;
+    }
+    if *hops >= MAX_SYMLINK_HOPS {
+        return false;
+    }
+    let Ok(canon) = path.canonicalize() else { return false };
+    if !root.starts_with(&canon) {
+        return false;
+    }
+    *hops += 1;
+    *path = canon;
+    true
 }
 
 /// Resolve one path component while refusing any symlink — including a dangling
@@ -187,7 +214,7 @@ fn step_within(root: &Path, cur: &mut PathBuf, hops: &mut u8) -> bool {
     if !meta.file_type().is_symlink() {
         return true;
     }
-    if *hops >= 40 {
+    if *hops >= MAX_SYMLINK_HOPS {
         return false;
     }
     *hops += 1;
@@ -209,25 +236,13 @@ fn step_within(root: &Path, cur: &mut PathBuf, hops: &mut u8) -> bool {
             }
             Component::Normal(n) => {
                 resolved.push(n);
-                if resolved.starts_with(root) {
-                    if !step_within(root, &mut resolved, hops) {
-                        return false;
-                    }
-                } else if let Ok(m) = std::fs::symlink_metadata(&resolved)
-                    && m.file_type().is_symlink()
-                {
-                    // Allow symlinked ancestors of `root` itself (e.g., macOS
-                    // `/tmp -> /private/tmp`) while refusing symlinks outside
-                    // `root` that point elsewhere.
-                    if *hops >= 40 {
-                        return false;
-                    }
-                    let Ok(canon) = resolved.canonicalize() else { return false };
-                    if !root.starts_with(&canon) {
-                        return false;
-                    }
-                    *hops += 1;
-                    resolved = canon;
+                let ok = if resolved.starts_with(root) {
+                    step_within(root, &mut resolved, hops)
+                } else {
+                    expand_ancestor_symlink(root, &mut resolved, hops)
+                };
+                if !ok {
+                    return false;
                 }
             }
         }
@@ -300,13 +315,25 @@ fn proc_fd_path(dir: &std::fs::File, name: Option<&std::ffi::OsStr>) -> PathBuf 
 }
 
 #[cfg(target_os = "linux")]
+fn relative_steps<'a>(components: impl Iterator<Item = Component<'a>>) -> Option<Vec<Step>> {
+    let mut steps = Vec::new();
+    for part in components {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => steps.push(Step::Parent),
+            Component::Normal(n) => steps.push(Step::Normal(n.to_os_string())),
+            Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    Some(steps)
+}
+
+#[cfg(target_os = "linux")]
 fn strip_root_prefix(root: &Path, target: &Path, hops: &mut u8) -> Option<Vec<Step>> {
     let mut prefix = PathBuf::new();
     let mut iter = target.components();
-    let mut matched = false;
-    while !matched {
-        let part = iter.next()?;
-        match part {
+    while prefix != root {
+        match iter.next()? {
             Component::RootDir => prefix.push(Component::RootDir.as_os_str()),
             Component::Prefix(p) => prefix.push(p.as_os_str()),
             Component::CurDir => {}
@@ -317,36 +344,13 @@ fn strip_root_prefix(root: &Path, target: &Path, hops: &mut u8) -> Option<Vec<St
             }
             Component::Normal(n) => {
                 prefix.push(n);
-                if prefix != root
-                    && let Ok(m) = std::fs::symlink_metadata(&prefix)
-                    && m.file_type().is_symlink()
-                {
-                    if *hops >= 40 {
-                        return None;
-                    }
-                    let canon = prefix.canonicalize().ok()?;
-                    if !root.starts_with(&canon) {
-                        return None;
-                    }
-                    *hops += 1;
-                    prefix = canon;
+                if prefix != root && !expand_ancestor_symlink(root, &mut prefix, hops) {
+                    return None;
                 }
             }
         }
-        if prefix == root {
-            matched = true;
-        }
     }
-    let mut rest = Vec::new();
-    for part in iter {
-        match part {
-            Component::CurDir => {}
-            Component::ParentDir => rest.push(Step::Parent),
-            Component::Normal(n) => rest.push(Step::Normal(n.to_os_string())),
-            Component::RootDir | Component::Prefix(_) => return None,
-        }
-    }
-    Some(rest)
+    relative_steps(iter)
 }
 
 impl Provider for Disk {
@@ -404,6 +408,40 @@ impl Provider for Disk {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn expand_pinned_symlink(
+    canon_root: &Path,
+    child: &Path,
+    dir_stack: &mut Vec<std::fs::File>,
+    queue: &mut VecDeque<Step>,
+    hops: &mut u8,
+) -> Result<(), Refusal> {
+    if *hops >= MAX_SYMLINK_HOPS {
+        return Err(Refusal::Denied);
+    }
+    *hops += 1;
+    let target = std::fs::read_link(child).map_err(|_| Refusal::Denied)?;
+    let steps = if target.is_absolute() {
+        dir_stack.truncate(1);
+        strip_root_prefix(canon_root, &target, hops).ok_or(Refusal::Denied)?
+    } else {
+        relative_steps(target.components()).ok_or(Refusal::Denied)?
+    };
+    for s in steps.into_iter().rev() {
+        queue.push_front(s);
+    }
+    Ok(())
+}
+
+fn exists_at(at: &Path) -> Value {
+    let exists = std::fs::symlink_metadata(at).is_ok_and(|m| !m.file_type().is_symlink());
+    given("exists", Value::Bool(exists))
+}
+
+fn remove_at(at: &Path) -> Value {
+    std::fs::remove_file(at).map_or_else(|e| refused(why(&e)), |()| given("remove", Value::Unit))
+}
+
 impl Disk {
     #[cfg(target_os = "linux")]
     fn resolve_pinned(
@@ -412,22 +450,8 @@ impl Disk {
         follow_final: bool,
         create_parents: bool,
     ) -> Result<Option<Pinned>, Refusal> {
-        if path.is_empty() || path.contains('\0') {
-            return Err(Refusal::Malformed);
-        }
-        let mut queue: VecDeque<Step> = VecDeque::new();
-        for part in Path::new(path).components() {
-            match part {
-                Component::Normal(name) => queue.push_back(Step::Normal(name.to_os_string())),
-                Component::CurDir => {}
-                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                    return Err(Refusal::Denied);
-                }
-            }
-        }
-        if !follow_final && queue.is_empty() {
-            return Err(Refusal::Denied);
-        }
+        let mut queue: VecDeque<Step> =
+            parse_rel_path(path, follow_final)?.into_iter().map(Step::Normal).collect();
         let Ok(canon_root) = self.root.canonicalize() else { return Err(Refusal::Denied) };
         let Ok(root_dir) = open_dir_nofollow(&canon_root) else { return Err(Refusal::Denied) };
         if std::fs::symlink_metadata(proc_fd_path(&root_dir, None)).is_err() {
@@ -436,70 +460,40 @@ impl Disk {
         let mut dir_stack = vec![root_dir];
         let mut hops = 0u8;
         while let Some(step) = queue.pop_front() {
-            match step {
-                Step::Parent => {
-                    if dir_stack.len() <= 1 {
-                        return Err(Refusal::Denied);
-                    }
-                    dir_stack.pop();
+            let Step::Normal(name) = step else {
+                if dir_stack.len() <= 1 {
+                    return Err(Refusal::Denied);
                 }
-                Step::Normal(name) => {
-                    let is_last = queue.is_empty();
-                    let Some(top) = dir_stack.last() else { return Err(Refusal::Denied) };
-                    let child = proc_fd_path(top, Some(&name));
-                    match std::fs::symlink_metadata(&child) {
-                        Ok(meta) if meta.file_type().is_symlink() && (!is_last || follow_final) => {
-                            if hops >= 40 {
-                                return Err(Refusal::Denied);
-                            }
-                            hops += 1;
-                            let target = std::fs::read_link(&child).map_err(|_| Refusal::Denied)?;
-                            let steps = if target.is_absolute() {
-                                dir_stack.truncate(1);
-                                strip_root_prefix(&canon_root, &target, &mut hops)
-                                    .ok_or(Refusal::Denied)?
-                            } else {
-                                let mut rel = Vec::new();
-                                for part in target.components() {
-                                    match part {
-                                        Component::CurDir => {}
-                                        Component::ParentDir => rel.push(Step::Parent),
-                                        Component::Normal(n) => {
-                                            rel.push(Step::Normal(n.to_os_string()));
-                                        }
-                                        Component::RootDir | Component::Prefix(_) => {
-                                            return Err(Refusal::Denied);
-                                        }
-                                    }
-                                }
-                                rel
-                            };
-                            for s in steps.into_iter().rev() {
-                                queue.push_front(s);
-                            }
-                        }
-                        Ok(_) | Err(_) if is_last => {
-                            let Some(parent) = dir_stack.pop() else {
-                                return Err(Refusal::Denied);
-                            };
-                            return Ok(Some(Pinned::Child { parent, name }));
-                        }
-                        Ok(_) => {
-                            let dir = open_dir_nofollow(&child).map_err(|e| why(&e))?;
-                            dir_stack.push(dir);
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::NotFound && create_parents => {
-                            match std::fs::create_dir(&child) {
-                                Ok(()) => {}
-                                Err(ce) if ce.kind() == std::io::ErrorKind::AlreadyExists => {}
-                                Err(ce) => return Err(why(&ce)),
-                            }
-                            let dir = open_dir_nofollow(&child).map_err(|oe| why(&oe))?;
-                            dir_stack.push(dir);
-                        }
-                        Err(e) => return Err(why(&e)),
-                    }
+                dir_stack.pop();
+                continue;
+            };
+            let is_last = queue.is_empty();
+            let Some(top) = dir_stack.last() else { return Err(Refusal::Denied) };
+            let child = proc_fd_path(top, Some(&name));
+            match std::fs::symlink_metadata(&child) {
+                Ok(meta) if meta.file_type().is_symlink() && (!is_last || follow_final) => {
+                    expand_pinned_symlink(
+                        &canon_root,
+                        &child,
+                        &mut dir_stack,
+                        &mut queue,
+                        &mut hops,
+                    )?;
                 }
+                Ok(_) | Err(_) if is_last => {
+                    let Some(parent) = dir_stack.pop() else { return Err(Refusal::Denied) };
+                    return Ok(Some(Pinned::Child { parent, name }));
+                }
+                Ok(_) => dir_stack.push(open_dir_nofollow(&child).map_err(|e| why(&e))?),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound && create_parents => {
+                    match std::fs::create_dir(&child) {
+                        Ok(()) => {}
+                        Err(ce) if ce.kind() == std::io::ErrorKind::AlreadyExists => {}
+                        Err(ce) => return Err(why(&ce)),
+                    }
+                    dir_stack.push(open_dir_nofollow(&child).map_err(|oe| why(&oe))?);
+                }
+                Err(e) => return Err(why(&e)),
             }
         }
         if !follow_final {
@@ -523,9 +517,7 @@ impl Disk {
             ("read" | "write", Pinned::Dir(_)) => refused(Refusal::Denied),
             ("exists", Pinned::Dir(_)) => given(function, Value::Bool(true)),
             ("exists", Pinned::Child { parent, name }) => {
-                let exists = std::fs::symlink_metadata(proc_fd_path(&parent, Some(&name)))
-                    .is_ok_and(|m| !m.file_type().is_symlink());
-                given(function, Value::Bool(exists))
+                exists_at(&proc_fd_path(&parent, Some(&name)))
             }
             ("list", Pinned::Dir(dir)) => Self::list_open_dir(&proc_fd_path(&dir, None)),
             ("list", Pinned::Child { parent, name }) => {
@@ -535,8 +527,7 @@ impl Disk {
                 }
             }
             ("remove", Pinned::Child { parent, name }) => {
-                std::fs::remove_file(proc_fd_path(&parent, Some(&name)))
-                    .map_or_else(|e| refused(why(&e)), |()| given(function, Value::Unit))
+                remove_at(&proc_fd_path(&parent, Some(&name)))
             }
             ("write", Pinned::Child { parent, name }) => {
                 Self::write_in_dir(&proc_fd_path(&parent, None), &name, call, into)?
@@ -549,14 +540,9 @@ impl Disk {
     fn act(function: &str, at: &Path, call: &Call, into: &Recorder) -> Result<Value, Refuse> {
         Ok(match function {
             "read" => Self::read(at),
-            "exists" => {
-                let exists =
-                    std::fs::symlink_metadata(at).is_ok_and(|m| !m.file_type().is_symlink());
-                given(function, Value::Bool(exists))
-            }
+            "exists" => exists_at(at),
             "list" => Self::list(at),
-            "remove" => std::fs::remove_file(at)
-                .map_or_else(|e| refused(why(&e)), |()| given(function, Value::Unit)),
+            "remove" => remove_at(at),
             "write" => Self::write(at, call, into)?,
             _ => refused(Refusal::Malformed),
         })

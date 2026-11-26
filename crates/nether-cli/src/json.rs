@@ -4,6 +4,8 @@
 //! is a string escaper, so that is what is here — a serialisation library for
 //! six fields would be a dependency for something smaller than the dependency.
 
+use core::fmt::Write as _;
+
 /// A string, quoted and escaped, as JSON spells one.
 #[must_use]
 pub fn string(s: &str) -> String {
@@ -17,7 +19,6 @@ pub fn string(s: &str) -> String {
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
             c if (c as u32) < 0x20 => {
-                use core::fmt::Write as _;
                 let _ = write!(out, "\\u{:04x}", c as u32);
             }
             c => out.push(c),

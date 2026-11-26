@@ -6,16 +6,12 @@
 //! structurally impossible for a Nether C program to leak to a log.
 
 use std::collections::HashSet;
-use std::fmt::Write as _;
 use std::process::ExitCode;
 
-use nether_core::{
-    Block, Capability, Depth, Expr, ExprKind, FuncDef, LocalId, Span, Stmt, Type, Unit, bound_to,
-    children,
-};
 use nether_ledger::{AnswerOf, Cairn, Node, Refusal, Store, Stored, Value};
 
-use crate::{FAILED, bad_usage, json, split_flag, strata::stratum_name, take_val};
+use crate::closing::store_err;
+use crate::{FlagStep, bad_usage, finish, json, lamp_at, parse_args, take_val};
 
 /// How far a provenance walk goes when nobody says, and the hard upper bound.
 const DEFAULT_DEPTH: usize = 8;
@@ -25,76 +21,64 @@ pub(crate) const USAGE: &str = "usage: nether lamp <cairn> [--provenance | --at 
 
 /// `nether lamp <cairn> [--provenance | --at <byte> [--source <path>]] [--depth <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
-    let mut name = None;
+    finish(run_inner(args))
+}
+
+fn run_inner(args: &[String]) -> Result<(), ExitCode> {
     let mut backwards = false;
-    let mut wants_json = false;
     let mut at_byte: Option<u64> = None;
-    let mut source_path: Option<String> = None;
+    let mut source_path: Option<&str> = None;
     let mut depth_opt: Option<usize> = None;
-    let mut end_opts = false;
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
-        if end_opts {
-            if name.is_some() {
-                return complain("one cairn at a time");
-            }
-            name = Some(arg.clone());
-            continue;
-        }
-        let (flag, inline) = split_flag(arg);
-        match (flag, inline) {
-            ("--", None) => end_opts = true,
-            ("--help" | "-h", None) => {
-                println!("{USAGE}");
-                return ExitCode::SUCCESS;
-            }
-            ("--provenance", None) => backwards = true,
-            ("--json", None) => wants_json = true,
-            ("--depth", inline) => {
-                match take_val(inline, &mut rest).and_then(|n| n.parse::<usize>().ok()) {
-                    Some(_) if depth_opt.is_some() => return complain("`--depth` is given once"),
-                    Some(n) => depth_opt = Some(n.min(MAX_DEPTH)),
-                    None => return complain("`--depth` wants a number"),
+    let Some((name, wants_json)) =
+        parse_args(args, USAGE, Some("one cairn at a time"), |flag, inline, rest| {
+            match (flag, inline) {
+                ("--provenance", None) => backwards = true,
+                ("--depth", inline) => {
+                    match take_val(inline, rest).and_then(|n| n.parse::<usize>().ok()) {
+                        Some(_) if depth_opt.is_some() => {
+                            return Err(complain("`--depth` is given once"));
+                        }
+                        Some(n) => depth_opt = Some(n.min(MAX_DEPTH)),
+                        None => return Err(complain("`--depth` wants a number")),
+                    }
                 }
+                ("--at", inline) => match take_val(inline, rest).and_then(|n| n.parse().ok()) {
+                    Some(_) if at_byte.is_some() => return Err(complain("`--at` is given once")),
+                    Some(n) => at_byte = Some(n),
+                    None => return Err(complain("`--at` wants a byte offset")),
+                },
+                ("--source", inline) => match take_val(inline, rest) {
+                    Some(_) if source_path.is_some() => {
+                        return Err(complain("`--source` is given once"));
+                    }
+                    Some(p) if !p.starts_with("--") => source_path = Some(p),
+                    _ => return Err(complain("`--source` wants a path")),
+                },
+                _ => return Ok(FlagStep::Unknown),
             }
-            ("--at", inline) => match take_val(inline, &mut rest).and_then(|n| n.parse().ok()) {
-                Some(_) if at_byte.is_some() => return complain("`--at` is given once"),
-                Some(n) => at_byte = Some(n),
-                None => return complain("`--at` wants a byte offset"),
-            },
-            ("--source", inline) => match take_val(inline, &mut rest) {
-                Some(_) if source_path.is_some() => return complain("`--source` is given once"),
-                Some(p) if !p.starts_with("--") => source_path = Some(p.to_owned()),
-                _ => return complain("`--source` wants a path"),
-            },
-            (other, _) if other.starts_with('-') && other != "-" => {
-                return complain(&format!("unknown option `{arg}`"));
-            }
-            _ if name.is_none() => name = Some(arg.clone()),
-            _ => return complain("one cairn at a time"),
-        }
-    }
+            Ok(FlagStep::Handled)
+        })?
+    else {
+        return Ok(());
+    };
     if source_path.is_some() && at_byte.is_none() {
-        return complain("`--source` wants `--at`");
+        return Err(complain("`--source` wants `--at`"));
     }
     if depth_opt.is_some() && !backwards && at_byte.is_none() {
-        return complain("`--depth` wants `--provenance` or `--at`");
+        return Err(complain("`--depth` wants `--provenance` or `--at`"));
     }
     if backwards && at_byte.is_some() {
-        return complain("`--provenance` and `--at` are different walks");
+        return Err(complain("`--provenance` and `--at` are different walks"));
     }
     let depth = depth_opt.unwrap_or(DEFAULT_DEPTH);
     let Some(name) = name else {
-        return complain("which cairn?");
+        return Err(complain("which cairn?"));
     };
 
     let store = crate::opened_readonly();
-    let cairn = match crate::named(&store, &name) {
-        Ok(c) => c,
-        Err(code) => return code,
-    };
+    let cairn = crate::named(&store, name)?;
     if let Some(byte) = at_byte {
-        inspect_at(&store, cairn, byte, source_path.as_deref(), depth, wants_json)
+        lamp_at::inspect_at(&store, cairn, byte, source_path, depth, wants_json)
     } else if backwards {
         provenance(&store, cairn, depth, wants_json)
     } else {
@@ -108,20 +92,14 @@ fn complain(what: &str) -> ExitCode {
 
 // ── forwards: what is there ─────────────────────────────────────────────────
 
-fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
-    let stored = match store.get(cairn) {
-        Ok(stored) => stored,
-        Err(e) => return crate::closing::store_err(&e),
-    };
+fn render(store: &Store, cairn: Cairn, wants_json: bool) -> Result<(), ExitCode> {
+    let stored = store.get(cairn).map_err(|e| store_err(&e))?;
     let text = match &stored {
         Stored::Value(v) => value(v),
         // A trace is read by what it left behind: every deposit under it, in
         // the order the program made them. §8.4.
         Stored::Node(Node::Trace { .. }) => {
-            let found = match deposits(store, cairn) {
-                Ok(found) => found,
-                Err(e) => return crate::closing::store_err(&e),
-            };
+            let found = deposits(store, cairn).map_err(|e| store_err(&e))?;
             if found.is_empty() { "nothing was deposited\n".to_string() } else { found.concat() }
         }
         Stored::Node(n) => node(store, n),
@@ -135,7 +113,7 @@ fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
     } else {
         println!("{text}");
     }
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 /// Every `Deposit` a trace names, rendered, in the order they were made.
@@ -220,7 +198,7 @@ const fn refusal(r: Refusal) -> &'static str {
 }
 
 /// A node, as one line.
-fn node(store: &Store, n: &Node) -> String {
+pub(crate) fn node(store: &Store, n: &Node) -> String {
     match n {
         Node::Literal(v) => value(v),
         Node::Apply { function, args, result } => {
@@ -292,28 +270,25 @@ fn as_written(v: &Value) -> String {
 /// §7.4: provenance is the forward edge, read backwards. A node names what it
 /// was made from, so what a value was made *for* is found by asking the store
 /// who names it.
-fn provenance(store: &Store, cairn: Cairn, limit: usize, wants_json: bool) -> ExitCode {
-    let head = match store.get(cairn) {
-        Ok(Stored::Value(v)) => format!("{}  {}", cairn.short(), value(&v)),
-        Ok(Stored::Node(n)) => format!("{}  {}", cairn.short(), node(store, &n)),
-        Err(e) => return crate::closing::store_err(&e),
+fn provenance(store: &Store, cairn: Cairn, limit: usize, wants_json: bool) -> Result<(), ExitCode> {
+    let head = match store.get(cairn).map_err(|e| store_err(&e))? {
+        Stored::Value(v) => format!("{}  {}", cairn.short(), value(&v)),
+        Stored::Node(n) => format!("{}  {}", cairn.short(), node(store, &n)),
     };
     let mut lines = vec![head];
-    if let Err(e) = walk(store, cairn, limit, 0, &mut lines) {
-        return crate::closing::store_err(&e);
-    }
+    walk(store, cairn, limit, 0, &mut lines).map_err(|e| store_err(&e))?;
     if wants_json {
         let each: Vec<String> = lines.iter().map(|l| json::string(l)).collect();
         println!("{{\"cairn\":\"{cairn}\",\"provenance\":[{}]}}", each.join(","));
     } else {
         println!("{}", lines.join("\n"));
     }
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 const MAX_PROVENANCE_LINES: usize = 10_000;
 
-fn walk(
+pub(crate) fn walk(
     store: &Store,
     cairn: Cairn,
     limit: usize,
@@ -356,461 +331,4 @@ fn walk_acyclic(
         }
     }
     Ok(())
-}
-
-// ── at a byte offset: §8.4.1 ────────────────────────────────────────────────
-
-struct Target<'a> {
-    depth: Depth,
-    ty: &'a Type,
-    span: Span,
-    expr: &'a Expr,
-    func: Option<&'a FuncDef>,
-    descend: Option<(Capability, Span)>,
-}
-
-struct Hit {
-    cairn: Cairn,
-    span: nether_ledger::Span,
-    lines: Vec<String>,
-}
-
-fn inspect_at(
-    store: &Store,
-    cairn: Cairn,
-    byte: u64,
-    source_path: Option<&str>,
-    limit: usize,
-    wants_json: bool,
-) -> ExitCode {
-    let Ok(Stored::Node(trace @ Node::Trace { source, .. })) = store.get(cairn) else {
-        return crate::not_a_trace(store, cairn);
-    };
-    if let Some(path) = source_path {
-        let buf = match std::fs::read(path) {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!("nether: {path}: {e}");
-                return FAILED;
-            }
-        };
-        let got = Value::Bytes(buf).cairn();
-        if got != source {
-            eprintln!(
-                "nether: buffer {} does not match trace source {}; bury the buffer again",
-                got.short(),
-                source.short()
-            );
-            return FAILED;
-        }
-    }
-    let src = match store.get(source) {
-        Ok(Stored::Value(Value::Bytes(b))) => b,
-        Ok(_) => {
-            eprintln!("nether: source {} is not bytes", source.short());
-            return ExitCode::from(crate::code::MALFORMED);
-        }
-        Err(e) => return crate::closing::store_err(&e),
-    };
-    let Some(at) =
-        u32::try_from(byte).ok().filter(|_| usize::try_from(byte).is_ok_and(|n| n < src.len()))
-    else {
-        eprintln!(
-            "nether: byte {byte} is past the end of {} ({} bytes)",
-            source.short(),
-            src.len()
-        );
-        return FAILED;
-    };
-    let unit = match crate::closing::checked_unit(&src, &source.short()) {
-        Ok(u) => u,
-        Err(code) => return code,
-    };
-    let Some(hit) = find_at(&unit, at) else {
-        eprintln!("nether: no expression at byte {byte} in {}", source.short());
-        return FAILED;
-    };
-    let descend = hit.descend.or_else(|| {
-        find_origin(&unit, hit.func, hit.expr, hit.depth, &|x| match &x.kind {
-            ExprKind::Descend { capability, body }
-                if capability.stratum() == hit.depth || body.depth == hit.depth =>
-            {
-                Some((*capability, x.span))
-            }
-            _ => None,
-        })
-    });
-    let call = find_origin(&unit, hit.func, hit.expr, hit.depth, &|x| {
-        if let ExprKind::Call { callee, .. } = &x.kind
-            && let Type::Fn { latent, result_depth, .. } = callee.ty
-            && (latent.holds(hit.depth) || result_depth == hit.depth)
-        {
-            let name = match &callee.kind {
-                ExprKind::Prim(p) => Some(p.name().to_string()),
-                ExprKind::Func(id) => unit.func(*id).map(|f| f.name.clone()),
-                _ => None,
-            };
-            return name.map(|n| (n, x.span));
-        }
-        None
-    });
-    let nodes = match trace_hits(store, &trace, source, byte, call.as_ref().map(|(_, s)| *s), limit)
-    {
-        Ok(n) => n,
-        Err(code) => return code,
-    };
-    print_at(
-        &AtReport { cairn, source, byte, hit: &hit, descend, call, nodes: &nodes },
-        wants_json,
-    );
-    ExitCode::SUCCESS
-}
-
-struct AtReport<'a> {
-    cairn: Cairn,
-    source: Cairn,
-    byte: u64,
-    hit: &'a Target<'a>,
-    descend: Option<(Capability, Span)>,
-    call: Option<(String, Span)>,
-    nodes: &'a [Hit],
-}
-
-fn print_at(r: &AtReport<'_>, wants_json: bool) {
-    let AtReport { cairn, source, byte, hit, descend, call, nodes } = r;
-    let d = hit.depth.get();
-    let s = stratum_name(d);
-    let ty = hit.ty.to_string();
-    if wants_json {
-        let desc = descend.as_ref().map_or_else(
-            || "null".to_string(),
-            |(c, sp)| {
-                format!(
-                    "{{\"capability\":{},\"start\":{},\"end\":{}}}",
-                    json::string(c.name()),
-                    sp.start,
-                    sp.end
-                )
-            },
-        );
-        let called = call.as_ref().map_or_else(
-            || "null".to_string(),
-            |(name, sp)| {
-                format!(
-                    "{{\"name\":{},\"start\":{},\"end\":{}}}",
-                    json::string(name),
-                    sp.start,
-                    sp.end
-                )
-            },
-        );
-        let each: Vec<String> = nodes
-            .iter()
-            .map(|h| {
-                let prov: Vec<String> = h.lines.iter().map(|l| json::string(l)).collect();
-                format!(
-                    "{{\"cairn\":\"{}\",\"start\":{},\"end\":{},\"provenance\":[{}]}}",
-                    h.cairn,
-                    h.span.start(),
-                    h.span.end(),
-                    prov.join(",")
-                )
-            })
-            .collect();
-        println!(
-            "{{\"cairn\":\"{cairn}\",\"source\":\"{source}\",\"at\":{byte},\"depth\":{d},\
-             \"stratum\":{},\"type\":{},\"span\":{{\"start\":{},\"end\":{}}},\
-             \"descend\":{desc},\"call\":{called},\"nodes\":[{}]}}",
-            json::string(s),
-            json::string(&ty),
-            hit.span.start,
-            hit.span.end,
-            each.join(",")
-        );
-        return;
-    }
-    let mut out = format!("depth {d}   {s}   {ty}   at {}..{}\n", hit.span.start, hit.span.end);
-    if let Some((cap, sp)) = descend {
-        let _ = writeln!(out, "descend {cap}   at {}..{}", sp.start, sp.end);
-    }
-    if let Some((name, sp)) = call {
-        let _ = writeln!(out, "call {name}   at {}..{}", sp.start, sp.end);
-    }
-    for h in *nodes {
-        for line in &h.lines {
-            let _ = writeln!(out, "{line}");
-        }
-    }
-    print!("{out}");
-}
-
-fn trace_hits(
-    store: &Store,
-    trace: &Node,
-    source: Cairn,
-    byte: u64,
-    call_span: Option<Span>,
-    limit: usize,
-) -> Result<Vec<Hit>, ExitCode> {
-    let mut seen = HashSet::new();
-    let mut all = Vec::new();
-    for at in trace.nodes() {
-        if !seen.insert(at) {
-            continue;
-        }
-        let stored = store.get(at).map_err(|e| crate::closing::store_err(&e))?;
-        let Stored::Node(n) = stored else { continue };
-        let (Node::Deposit { span, .. } | Node::Hole { span, .. } | Node::Witness { span, .. }) =
-            &n
-        else {
-            continue;
-        };
-        all.push((at, n.clone(), *span));
-    }
-    let direct =
-        |sp: &nether_ledger::Span| sp.source() == source && sp.start() <= byte && byte < sp.end();
-    let mut matched: Vec<(Cairn, Node, nether_ledger::Span)> =
-        all.iter().filter(|(_, _, sp)| direct(sp)).cloned().collect();
-    if matched.is_empty()
-        && let Some(cs) = call_span
-    {
-        matched = all
-            .into_iter()
-            .filter(|(_, _, sp)| {
-                sp.source() == source
-                    && sp.start() <= u64::from(cs.start)
-                    && u64::from(cs.end) <= sp.end()
-            })
-            .collect();
-    }
-    let mut hits = Vec::new();
-    for (at, n, span) in matched {
-        for r in n.references() {
-            store.get(r).map_err(|e| crate::closing::store_err(&e))?;
-        }
-        let mut lines = vec![format!("{}  {}", at.short(), node(store, &n))];
-        walk(store, at, limit, 0, &mut lines).map_err(|e| crate::closing::store_err(&e))?;
-        hits.push(Hit { cairn: at, span, lines });
-    }
-    Ok(hits)
-}
-
-const fn contains(s: Span, byte: u32) -> bool {
-    s.start < s.end && s.start <= byte && byte < s.end
-}
-
-fn put<'a>(best: &mut Option<Target<'a>>, next: Target<'a>) {
-    if let Some(cur) = best {
-        if next.span.end - next.span.start <= cur.span.end - cur.span.start {
-            *cur = next;
-        }
-    } else {
-        *best = Some(next);
-    }
-}
-
-fn find_at(unit: &Unit, byte: u32) -> Option<Target<'_>> {
-    let mut best = None;
-    for g in &unit.globals {
-        if contains(g.span, byte) {
-            put(
-                &mut best,
-                Target {
-                    depth: g.value.depth,
-                    ty: &g.ty,
-                    span: g.span,
-                    expr: &g.value,
-                    func: None,
-                    descend: None,
-                },
-            );
-        }
-        expr_at(&g.value, unit, None, None, byte, &mut best);
-    }
-    for f in &unit.funcs {
-        block_at(&f.body, unit, Some(f), None, byte, &mut best);
-    }
-    for d in &unit.demands {
-        expr_at(&d.value, unit, None, None, byte, &mut best);
-    }
-    best
-}
-
-fn block_at<'a>(
-    b: &'a Block,
-    unit: &'a Unit,
-    func: Option<&'a FuncDef>,
-    descend: Option<(Capability, Span)>,
-    byte: u32,
-    best: &mut Option<Target<'a>>,
-) {
-    for s in &b.stmts {
-        match s {
-            Stmt::Let { local, value } => {
-                let def = func.map_or_else(|| unit.local(*local), |f| f.local(*local));
-                if let Some(l) = def
-                    && contains(l.span, byte)
-                {
-                    put(
-                        best,
-                        Target {
-                            depth: value.depth,
-                            ty: &l.ty,
-                            span: l.span,
-                            expr: value,
-                            func,
-                            descend,
-                        },
-                    );
-                }
-                expr_at(value, unit, func, descend, byte, best);
-            }
-            Stmt::Expr(x) => expr_at(x, unit, func, descend, byte, best),
-            Stmt::Declare { .. } => {}
-        }
-    }
-    if let Some(t) = &b.tail {
-        expr_at(t, unit, func, descend, byte, best);
-    }
-}
-
-fn expr_at<'a>(
-    x: &'a Expr,
-    unit: &'a Unit,
-    func: Option<&'a FuncDef>,
-    descend: Option<(Capability, Span)>,
-    byte: u32,
-    best: &mut Option<Target<'a>>,
-) {
-    let descend = match &x.kind {
-        ExprKind::Descend { capability, .. } if contains(x.span, byte) => {
-            Some((*capability, x.span))
-        }
-        _ => descend,
-    };
-    if contains(x.span, byte) {
-        put(best, Target { depth: x.depth, ty: &x.ty, span: x.span, expr: x, func, descend });
-    }
-    match &x.kind {
-        ExprKind::Block(b) => block_at(b, unit, func, descend, byte, best),
-        ExprKind::Call { callee, args } => {
-            if !matches!(callee.kind, ExprKind::Prim(_) | ExprKind::Func(_)) {
-                expr_at(callee, unit, func, descend, byte, best);
-            }
-            for a in args {
-                expr_at(a, unit, func, descend, byte, best);
-            }
-        }
-        _ => {
-            for c in children(x) {
-                expr_at(c, unit, func, descend, byte, best);
-            }
-        }
-    }
-}
-
-fn find_origin<T>(
-    unit: &Unit,
-    func: Option<&FuncDef>,
-    x: &Expr,
-    want: Depth,
-    pred: &impl Fn(&Expr) -> Option<T>,
-) -> Option<T> {
-    fn walk<T>(
-        unit: &Unit,
-        func: Option<&FuncDef>,
-        x: &Expr,
-        seen: &mut HashSet<nether_core::GlobalId>,
-        seen_locals: &mut HashSet<LocalId>,
-        pred: &impl Fn(&Expr) -> Option<T>,
-    ) -> Option<T> {
-        if let Some(hit) = pred(x) {
-            return Some(hit);
-        }
-        if let ExprKind::Local(id) = x.kind {
-            if !seen_locals.insert(id) {
-                return None;
-            }
-            return local_sources(unit, func, id)
-                .into_iter()
-                .find_map(|v| walk(unit, func, v, seen, seen_locals, pred));
-        }
-        if let ExprKind::Global(id) = x.kind {
-            if !seen.insert(id) {
-                return None;
-            }
-            let mut global_locals = HashSet::new();
-            return unit
-                .global(id)
-                .and_then(|g| walk(unit, None, &g.value, seen, &mut global_locals, pred));
-        }
-        children(x).into_iter().find_map(|c| walk(unit, func, c, seen, seen_locals, pred))
-    }
-    if want == Depth::PURE {
-        return None;
-    }
-    walk(unit, func, x, &mut HashSet::new(), &mut HashSet::new(), pred)
-}
-
-/// Collect every expression that can contribute depth to local `id`: its `Let`
-/// initializer (if any) plus every `Assign` targeting `id` (both RHS and
-/// `place.path` index expressions), ordered deepest-first so reassignments
-/// deeper than a pure `Let` initializer are never hidden.
-fn local_sources<'a>(unit: &'a Unit, func: Option<&'a FuncDef>, id: LocalId) -> Vec<&'a Expr> {
-    let mut out = Vec::new();
-    if let Some(f) = func {
-        if let Some(init) = bound_to(&f.body, id) {
-            out.push(init);
-        }
-        collect_assigns_in_block(&f.body, id, &mut out);
-    } else {
-        for e in unit.globals.iter().map(|g| &g.value).chain(unit.demands.iter().map(|d| &d.value))
-        {
-            if let Some(init) = bound_in_expr(e, id) {
-                out.push(init);
-            }
-            collect_assigns_in_expr(e, id, &mut out);
-        }
-    }
-    out.sort_by_key(|a| std::cmp::Reverse(a.depth));
-    out
-}
-
-fn bound_in_expr(x: &Expr, id: LocalId) -> Option<&Expr> {
-    if let ExprKind::Block(b) = &x.kind {
-        return bound_to(b, id);
-    }
-    children(x).into_iter().find_map(|c| bound_in_expr(c, id))
-}
-
-fn collect_assigns_in_block<'a>(b: &'a Block, id: LocalId, out: &mut Vec<&'a Expr>) {
-    for s in &b.stmts {
-        match s {
-            Stmt::Let { value, .. } | Stmt::Expr(value) => collect_assigns_in_expr(value, id, out),
-            Stmt::Declare { .. } => {}
-        }
-    }
-    if let Some(t) = &b.tail {
-        collect_assigns_in_expr(t, id, out);
-    }
-}
-
-fn collect_assigns_in_expr<'a>(x: &'a Expr, id: LocalId, out: &mut Vec<&'a Expr>) {
-    if let ExprKind::Assign { place, value } = &x.kind
-        && place.local == id
-    {
-        out.push(value);
-        for proj in &place.path {
-            if let nether_core::Proj::Index(idx) = proj {
-                out.push(idx);
-            }
-        }
-    }
-    if let ExprKind::Block(b) = &x.kind {
-        collect_assigns_in_block(b, id, out);
-        return;
-    }
-    for c in children(x) {
-        collect_assigns_in_expr(c, id, out);
-    }
 }

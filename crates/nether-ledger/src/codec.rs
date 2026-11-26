@@ -40,11 +40,21 @@ impl Value {
     /// Returns [`DecodeError`] if any nested value exceeds [`MAX_DEPTH`] or
     /// [`MAX_DECODED_BYTES`].
     pub fn validate(&self) -> Result<(), DecodeError> {
+        let _ = self.walk_weight(true)?;
+        Ok(())
+    }
+
+    /// Estimated in-memory weight of this value tree.
+    pub(crate) fn weight(&self) -> usize {
+        self.walk_weight(false).unwrap_or(usize::MAX)
+    }
+
+    fn walk_weight(&self, check_bounds: bool) -> Result<usize, DecodeError> {
         let mut stack = vec![(self, 0usize)];
         let mut weight = 0usize;
         let val_sz = core::mem::size_of::<Self>();
         while let Some((cur, depth)) = stack.pop() {
-            if depth > MAX_DEPTH {
+            if check_bounds && depth > MAX_DEPTH {
                 return Err(DecodeError::TooDeep);
             }
             let extra = match cur {
@@ -54,7 +64,7 @@ impl Value {
                 _ => 0,
             };
             weight = weight.saturating_add(val_sz).saturating_add(extra);
-            if weight > MAX_DECODED_BYTES {
+            if check_bounds && weight > MAX_DECODED_BYTES {
                 return Err(DecodeError::TooLarge { bytes: weight, limit: MAX_DECODED_BYTES });
             }
             match cur {
@@ -76,7 +86,7 @@ impl Value {
                 _ => {}
             }
         }
-        Ok(())
+        Ok(weight)
     }
 
     /// Validates invariants and returns the canonical encoding.
@@ -92,11 +102,7 @@ impl Value {
     /// The canonical encoding of this value.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
-        let mut size = Count(0);
-        self.encode_into(&mut size);
-        let mut out = Vec::with_capacity(size.0);
-        self.encode_into(&mut out);
-        out
+        encode_with(&|out| self.encode_into(out))
     }
 
     fn encode_into(&self, out: &mut dyn Sink) {
@@ -186,6 +192,14 @@ fn put_len(out: &mut dyn Sink, n: usize) {
     out.extend_from_slice(&(n as u64).to_be_bytes());
 }
 
+fn encode_with(write: &dyn Fn(&mut dyn Sink)) -> Vec<u8> {
+    let mut size = Count(0);
+    write(&mut size);
+    let mut out = Vec::with_capacity(size.0);
+    write(&mut out);
+    out
+}
+
 // ── nodes ───────────────────────────────────────────────────────────────────
 
 impl Node {
@@ -222,11 +236,7 @@ impl Node {
     /// The canonical encoding of this node.
     #[must_use]
     pub fn encode(&self) -> Vec<u8> {
-        let mut size = Count(0);
-        self.encode_into(&mut size);
-        let mut out = Vec::with_capacity(size.0);
-        self.encode_into(&mut out);
-        out
+        encode_with(&|out| self.encode_into(out))
     }
 
     fn encode_into(&self, out: &mut dyn Sink) {
@@ -454,6 +464,12 @@ pub(crate) struct Scanned {
     pub nodes: Vec<Cairn>,
 }
 
+impl Scanned {
+    const fn node(references: Vec<Cairn>) -> Self {
+        Self { is_node: true, is_trace: false, references, nodes: Vec::new() }
+    }
+}
+
 /// Validates canonical encoding of one value or node and extracts node
 /// references without allocating `Value` payloads.
 pub(crate) fn scan_stored(bytes: &[u8]) -> Result<Scanned, DecodeError> {
@@ -622,6 +638,22 @@ impl<'a> Reader<'a> {
         Stratum::new(self.byte()?)
     }
 
+    fn bool_byte(&mut self) -> Result<bool, DecodeError> {
+        match self.byte()? {
+            0x00 => Ok(false),
+            0x01 => Ok(true),
+            other => Err(DecodeError::BadBool(other)),
+        }
+    }
+
+    fn mark_byte(&mut self) -> Result<bool, DecodeError> {
+        match self.byte()? {
+            0x00 => Ok(false),
+            0x01 => Ok(true),
+            other => Err(DecodeError::BadMark(other)),
+        }
+    }
+
     fn node(&mut self) -> Result<Node, DecodeError> {
         match self.byte()? {
             kind::LITERAL => Ok(Node::Literal(self.value(0)?)),
@@ -640,20 +672,15 @@ impl<'a> Reader<'a> {
                 answer: self.cairn()?,
                 span: self.span()?,
             }),
-            kind::TRACE => {
-                let residue = self.cairn()?;
-                let holes = self.cairns()?;
-                let witnesses = self.cairns()?;
-                let deposits = self.cairns()?;
-                let source = self.cairn()?;
-                let depth = self.stratum()?;
-                let unrecorded = match self.byte()? {
-                    0x00 => false,
-                    0x01 => true,
-                    other => return Err(DecodeError::BadMark(other)),
-                };
-                Ok(Node::Trace { residue, holes, witnesses, deposits, source, depth, unrecorded })
-            }
+            kind::TRACE => Ok(Node::Trace {
+                residue: self.cairn()?,
+                holes: self.cairns()?,
+                witnesses: self.cairns()?,
+                deposits: self.cairns()?,
+                source: self.cairn()?,
+                depth: self.stratum()?,
+                unrecorded: self.mark_byte()?,
+            }),
             other => Err(DecodeError::UnknownKind(other)),
         }
     }
@@ -662,12 +689,7 @@ impl<'a> Reader<'a> {
         match self.byte()? {
             kind::LITERAL => {
                 self.skip_value(0)?;
-                Ok(Scanned {
-                    is_node: true,
-                    is_trace: false,
-                    references: Vec::new(),
-                    nodes: Vec::new(),
-                })
+                Ok(Scanned::node(Vec::new()))
             }
             kind::APPLY => {
                 let function = self.cairn()?;
@@ -677,7 +699,7 @@ impl<'a> Reader<'a> {
                 references.push(function);
                 references.extend_from_slice(&args);
                 references.push(result);
-                Ok(Scanned { is_node: true, is_trace: false, references, nodes: Vec::new() })
+                Ok(Scanned::node(references))
             }
             kind::HOLE => {
                 let call = self.call()?;
@@ -685,17 +707,12 @@ impl<'a> Reader<'a> {
                 let span = self.span()?;
                 let mut references = call.into_args();
                 references.push(span.source());
-                Ok(Scanned { is_node: true, is_trace: false, references, nodes: Vec::new() })
+                Ok(Scanned::node(references))
             }
             kind::DEPOSIT => {
                 let value = self.cairn()?;
                 let span = self.span()?;
-                Ok(Scanned {
-                    is_node: true,
-                    is_trace: false,
-                    references: vec![value, span.source()],
-                    nodes: Vec::new(),
-                })
+                Ok(Scanned::node(vec![value, span.source()]))
             }
             kind::WITNESS => {
                 let _ = self.stratum()?;
@@ -705,7 +722,7 @@ impl<'a> Reader<'a> {
                 let mut references = call.into_args();
                 references.push(answer);
                 references.push(span.source());
-                Ok(Scanned { is_node: true, is_trace: false, references, nodes: Vec::new() })
+                Ok(Scanned::node(references))
             }
             kind::TRACE => {
                 let residue = self.cairn()?;
@@ -714,10 +731,7 @@ impl<'a> Reader<'a> {
                 let deposits = self.cairns()?;
                 let source = self.cairn()?;
                 let _ = self.stratum()?;
-                match self.byte()? {
-                    0x00 | 0x01 => {}
-                    other => return Err(DecodeError::BadMark(other)),
-                }
+                let _ = self.mark_byte()?;
                 let node_count = holes.len() + witnesses.len() + deposits.len();
                 let mut nodes = Vec::with_capacity(node_count);
                 nodes.extend_from_slice(&holes);
@@ -740,10 +754,10 @@ impl<'a> Reader<'a> {
         self.charge(core::mem::size_of::<Value>())?;
         match self.byte()? {
             tag::UNIT => Ok(()),
-            tag::BOOL => match self.byte()? {
-                0x00 | 0x01 => Ok(()),
-                other => Err(DecodeError::BadBool(other)),
-            },
+            tag::BOOL => {
+                let _ = self.bool_byte()?;
+                Ok(())
+            }
             tag::INT => {
                 let _ = self.take(8)?;
                 Ok(())
@@ -762,10 +776,7 @@ impl<'a> Reader<'a> {
                 Ok(())
             }
             tag::SHADE => {
-                let origin = self.byte()?;
-                if origin > MAX_STRATUM {
-                    return Err(DecodeError::NoSuchStratum(origin));
-                }
+                let _ = self.stratum()?;
                 let _ = self.take(32)?;
                 Ok(())
             }
@@ -814,11 +825,7 @@ impl<'a> Reader<'a> {
         self.charge(core::mem::size_of::<Value>())?;
         match self.byte()? {
             tag::UNIT => Ok(Value::Unit),
-            tag::BOOL => match self.byte()? {
-                0x00 => Ok(Value::Bool(false)),
-                0x01 => Ok(Value::Bool(true)),
-                other => Err(DecodeError::BadBool(other)),
-            },
+            tag::BOOL => Ok(Value::Bool(self.bool_byte()?)),
             tag::INT => Ok(Value::Int(i64::from_be_bytes(self.take_array::<8>()?))),
             tag::BYTES => {
                 let n = self.len()?;

@@ -105,9 +105,8 @@ impl Provider for Unrecorded {
             .map_err(|e| Refuse::NotRecorded(StoreError::Io(e)))?;
         let (code, said) = match object.call(&symbol, &args) {
             Ok(answered) => answered,
-            // The symbol was there a moment ago and the call did not happen.
-            // Keep the attempt record intact on disk? Clean return returns an
-            // explicit `Unavailable` error to the caller.
+            // The callee returned an error cleanly without crashing, so dropping
+            // `attempt_guard` removes the in-flight record before returning `Unavailable`.
             Err(why) => return Err(Refuse::Unavailable(why.to_string())),
         };
 

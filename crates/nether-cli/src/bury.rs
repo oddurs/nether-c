@@ -17,63 +17,41 @@ use nether_syntax::print;
 
 use crate::memo::Remembered;
 use crate::{
-    DEFAULT_FUEL, FAILED, bad_usage, code, json, parse_fuel, split_flag, take_val, usage_error,
+    DEFAULT_FUEL, FAILED, FlagStep, code, finish, json, parse_args, parse_fuel, parse_grant,
+    read_file_bytes, take_val, usage_error,
 };
 
 pub(crate) const USAGE: &str = "usage: nether bury <file.nc> [--fuel <n>] [--json]";
 
 /// `nether bury <file.nc> [--fuel <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
-    let mut wants_json = false;
+    finish(run_inner(args))
+}
+
+fn run_inner(args: &[String]) -> Result<(), ExitCode> {
     let mut fuel: Option<u64> = None;
     let mut granted: Vec<Capability> = Vec::new();
-    let mut path: Option<&str> = None;
-    let mut end_opts = false;
-
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
-        if end_opts {
-            if path.is_some() {
-                return bad_usage("one file at a time", USAGE);
-            }
-            path = Some(arg.as_str());
-            continue;
-        }
-        let (flag, inline) = split_flag(arg);
-        match (flag, inline) {
-            ("--", None) => end_opts = true,
-            ("--help" | "-h", None) => {
-                println!("{USAGE}");
-                return ExitCode::SUCCESS;
-            }
-            ("--json", None) => wants_json = true,
-            ("--fuel", inline) => {
-                if let Err(c) = parse_fuel(&mut fuel, take_val(inline, &mut rest), USAGE) {
-                    return c;
+    let Some((path, wants_json)) =
+        parse_args(args, USAGE, Some("one file at a time"), |flag, inline, rest| {
+            match (flag, inline) {
+                ("--fuel", inline) => {
+                    parse_fuel(&mut fuel, take_val(inline, rest), USAGE)?;
+                    Ok(FlagStep::Handled)
                 }
-            }
-            ("--grant", inline) => match take_val(inline, &mut rest).map(Capability::from_name) {
-                Some(Some(cap)) => granted.push(cap),
-                Some(None) => {
-                    eprintln!("nether: no capability by that name");
-                    eprintln!(
-                        "        §9.1 lists them: store env disk disk! net net! entropy unrecorded"
-                    );
-                    return usage_error();
+                ("--grant", inline) => {
+                    granted.push(parse_grant(take_val(inline, rest), USAGE)?);
+                    Ok(FlagStep::Handled)
                 }
-                None => return bad_usage("`--grant` wants a capability", USAGE),
-            },
-            (other, _) if other.starts_with('-') && other != "-" => {
-                return bad_usage(&format!("unknown option `{arg}`"), USAGE);
+                _ => Ok(FlagStep::Unknown),
             }
-            _ if path.is_some() => return bad_usage("one file at a time", USAGE),
-            _ => path = Some(arg.as_str()),
-        }
-    }
+        })?
+    else {
+        return Ok(());
+    };
 
     let Some(path) = path else {
         eprintln!("{USAGE}");
-        return usage_error();
+        return Err(usage_error());
     };
 
     // A grant is refused rather than accepted and discarded. Honouring one is
@@ -89,29 +67,20 @@ pub fn run(args: &[String]) -> ExitCode {
         eprintln!();
         eprintln!("    nether bury {path}");
         eprintln!("    nether exhume <cairn> --grant {cap}");
-        return usage_error();
+        return Err(usage_error());
     }
-    match inter(Path::new(path), fuel.unwrap_or(DEFAULT_FUEL), wants_json) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(code) => code,
-    }
+    inter(Path::new(path), fuel.unwrap_or(DEFAULT_FUEL), wants_json)
 }
 
 fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
-    let source = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln!("nether: {}: {e}", path.display());
-            return Err(FAILED);
-        }
-    };
+    let source = read_file_bytes(path)?;
 
     // Source has to be text to be pointed at: every diagnostic underlines a
     // span, and a span is a byte range in something with lines in it.
-    let Ok(text) = String::from_utf8(source.clone()) else {
+    if core::str::from_utf8(&source).is_err() {
         eprintln!("nether: {} is not UTF-8", path.display());
         return Err(ExitCode::from(code::MALFORMED));
-    };
+    }
     let shown = path.display().to_string();
     let unit = crate::closing::checked_unit(&source, &shown)?;
 
@@ -129,8 +98,13 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
     let (store, done) = if let Some(r) = recalled {
         (ro_store, r)
     } else {
-        let residue = bury(&unit, source_cairn, fuel)
-            .map_err(|h| crate::closing::halt_exit(&h, &text, &shown))?;
+        let residue = bury(&unit, source_cairn, fuel).map_err(|h| {
+            let text = match &source_stored {
+                Stored::Value(Value::Bytes(raw)) => core::str::from_utf8(raw).unwrap_or(""),
+                _ => "",
+            };
+            crate::closing::halt_exit(&h, text, &shown)
+        })?;
 
         // Source, everything burial named, then the residue as source, then the trace.
         // Nothing was written (and no store directory created) until burial finished.

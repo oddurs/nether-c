@@ -87,29 +87,10 @@ impl Net {
     fn reaches(&self, host: &str, port: u16) -> bool {
         let host_v6 = host.parse::<Ipv6Addr>().ok();
         self.reach.iter().any(|named| {
-            let (entry_host, entry_port) = if let Some(rest) = named.strip_prefix('[') {
-                let Some((inner, after)) = rest.split_once(']') else {
-                    return false;
-                };
-                if after.is_empty() {
-                    (inner, None)
-                } else if let Some(p) = after.strip_prefix(':') {
-                    let Ok(parsed) = p.parse::<u16>() else { return false };
-                    (inner, Some(parsed))
-                } else {
-                    return false;
-                }
-            } else if named.parse::<Ipv6Addr>().is_ok() {
-                (named.as_str(), None)
-            } else if let Some((h, p)) = named.rsplit_once(':') {
-                let Ok(parsed) = p.parse::<u16>() else { return false };
-                (h, Some(parsed))
-            } else {
-                (named.as_str(), None)
+            let Some((entry_host, entry_port)) = parse_reach_entry(named) else {
+                return false;
             };
-            if let Some(p) = entry_port
-                && p != port
-            {
+            if entry_port.is_some_and(|p| p != port) {
                 return false;
             }
             if let (Some(a), Ok(b)) = (host_v6, entry_host.parse::<Ipv6Addr>()) {
@@ -117,6 +98,23 @@ impl Net {
             }
             entry_host.eq_ignore_ascii_case(host)
         })
+    }
+}
+
+fn parse_reach_entry(named: &str) -> Option<(&str, Option<u16>)> {
+    if let Some(rest) = named.strip_prefix('[') {
+        let (inner, after) = rest.split_once(']')?;
+        if after.is_empty() {
+            Some((inner, None))
+        } else {
+            Some((inner, Some(after.strip_prefix(':')?.parse::<u16>().ok()?)))
+        }
+    } else if named.parse::<Ipv6Addr>().is_ok() {
+        Some((named, None))
+    } else if let Some((h, p)) = named.rsplit_once(':') {
+        Some((h, Some(p.parse::<u16>().ok()?)))
+    } else {
+        Some((named, None))
     }
 }
 
@@ -336,21 +334,11 @@ fn is_public_ip(ip: IpAddr) -> bool {
                 // Documentation: 2001:db8::/32
                 || (segs[0] == 0x2001 && segs[1] == 0x0db8)
                 // Discard-only: 100::/64
-                || (segs[0] == 0x0100 && segs[1] == 0 && segs[2] == 0 && segs[3] == 0)
+                || (segs[0] == 0x0100 && segs[1..4] == [0; 3])
                 // Well-known NAT64 prefix: 64:ff9b::/96
-                || (segs[0] == 0x0064
-                    && segs[1] == 0xff9b
-                    && segs[2] == 0
-                    && segs[3] == 0
-                    && segs[4] == 0
-                    && segs[5] == 0)
+                || (segs[0] == 0x0064 && segs[1] == 0xff9b && segs[2..6] == [0; 4])
                 // IPv4-compatible (deprecated): ::/96
-                || (segs[0] == 0
-                    && segs[1] == 0
-                    && segs[2] == 0
-                    && segs[3] == 0
-                    && segs[4] == 0
-                    && segs[5] == 0))
+                || segs[..6] == [0; 6])
         }
     }
 }
@@ -472,6 +460,32 @@ struct ResponseHead {
     chunked: bool,
 }
 
+fn arm_read_timeout(reading: &BufReader<TcpStream>, deadline: Instant) -> Result<(), Refusal> {
+    if reading.buffer().is_empty() {
+        reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
+    }
+    Ok(())
+}
+
+fn read_some(
+    reading: &mut BufReader<TcpStream>,
+    buf: &mut [u8],
+    deadline: Instant,
+) -> Result<usize, Refusal> {
+    loop {
+        arm_read_timeout(reading, deadline)?;
+        match reading.read(buf) {
+            Ok(n) => return Ok(n),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(why(&e)),
+        }
+    }
+}
+
+fn is_http_eol(b: &[u8]) -> bool {
+    b == b"\r\n" || b == b"\n"
+}
+
 fn read_line_bytes(
     reading: &mut BufReader<TcpStream>,
     budget: &mut u64,
@@ -482,9 +496,7 @@ fn read_line_bytes(
         if *budget == 0 {
             return Err(Refusal::Exhausted);
         }
-        if reading.buffer().is_empty() {
-            reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
-        }
+        arm_read_timeout(reading, deadline)?;
         let avail = match reading.fill_buf() {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
@@ -509,24 +521,7 @@ fn read_line_bytes(
 }
 
 fn is_http_tchar(b: u8) -> bool {
-    b.is_ascii_alphanumeric()
-        || matches!(
-            b,
-            b'!' | b'#'
-                | b'$'
-                | b'%'
-                | b'&'
-                | b'\''
-                | b'*'
-                | b'+'
-                | b'-'
-                | b'.'
-                | b'^'
-                | b'_'
-                | b'`'
-                | b'|'
-                | b'~'
-        )
+    b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b)
 }
 
 /// Strip one trailing `\r\n` or `\n` and reject bare `\r` inside HTTP framing.
@@ -544,31 +539,36 @@ fn trim_ows(s: &str) -> &str {
     s.trim_matches([' ', '\t'])
 }
 
+fn parse_status_line(raw: &[u8]) -> Result<u16, Refusal> {
+    let raw_line = core::str::from_utf8(raw).map_err(|_| Refusal::Unreachable)?;
+    let line = strip_http_eol(raw_line)?;
+    let (version, after_ver) = line.split_once(' ').ok_or(Refusal::Unreachable)?;
+    if version != "HTTP/1.0" && version != "HTTP/1.1" {
+        return Err(Refusal::Unreachable);
+    }
+    let status_tok = after_ver.split_once(' ').map_or(after_ver, |(code, _)| code);
+    if status_tok.len() != 3 || !status_tok.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(Refusal::Unreachable);
+    }
+    let status: u16 = status_tok.parse().map_err(|_| Refusal::Unreachable)?;
+    if !(100..=599).contains(&status) {
+        return Err(Refusal::Unreachable);
+    }
+    Ok(status)
+}
+
 /// Parse HTTP/1.x status line and framing headers on raw bytes, skipping
 /// interim `1xx` responses other than `101 Switching Protocols`.
 fn head_of(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result<ResponseHead, Refusal> {
     let mut budget = MOST_HEAD;
     loop {
         let status_line = read_line_bytes(reading, &mut budget, deadline)?;
-        let raw_line = core::str::from_utf8(&status_line).map_err(|_| Refusal::Unreachable)?;
-        let line = strip_http_eol(raw_line)?;
-        let (version, after_ver) = line.split_once(' ').ok_or(Refusal::Unreachable)?;
-        if version != "HTTP/1.0" && version != "HTTP/1.1" {
-            return Err(Refusal::Unreachable);
-        }
-        let status_tok = after_ver.split_once(' ').map_or(after_ver, |(code, _)| code);
-        if status_tok.len() != 3 || !status_tok.bytes().all(|b| b.is_ascii_digit()) {
-            return Err(Refusal::Unreachable);
-        }
-        let status: u16 = status_tok.parse().map_err(|_| Refusal::Unreachable)?;
-        if !(100..=599).contains(&status) {
-            return Err(Refusal::Unreachable);
-        }
+        let status = parse_status_line(&status_line)?;
         let mut content_length: Option<u64> = None;
         let mut chunked = false;
         loop {
             let hdr = read_line_bytes(reading, &mut budget, deadline)?;
-            if hdr == b"\r\n" || hdr == b"\n" {
+            if is_http_eol(&hdr) {
                 break;
             }
             let Some(colon) = hdr.iter().position(|&b| b == b':') else {
@@ -630,20 +630,13 @@ fn read_plain(
         {
             break;
         }
-        if reading.buffer().is_empty() {
-            reading.get_ref().set_read_timeout(Some(remaining(deadline)?)).map_err(|e| why(&e))?;
-        }
         let want = match expected {
             Some(len) => {
                 usize::try_from(len - said.len() as u64).unwrap_or(buf.len()).min(buf.len())
             }
             None => buf.len(),
         };
-        let n = match reading.read(&mut buf[..want]) {
-            Ok(n) => n,
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(why(&e)),
-        };
+        let n = read_some(reading, &mut buf[..want], deadline)?;
         if n == 0 {
             break;
         }
@@ -679,7 +672,7 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
             let mut trailer_budget = MOST_HEAD.min(wire_framing);
             loop {
                 let trailer = read_line_bytes(reading, &mut trailer_budget, deadline)?;
-                if trailer == b"\r\n" || trailer == b"\n" {
+                if is_http_eol(&trailer) {
                     return Ok(said);
                 }
             }
@@ -690,18 +683,8 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
         let mut left = usize::try_from(size).map_err(|_| Refusal::Exhausted)?;
         let mut buf = [0u8; 8192];
         while left > 0 {
-            if reading.buffer().is_empty() {
-                reading
-                    .get_ref()
-                    .set_read_timeout(Some(remaining(deadline)?))
-                    .map_err(|e| why(&e))?;
-            }
             let want = left.min(buf.len());
-            let n = match reading.read(&mut buf[..want]) {
-                Ok(n) => n,
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(why(&e)),
-            };
+            let n = read_some(reading, &mut buf[..want], deadline)?;
             if n == 0 {
                 return Err(Refusal::Unreachable);
             }
@@ -711,7 +694,7 @@ fn read_chunked(reading: &mut BufReader<TcpStream>, deadline: Instant) -> Result
         let mut crlf_budget = MAX_CHUNK_LINE.min(wire_framing);
         let crlf = read_line_bytes(reading, &mut crlf_budget, deadline)?;
         wire_framing = wire_framing.checked_sub(crlf.len() as u64).ok_or(Refusal::Exhausted)?;
-        if crlf != b"\r\n" && crlf != b"\n" {
+        if !is_http_eol(&crlf) {
             return Err(Refusal::Unreachable);
         }
     }

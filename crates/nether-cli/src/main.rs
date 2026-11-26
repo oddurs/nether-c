@@ -10,12 +10,14 @@ mod exhume;
 mod graft;
 mod json;
 mod lamp;
+mod lamp_at;
 mod memo;
 mod strata;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use nether_core::Capability;
 use nether_ledger::{Cairn, Node, Store, Stored};
 
 /// What this build is, and it is the tag or it is nothing.
@@ -89,21 +91,108 @@ pub(crate) fn parse_fuel(
     }
 }
 
-/// Where the ledger is.
-///
-/// `$NETHER_STORE`, or `.nether` beside the work. §07 does not say, and does
-/// not need to: where a store sits changes nothing about what is in it, and a
-/// trace means the same thing wherever it was written.
-fn ledger() -> Result<Store, std::io::Error> {
-    Store::open(store_root())
+pub(crate) fn finish(res: Result<(), ExitCode>) -> ExitCode {
+    match res {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(code) => code,
+    }
 }
 
-/// Where the store is: `NETHER_STORE`, or `.nether` beside the work.
-/// An empty `NETHER_STORE=""` falls back to `.nether`.
+pub(crate) enum FlagStep {
+    Handled,
+    Unknown,
+}
+
+/// Parse `--`, `-h`/`--help`, `--json`, rite-specific flags via `on_flag`, and
+/// at most one positional argument. Returns `Ok(None)` when help was printed.
+pub(crate) fn parse_args<'a>(
+    args: &'a [String],
+    usage: &str,
+    too_many_msg: Option<&str>,
+    mut on_flag: impl FnMut(
+        &str,
+        Option<&'a str>,
+        &mut std::slice::Iter<'a, String>,
+    ) -> Result<FlagStep, ExitCode>,
+) -> Result<Option<(Option<&'a str>, bool)>, ExitCode> {
+    let mut wants_json = false;
+    let mut pos: Option<&'a str> = None;
+    let mut end_opts = false;
+    let mut rest = args.iter();
+    let too_many = || {
+        if let Some(msg) = too_many_msg {
+            bad_usage(msg, usage)
+        } else {
+            eprintln!("{usage}");
+            usage_error()
+        }
+    };
+    while let Some(arg) = rest.next() {
+        if end_opts {
+            if pos.is_some() {
+                return Err(too_many());
+            }
+            pos = Some(arg.as_str());
+            continue;
+        }
+        let (flag, inline) = split_flag(arg);
+        match (flag, inline) {
+            ("--", None) => end_opts = true,
+            ("--help" | "-h", None) => {
+                println!("{usage}");
+                return Ok(None);
+            }
+            ("--json", None) => wants_json = true,
+            _ => match on_flag(flag, inline, &mut rest)? {
+                FlagStep::Handled => {}
+                FlagStep::Unknown => {
+                    if flag.starts_with('-') && flag != "-" {
+                        return Err(bad_usage(&format!("unknown option `{arg}`"), usage));
+                    }
+                    if pos.is_some() {
+                        return Err(too_many());
+                    }
+                    pos = Some(arg.as_str());
+                }
+            },
+        }
+    }
+    Ok(Some((pos, wants_json)))
+}
+
+/// One `--grant`, by the names §9.1 fixes.
+pub(crate) fn parse_grant(arg: Option<&str>, usage: &str) -> Result<Capability, ExitCode> {
+    match arg.map(Capability::from_name) {
+        Some(Some(cap)) => Ok(cap),
+        Some(None) => {
+            eprintln!("nether: no capability by that name");
+            eprintln!("        §9.1 lists them: store env disk disk! net net! entropy unrecorded");
+            Err(usage_error())
+        }
+        None => Err(bad_usage("`--grant` wants a capability", usage)),
+    }
+}
+
+/// Read a file from disk, or report why it could not be read.
+pub(crate) fn read_file_bytes(path: &Path) -> Result<Vec<u8>, ExitCode> {
+    std::fs::read(path).map_err(|e| {
+        eprintln!("nether: {}: {e}", path.display());
+        FAILED
+    })
+}
+
+/// Where the ledger is: `$NETHER_STORE` (if non-empty), or `.nether` beside the work.
+///
+/// §07 does not say, and does not need to: where a store sits changes nothing
+/// about what is in it, and a trace means the same thing wherever it was written.
 fn store_root() -> PathBuf {
     std::env::var_os("NETHER_STORE")
         .filter(|v| !v.is_empty())
         .map_or_else(|| PathBuf::from(".nether"), PathBuf::from)
+}
+
+fn ledger() -> Result<Store, std::io::Error> {
+    Store::open(store_root())
 }
 
 /// Open the ledger without creating any directories on disk (read-only rites).
@@ -179,16 +268,6 @@ fn kind(stored: &Stored) -> &'static str {
 }
 
 /// Say that a cairn does not name a trace, and what it names instead.
-///
-/// Three rites read a trace before they do anything and all three said so
-/// differently. Two said only "is not a trace", which tells a reader they are
-/// wrong and not what they have — `strata` already said which, and offered
-/// the rite that would show them. That is the sentence, and now it is the
-/// only one.
-///
-/// The `let … else` that failed stays where it is: what was duplicated is the
-/// sentence, not the shape of reading a trace, and a helper that returned one
-/// would leave every caller destructuring a `Node` it had just been promised.
 fn not_a_trace(store: &Store, cairn: Cairn) -> ExitCode {
     match store.get(cairn) {
         Ok(stored) => {
@@ -196,17 +275,7 @@ fn not_a_trace(store: &Store, cairn: Cairn) -> ExitCode {
             eprintln!("        `nether lamp {}` shows what is there", cairn.short());
             FAILED
         }
-        Err(
-            e @ (nether_ledger::StoreError::Corrupt { .. }
-            | nether_ledger::StoreError::Ragged { .. }),
-        ) => {
-            eprintln!("nether: {e}");
-            ExitCode::from(code::MALFORMED)
-        }
-        Err(e) => {
-            eprintln!("nether: {e}");
-            FAILED
-        }
+        Err(e) => closing::store_err(&e),
     }
 }
 

@@ -31,31 +31,19 @@ pub(crate) fn store_err(e: &StoreError) -> ExitCode {
 /// Parse, lower, and check source or residue bytes, reporting every fault.
 pub fn checked_unit(bytes: &[u8], shown: &str) -> Result<Unit, ExitCode> {
     let text = String::from_utf8_lossy(bytes);
-    let complain = |d: &nether_core::Diagnostic| eprint!("{}", report(d, &text, shown));
-    let ast = match parse(bytes) {
-        Ok(ast) => ast,
-        Err(faults) => {
-            for f in &faults {
-                complain(&f.diagnostic());
-            }
-            return Err(ExitCode::from(code::MALFORMED));
+    let fail = |diags: &mut dyn Iterator<Item = nether_core::Diagnostic>| -> ExitCode {
+        for d in diags {
+            eprint!("{}", report(&d, &text, shown));
         }
+        ExitCode::from(code::MALFORMED)
     };
-    let unit = match lower(&ast) {
-        Ok(unit) => unit,
-        Err(faults) => {
-            for f in &faults {
-                complain(&f.diagnostic());
-            }
-            return Err(ExitCode::from(code::MALFORMED));
-        }
-    };
+    let ast =
+        parse(bytes).map_err(|f| fail(&mut f.iter().map(nether_syntax::Fault::diagnostic)))?;
+    let unit =
+        lower(&ast).map_err(|f| fail(&mut f.iter().map(nether_syntax::Fault::diagnostic)))?;
     let faults = check(&unit);
     if !faults.is_empty() {
-        for f in &faults {
-            complain(&f.diagnostic());
-        }
-        return Err(ExitCode::from(code::MALFORMED));
+        return Err(fail(&mut faults.iter().map(nether_core::Fault::diagnostic)));
     }
     Ok(unit)
 }
@@ -159,24 +147,88 @@ pub fn deposits(before: &[Cairn], now: &[Cairn]) -> Vec<Cairn> {
     out
 }
 
+/// The unpacked fields of a `Node::Trace`.
+pub(crate) struct TraceParts {
+    pub residue: Cairn,
+    pub holes: Vec<Cairn>,
+    pub witnesses: Vec<Cairn>,
+    pub deposits: Vec<Cairn>,
+    pub source: Cairn,
+    pub depth: Stratum,
+    pub unrecorded: bool,
+}
+
+impl TraceParts {
+    pub(crate) fn to_node(&self) -> Node {
+        Node::Trace {
+            residue: self.residue,
+            holes: self.holes.clone(),
+            witnesses: self.witnesses.clone(),
+            deposits: self.deposits.clone(),
+            source: self.source,
+            depth: self.depth,
+            unrecorded: self.unrecorded,
+        }
+    }
+}
+
+/// Read a `Node::Trace` from the store, or report what `cairn` holds instead.
+pub(crate) fn load_trace(store: &Store, cairn: Cairn) -> Result<TraceParts, ExitCode> {
+    let Ok(Stored::Node(Node::Trace {
+        residue,
+        holes,
+        witnesses,
+        deposits,
+        source,
+        depth,
+        unrecorded,
+    })) = store.get(cairn)
+    else {
+        return Err(crate::not_a_trace(store, cairn));
+    };
+    Ok(TraceParts { residue, holes, witnesses, deposits, source, depth, unrecorded })
+}
+
+/// Read and validate a single `Node::Hole` from `store`.
+pub(crate) fn load_hole(
+    store: &Store,
+    hole: Cairn,
+    on_absent: impl FnOnce(Cairn) -> ExitCode,
+) -> Result<(nether_ledger::Call, Stratum, nether_ledger::Span), ExitCode> {
+    match store.get(hole) {
+        Ok(Stored::Node(Node::Hole { call, stratum, span })) if valid_stratum(&call, stratum) => {
+            Ok((call, stratum, span))
+        }
+        Ok(Stored::Node(Node::Hole { call, stratum, .. })) => {
+            eprintln!(
+                "nether: hole {} claims stratum {stratum} for `{}`",
+                hole.short(),
+                call.function()
+            );
+            Err(ExitCode::from(code::MALFORMED))
+        }
+        Ok(_) => {
+            eprintln!("nether: hole {} is not a hole node in this ledger", hole.short());
+            Err(ExitCode::from(code::MALFORMED))
+        }
+        Err(StoreError::Absent(_)) => Err(on_absent(hole)),
+        Err(e) => Err(store_err(&e)),
+    }
+}
+
 /// Validate a trace's `source`, `deposits`, `holes`, `witnesses`, `depth`, and
 /// `unrecorded` mark upfront before exhuming, replaying, or grafting.
 ///
 /// Returns whether any prior witness reached stratum 8.
-pub fn verify_trace_parts(
-    store: &Store,
-    source: Cairn,
-    deposits: &[Cairn],
-    holes: &[Cairn],
-    witnesses: &[Cairn],
-    orig_depth: Stratum,
-    marked: bool,
-) -> Result<bool, ExitCode> {
-    if !matches!(store.get(source).map_err(|e| store_err(&e))?, Stored::Value(Value::Bytes(_))) {
-        eprintln!("nether: source {} is not bytes", source.short());
+pub(crate) fn verify_trace(store: &Store, trace: &TraceParts) -> Result<bool, ExitCode> {
+    if !matches!(
+        store.get(trace.source).map_err(|e| store_err(&e))?,
+        Stored::Value(Value::Bytes(_))
+    ) {
+        eprintln!("nether: source {} is not bytes", trace.source.short());
         return Err(ExitCode::from(code::MALFORMED));
     }
-    for &d in deposits {
+    for &d in &trace.deposits {
         let Stored::Node(Node::Deposit { value, .. }) = store.get(d).map_err(|e| store_err(&e))?
         else {
             eprintln!("nether: deposit {} is not a deposit node in this ledger", d.short());
@@ -187,19 +239,20 @@ pub fn verify_trace_parts(
             return Err(ExitCode::from(code::MALFORMED));
         }
     }
-    let prior_unrecorded = unrecorded(store, witnesses)?;
-    if !marked && prior_unrecorded {
+    let prior_unrecorded = unrecorded(store, &trace.witnesses)?;
+    if !trace.unrecorded && prior_unrecorded {
         eprintln!("nether: this trace is not marked unrecorded, and a witness under it reached 8");
         return Err(ExitCode::from(code::MALFORMED));
     }
-    if marked && orig_depth < Stratum::MAX {
-        eprintln!("nether: this trace is marked unrecorded, and records depth {orig_depth}");
+    if trace.unrecorded && trace.depth < Stratum::MAX {
+        eprintln!("nether: this trace is marked unrecorded, and records depth {}", trace.depth);
         return Err(ExitCode::from(code::MALFORMED));
     }
-    let min_depth = depth(store, Stratum::ZERO, holes, witnesses)?;
-    if min_depth > orig_depth {
+    let min_depth = depth(store, Stratum::ZERO, &trace.holes, &trace.witnesses)?;
+    if min_depth > trace.depth {
         eprintln!(
-            "nether: this trace records depth {orig_depth}, and a hole or witness under it reaches {min_depth}"
+            "nether: this trace records depth {}, and a hole or witness under it reaches {min_depth}",
+            trace.depth
         );
         return Err(ExitCode::from(code::MALFORMED));
     }

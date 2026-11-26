@@ -111,6 +111,16 @@ impl core::fmt::Display for Unanswered {
 
 impl core::error::Error for Unanswered {}
 
+impl From<Refuse> for Unanswered {
+    fn from(e: Refuse) -> Self {
+        match e {
+            Refuse::NotRecorded(err) => Self::NotRecorded(err.to_string()),
+            Refuse::Collapse(why) => Self::Collapsed(why),
+            Refuse::Unavailable(why) => Self::Unavailable(why),
+        }
+    }
+}
+
 impl World {
     /// A world with nothing granted. Every question goes unanswered.
     #[must_use]
@@ -168,11 +178,7 @@ impl World {
                 call.args().len()
             )));
         }
-        provider.answer(call, span, into).map_err(|e| match e {
-            Refuse::NotRecorded(e) => Unanswered::NotRecorded(e.to_string()),
-            Refuse::Collapse(why) => Unanswered::Collapsed(why),
-            Refuse::Unavailable(why) => Unanswered::Unavailable(why),
-        })
+        provider.answer(call, span, into).map_err(Unanswered::from)
     }
 
     /// Answer a slice of holes in discovery order, overlapping contiguous runs
@@ -205,75 +211,78 @@ impl World {
                 i += 1;
                 continue;
             }
-            let run = &asked[i..end];
-            // Deduplicate identical read-stratum `Call` holes within the batch
-            // regardless of `Span` so concurrent reads of the same resource
-            // contact the world once and cannot produce conflicting witnesses.
-            let mut leaders: Vec<usize> = Vec::with_capacity(run.len());
-            let mut first_of: HashMap<&Call, usize> = HashMap::new();
-            let mut leader_for: Vec<usize> = Vec::with_capacity(run.len());
-            for (idx, (call, _)) in run.iter().enumerate() {
-                let leader = *first_of.entry(call).or_insert_with(|| {
-                    leaders.push(idx);
-                    idx
-                });
-                leader_for.push(leader);
-            }
-            let (next, cutoff) = (AtomicUsize::new(0), AtomicUsize::new(leaders.len()));
-            let slots: Vec<Mutex<Option<Result<Recorded, Unanswered>>>> =
-                (0..leaders.len()).map(|_| Mutex::new(None)).collect();
-            std::thread::scope(|s| {
-                for _ in 0..leaders.len().min(MOST_IN_FLIGHT) {
-                    s.spawn(|| {
-                        loop {
-                            let li = next.fetch_add(1, Ordering::Relaxed);
-                            if li >= cutoff.load(Ordering::Acquire) {
-                                break;
-                            }
-                            let idx = leaders[li];
-                            let res = self.ask(&run[idx].0, run[idx].1, into);
-                            if Self::fatal(&res) {
-                                cutoff.fetch_min(li, Ordering::AcqRel);
-                            }
-                            *slots[li].lock().unwrap_or_else(PoisonError::into_inner) = Some(res);
-                        }
-                    });
-                }
-            });
-            let mut leader_results: HashMap<usize, Result<Recorded, Unanswered>> = HashMap::new();
-            for (li, slot) in slots.into_iter().enumerate() {
-                if let Some(res) = slot.into_inner().unwrap_or_else(PoisonError::into_inner) {
-                    leader_results.insert(leaders[li], res);
-                }
-            }
-            for (idx, &leader) in leader_for.iter().enumerate() {
-                let Some(leader_res) = leader_results.get(&leader) else {
-                    break;
-                };
-                let res = match leader_res {
-                    Ok(rec) if idx != leader && run[idx].1 != run[leader].1 => {
-                        let stratum = Prim::from_name(run[idx].0.function())
-                            .map_or(Depth::PURE, Prim::latent);
-                        into.record_existing(&run[idx].0, stratum, run[idx].1, rec.answer())
-                            .map_err(|e| match e {
-                                Refuse::NotRecorded(err) => {
-                                    Unanswered::NotRecorded(err.to_string())
-                                }
-                                Refuse::Collapse(why) => Unanswered::Collapsed(why),
-                                Refuse::Unavailable(why) => Unanswered::Unavailable(why),
-                            })
-                    }
-                    other => other.clone(),
-                };
-                let stop = Self::fatal(&res);
-                out.push(res);
-                if stop {
-                    return out;
-                }
+            if self.ask_read_run(&asked[i..end], into, &mut out) {
+                return out;
             }
             i = end;
         }
         out
+    }
+
+    /// Answer a contiguous read-stratum run, deduplicating identical calls and
+    /// returning `true` if a fatal failure ended the run early.
+    fn ask_read_run(
+        &self,
+        run: &[(Call, Span)],
+        into: &Recorder,
+        out: &mut Vec<Result<Recorded, Unanswered>>,
+    ) -> bool {
+        // Deduplicate identical read-stratum `Call` holes within the batch
+        // regardless of `Span` so concurrent reads of the same resource
+        // contact the world once and cannot produce conflicting witnesses.
+        let mut leaders: Vec<usize> = Vec::with_capacity(run.len());
+        let mut first_of: HashMap<&Call, usize> = HashMap::new();
+        let mut leader_for: Vec<usize> = Vec::with_capacity(run.len());
+        for (idx, (call, _)) in run.iter().enumerate() {
+            let leader = *first_of.entry(call).or_insert_with(|| {
+                leaders.push(idx);
+                idx
+            });
+            leader_for.push(leader);
+        }
+        let (next, cutoff) = (AtomicUsize::new(0), AtomicUsize::new(leaders.len()));
+        let slots: Vec<Mutex<Option<Result<Recorded, Unanswered>>>> =
+            (0..leaders.len()).map(|_| Mutex::new(None)).collect();
+        std::thread::scope(|s| {
+            for _ in 0..leaders.len().min(MOST_IN_FLIGHT) {
+                s.spawn(|| {
+                    while let li = next.fetch_add(1, Ordering::Relaxed)
+                        && li < cutoff.load(Ordering::Acquire)
+                    {
+                        let idx = leaders[li];
+                        let res = self.ask(&run[idx].0, run[idx].1, into);
+                        if Self::fatal(&res) {
+                            cutoff.fetch_min(li, Ordering::AcqRel);
+                        }
+                        *slots[li].lock().unwrap_or_else(PoisonError::into_inner) = Some(res);
+                    }
+                });
+            }
+        });
+        let mut leader_results: HashMap<usize, Result<Recorded, Unanswered>> = HashMap::new();
+        for (li, slot) in slots.into_iter().enumerate() {
+            if let Some(res) = slot.into_inner().unwrap_or_else(PoisonError::into_inner) {
+                leader_results.insert(leaders[li], res);
+            }
+        }
+        for (idx, &leader) in leader_for.iter().enumerate() {
+            let Some(leader_res) = leader_results.get(&leader) else { break };
+            let res = match leader_res {
+                Ok(rec) if idx != leader && run[idx].1 != run[leader].1 => {
+                    let stratum =
+                        Prim::from_name(run[idx].0.function()).map_or(Depth::PURE, Prim::latent);
+                    into.record_existing(&run[idx].0, stratum, run[idx].1, rec.answer())
+                        .map_err(Unanswered::from)
+                }
+                other => other.clone(),
+            };
+            let stop = Self::fatal(&res);
+            out.push(res);
+            if stop {
+                return true;
+            }
+        }
+        false
     }
 
     /// Answer the assigned slot indices of a trace's `holes` list in ascending
@@ -302,11 +311,7 @@ impl World {
             };
             match into.store().get(hole) {
                 Ok(Stored::Node(Node::Hole { call, stratum, span })) => {
-                    if Prim::from_name(call.function()).is_none_or(|p| {
-                        p.latent() == Depth::PURE
-                            || p.latent().get() != stratum.as_u8()
-                            || call.args().len() != p.arity()
-                    }) {
+                    if !crate::replay::valid_call_stratum(&call, stratum) {
                         return Err(Unanswered::NotRecorded(format!(
                             "hole {hole} claims stratum {stratum} with {} arg(s) for `{}`",
                             call.args().len(),

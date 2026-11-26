@@ -157,13 +157,7 @@ impl<'a> Recorder<'a> {
         said: &Value,
     ) -> Result<Recorded, Refuse> {
         let answer = self.store.put(&Stored::Value(said.clone()))?;
-        let witness = self.store.put(&Stored::Node(Node::Witness {
-            stratum: Stratum::new(stratum.get()).unwrap_or(Stratum::MAX),
-            call: call.clone(),
-            answer,
-            span,
-        }))?;
-        Ok(Recorded { witness, answer })
+        self.record_existing(call, stratum, span, answer)
     }
 
     /// Record a witness referencing an already-recorded `answer` cairn (used

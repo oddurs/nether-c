@@ -7,48 +7,39 @@ use std::process::ExitCode;
 
 use nether_ledger::{Cairn, Store, StoreError, Stored, Value};
 
-use crate::{FAILED, bad_usage, code, json, split_flag, take_val, usage_error};
+use crate::{
+    FAILED, FlagStep, code, finish, json, parse_args, read_file_bytes, take_val, usage_error,
+};
 
 pub(crate) const USAGE: &str = "usage: nether cairn <path> | --verify <cairn> [--json]";
 
 /// `nether cairn <path> | --verify <cairn> [--json]`
 pub fn run(args: &[String]) -> ExitCode {
-    let mut wants_json = false;
+    finish(run_inner(args))
+}
+
+fn run_inner(args: &[String]) -> Result<(), ExitCode> {
     let mut verify_arg: Option<&str> = None;
-    let mut path_arg: Option<&str> = None;
-    let mut end_opts = false;
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
-        if end_opts {
-            if path_arg.is_some() || verify_arg.is_some() {
-                return usage();
+    let Some((path_arg, wants_json)) = parse_args(args, USAGE, None, |flag, inline, rest| {
+        if flag == "--verify" {
+            match take_val(inline, rest) {
+                Some(v) if verify_arg.is_none() => {
+                    verify_arg = Some(v);
+                    Ok(FlagStep::Handled)
+                }
+                _ => Err(usage()),
             }
-            path_arg = Some(arg.as_str());
-            continue;
+        } else {
+            Ok(FlagStep::Unknown)
         }
-        let (flag, inline) = split_flag(arg);
-        match (flag, inline) {
-            ("--", None) => end_opts = true,
-            ("--help" | "-h", None) => {
-                println!("{USAGE}");
-                return ExitCode::SUCCESS;
-            }
-            ("--json", None) => wants_json = true,
-            ("--verify", inline) => match take_val(inline, &mut rest) {
-                Some(v) if verify_arg.is_none() && path_arg.is_none() => verify_arg = Some(v),
-                _ => return usage(),
-            },
-            (other, _) if other.starts_with('-') && other != "-" => {
-                return bad_usage(&format!("unknown option `{arg}`"), USAGE);
-            }
-            _ if path_arg.is_none() && verify_arg.is_none() => path_arg = Some(arg.as_str()),
-            _ => return usage(),
-        }
-    }
+    })?
+    else {
+        return Ok(());
+    };
     match (verify_arg, path_arg) {
         (Some(name), None) => verify(name, wants_json),
         (None, Some(path)) => name(Path::new(path), wants_json),
-        _ => usage(),
+        _ => Err(usage()),
     }
 }
 
@@ -62,14 +53,8 @@ fn usage() -> ExitCode {
 /// A file is bytes. Reading it as a `Str` would mean deciding what to do about
 /// one that is not UTF-8, and there is nothing to decide: the name of a thing
 /// is the name of what it holds.
-fn name(path: &Path, wants_json: bool) -> ExitCode {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            eprintln!("nether: {}: {e}", path.display());
-            return FAILED;
-        }
-    };
+fn name(path: &Path, wants_json: bool) -> Result<(), ExitCode> {
+    let bytes = read_file_bytes(path)?;
     let size = bytes.len();
     let cairn = Value::Bytes(bytes).cairn();
     if wants_json {
@@ -80,7 +65,7 @@ fn name(path: &Path, wants_json: bool) -> ExitCode {
     } else {
         println!("{cairn}   {size} bytes   {}", path.display());
     }
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 /// Whether the store still holds what that name says it holds.
@@ -88,28 +73,21 @@ fn name(path: &Path, wants_json: bool) -> ExitCode {
 /// §8.5: this MUST report *what* differs, not merely that something does. The
 /// store already refuses to serve bytes that do not hash to the name it was
 /// asked for; what this adds is saying which of the three things happened.
-fn verify(prefix: &str, wants_json: bool) -> ExitCode {
+fn verify(prefix: &str, wants_json: bool) -> Result<(), ExitCode> {
     let store = crate::opened_readonly();
-    let cairn = match store.resolve(prefix) {
-        Ok(cairn) => cairn,
-        Err(e) => return complain(&e, prefix, wants_json),
-    };
-    match store.get(cairn) {
-        Ok(stored) => holds(&store, cairn, &stored, wants_json),
-        Err(e) => complain(&e, prefix, wants_json),
-    }
+    let cairn = store.resolve(prefix).map_err(|e| complain(&e, prefix, wants_json))?;
+    let stored = store.get(cairn).map_err(|e| complain(&e, prefix, wants_json))?;
+    holds(&store, cairn, &stored, wants_json)
 }
 
-fn holds(store: &Store, cairn: Cairn, stored: &Stored, wants_json: bool) -> ExitCode {
+fn holds(store: &Store, cairn: Cairn, stored: &Stored, wants_json: bool) -> Result<(), ExitCode> {
     let bytes = stored.encode();
     let what = match stored {
         Stored::Value(_) => "value",
         Stored::Node(_) => "node",
     };
-    let referrers = match store.referrers(cairn) {
-        Ok(r) => r.len(),
-        Err(e) => return complain(&e, &cairn.to_string(), wants_json),
-    };
+    let referrers =
+        store.referrers(cairn).map_err(|e| complain(&e, &cairn.to_string(), wants_json))?.len();
     if wants_json {
         println!(
             "{{\"cairn\":\"{cairn}\",\"holds\":true,\"kind\":\"{what}\",\
@@ -122,7 +100,7 @@ fn holds(store: &Store, cairn: Cairn, stored: &Stored, wants_json: bool) -> Exit
             println!("  named by {referrers} other object(s)");
         }
     }
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 /// What went wrong, in the words the store used, and the exit code §8.8 gives
