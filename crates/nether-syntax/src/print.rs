@@ -10,13 +10,13 @@
 //! a child whose level is looser than its place allows, read from the same
 //! table the parser climbs. That is what keeps a printed residue inside
 //! `MAX_NESTING` — minimal parentheses never nest deeper than the source that
-//! lowered — and §6.5 needs every residue to be read back in. 0279.
+//! lowered — and §6.5 needs every residue to be read back in.
 
 use core::fmt::Write as _;
 
 use nether_core::{
-    Asserted, BinOp, Block, Expr, ExprKind, FuncDef, Literal, LocalDef, LocalId, Proj, Rite, Stmt,
-    Type, UnOp, Unit,
+    Asserted, BinOp, Block, Expr, ExprKind, Field, FuncDef, Literal, LocalDef, LocalId, Place,
+    Proj, Rite, Stmt, Type, UnOp, Unit,
 };
 
 use crate::parse::LEVELS;
@@ -129,13 +129,20 @@ fn indent(depth: usize) -> String {
     "  ".repeat(depth)
 }
 
-/// A local, from the function it is in or, outside one, from the unit. 0280.
+/// A local, from the function it is in or, outside one, from the unit.
 fn local<'u>(unit: &'u Unit, f: Option<&'u FuncDef>, id: LocalId) -> Option<&'u LocalDef> {
     f.map_or_else(|| unit.local(id), |f| f.local(id))
 }
 
 fn local_name(unit: &Unit, f: Option<&FuncDef>, id: LocalId) -> String {
     local(unit, f, id).map_or_else(|| format!("«local {}»", id.0), |l| l.name.clone())
+}
+
+fn local_decl(unit: &Unit, f: Option<&FuncDef>, id: LocalId) -> (String, String) {
+    local(unit, f, id).map_or_else(
+        || ("U0".to_string(), format!("«local {}»", id.0)),
+        |d| (declared(&d.ty, d.asserted), d.name.clone()),
+    )
 }
 
 fn block(b: &Block, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
@@ -157,46 +164,37 @@ fn block(b: &Block, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
 fn stmt(s: &Stmt, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
     match s {
         Stmt::Let { local, value } => {
-            let def = self::local(unit, f, *local);
-            let (t, name) = def.map_or_else(
-                || ("U0".to_string(), format!("«local {}»", local.0)),
-                |d| (declared(&d.ty, d.asserted), d.name.clone()),
-            );
+            let (t, name) = local_decl(unit, f, *local);
             format!("{}{t} {name} = {};\n", indent(at), expr(value, unit, f))
         }
         // A declaration with no value, which is how an aggregate is built. It
         // has to print back as one or a residue stops round-tripping. §6.5.
         Stmt::Declare { local } => {
-            let def = self::local(unit, f, *local);
-            let (t, name) = def.map_or_else(
-                || ("U0".to_string(), format!("«local {}»", local.0)),
-                |d| (declared(&d.ty, d.asserted), d.name.clone()),
-            );
+            let (t, name) = local_decl(unit, f, *local);
             format!("{}{t} {name};\n", indent(at))
         }
-        // The forms that were statements before lowering folded them go back
-        // to being statements, which is what makes the result parse.
-        Stmt::Expr(x) => match &x.kind {
-            ExprKind::Select { .. } if !short_circuit(x) => {
-                format!("{}\n", branch(x, unit, f, at))
-            }
-            ExprKind::Loop { body, step } => {
-                let step =
-                    step.as_ref().map_or_else(String::new, |s| format!(" {}", expr(s, unit, f)));
-                let body = as_block(body, unit, f, at);
-                format!("{}for (; ;{step})\n{body}\n", indent(at))
-            }
-            ExprKind::Break => format!("{}break;\n", indent(at)),
-            ExprKind::Continue => format!("{}continue;\n", indent(at)),
-            ExprKind::Return(v) => match v {
-                Some(v) => format!("{}return {};\n", indent(at), expr(v, unit, f)),
-                None => format!("{}return;\n", indent(at)),
-            },
-            ExprKind::Block(b) if b.tail.is_some() => format!("{};\n", block(b, unit, f, at)),
-            ExprKind::Block(b) => format!("{}\n", block(b, unit, f, at)),
-            _ if starts_with_block(x) => format!("{}({});\n", indent(at), expr(x, unit, f)),
-            _ => format!("{}{};\n", indent(at), expr(x, unit, f)),
-        },
+        Stmt::Expr(x) => stmt_expr(x, unit, f, at),
+    }
+}
+
+/// The forms that were statements before lowering folded them go back to being
+/// statements, which is what makes the result parse.
+fn stmt_expr(x: &Expr, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
+    match &x.kind {
+        ExprKind::Select { .. } if !short_circuit(x) => format!("{}\n", branch(x, unit, f, at)),
+        ExprKind::Loop { body, step } => {
+            let step = step.as_ref().map_or_else(String::new, |s| format!(" {}", expr(s, unit, f)));
+            let body = as_block(body, unit, f, at);
+            format!("{}for (; ;{step})\n{body}\n", indent(at))
+        }
+        ExprKind::Break => format!("{}break;\n", indent(at)),
+        ExprKind::Continue => format!("{}continue;\n", indent(at)),
+        ExprKind::Return(Some(v)) => format!("{}return {};\n", indent(at), expr(v, unit, f)),
+        ExprKind::Return(None) => format!("{}return;\n", indent(at)),
+        ExprKind::Block(b) if b.tail.is_some() => format!("{};\n", block(b, unit, f, at)),
+        ExprKind::Block(b) => format!("{}\n", block(b, unit, f, at)),
+        _ if starts_with_block(x) => format!("{}({});\n", indent(at), expr(x, unit, f)),
+        _ => format!("{}{};\n", indent(at), expr(x, unit, f)),
     }
 }
 
@@ -221,25 +219,8 @@ fn branch(x: &Expr, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
 fn as_block(x: &Expr, unit: &Unit, f: Option<&FuncDef>, at: usize) -> String {
     match &x.kind {
         ExprKind::Block(b) => block(b, unit, f, at),
-        ExprKind::Break => format!("{}{{\n{}break;\n{}}}", indent(at), indent(at + 1), indent(at)),
-        ExprKind::Continue => {
-            format!("{}{{\n{}continue;\n{}}}", indent(at), indent(at + 1), indent(at))
-        }
-        ExprKind::Return(_) | ExprKind::Loop { .. } => {
-            format!(
-                "{}{{\n{}{}}}",
-                indent(at),
-                stmt(&Stmt::Expr(x.clone()), unit, f, at + 1),
-                indent(at)
-            )
-        }
-        ExprKind::Select { .. } if !short_circuit(x) => {
-            format!(
-                "{}{{\n{}{}}}",
-                indent(at),
-                stmt(&Stmt::Expr(x.clone()), unit, f, at + 1),
-                indent(at)
-            )
+        _ if !expr_printable(x) => {
+            format!("{}{{\n{}{}}}", indent(at), stmt_expr(x, unit, f, at + 1), indent(at))
         }
         ExprKind::Literal(Literal::Unit) => format!("{}{{\n{}}}", indent(at), indent(at)),
         _ if starts_with_block(x) => {
@@ -352,44 +333,19 @@ fn bare(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
         }
         ExprKind::Index { base, index } => format!("{}[{}]", at(base, POSTFIX), go(index)),
         ExprKind::Assign { place, value } => {
-            let mut out = local_name(unit, f, place.local);
-            let mut ty_of = local(unit, f, place.local).map(|l| l.ty.clone());
-            for p in &place.path {
-                match p {
-                    Proj::Field(i) => {
-                        let name = ty_of
-                            .as_ref()
-                            .map_or_else(|| format!("«{i}»"), |t| field_name(t, *i, unit));
-                        ty_of = ty_of.as_ref().and_then(|t| field_type(t, *i, unit));
-                        let _ = write!(out, ".{name}");
-                    }
-                    Proj::Index(e) => {
-                        ty_of = ty_of.and_then(|t| match t {
-                            Type::Array { elem, .. } => Some(*elem),
-                            _ => None,
-                        });
-                        let _ = write!(out, "[{}]", go(e));
-                    }
-                }
-            }
-            format!("{out} = {}", go(value))
+            format!("{} = {}", assign_place(place, unit, f), go(value))
         }
         // A block in expression position is its own tail, which is the only
         // way §04 lets one appear there.
         ExprKind::Block(b) => block(b, unit, f, 0),
-        ExprKind::Select { cond, then, otherwise } => {
-            if short_circuit(x) && is_false(otherwise) {
-                format!("{} && {}", at(cond, level("&&")), at(then, level("&&") - 1))
-            } else if short_circuit(x)
-                && matches!(then.kind, ExprKind::Literal(Literal::Bool(true)))
-            {
-                format!("{} || {}", at(cond, level("||")), at(otherwise, level("||") - 1))
-            } else {
-                // §04 has no `if` expression, so this cannot have come from
-                // source and cannot go back to it.
-                "«a branch outside a statement»".into()
-            }
+        ExprKind::Select { cond, then, otherwise } if short_circuit(x) => {
+            let (op, rhs) = if is_false(otherwise) { ("&&", then) } else { ("||", otherwise) };
+            let l = level(op);
+            format!("{} {op} {}", at(cond, l), at(rhs, l - 1))
         }
+        // §04 has no `if` expression, so this cannot have come from source and
+        // cannot go back to it.
+        ExprKind::Select { .. } => "«a branch outside a statement»".into(),
         ExprKind::Loop { .. } => "«a loop outside a statement»".into(),
         ExprKind::Break => "break".into(),
         ExprKind::Continue => "continue".into(),
@@ -409,20 +365,42 @@ fn bare(x: &Expr, unit: &Unit, f: Option<&FuncDef>) -> String {
     }
 }
 
+fn assign_place(place: &Place, unit: &Unit, f: Option<&FuncDef>) -> String {
+    let mut out = local_name(unit, f, place.local);
+    let mut ty_of = local(unit, f, place.local).map(|l| &l.ty);
+    for p in &place.path {
+        match p {
+            Proj::Field(i) => {
+                let field = ty_of.and_then(|t| field_def(t, *i, unit));
+                let _ = match field {
+                    Some(def) => write!(out, ".{}", def.name),
+                    None => write!(out, ".«{i}»"),
+                };
+                ty_of = field.map(|def| &def.ty);
+            }
+            Proj::Index(e) => {
+                ty_of = ty_of.and_then(|t| match t {
+                    Type::Array { elem, .. } => Some(elem.as_ref()),
+                    _ => None,
+                });
+                let _ = write!(out, "[{}]", expr(e, unit, f));
+            }
+        }
+    }
+    out
+}
+
 fn is_false(x: &Expr) -> bool {
     matches!(x.kind, ExprKind::Literal(Literal::Bool(false)))
 }
 
-fn field_name(t: &Type, index: u32, unit: &Unit) -> String {
-    let Type::Struct(name) = t else { return format!("«{index}»") };
-    unit.struct_def(name)
-        .and_then(|s| s.fields.get(index as usize))
-        .map_or_else(|| format!("«{index}»"), |f| f.name.clone())
+fn field_def<'u>(t: &Type, index: u32, unit: &'u Unit) -> Option<&'u Field> {
+    let Type::Struct(name) = t else { return None };
+    unit.struct_def(name)?.fields.get(index as usize)
 }
 
-fn field_type(t: &Type, index: u32, unit: &Unit) -> Option<Type> {
-    let Type::Struct(name) = t else { return None };
-    unit.struct_def(name).and_then(|s| s.fields.get(index as usize)).map(|f| f.ty.clone())
+fn field_name(t: &Type, index: u32, unit: &Unit) -> String {
+    field_def(t, index, unit).map_or_else(|| format!("«{index}»"), |f| f.name.clone())
 }
 
 fn literal(l: &Literal) -> String {

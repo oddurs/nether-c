@@ -119,94 +119,67 @@ impl Prim {
         Self::CallForeign,
     ];
 
+    const fn info(self) -> (&'static str, Depth, usize, bool) {
+        match self {
+            Self::Min => ("min", Depth::PURE, 2, false),
+            Self::Max => ("max", Depth::PURE, 2, false),
+            Self::Abs => ("abs", Depth::PURE, 1, false),
+            Self::Len => ("len", Depth::PURE, 1, false),
+            Self::Slice => ("slice", Depth::PURE, 3, false),
+            Self::Concat => ("concat", Depth::PURE, 2, false),
+            Self::StartsWith => ("starts_with", Depth::PURE, 2, false),
+            Self::Utf8 => ("utf8", Depth::PURE, 1, true),
+            Self::Raw => ("raw", Depth::PURE, 1, false),
+            Self::Join => ("join", Depth::PURE, 2, false),
+            Self::Split => ("split", Depth::PURE, 2, false),
+            Self::CairnOf => ("cairn_of", Depth::PURE, 1, false),
+            Self::Hex => ("hex", Depth::PURE, 1, false),
+            Self::Given => ("given", Depth::PURE, 1, false),
+            Self::Refusal => ("refusal", Depth::PURE, 1, false),
+            Self::Must => ("must", Depth::PURE, 1, false),
+            Self::Answered => ("answered", Depth::PURE, 1, true),
+            Self::Refused => ("refused", Depth::PURE, 1, true),
+            Self::FetchNode => ("fetch_node", Depth::STORE, 1, true),
+            Self::HasNode => ("has_node", Depth::STORE, 1, false),
+            Self::Env => ("env", Depth::ENV, 1, true),
+            Self::Clock => ("clock", Depth::ENV, 0, false),
+            Self::Target => ("target", Depth::ENV, 0, false),
+            Self::Read => ("read", Depth::DISK, 1, true),
+            Self::List => ("list", Depth::DISK, 1, true),
+            Self::Exists => ("exists", Depth::DISK, 1, false),
+            Self::Write => ("write", Depth::DISK_WRITE, 2, true),
+            Self::Remove => ("remove", Depth::DISK_WRITE, 1, true),
+            Self::Get => ("get", Depth::NET, 1, true),
+            Self::Post => ("post", Depth::NET_WRITE, 2, true),
+            Self::Draw => ("draw", Depth::ENTROPY, 1, false),
+            Self::CallForeign => ("call_foreign", Depth::UNRECORDED, 2, true),
+        }
+    }
+
     /// The name it is written with, and the deepest stratum applying it
     /// reaches.
     #[must_use]
     pub const fn signature(self) -> (&'static str, Depth) {
-        match self {
-            Self::Min => ("min", Depth::PURE),
-            Self::Max => ("max", Depth::PURE),
-            Self::Abs => ("abs", Depth::PURE),
-            Self::Len => ("len", Depth::PURE),
-            Self::Slice => ("slice", Depth::PURE),
-            Self::Concat => ("concat", Depth::PURE),
-            Self::StartsWith => ("starts_with", Depth::PURE),
-            Self::Utf8 => ("utf8", Depth::PURE),
-            Self::Raw => ("raw", Depth::PURE),
-            Self::Join => ("join", Depth::PURE),
-            Self::Split => ("split", Depth::PURE),
-            Self::CairnOf => ("cairn_of", Depth::PURE),
-            Self::Hex => ("hex", Depth::PURE),
-            Self::Given => ("given", Depth::PURE),
-            Self::Refusal => ("refusal", Depth::PURE),
-            Self::Must => ("must", Depth::PURE),
-            Self::Answered => ("answered", Depth::PURE),
-            Self::Refused => ("refused", Depth::PURE),
-            Self::FetchNode => ("fetch_node", Depth::STORE),
-            Self::HasNode => ("has_node", Depth::STORE),
-            Self::Env => ("env", Depth::ENV),
-            Self::Clock => ("clock", Depth::ENV),
-            Self::Target => ("target", Depth::ENV),
-            Self::Read => ("read", Depth::DISK),
-            Self::List => ("list", Depth::DISK),
-            Self::Exists => ("exists", Depth::DISK),
-            Self::Write => ("write", Depth::DISK_WRITE),
-            Self::Remove => ("remove", Depth::DISK_WRITE),
-            Self::Get => ("get", Depth::NET),
-            Self::Post => ("post", Depth::NET_WRITE),
-            Self::Draw => ("draw", Depth::ENTROPY),
-            Self::CallForeign => ("call_foreign", Depth::UNRECORDED),
-        }
+        let (name, latent, _, _) = self.info();
+        (name, latent)
     }
 
     /// The name it is written with.
     #[must_use]
     pub const fn name(self) -> &'static str {
-        self.signature().0
+        self.info().0
     }
 
     /// The deepest stratum applying it reaches: `dƒ` in [APP].
     #[must_use]
     pub const fn latent(self) -> Depth {
-        self.signature().1
+        self.info().1
     }
 
     /// Fixed argument count of this prelude function (`spec/09-prelude.md`).
     #[must_use]
     pub const fn arity(self) -> usize {
-        match self {
-            Self::Clock | Self::Target => 0,
-            Self::Abs
-            | Self::Len
-            | Self::Utf8
-            | Self::Raw
-            | Self::CairnOf
-            | Self::Hex
-            | Self::Given
-            | Self::Refusal
-            | Self::Must
-            | Self::Answered
-            | Self::Refused
-            | Self::FetchNode
-            | Self::HasNode
-            | Self::Env
-            | Self::Read
-            | Self::List
-            | Self::Exists
-            | Self::Remove
-            | Self::Get
-            | Self::Draw => 1,
-            Self::Min
-            | Self::Max
-            | Self::Concat
-            | Self::StartsWith
-            | Self::Join
-            | Self::Split
-            | Self::Write
-            | Self::Post
-            | Self::CallForeign => 2,
-            Self::Slice => 3,
-        }
+        self.info().2
     }
 
     /// Whether §09 types this one's result as an `Answer<T>`.
@@ -217,21 +190,7 @@ impl Prim {
     /// `Bytes`.
     #[must_use]
     pub const fn refusable(self) -> bool {
-        matches!(
-            self,
-            Self::Utf8
-                | Self::Answered
-                | Self::Refused
-                | Self::FetchNode
-                | Self::Env
-                | Self::Read
-                | Self::List
-                | Self::Write
-                | Self::Remove
-                | Self::Get
-                | Self::Post
-                | Self::CallForeign
-        )
+        self.info().3
     }
 
     /// The prelude function of that name, if there is one.

@@ -206,21 +206,28 @@ impl Scanner<'_> {
         self.out.push(Token { kind, span });
     }
 
+    /// Consume `\r` before `\n`, or reject a stray carriage return. §3.1.
+    fn check_cr(&mut self) -> Result<(), Fault> {
+        let here = self.at;
+        let crlf = self.rest().starts_with("\r\n");
+        self.at += 1;
+        if crlf { Ok(()) } else { Err(self.fault(here, FaultKind::StrayCarriageReturn)) }
+    }
+
+    fn cr_in_string(&self, from: usize) -> Fault {
+        if self.rest().starts_with('\n') {
+            self.fault(from, FaultKind::UnterminatedString)
+        } else {
+            self.fault(self.at - 1, FaultKind::StrayCarriageReturn)
+        }
+    }
+
     fn run(mut self) -> Result<Vec<Token>, Fault> {
         while let Some(c) = self.peek() {
             let from = self.at;
             match c {
                 ' ' | '\t' | '\n' => self.at += c.len_utf8(),
-                // §3.1: a U+000D immediately preceding U+000A is discarded,
-                // and one anywhere else is an error.
-                '\r' => {
-                    if self.rest().starts_with("\r\n") {
-                        self.at += 1;
-                    } else {
-                        self.at += 1;
-                        return Err(self.fault(from, FaultKind::StrayCarriageReturn));
-                    }
-                }
+                '\r' => self.check_cr()?,
                 '/' if self.rest().starts_with("//") => self.line_comment()?,
                 '/' if self.rest().starts_with("/*") => self.block_comment(from)?,
                 '"' => self.string(from, false)?,
@@ -245,13 +252,8 @@ impl Scanner<'_> {
                 break;
             }
             if c == '\r' {
-                if self.rest().starts_with("\r\n") {
-                    self.at += 1;
-                    break;
-                }
-                let here = self.at;
-                self.at += 1;
-                return Err(self.fault(here, FaultKind::StrayCarriageReturn));
+                self.check_cr()?;
+                break;
             }
             self.at += c.len_utf8();
         }
@@ -266,10 +268,9 @@ impl Scanner<'_> {
                 self.at += 2;
                 return Ok(());
             }
-            if c == '\r' && !self.rest().starts_with("\r\n") {
-                let here = self.at;
-                self.at += 1;
-                return Err(self.fault(here, FaultKind::StrayCarriageReturn));
+            if c == '\r' {
+                self.check_cr()?;
+                continue;
             }
             self.at += c.len_utf8();
         }
@@ -282,8 +283,8 @@ impl Scanner<'_> {
     /// one name must not resolve to two bindings, and the ledger will not fix
     /// it later because the ledger stores the bytes it is handed.
     fn word(&mut self, from: usize) {
-        while self.peek().is_some_and(|c| unicode_ident::is_xid_continue(c) || c == '_') {
-            self.at += self.peek().map_or(0, char::len_utf8);
+        while let Some(c) = self.peek().filter(|&c| unicode_ident::is_xid_continue(c) || c == '_') {
+            self.at += c.len_utf8();
         }
         let raw = &self.text[from..self.at];
         let kind = match Keyword::from_word(raw) {
@@ -402,12 +403,7 @@ impl Scanner<'_> {
                 // A string that runs off the end of its line is a missing
                 // quote, and saying so here beats saying it four lines later.
                 '\n' => return Err(self.fault(from, FaultKind::UnterminatedString)),
-                '\r' => {
-                    if self.rest().starts_with('\n') {
-                        return Err(self.fault(from, FaultKind::UnterminatedString));
-                    }
-                    return Err(self.fault(self.at - 1, FaultKind::StrayCarriageReturn));
-                }
+                '\r' => return Err(self.cr_in_string(from)),
                 '\\' => self.escape(from, raw, &mut out)?,
                 _ => out.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes()),
             }
@@ -418,10 +414,9 @@ impl Scanner<'_> {
             // Every character came from the source, which §3.1 makes UTF-8,
             // or from an escape that names a scalar value. `\x` is the one
             // that would not, and it is not admissible here.
-            match String::from_utf8(out) {
-                Ok(text) => TokenKind::Str(text),
-                Err(_) => return Err(self.fault(from, FaultKind::UnknownEscape)),
-            }
+            String::from_utf8(out)
+                .map(TokenKind::Str)
+                .map_err(|_| self.fault(from, FaultKind::UnknownEscape))?
         };
         self.push(from, kind);
         Ok(())
@@ -451,12 +446,7 @@ impl Scanner<'_> {
                 out.push(byte);
                 return Ok(());
             }
-            '\r' => {
-                if self.rest().starts_with('\n') {
-                    return Err(self.fault(from, FaultKind::UnterminatedString));
-                }
-                return Err(self.fault(self.at - 1, FaultKind::StrayCarriageReturn));
-            }
+            '\r' => return Err(self.cr_in_string(from)),
             '\n' => return Err(self.fault(from, FaultKind::UnterminatedString)),
             _ => return Err(self.fault(here, FaultKind::UnknownEscape)),
         };

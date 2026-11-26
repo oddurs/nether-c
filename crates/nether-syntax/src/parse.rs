@@ -301,19 +301,40 @@ impl Parser<'_> {
         }
     }
 
+    fn cursor(&self) -> (usize, bool) {
+        (self.at, self.pending_gt.is_some())
+    }
+
+    fn separated<T>(
+        &mut self,
+        end: Punct,
+        mut parse_item: impl FnMut(&mut Self) -> Parsed<T>,
+    ) -> Parsed<Vec<T>> {
+        let mut items = Vec::new();
+        if !self.at_punct(end) {
+            loop {
+                items.push(parse_item(self)?);
+                if !self.eat(Punct::Comma) {
+                    break;
+                }
+            }
+        }
+        Ok(items)
+    }
+
     // ── §4.1 and §4.2 ───────────────────────────────────────────────────────
 
     fn unit(&mut self) -> Unit {
         let mut items = Vec::new();
         while self.peek().is_some() {
-            let before = (self.at, self.pending_gt.is_some());
+            let before = self.cursor();
             match self.item() {
                 Ok(item) => items.push(item),
                 Err(Given) => self.resync_item(),
             }
             // Recovery that does not move is a loop, and a parser that hangs
             // on a malformed file is worse than one that says the wrong thing.
-            if (self.at, self.pending_gt.is_some()) == before {
+            if self.cursor() == before {
                 self.bump();
             }
         }
@@ -370,18 +391,12 @@ impl Parser<'_> {
 
     fn func(&mut self, ret: Type, name: Name, from: Span) -> Parsed<Item> {
         self.expect(Punct::LParen, "`(`")?;
-        let mut params = Vec::new();
-        if !self.at_punct(Punct::RParen) {
-            loop {
-                let at = self.span();
-                let ty = self.ty()?;
-                let pname = self.name("a name for the parameter")?;
-                params.push(Field { ty, name: pname, span: self.since(at) });
-                if !self.eat(Punct::Comma) {
-                    break;
-                }
-            }
-        }
+        let params = self.separated(Punct::RParen, |p| {
+            let at = p.span();
+            let ty = p.ty()?;
+            let pname = p.name("a name for the parameter")?;
+            Ok(Field { ty, name: pname, span: p.since(at) })
+        })?;
         self.expect(Punct::RParen, "`)` to close the parameters")?;
         let latent = self.latent()?;
         let body = self.block()?;
@@ -454,52 +469,47 @@ impl Parser<'_> {
     // ── §4.3 ────────────────────────────────────────────────────────────────
 
     fn ty(&mut self) -> Parsed<Type> {
-        self.deeper()?;
-        let out = self.ty_inner();
-        self.deep -= 1;
-        out
-    }
-
-    fn ty_inner(&mut self) -> Parsed<Type> {
-        let from = self.span();
-        let name = self.name("a type")?;
-        let mut args = Vec::new();
-        if self.eat(Punct::Lt) {
-            loop {
-                args.push(self.ty()?);
-                if !self.eat(Punct::Comma) {
-                    break;
-                }
-            }
-            self.expect_gt("`>` to close the type arguments")?;
-        }
-        let mut arrays = Vec::new();
-        self.with_chain(|p| {
-            while p.eat(Punct::LBracket) {
-                p.chain_step()?;
-                let len = match p.peek() {
-                    Some(TokenKind::Int(n)) => {
-                        let n = *n;
-                        p.at += 1;
-                        Some(n)
+        self.with_depth(|p| {
+            let from = p.span();
+            let name = p.name("a type")?;
+            let mut args = Vec::new();
+            if p.eat(Punct::Lt) {
+                loop {
+                    args.push(p.ty()?);
+                    if !p.eat(Punct::Comma) {
+                        break;
                     }
-                    _ => None,
-                };
-                p.expect(Punct::RBracket, "`]` to close the length")?;
-                arrays.push(len);
+                }
+                p.expect_gt("`>` to close the type arguments")?;
             }
-            Ok(())
-        })?;
-        // §3.5: on a type there is no space, so this is one token or nothing.
-        let depth = match self.peek() {
-            Some(TokenKind::Depth(d)) => {
-                let d = *d;
-                self.at += 1;
-                Some(d)
-            }
-            _ => None,
-        };
-        Ok(Type { name, args, arrays, depth, span: self.since(from) })
+            let mut arrays = Vec::new();
+            p.with_chain(|p| {
+                while p.eat(Punct::LBracket) {
+                    p.chain_step()?;
+                    let len = match p.peek() {
+                        Some(TokenKind::Int(n)) => {
+                            let n = *n;
+                            p.at += 1;
+                            Some(n)
+                        }
+                        _ => None,
+                    };
+                    p.expect(Punct::RBracket, "`]` to close the length")?;
+                    arrays.push(len);
+                }
+                Ok(())
+            })?;
+            // §3.5: on a type there is no space, so this is one token or nothing.
+            let depth = match p.peek() {
+                Some(TokenKind::Depth(d)) => {
+                    let d = *d;
+                    p.at += 1;
+                    Some(d)
+                }
+                _ => None,
+            };
+            Ok(Type { name, args, arrays, depth, span: p.since(from) })
+        })
     }
 
     /// A type followed by a name, or nothing. Used where §04 has two
@@ -525,55 +535,50 @@ impl Parser<'_> {
     // ── §4.4 ────────────────────────────────────────────────────────────────
 
     fn block(&mut self) -> Parsed<Block> {
-        self.deeper()?;
-        let out = self.block_inner();
-        self.deep -= 1;
-        out
+        self.with_depth(|p| {
+            let from = p.span();
+            p.expect(Punct::LBrace, "`{`")?;
+            let mut stmts = Vec::new();
+            let mut tail = None;
+            while !p.at_punct(Punct::RBrace) && p.peek().is_some() {
+                let before = p.cursor();
+                match p.stmt_or_tail() {
+                    Ok(Line::Stmt(s)) => stmts.push(s),
+                    Ok(Line::Tail(e)) => {
+                        tail = Some(Box::new(e));
+                        break;
+                    }
+                    Err(Given) => p.resync_stmt(),
+                }
+                if p.cursor() == before {
+                    p.bump();
+                }
+            }
+            p.expect(Punct::RBrace, "`}` to close the block")?;
+            Ok(Block { stmts, tail, span: p.since(from) })
+        })
     }
 
-    fn block_inner(&mut self) -> Parsed<Block> {
-        let from = self.span();
-        self.expect(Punct::LBrace, "`{`")?;
-        let mut stmts = Vec::new();
-        let mut tail = None;
-        while !self.at_punct(Punct::RBrace) && self.peek().is_some() {
-            let before = (self.at, self.pending_gt.is_some());
-            match self.stmt_or_tail() {
-                Ok(Line::Stmt(s)) => stmts.push(s),
-                Ok(Line::Tail(e)) => {
-                    tail = Some(Box::new(e));
-                    break;
-                }
-                Err(Given) => self.resync_stmt(),
-            }
-            if (self.at, self.pending_gt.is_some()) == before {
-                self.bump();
-            }
-        }
-        self.expect(Punct::RBrace, "`}` to close the block")?;
-        Ok(Block { stmts, tail, span: self.since(from) })
+    fn expr_line(&mut self, value: Expr) -> Line {
+        if self.eat(Punct::Semi) { Line::Stmt(Stmt::Expr(value)) } else { Line::Tail(value) }
     }
 
     fn stmt_or_tail(&mut self) -> Parsed<Line> {
         let from = self.span();
         if self.at_punct(Punct::LBrace) {
             let block = self.block()?;
+            let as_expr =
+                |p: &Self, block| Expr { kind: ExprKind::Block(block), span: p.since(from) };
             if self.continues_expr() {
-                let lhs = Expr { kind: ExprKind::Block(block), span: self.since(from) };
+                let lhs = as_expr(self, block);
                 let value = self.expr_from(lhs, from)?;
-                return if self.eat(Punct::Semi) {
-                    Ok(Line::Stmt(Stmt::Expr(value)))
-                } else {
-                    Ok(Line::Tail(value))
-                };
+                return Ok(self.expr_line(value));
             }
             if self.eat(Punct::Semi) {
-                let value = Expr { kind: ExprKind::Block(block), span: self.since(from) };
-                return Ok(Line::Stmt(Stmt::Expr(value)));
+                return Ok(Line::Stmt(Stmt::Expr(as_expr(self, block))));
             }
             if block.tail.is_some() && self.at_punct(Punct::RBrace) {
-                let value = Expr { kind: ExprKind::Block(block), span: self.since(from) };
-                return Ok(Line::Tail(value));
+                return Ok(Line::Tail(as_expr(self, block)));
             }
             return Ok(Line::Stmt(Stmt::Block(block)));
         }
@@ -610,11 +615,7 @@ impl Parser<'_> {
         // An expression. With a `;` it is a statement; without one, and with
         // the block about to close, it is the block's tail value.
         let value = self.expr()?;
-        if self.eat(Punct::Semi) {
-            Ok(Line::Stmt(Stmt::Expr(value)))
-        } else {
-            Ok(Line::Tail(value))
-        }
+        Ok(self.expr_line(value))
     }
 
     fn let_stmt(&mut self, from: Span) -> Parsed<Option<Stmt>> {
@@ -627,29 +628,24 @@ impl Parser<'_> {
     }
 
     fn if_stmt(&mut self) -> Parsed<Stmt> {
-        self.deeper()?;
-        let out = self.if_stmt_inner();
-        self.deep -= 1;
-        out
-    }
-
-    fn if_stmt_inner(&mut self) -> Parsed<Stmt> {
-        let from = self.span();
-        self.at += 1;
-        self.expect(Punct::LParen, "`(` after `if`")?;
-        let cond = self.expr()?;
-        self.expect(Punct::RParen, "`)` after the condition")?;
-        let then = self.block()?;
-        let otherwise = if self.eat_keyword(Keyword::Else) {
-            Some(Box::new(if self.at_keyword(Keyword::If) {
-                Else::If(Box::new(self.if_stmt()?))
+        self.with_depth(|p| {
+            let from = p.span();
+            p.at += 1;
+            p.expect(Punct::LParen, "`(` after `if`")?;
+            let cond = p.expr()?;
+            p.expect(Punct::RParen, "`)` after the condition")?;
+            let then = p.block()?;
+            let otherwise = if p.eat_keyword(Keyword::Else) {
+                Some(Box::new(if p.at_keyword(Keyword::If) {
+                    Else::If(Box::new(p.if_stmt()?))
+                } else {
+                    Else::Block(p.block()?)
+                }))
             } else {
-                Else::Block(self.block()?)
-            }))
-        } else {
-            None
-        };
-        Ok(Stmt::If { cond, then, otherwise, span: self.since(from) })
+                None
+            };
+            Ok(Stmt::If { cond, then, otherwise, span: p.since(from) })
+        })
     }
 
     fn for_stmt(&mut self, from: Span) -> Parsed<Stmt> {
@@ -693,27 +689,38 @@ impl Parser<'_> {
         self.assign_tail(lhs, from)
     }
 
-    fn assign_tail(&mut self, lhs: Expr, from: Span) -> Parsed<Expr> {
-        if self.eat(Punct::Eq) {
-            self.deeper()?;
-            let value = self.expr();
-            self.deep -= 1;
-            let value = value?;
-            let kind = ExprKind::Assign { op: None, place: Box::new(lhs), value: Box::new(value) };
-            return Ok(Expr { kind, span: self.since(from) });
-        }
+    fn eat_compound(&mut self) -> Option<BinOp> {
         for (punct, op) in COMPOUND {
             if self.eat(punct) {
-                self.deeper()?;
-                let value = self.expr();
-                self.deep -= 1;
-                let value = value?;
-                let kind =
-                    ExprKind::Assign { op: Some(op), place: Box::new(lhs), value: Box::new(value) };
-                return Ok(Expr { kind, span: self.since(from) });
+                return Some(op);
             }
         }
-        Ok(lhs)
+        None
+    }
+
+    fn assign_tail(&mut self, lhs: Expr, from: Span) -> Parsed<Expr> {
+        let op = if self.eat(Punct::Eq) {
+            None
+        } else if let Some(op) = self.eat_compound() {
+            Some(op)
+        } else {
+            return Ok(lhs);
+        };
+        let value = self.with_depth(Self::expr)?;
+        let kind = ExprKind::Assign { op, place: Box::new(lhs), value: Box::new(value) };
+        Ok(Expr { kind, span: self.since(from) })
+    }
+
+    fn with_depth<T>(&mut self, f: impl FnOnce(&mut Self) -> Parsed<T>) -> Parsed<T> {
+        if self.deep >= MAX_NESTING {
+            let span = self.span();
+            self.faults.push(Fault { span, kind: FaultKind::TooDeep });
+            return Err(Given);
+        }
+        self.deep += 1;
+        let out = f(self);
+        self.deep -= 1;
+        out
     }
 
     fn with_chain<T>(&mut self, f: impl FnOnce(&mut Self) -> Parsed<T>) -> Parsed<T> {
@@ -777,21 +784,7 @@ impl Parser<'_> {
     /// argument and a prefix operator all arrive here. So this is where the
     /// depth is counted.
     fn unary(&mut self) -> Parsed<Expr> {
-        self.deeper()?;
-        let out = self.prefix();
-        self.deep -= 1;
-        out
-    }
-
-    /// One level further in, or the fault that says this is far enough.
-    fn deeper(&mut self) -> Parsed<()> {
-        if self.deep >= MAX_NESTING {
-            let span = self.span();
-            self.faults.push(Fault { span, kind: FaultKind::TooDeep });
-            return Err(Given);
-        }
-        self.deep += 1;
-        Ok(())
+        self.with_depth(Self::prefix)
     }
 
     fn prefix(&mut self) -> Parsed<Expr> {
@@ -833,15 +826,7 @@ impl Parser<'_> {
             loop {
                 let kind = if p.eat(Punct::LParen) {
                     p.chain_step()?;
-                    let mut args = Vec::new();
-                    if !p.at_punct(Punct::RParen) {
-                        loop {
-                            args.push(p.expr()?);
-                            if !p.eat(Punct::Comma) {
-                                break;
-                            }
-                        }
-                    }
+                    let args = p.separated(Punct::RParen, Self::expr)?;
                     p.expect(Punct::RParen, "`)` to close the arguments")?;
                     ExprKind::Call { callee: Box::new(base), args }
                 } else if p.eat(Punct::LBracket) {

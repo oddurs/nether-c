@@ -68,6 +68,16 @@ impl Depth {
         if self.0 >= other.0 { self } else { other }
     }
 
+    /// The deeper of two optional depths, if either is present.
+    #[must_use]
+    pub const fn join_opt(a: Option<Self>, b: Option<Self>) -> Option<Self> {
+        match (a, b) {
+            (Some(x), Some(y)) => Some(x.join(y)),
+            (Some(x), None) | (None, Some(x)) => Some(x),
+            (None, None) => None,
+        }
+    }
+
     /// Whether everything this depth reached can be written down and served
     /// back. Everything but stratum 8. `spec/01-strata.md` §1.7.
     #[must_use]

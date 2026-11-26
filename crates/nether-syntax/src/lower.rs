@@ -26,14 +26,10 @@ use nether_core::{self as ir, Asserted, Capability, Depth, Held, Prim, Refusal, 
 
 use crate::ast;
 use crate::lex::{Fault, FaultKind};
-
-type FuncSig = (Vec<(ir::Type, Asserted)>, (ir::Type, Asserted));
+use crate::lower_types::{FuncSig, LoweredType, TypeDecl, prim_arrow};
 
 /// Upper bound on loop fixpoint re-iterations per unit.
 const MAX_FIXPOINT_STEPS: usize = 4096;
-
-/// Upper bound on expanded type nesting depth (matching `parse::MAX_NESTING`).
-const MAX_TYPE_DEPTH: usize = 64;
 
 /// Control-flow exit depths propagated out of a statement or expression.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -47,26 +43,18 @@ impl ExitPc {
 
     fn join(self, other: Self) -> Self {
         Self {
-            loop_exit: join_opt(self.loop_exit, other.loop_exit),
-            fn_exit: join_opt(self.fn_exit, other.fn_exit),
+            loop_exit: Depth::join_opt(self.loop_exit, other.loop_exit),
+            fn_exit: Depth::join_opt(self.fn_exit, other.fn_exit),
         }
     }
 
     fn deepest(self) -> Option<Depth> {
-        join_opt(self.loop_exit, self.fn_exit)
+        Depth::join_opt(self.loop_exit, self.fn_exit)
     }
 }
 
 const fn is_poly_prim(p: Prim) -> bool {
     matches!(p, Prim::Refused | Prim::Answered | Prim::Must | Prim::Given | Prim::Refusal)
-}
-
-fn join_opt(a: Option<Depth>, b: Option<Depth>) -> Option<Depth> {
-    match (a, b) {
-        (Some(x), Some(y)) => Some(x.join(y)),
-        (Some(x), None) | (None, Some(x)) => Some(x),
-        (None, None) => None,
-    }
 }
 
 /// Lower a parsed unit.
@@ -81,20 +69,23 @@ pub fn lower(unit: &ast::Unit) -> Result<ir::Unit, Vec<Fault>> {
     if l.faults.is_empty() { Ok(out) } else { Err(l.faults) }
 }
 
-#[derive(Clone, Copy)]
-enum TypeDecl<'a> {
-    Alias(&'a ast::Type),
-    Struct(&'a [ast::Field]),
+/// Per-frame local bindings, name set, temp counter, and depths.
+#[derive(Default)]
+struct LocalFrame {
+    locals: Vec<ir::LocalDef>,
+    names: HashSet<String>,
+    next_temp: usize,
+    depths: Vec<Depth>,
 }
 
-struct Lowering<'a> {
-    faults: Vec<Fault>,
+pub(crate) struct Lowering<'a> {
+    pub(crate) faults: Vec<Fault>,
     /// `typedef` and `struct` declarations, mutually exclusive by name.
-    types: HashMap<&'a str, TypeDecl<'a>>,
+    pub(crate) types: HashMap<&'a str, TypeDecl<'a>>,
     /// Active typedef names during expansion, for cycle detection.
-    expanding: Vec<&'a str>,
-    /// Memoized clean typedef expansions `(type, asserted, has_inferred, height)`.
-    expanded_aliases: HashMap<&'a str, (ir::Type, Asserted, bool, usize)>,
+    pub(crate) expanding: Vec<&'a str>,
+    /// Memoized clean typedef expansions.
+    pub(crate) expanded_aliases: HashMap<&'a str, LoweredType>,
     /// Unit-level functions and bindings, by name.
     funcs: HashMap<&'a str, (ir::FuncId, ir::Type)>,
     globals: HashMap<&'a str, (ir::GlobalId, ir::Type, Depth)>,
@@ -123,9 +114,8 @@ struct Lowering<'a> {
     in_loop: u32,
     /// Total loop fixpoint re-iterations used in this unit.
     fixpoint_steps: usize,
-    /// Unit-level code's locals, names, temp counter, and depths, kept while a
-    /// function's are in their place.
-    unit_frame: (Vec<ir::LocalDef>, HashSet<String>, usize, Vec<Depth>),
+    /// Unit-level code's frame, kept while a function's is in its place.
+    unit_frame: LocalFrame,
 }
 
 impl<'a> Lowering<'a> {
@@ -149,7 +139,7 @@ impl<'a> Lowering<'a> {
             last_exit: ExitPc::NONE,
             in_loop: 0,
             fixpoint_steps: 0,
-            unit_frame: (Vec::new(), HashSet::new(), 0, Vec::new()),
+            unit_frame: LocalFrame::default(),
         };
         // Declarations are visible to each other regardless of order, so the
         // shapes are collected before anything is lowered.
@@ -170,207 +160,103 @@ impl<'a> Lowering<'a> {
         l
     }
 
-    fn fault(&mut self, span: Span, kind: FaultKind) {
+    pub(crate) fn fault(&mut self, span: Span, kind: FaultKind) {
         self.faults.push(Fault { span, kind });
     }
 
-    // ── types ───────────────────────────────────────────────────────────────
-
-    /// An `ast::Type`, with aliases expanded and prelude names resolved.
-    fn ty(&mut self, t: &ast::Type) -> ir::Type {
-        self.ty_in(t, false).0
+    fn reset_frame(&mut self) {
+        self.locals = Vec::new();
+        self.local_names.clear();
+        self.next_temp = 0;
+        self.depths = Vec::new();
+        self.pc = Depth::PURE;
+        self.in_loop = 0;
     }
 
-    /// Lower an `ast::Type`, returning `(ir_type, effective_asserted_depth, has_inferred_shade)`.
-    /// When `allow_inferred_shade` is true (initialized `let` bindings), direct
-    /// `Shade<T>` annotations may omit `@d` and inherit the RHS origin.
-    fn ty_in(&mut self, t: &ast::Type, allow_inferred_shade: bool) -> (ir::Type, Asserted, bool) {
-        let (ty, asserted, has_inferred, _) = self.ty_depth(t, allow_inferred_shade);
-        (ty, asserted, has_inferred)
+    fn advance_pc(&mut self, ex: ExitPc) {
+        if let Some(ed) = ex.deepest() {
+            self.pc = self.pc.join(ed);
+        }
     }
 
-    fn ty_depth(
-        &mut self,
-        t: &ast::Type,
-        allow_inferred_shade: bool,
-    ) -> (ir::Type, Asserted, bool, usize) {
-        let (mut inner, alias_asserted, has_inferred, mut height) =
-            self.atom_in(t, allow_inferred_shade);
-        for len in t.arrays.iter().rev() {
-            height = height.saturating_add(1);
-            if height > MAX_TYPE_DEPTH {
-                self.fault(t.span, FaultKind::TooDeep);
-                return (ir::Type::Unit, None, false, MAX_TYPE_DEPTH);
-            }
-            let len = match len {
-                Some(n) if *n < 0 => {
-                    self.fault(t.span, FaultKind::Expected("a non-negative array length"));
-                    None
-                }
-                Some(n) => u64::try_from(*n).ok(),
-                None => None,
-            };
-            inner = ir::Type::Array { elem: Box::new(inner), len };
-        }
-        let own = Self::asserted(t);
-        if let (Some(a), Some(b)) = (own, alias_asserted)
-            && a != b
-        {
-            self.fault(t.span, FaultKind::Expected("a matching depth annotation on typedef"));
-        }
-        (inner, own.or(alias_asserted), has_inferred, height)
-    }
-
-    fn expand_alias(
-        &mut self,
-        key: &'a str,
-        alias: &'a ast::Type,
-        span: Span,
-    ) -> (ir::Type, Asserted, bool, usize) {
-        if let Some(cached) = self.expanded_aliases.get(key) {
-            return cached.clone();
-        }
-        if self.expanding.contains(&key) || self.expanding.len() > 16 {
-            self.fault(span, FaultKind::Expected("a non-cyclic typedef"));
-            return (ir::Type::Unit, None, false, 1);
-        }
-        let faults_before = self.faults.len();
-        self.expanding.push(key);
-        let expanded = self.ty_depth(alias, false);
-        self.expanding.pop();
-        if self.faults.len() == faults_before {
-            self.expanded_aliases.insert(key, expanded.clone());
-        }
-        expanded
-    }
-
-    fn atom_in(
-        &mut self,
-        t: &ast::Type,
-        allow_inferred_shade: bool,
-    ) -> (ir::Type, Asserted, bool, usize) {
-        let name = t.name.text.as_str();
-        let reject_args = |this: &mut Self, ok_len: usize| {
-            if t.args.len() > ok_len {
-                this.fault(t.span, FaultKind::Expected("no extra type arguments"));
-            }
-        };
-        // §3.4: user-defined typedefs and structs shadow prelude type names.
-        if let Some((&key, &decl)) = self.types.get_key_value(name) {
-            reject_args(self, 0);
-            return match decl {
-                TypeDecl::Alias(alias) => self.expand_alias(key, alias, t.span),
-                TypeDecl::Struct(_) => (ir::Type::Struct(name.to_string()), None, false, 1),
-            };
-        }
-        let mut has_inferred = false;
-        let mut height = 1usize;
-        let ty = match name {
-            "U0" | "Bool" | "I64" | "Bytes" | "Str" | "Cairn" | "Refusal" => {
-                reject_args(self, 0);
-                match name {
-                    "U0" => ir::Type::Unit,
-                    "Bool" => ir::Type::Bool,
-                    "I64" => ir::Type::Int,
-                    "Bytes" => ir::Type::Bytes,
-                    "Str" => ir::Type::Str,
-                    "Cairn" => ir::Type::Cairn,
-                    _ => ir::Type::Refusal,
-                }
-            }
-            "Answer" => {
-                reject_args(self, 1);
-                if let Some(arg_ast) = t.args.first() {
-                    let (a, arg_asserted, arg_inf, arg_h) =
-                        self.ty_depth(arg_ast, allow_inferred_shade);
-                    has_inferred = arg_inf;
-                    height = arg_h.saturating_add(1);
-                    if height > MAX_TYPE_DEPTH {
-                        self.fault(t.span, FaultKind::TooDeep);
-                        return (ir::Type::Unit, None, false, MAX_TYPE_DEPTH);
-                    }
-                    if arg_asserted.is_some() {
-                        self.fault(
-                            arg_ast.span,
-                            FaultKind::Expected(
-                                "no depth annotation inside `Answer<T>` (write `Answer<T>@d` instead)",
-                            ),
-                        );
-                    }
-                    ir::Type::Answer(Box::new(a))
-                } else {
-                    self.fault(t.span, FaultKind::Expected("`Answer<T>` to say what it answers"));
-                    ir::Type::Unit
-                }
-            }
-            // §4.3: a received shade MUST write its origin on its argument (`Shade<Bytes@5>`).
-            // An initialized binding may omit it (`Shade<Bytes>`) and inherit it from the value.
-            "Shade" => {
-                reject_args(self, 1);
-                if let Some(arg_ast) = t.args.first() {
-                    let (arg_ir, arg_asserted, arg_inf, arg_h) =
-                        self.ty_depth(arg_ast, allow_inferred_shade);
-                    has_inferred = arg_inf;
-                    height = arg_h.saturating_add(1);
-                    if height > MAX_TYPE_DEPTH {
-                        self.fault(t.span, FaultKind::TooDeep);
-                        return (ir::Type::Unit, None, false, MAX_TYPE_DEPTH);
-                    }
-                    let origin = if let Some(d) = arg_asserted {
-                        d
-                    } else {
-                        has_inferred = true;
-                        if !allow_inferred_shade {
-                            self.fault(
-                                t.span,
-                                FaultKind::Expected("an explicit `@d` origin on `Shade<T@d>`"),
-                            );
-                        }
-                        Depth::UNRECORDED
-                    };
-                    ir::Type::Shade { origin, inner: Box::new(arg_ir) }
-                } else {
-                    self.fault(t.span, FaultKind::Expected("`Shade<T>` to say what it hides"));
-                    ir::Type::Unit
-                }
-            }
-            _ => {
-                reject_args(self, 0);
-                self.fault(t.span, FaultKind::Unknown("a type"));
-                ir::Type::Unit
-            }
-        };
-        (ty, None, has_inferred, height)
-    }
-
-    fn asserted(t: &ast::Type) -> Asserted {
-        t.depth.and_then(Depth::new)
+    fn expr_after(&mut self, prev: ExitPc, extra_pc: Depth, e: &ast::Expr) -> (ir::Expr, ExitPc) {
+        let saved = self.pc;
+        self.pc = self.pc.join(extra_pc);
+        self.advance_pc(prev);
+        let out = self.expr(e);
+        self.pc = saved;
+        (out, prev.join(self.last_exit))
     }
 
     // ── the unit ────────────────────────────────────────────────────────────
 
-    fn unit(&mut self, unit: &'a ast::Unit) -> ir::Unit {
+    fn lower_structs(&mut self, unit: &'a ast::Unit) -> Vec<ir::StructDef> {
         let mut structs = Vec::new();
         for item in &unit.items {
-            if let ast::Item::Struct { name, fields, span } = item {
-                let mut seen_fields: Vec<&str> = Vec::with_capacity(fields.len());
-                let fields = fields
-                    .iter()
-                    .map(|f| {
-                        let fname = f.name.text.as_str();
-                        if seen_fields.contains(&fname) {
-                            self.fault(f.name.span, FaultKind::Expected("a unique field name"));
-                        } else {
-                            seen_fields.push(fname);
-                        }
-                        let (ty, asserted, _) = self.ty_in(&f.ty, false);
-                        ir::Field { name: f.name.text.clone(), ty, asserted, span: f.span }
-                    })
-                    .collect();
-                structs.push(ir::StructDef { name: name.text.clone(), fields, span: *span });
-            }
+            let ast::Item::Struct { name, fields, span } = item else { continue };
+            let mut seen_fields: Vec<&str> = Vec::with_capacity(fields.len());
+            let fields = fields
+                .iter()
+                .map(|f| {
+                    let fname = f.name.text.as_str();
+                    if seen_fields.contains(&fname) {
+                        self.fault(f.name.span, FaultKind::Expected("a unique field name"));
+                    } else {
+                        seen_fields.push(fname);
+                    }
+                    let lowered = self.ty_depth(&f.ty, false);
+                    ir::Field {
+                        name: f.name.text.clone(),
+                        ty: lowered.ty,
+                        asserted: lowered.asserted,
+                        span: f.span,
+                    }
+                })
+                .collect();
+            structs.push(ir::StructDef { name: name.text.clone(), fields, span: *span });
         }
         self.check_struct_cycles(&structs);
+        structs
+    }
+
+    fn collect_func_sigs(&mut self, declarations: &[&'a ast::Func]) -> Vec<FuncSig> {
+        let mut sigs = Vec::with_capacity(declarations.len());
+        for (i, f) in declarations.iter().enumerate() {
+            let param_sigs: Vec<(ir::Type, Asserted)> = f
+                .params
+                .iter()
+                .map(|p| {
+                    let lowered = self.ty_depth(&p.ty, false);
+                    (lowered.ty, lowered.asserted)
+                })
+                .collect();
+            let ret_lowered = self.ty_depth(&f.ret, false);
+            let params = param_sigs.iter().map(|(ty, _)| ty.clone()).collect();
+            // Start from lattice bottom (`Held::NONE`) so a recursive function's
+            // written `@d` annotation cannot self-fulfill its own latent depth.
+            let arrow = ir::Type::Fn {
+                params,
+                latent: Held::NONE,
+                result: Box::new(ret_lowered.ty.clone()),
+                // What a function hands back is its body's depth, and the body
+                // has not been lowered yet. Filled in below.
+                result_depth: Depth::PURE,
+            };
+            sigs.push(FuncSig {
+                params: param_sigs,
+                ret: ret_lowered.ty,
+                asserted_ret: ret_lowered.asserted,
+            });
+            let id = ir::FuncId(u32::try_from(i).unwrap_or(0));
+            if self.funcs.insert(f.name.text.as_str(), (id, arrow)).is_some() {
+                self.fault(f.name.span, FaultKind::Expected("a unique function name"));
+            }
+        }
+        sigs
+    }
+
+    fn unit(&mut self, unit: &'a ast::Unit) -> ir::Unit {
+        let structs = self.lower_structs(unit);
 
         // Validate every typedef declaration even if unreferenced.
         for item in &unit.items {
@@ -396,34 +282,7 @@ impl<'a> Lowering<'a> {
                 _ => None,
             })
             .collect();
-        let mut sigs: Vec<FuncSig> = Vec::with_capacity(declarations.len());
-        for (i, f) in declarations.iter().enumerate() {
-            let param_sigs: Vec<(ir::Type, Asserted)> = f
-                .params
-                .iter()
-                .map(|p| {
-                    let (ty, asserted, _) = self.ty_in(&p.ty, false);
-                    (ty, asserted)
-                })
-                .collect();
-            let (ret, asserted_ret, _) = self.ty_in(&f.ret, false);
-            let params = param_sigs.iter().map(|(ty, _)| ty.clone()).collect();
-            // Start from lattice bottom (`Held::NONE`) so a recursive function's
-            // written `@d` annotation cannot self-fulfill its own latent depth.
-            let arrow = ir::Type::Fn {
-                params,
-                latent: Held::NONE,
-                result: Box::new(ret.clone()),
-                // What a function hands back is its body's depth, and the body
-                // has not been lowered yet. Filled in below.
-                result_depth: Depth::PURE,
-            };
-            sigs.push((param_sigs, (ret, asserted_ret)));
-            let id = ir::FuncId(u32::try_from(i).unwrap_or(0));
-            if self.funcs.insert(f.name.text.as_str(), (id, arrow)).is_some() {
-                self.fault(f.name.span, FaultKind::Expected("a unique function name"));
-            }
-        }
+        let sigs = self.collect_func_sigs(&declarations);
 
         // A call lowered before its callee's body was is holding the wrong
         // result depth, so the whole thing is lowered again with the arrows
@@ -440,8 +299,7 @@ impl<'a> Lowering<'a> {
             for (i, f) in declarations.iter().enumerate() {
                 let Some(entry) = self.funcs.get_mut(f.name.text.as_str()) else { continue };
                 let ir::Type::Fn { result_depth, latent, .. } = &mut entry.1 else { continue };
-                let derived = funcs[i].ret_depth;
-                let needs = funcs[i].latent;
+                let (derived, needs) = (funcs[i].ret_depth, funcs[i].latent);
                 moved |= *result_depth != derived || *latent != needs;
                 *result_depth = derived;
                 *latent = needs;
@@ -452,68 +310,17 @@ impl<'a> Lowering<'a> {
         }
         // The bindings' frame, set aside while the functions had theirs, is
         // the demands' frame too: unit-level code has one.
+        let frame = std::mem::take(&mut self.unit_frame);
         (self.locals, self.local_names, self.next_temp, self.depths) =
-            std::mem::take(&mut self.unit_frame);
+            (frame.locals, frame.names, frame.next_temp, frame.depths);
         let demands = self.demands(unit);
         let locals = std::mem::take(&mut self.locals);
         ir::Unit { structs, funcs, globals, demands, locals }
     }
 
-    fn check_struct_cycles(&mut self, structs: &[ir::StructDef]) {
-        fn collect_value_deps<'b>(ty: &'b ir::Type, out: &mut Vec<&'b str>) {
-            match ty {
-                ir::Type::Struct(name) => out.push(name.as_str()),
-                ir::Type::Array { elem, len: Some(n) } if *n > 0 => collect_value_deps(elem, out),
-                ir::Type::Shade { inner, .. } => collect_value_deps(inner, out),
-                _ => {}
-            }
-        }
-        fn dfs(idx: usize, adj: &[Vec<usize>], state: &mut [u8], cyclic: &mut [bool]) -> bool {
-            state[idx] = 1;
-            let mut found = false;
-            for &next in &adj[idx] {
-                if state[next] == 1 || (state[next] == 0 && dfs(next, adj, state, cyclic)) {
-                    cyclic[idx] = true;
-                    found = true;
-                }
-            }
-            state[idx] = 2;
-            found
-        }
-        let adj: Vec<Vec<usize>> = structs
-            .iter()
-            .map(|s| {
-                let mut deps = Vec::new();
-                for f in &s.fields {
-                    collect_value_deps(&f.ty, &mut deps);
-                }
-                deps.into_iter()
-                    .filter_map(|n| structs.iter().position(|st| st.name == n))
-                    .collect()
-            })
-            .collect();
-        let mut state = vec![0u8; structs.len()];
-        let mut cyclic = vec![false; structs.len()];
-        for i in 0..structs.len() {
-            if state[i] == 0 {
-                let _ = dfs(i, &adj, &mut state, &mut cyclic);
-            }
-        }
-        for (i, is_cyc) in cyclic.into_iter().enumerate() {
-            if is_cyc {
-                self.fault(structs[i].span, FaultKind::Expected("a non-cyclic struct"));
-            }
-        }
-    }
-
     fn unit_bindings(&mut self, unit: &'a ast::Unit) -> Vec<ir::GlobalDef> {
         self.globals.clear();
-        self.locals = Vec::new();
-        self.local_names.clear();
-        self.next_temp = 0;
-        self.depths = Vec::new();
-        self.pc = Depth::PURE;
-        self.in_loop = 0;
+        self.reset_frame();
         let mut out = Vec::new();
         for item in &unit.items {
             let ast::Item::Let(binding) = item else { continue };
@@ -523,10 +330,10 @@ impl<'a> Lowering<'a> {
                 self.scopes.pop();
                 continue;
             };
-            let (ty, asserted, has_inferred) = self.ty_in(&binding.ty, true);
-            let value = self.landed(init, (!has_inferred).then(|| ty.clone()));
+            let lowered = self.ty_depth(&binding.ty, true);
+            let value = self.landed(init, (!lowered.has_inferred).then(|| lowered.ty.clone()));
             self.scopes.pop();
-            let ty = self.binding_type(&binding.ty, ty, &value);
+            let ty = self.binding_type(&binding.ty, lowered.ty, &value);
             let id = ir::GlobalId(u32::try_from(out.len()).unwrap_or(0));
             if self.funcs.contains_key(binding.name.text.as_str())
                 || self
@@ -539,17 +346,17 @@ impl<'a> Lowering<'a> {
             out.push(ir::GlobalDef {
                 name: binding.name.text.clone(),
                 ty,
-                asserted,
+                asserted: lowered.asserted,
                 value,
                 span: binding.span,
             });
         }
-        self.unit_frame = (
-            std::mem::take(&mut self.locals),
-            std::mem::take(&mut self.local_names),
-            self.next_temp,
-            std::mem::take(&mut self.depths),
-        );
+        self.unit_frame = LocalFrame {
+            locals: std::mem::take(&mut self.locals),
+            names: std::mem::take(&mut self.local_names),
+            next_temp: self.next_temp,
+            depths: std::mem::take(&mut self.depths),
+        };
         out
     }
 
@@ -568,104 +375,18 @@ impl<'a> Lowering<'a> {
         out
     }
 
-    /// The declared type of a binding, recursively filling only omitted shade
-    /// origins directly written on the binding (never overwriting `typedef` origins). §4.3.
-    fn binding_type(&self, ty_ast: &ast::Type, ty: ir::Type, value: &ir::Expr) -> ir::Type {
-        self.fill_shades(ty_ast, ty_ast.arrays.len(), ty, &value.ty)
-    }
-
-    fn fill_shades(
-        &self,
-        ty_ast: &ast::Type,
-        arrays_left: usize,
-        ir_ty: ir::Type,
-        val_ty: &ir::Type,
-    ) -> ir::Type {
-        if arrays_left > 0 {
-            return match (ir_ty, val_ty) {
-                (ir::Type::Array { elem, len }, ir::Type::Array { elem: val_elem, .. }) => {
-                    ir::Type::Array {
-                        elem: Box::new(self.fill_shades(ty_ast, arrays_left - 1, *elem, val_elem)),
-                        len,
-                    }
-                }
-                (other, _) => other,
-            };
-        }
-        let name = ty_ast.name.text.as_str();
-        if self.types.contains_key(name) {
-            return ir_ty;
-        }
-        match (name, ir_ty, val_ty) {
-            ("Answer", ir::Type::Answer(inner), ir::Type::Answer(val_inner)) => {
-                if let Some(arg_ast) = ty_ast.args.first() {
-                    ir::Type::Answer(Box::new(self.fill_shades(
-                        arg_ast,
-                        arg_ast.arrays.len(),
-                        *inner,
-                        val_inner,
-                    )))
-                } else {
-                    ir::Type::Answer(inner)
-                }
-            }
-            (
-                "Shade",
-                ir::Type::Shade { origin, inner },
-                ir::Type::Shade { origin: val_origin, inner: val_inner },
-            ) => {
-                let arg_ast = ty_ast.args.first();
-                let explicit = arg_ast.is_some_and(|a| self.has_explicit_depth(a));
-                let next_origin = if explicit { origin } else { *val_origin };
-                let next_inner = if let Some(arg) = arg_ast {
-                    self.fill_shades(arg, arg.arrays.len(), *inner, val_inner)
-                } else {
-                    *inner
-                };
-                ir::Type::Shade { origin: next_origin, inner: Box::new(next_inner) }
-            }
-            (_, other, _) => other,
-        }
-    }
-
-    fn has_explicit_depth(&self, mut t: &'a ast::Type) -> bool {
-        let mut seen: Vec<&'a str> = Vec::new();
-        loop {
-            if t.depth.is_some() {
-                return true;
-            }
-            let name = t.name.text.as_str();
-            if let Some((_, asserted, _, _)) = self.expanded_aliases.get(name) {
-                return asserted.is_some();
-            }
-            if seen.contains(&name) {
-                return false;
-            }
-            seen.push(name);
-            let Some(TypeDecl::Alias(alias)) = self.types.get(name).copied() else {
-                return false;
-            };
-            t = alias;
-        }
-    }
-
     // ── functions ───────────────────────────────────────────────────────────
 
     fn func(&mut self, f: &'a ast::Func, sig: &FuncSig) -> ir::FuncDef {
-        self.locals = Vec::new();
-        self.local_names.clear();
-        self.next_temp = 0;
-        self.depths = Vec::new();
+        self.reset_frame();
         self.scopes = vec![Vec::new()];
-        self.pc = Depth::PURE;
         self.ret_depth = Depth::PURE;
-        self.in_loop = 0;
 
         let mut seen_params: Vec<&str> = Vec::with_capacity(f.params.len());
         let params: Vec<ir::LocalId> = f
             .params
             .iter()
-            .zip(&sig.0)
+            .zip(&sig.params)
             .map(|(p, (ty, asserted))| {
                 let pname = p.name.text.as_str();
                 if seen_params.contains(&pname) {
@@ -679,7 +400,7 @@ impl<'a> Lowering<'a> {
             })
             .collect();
 
-        let (ret_ty, asserted_ret) = (sig.1.0.clone(), sig.1.1);
+        let ret_ty = sig.ret.clone();
         self.returning = Some(ret_ty.clone());
         let body = self.block_landed(&f.body, Some(ret_ty));
         let ret = self.returning.take().unwrap_or(ir::Type::Unit);
@@ -689,7 +410,7 @@ impl<'a> Lowering<'a> {
             params,
             ret,
             ret_depth: tail_depth.join(self.ret_depth),
-            asserted_ret,
+            asserted_ret: sig.asserted_ret,
             latent: Self::needs(&body),
             asserted_latent: Self::written(f.latent.as_deref()),
             locals: std::mem::take(&mut self.locals),
@@ -710,12 +431,11 @@ impl<'a> Lowering<'a> {
     /// The least set, by inclusion, at which this body checks: what an
     /// application in it asked for and the surface could not give. [ABS].
     fn needs(block: &ir::Block) -> Held {
-        fn walk(x: &ir::Expr, ambient: Held, acc: Held) -> Held {
-            let mut acc = acc;
-            if let ir::ExprKind::Call { callee, .. } = &x.kind {
-                if let ir::Type::Fn { latent, .. } = callee.ty {
-                    acc = acc.union(latent.without(ambient));
-                }
+        fn walk(x: &ir::Expr, ambient: Held, mut acc: Held) -> Held {
+            if let ir::ExprKind::Call { callee, .. } = &x.kind
+                && let ir::Type::Fn { latent, .. } = callee.ty
+            {
+                acc = acc.union(latent.without(ambient));
             }
             let inside = match &x.kind {
                 ir::ExprKind::Descend { capability, .. } => ambient.with(capability.stratum()),
@@ -723,7 +443,7 @@ impl<'a> Lowering<'a> {
             };
             ir::children(x).iter().fold(acc, |a, c| walk(c, inside, a))
         }
-        block_children(block).iter().fold(Held::NONE, |acc, x| walk(x, Held::NONE, acc))
+        block.children().fold(Held::NONE, |acc, x| walk(x, Held::NONE, acc))
     }
 
     fn bind(
@@ -771,19 +491,6 @@ impl<'a> Lowering<'a> {
     }
 }
 
-fn block_children(b: &ir::Block) -> Vec<&ir::Expr> {
-    let mut out: Vec<&ir::Expr> = b
-        .stmts
-        .iter()
-        .filter_map(|s| match s {
-            ir::Stmt::Let { value, .. } | ir::Stmt::Expr(value) => Some(value),
-            ir::Stmt::Declare { .. } => None,
-        })
-        .collect();
-    out.extend(b.tail.as_deref());
-    out
-}
-
 // ── statements and expressions ──────────────────────────────────────────────
 
 impl Lowering<'_> {
@@ -813,9 +520,7 @@ impl Lowering<'_> {
             self.stmt(s, &mut stmts);
             let ex = self.last_exit;
             exit = exit.join(ex);
-            if let Some(ex_d) = ex.deepest() {
-                self.pc = self.pc.join(ex_d);
-            }
+            self.advance_pc(ex);
         }
         let tail = b.tail.as_ref().map(|t| {
             self.last_exit = ExitPc::NONE;
@@ -835,17 +540,23 @@ impl Lowering<'_> {
                 // No initialiser is how an aggregate is constructed: declare
                 // it, then write its fields. §4.2, §5.4.
                 let Some(init) = binding.value.as_ref() else {
-                    let (ty, asserted, _) = self.ty_in(&binding.ty, false);
-                    let local = self.bind(&binding.name, ty, asserted, Depth::PURE, binding.span);
+                    let lowered = self.ty_depth(&binding.ty, false);
+                    let local = self.bind(
+                        &binding.name,
+                        lowered.ty,
+                        lowered.asserted,
+                        Depth::PURE,
+                        binding.span,
+                    );
                     out.push(ir::Stmt::Declare { local });
                     self.last_exit = ExitPc::NONE;
                     return;
                 };
-                let (ty, asserted, has_inferred) = self.ty_in(&binding.ty, true);
-                let value = self.landed(init, (!has_inferred).then(|| ty.clone()));
-                let ty = self.binding_type(&binding.ty, ty, &value);
+                let lowered = self.ty_depth(&binding.ty, true);
+                let value = self.landed(init, (!lowered.has_inferred).then(|| lowered.ty.clone()));
+                let ty = self.binding_type(&binding.ty, lowered.ty, &value);
                 let depth = value.depth;
-                let local = self.bind(&binding.name, ty, asserted, depth, binding.span);
+                let local = self.bind(&binding.name, ty, lowered.asserted, depth, binding.span);
                 out.push(ir::Stmt::Let { local, value });
             }
             ast::Stmt::Expr(e) => {
@@ -854,11 +565,7 @@ impl Lowering<'_> {
             }
             ast::Stmt::Block(b) => {
                 let block = self.block(b);
-                let (ty, depth) = block
-                    .tail
-                    .as_ref()
-                    .map_or((ir::Type::Unit, Depth::PURE), |t| (t.ty.clone(), t.depth));
-                out.push(ir::Stmt::Expr(Self::at(ir::ExprKind::Block(block), ty, depth, b.span)));
+                out.push(ir::Stmt::Expr(Self::as_expr(block, b.span)));
             }
             ast::Stmt::If { .. } => {
                 let value = self.branch(s);
@@ -877,10 +584,7 @@ impl Lowering<'_> {
                 }
                 let returning = self.returning.clone();
                 let (value, ex) = match value.as_ref() {
-                    Some(v) => {
-                        let e = self.landed(v, returning);
-                        (Some(Box::new(e)), self.last_exit)
-                    }
+                    Some(v) => (Some(Box::new(self.landed(v, returning))), self.last_exit),
                     None => (None, ExitPc::NONE),
                 };
                 let depth = value.as_ref().map_or(Depth::PURE, |v| v.depth);
@@ -894,29 +598,16 @@ impl Lowering<'_> {
                     *span,
                 )));
             }
-            ast::Stmt::Break(span) => {
+            ast::Stmt::Break(span) | ast::Stmt::Continue(span) => {
+                let is_break = matches!(s, ast::Stmt::Break(_));
                 if self.in_loop == 0 {
-                    self.fault(*span, FaultKind::Expected("`break` inside a loop"));
+                    let msg =
+                        if is_break { "`break` inside a loop" } else { "`continue` inside a loop" };
+                    self.fault(*span, FaultKind::Expected(msg));
                 }
                 self.last_exit = ExitPc { loop_exit: Some(self.pc), fn_exit: None };
-                out.push(ir::Stmt::Expr(Self::at(
-                    ir::ExprKind::Break,
-                    ir::Type::Unit,
-                    Depth::PURE,
-                    *span,
-                )));
-            }
-            ast::Stmt::Continue(span) => {
-                if self.in_loop == 0 {
-                    self.fault(*span, FaultKind::Expected("`continue` inside a loop"));
-                }
-                self.last_exit = ExitPc { loop_exit: Some(self.pc), fn_exit: None };
-                out.push(ir::Stmt::Expr(Self::at(
-                    ir::ExprKind::Continue,
-                    ir::Type::Unit,
-                    Depth::PURE,
-                    *span,
-                )));
+                let kind = if is_break { ir::ExprKind::Break } else { ir::ExprKind::Continue };
+                out.push(ir::Stmt::Expr(Self::at(kind, ir::Type::Unit, Depth::PURE, *span)));
             }
         }
     }
@@ -939,9 +630,7 @@ impl Lowering<'_> {
             self.last_exit = ExitPc::NONE;
             self.stmt(init, &mut inner);
             exit = exit.join(self.last_exit);
-            if let Some(ex_d) = self.last_exit.deepest() {
-                self.pc = self.pc.join(ex_d);
-            }
+            self.advance_pc(self.last_exit);
         }
         let looping = self.looping(cond, step, body, span);
         exit = exit.join(self.last_exit);
@@ -966,7 +655,8 @@ impl Lowering<'_> {
         let cond = self.expr(cond);
         let e_cond = self.last_exit;
         let saved_pc = self.pc;
-        self.pc = e_cond.deepest().map_or(saved_pc, |e| saved_pc.join(e)).join(cond.depth);
+        self.advance_pc(e_cond);
+        self.pc = self.pc.join(cond.depth);
         let before = self.depths.clone();
         let then_block = self.block(then);
         let e_then = self.last_exit;
@@ -978,10 +668,7 @@ impl Lowering<'_> {
                 let block = self.block(b);
                 (Self::as_expr(block, b.span), self.last_exit)
             }
-            Some(ast::Else::If(inner)) => {
-                let e = self.branch(inner);
-                (e, self.last_exit)
-            }
+            Some(ast::Else::If(inner)) => (self.branch(inner), self.last_exit),
             None => (Self::unit_at(*span), ExitPc::NONE),
         };
         self.pc = saved_pc;
@@ -1062,9 +749,9 @@ impl Lowering<'_> {
         let mut guard_exit = ExitPc::NONE;
         let guard = cond.map(|c| {
             let c = self.expr(c);
-            let e_c = self.last_exit;
             let depth = c.depth;
-            guard_exit = e_c.join(ExitPc { loop_exit: Some(loop_pc.join(depth)), fn_exit: None });
+            guard_exit =
+                self.last_exit.join(ExitPc { loop_exit: Some(loop_pc.join(depth)), fn_exit: None });
             let negated = Self::at(
                 ir::ExprKind::Unary { op: UnOp::Not, operand: Box::new(c) },
                 ir::Type::Bool,
@@ -1073,19 +760,9 @@ impl Lowering<'_> {
             );
             // A block, because `if (c) { break; }` written out is a block and
             // the two have to lower to the same thing.
-            let breaking = Self::at(
-                ir::ExprKind::Block(ir::Block {
-                    stmts: vec![ir::Stmt::Expr(Self::at(
-                        ir::ExprKind::Break,
-                        ir::Type::Unit,
-                        Depth::PURE,
-                        span,
-                    ))],
-                    tail: None,
-                    span,
-                }),
-                ir::Type::Unit,
-                Depth::PURE,
+            let brk = Self::at(ir::ExprKind::Break, ir::Type::Unit, Depth::PURE, span);
+            let breaking = Self::as_expr(
+                ir::Block { stmts: vec![ir::Stmt::Expr(brk)], tail: None, span },
                 span,
             );
             ir::Stmt::Expr(Self::at(
@@ -1100,25 +777,21 @@ impl Lowering<'_> {
             ))
         });
 
-        if let Some(ex_d) = guard_exit.deepest() {
-            self.pc = self.pc.join(ex_d);
-        }
+        self.advance_pc(guard_exit);
         let mut inner = self.block(body);
         let e_body = guard_exit.join(self.last_exit);
         if let Some(guard) = guard {
             inner.stmts.insert(0, guard);
         }
         let body = Self::as_expr(inner, body.span);
-        let step_pc = e_body.deepest().map_or(loop_pc, |e| loop_pc.join(e));
-        self.pc = step_pc;
-        let (step, e_step) = match step {
-            Some(s) => {
-                let e = self.expr(s);
-                (Some(Box::new(e)), self.last_exit)
-            }
-            None => (None, ExitPc::NONE),
-        };
         self.pc = loop_pc;
+        let (step, combined) = match step {
+            Some(s) => {
+                let (e, ex) = self.expr_after(e_body, Depth::PURE, s);
+                (Some(Box::new(e)), ex)
+            }
+            None => (None, e_body),
+        };
         let depth = body.depth.join(step.as_ref().map_or(Depth::PURE, |s| s.depth));
         (
             Self::at(
@@ -1127,7 +800,7 @@ impl Lowering<'_> {
                 depth,
                 span,
             ),
-            e_body.join(e_step),
+            combined,
         )
     }
 }
@@ -1195,14 +868,8 @@ impl Lowering<'_> {
             ast::ExprKind::Call { callee, args } => self.call(callee, args, landing, span),
             ast::ExprKind::Index { base, index } => {
                 let base = self.expr(base);
-                let e_base = self.last_exit;
-                let saved_pc = self.pc;
-                if let Some(ed) = e_base.deepest() {
-                    self.pc = saved_pc.join(ed);
-                }
-                let index = self.expr(index);
-                self.pc = saved_pc;
-                self.last_exit = e_base.join(self.last_exit);
+                let (index, ex) = self.expr_after(self.last_exit, Depth::PURE, index);
+                self.last_exit = ex;
                 let ty = if let ir::Type::Array { elem, .. } = &base.ty {
                     (**elem).clone()
                 } else {
@@ -1264,8 +931,7 @@ impl Lowering<'_> {
             return (0, ir::Type::Unit);
         };
         if let Some(i) = fields.iter().position(|f| f.name.text == name.text) {
-            let ty = self.ty(&fields[i].ty);
-            (u32::try_from(i).unwrap_or(0), ty)
+            (u32::try_from(i).unwrap_or(0), self.ty(&fields[i].ty))
         } else {
             self.fault(name.span, FaultKind::Unknown("a field of that name"));
             (0, ir::Type::Unit)
@@ -1301,20 +967,13 @@ impl Lowering<'_> {
     }
 
     fn binary(&mut self, op: ast::BinOp, l: &ast::Expr, r: &ast::Expr, span: Span) -> ir::Expr {
+        let lhs = self.expr(l);
         // `&&` and `||` short-circuit, so they are control flow rather than
         // operators and become the one branching form.
         if matches!(op, ast::BinOp::And | ast::BinOp::Or) {
-            let lhs = self.expr(l);
-            let e_lhs = self.last_exit;
-            let saved_pc = self.pc;
-            self.pc = e_lhs.deepest().map_or(saved_pc, |e| saved_pc.join(e)).join(lhs.depth);
-            let rhs = self.expr(r);
-            let e_rhs = self.last_exit;
-            self.pc = saved_pc;
-            self.last_exit = e_lhs.join(e_rhs);
-            let constant = ir::Literal::Bool(op == ast::BinOp::Or);
-            let short =
-                Self::at(ir::ExprKind::Literal(constant), ir::Type::Bool, Depth::PURE, span);
+            let (rhs, ex) = self.expr_after(self.last_exit, lhs.depth, r);
+            self.last_exit = ex;
+            let short = Self::lit(ir::Literal::Bool(op == ast::BinOp::Or), ir::Type::Bool, span);
             let depth = lhs.depth.join(rhs.depth);
             let (then, otherwise) = if op == ast::BinOp::And { (rhs, short) } else { (short, rhs) };
             return Self::at(
@@ -1328,15 +987,8 @@ impl Lowering<'_> {
                 span,
             );
         }
-        let lhs = self.expr(l);
-        let e_lhs = self.last_exit;
-        let saved_pc = self.pc;
-        if let Some(ed) = e_lhs.deepest() {
-            self.pc = saved_pc.join(ed);
-        }
-        let rhs = self.expr(r);
-        self.pc = saved_pc;
-        self.last_exit = e_lhs.join(self.last_exit);
+        let (rhs, ex) = self.expr_after(self.last_exit, Depth::PURE, r);
+        self.last_exit = ex;
         let op = arithmetic(op);
         let ty = if comparison(op) { ir::Type::Bool } else { lhs.ty.clone() };
         let depth = lhs.depth.join(rhs.depth);
@@ -1346,6 +998,55 @@ impl Lowering<'_> {
             depth,
             span,
         )
+    }
+
+    /// `x op= e` reads the place and writes back `place op value`.
+    /// Hoist any non-literal index expressions in `place.path` into hidden
+    /// locals so side-effecting indices are lowered and evaluated once.
+    fn hoist_compound_place(
+        &mut self,
+        op: ast::BinOp,
+        place: ir::Place,
+        target_span: Span,
+        value: &ast::Expr,
+        span: Span,
+    ) -> (Vec<ir::Stmt>, ir::Place, ir::Expr, ExitPc) {
+        let mut stmts = Vec::new();
+        let mut read_path = Vec::with_capacity(place.path.len());
+        let mut write_path = Vec::with_capacity(place.path.len());
+        for proj in place.path {
+            match proj {
+                ir::Proj::Field(idx) => {
+                    read_path.push(ir::Proj::Field(idx));
+                    write_path.push(ir::Proj::Field(idx));
+                }
+                ir::Proj::Index(idx) if matches!(idx.kind, ir::ExprKind::Literal(_)) => {
+                    read_path.push(ir::Proj::Index(idx.clone()));
+                    write_path.push(ir::Proj::Index(idx));
+                }
+                ir::Proj::Index(idx) => {
+                    let (idx_span, idx_ty, idx_depth) = (idx.span, idx.ty.clone(), idx.depth);
+                    let tmp = self.fresh_temp_local(idx_ty.clone(), idx_depth, idx_span);
+                    stmts.push(ir::Stmt::Let { local: tmp, value: *idx });
+                    let load = Self::at(ir::ExprKind::Local(tmp), idx_ty, idx_depth, idx_span);
+                    read_path.push(ir::Proj::Index(Box::new(load.clone())));
+                    write_path.push(ir::Proj::Index(Box::new(load)));
+                }
+            }
+        }
+        let lhs = self.read_place(place.local, &read_path, target_span);
+        let rhs = self.expr(value);
+        let e_rhs = self.last_exit;
+        let bin_op = arithmetic(op);
+        let bin_ty = if comparison(bin_op) { ir::Type::Bool } else { lhs.ty.clone() };
+        let bin_depth = lhs.depth.join(rhs.depth);
+        let combined = Self::at(
+            ir::ExprKind::Binary { op: bin_op, lhs: Box::new(lhs), rhs: Box::new(rhs) },
+            bin_ty,
+            bin_depth,
+            span,
+        );
+        (stmts, ir::Place { local: place.local, path: write_path }, combined, e_rhs)
     }
 
     fn assign(
@@ -1362,59 +1063,14 @@ impl Lowering<'_> {
             return Self::unit_at(span);
         };
         let e_place = self.last_exit;
-        if let Some(ed) = e_place.deepest() {
-            self.pc = self.pc.join(ed);
-        }
-        // `x op= e` reads the place and writes back `place op value`.
-        // Hoist any index expressions in `place.path` into hidden locals so
-        // side-effecting index expressions are lowered and evaluated once.
+        self.advance_pc(e_place);
         let (stmts, assign_place, val_expr, e_val) = if let Some(op) = op {
-            let mut stmts = Vec::new();
-            let mut read_path = Vec::with_capacity(place.path.len());
-            let mut write_path = Vec::with_capacity(place.path.len());
-            for proj in place.path {
-                match proj {
-                    ir::Proj::Field(idx) => {
-                        read_path.push(ir::Proj::Field(idx));
-                        write_path.push(ir::Proj::Field(idx));
-                    }
-                    ir::Proj::Index(idx) => {
-                        if matches!(idx.kind, ir::ExprKind::Literal(_)) {
-                            read_path.push(ir::Proj::Index(idx.clone()));
-                            write_path.push(ir::Proj::Index(idx));
-                        } else {
-                            let (idx_span, idx_ty, idx_depth) =
-                                (idx.span, idx.ty.clone(), idx.depth);
-                            let tmp = self.fresh_temp_local(idx_ty.clone(), idx_depth, idx_span);
-                            stmts.push(ir::Stmt::Let { local: tmp, value: *idx });
-                            let load =
-                                Self::at(ir::ExprKind::Local(tmp), idx_ty, idx_depth, idx_span);
-                            read_path.push(ir::Proj::Index(Box::new(load.clone())));
-                            write_path.push(ir::Proj::Index(Box::new(load)));
-                        }
-                    }
-                }
-            }
-            let lhs = self.read_place(place.local, &read_path, target.span);
-            let rhs = self.expr(value);
-            let e_rhs = self.last_exit;
-            let bin_op = arithmetic(op);
-            let bin_ty = if comparison(bin_op) { ir::Type::Bool } else { lhs.ty.clone() };
-            let bin_depth = lhs.depth.join(rhs.depth);
-            let combined = Self::at(
-                ir::ExprKind::Binary { op: bin_op, lhs: Box::new(lhs), rhs: Box::new(rhs) },
-                bin_ty,
-                bin_depth,
-                span,
-            );
-            (stmts, ir::Place { local: place.local, path: write_path }, combined, e_rhs)
+            self.hoist_compound_place(op, place, target.span, value, span)
         } else {
             let value = self.landed(value, Some(place_ty));
             (Vec::new(), place, value, self.last_exit)
         };
-        if let Some(ed) = e_val.deepest() {
-            self.pc = self.pc.join(ed);
-        }
+        self.advance_pc(e_val);
         let depth = assign_place.path.iter().fold(val_expr.depth, |acc, p| match p {
             ir::Proj::Index(i) => acc.join(i.depth),
             ir::Proj::Field(_) => acc,
@@ -1501,20 +1157,14 @@ impl Lowering<'_> {
             }
             ast::ExprKind::Index { base, index } => {
                 let (mut place, base_ty) = self.place(base)?;
-                let e_base = self.last_exit;
-                let saved_pc = self.pc;
-                if let Some(ed) = e_base.deepest() {
-                    self.pc = saved_pc.join(ed);
-                }
                 let elem_ty = if let ir::Type::Array { elem, .. } = base_ty {
                     *elem
                 } else {
                     self.fault(e.span, FaultKind::Unknown("an array to index"));
                     ir::Type::Unit
                 };
-                let index = self.expr(index);
-                self.pc = saved_pc;
-                self.last_exit = e_base.join(self.last_exit);
+                let (index, ex) = self.expr_after(self.last_exit, Depth::PURE, index);
+                self.last_exit = ex;
                 place.path.push(ir::Proj::Index(Box::new(index)));
                 Some((place, elem_ty))
             }
@@ -1555,9 +1205,7 @@ impl Lowering<'_> {
             _ => {
                 let c = self.expr(callee);
                 ex = ex.join(self.last_exit);
-                if let Some(ed) = self.last_exit.deepest() {
-                    self.pc = self.pc.join(ed);
-                }
+                self.advance_pc(self.last_exit);
                 let ps = match &c.ty {
                     ir::Type::Fn { params, .. } => Some(params.clone()),
                     _ => None,
@@ -1570,9 +1218,7 @@ impl Lowering<'_> {
             let expected = param_types.as_ref().and_then(|ps| ps.get(i).cloned());
             let arg = self.landed(a, expected);
             ex = ex.join(self.last_exit);
-            if let Some(ed) = self.last_exit.deepest() {
-                self.pc = self.pc.join(ed);
-            }
+            self.advance_pc(self.last_exit);
             lowered_args.push(arg);
         }
         self.pc = saved_pc;
@@ -1665,61 +1311,5 @@ fn arithmetic(op: ast::BinOp) -> ir::BinOp {
         // `&&` and `||` never reach here: they are a branch and not an
         // operator, and `binary` takes them before this is called.
         ast::BinOp::BitAnd | ast::BinOp::And | ast::BinOp::Or => ir::BinOp::BitAnd,
-    }
-}
-
-/// The prelude, instantiated. `spec/09-prelude.md`.
-///
-/// The names and the strata are `nether_core::Prim`'s; the shapes are here,
-/// because three of them are polymorphic in `T` and the IR's types have no
-/// variables. `T` comes from what the call was handed.
-fn prim_arrow(p: Prim, args: &[ir::Type]) -> ir::Type {
-    use ir::Type as T;
-    let answer = |t: T| T::Answer(Box::new(t));
-    let strs = || T::Array { elem: Box::new(T::Str), len: None };
-    let held = || match args.first() {
-        Some(T::Answer(inner)) => (**inner).clone(),
-        _ => T::Unit,
-    };
-    let (params, result) = match p {
-        Prim::Min | Prim::Max => (vec![T::Int, T::Int], T::Int),
-        Prim::Abs => (vec![T::Int], T::Int),
-        Prim::Len => (vec![T::Bytes], T::Int),
-        Prim::Slice => (vec![T::Bytes, T::Int, T::Int], T::Bytes),
-        Prim::Concat => (vec![T::Bytes, T::Bytes], T::Bytes),
-        Prim::StartsWith => (vec![T::Bytes, T::Bytes], T::Bool),
-        Prim::Utf8 => (vec![T::Bytes], answer(T::Str)),
-        Prim::Raw => (vec![T::Str], T::Bytes),
-        Prim::Join => (vec![strs(), T::Str], T::Str),
-        Prim::Split => (vec![T::Str, T::Str], strs()),
-        Prim::CairnOf => (vec![T::Bytes], T::Cairn),
-        Prim::Hex => (vec![T::Cairn], T::Str),
-        Prim::Given => (vec![answer(held())], T::Bool),
-        Prim::Refusal => (vec![answer(held())], T::Refusal),
-        Prim::Must => (vec![answer(held())], held()),
-        Prim::Answered => (args.to_vec(), answer(args.first().cloned().unwrap_or(T::Unit))),
-        Prim::Refused => (vec![T::Refusal], answer(T::Unit)),
-        Prim::FetchNode => (vec![T::Cairn], answer(T::Bytes)),
-        Prim::HasNode => (vec![T::Cairn], T::Bool),
-        Prim::Env => (vec![T::Str], answer(T::Str)),
-        Prim::Clock => (Vec::new(), T::Int),
-        Prim::Target => (Vec::new(), T::Str),
-        // The same shape from two different strata, which is the whole of the
-        // difference between reading a file and fetching a page.
-        Prim::Read | Prim::Get => (vec![T::Str], answer(T::Bytes)),
-        Prim::List => (vec![T::Str], answer(strs())),
-        Prim::Exists => (vec![T::Str], T::Bool),
-        Prim::Write => (vec![T::Str, T::Bytes], answer(T::Unit)),
-        Prim::Remove => (vec![T::Str], answer(T::Unit)),
-        Prim::Post | Prim::CallForeign => (vec![T::Str, T::Bytes], answer(T::Bytes)),
-        Prim::Draw => (vec![T::Int], T::Bytes),
-    };
-    // Every prelude function hands back what it went and got, so its two
-    // depths are the same one.
-    T::Fn {
-        params,
-        latent: Held::of(p.latent()),
-        result: Box::new(result),
-        result_depth: p.latent(),
     }
 }
