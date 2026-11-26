@@ -138,14 +138,11 @@ body {
      seven pixels per cell: six for ink and one blank metric bearing. The
      scale is 8, 16, 24, 32 and there is nothing in between it. */
   font-size: var(--type-body);
-  /* Twenty-two pixels, not twenty-four. Leading is the largest vertical
-     measure on the page by a long way -- margins are a minority of it -- so it
-     is the only number that makes the page denser rather than marginally
-     tidier. It has to land on a whole pixel: the face draws a one-pixel stem
-     and a line box that ends on a half puts the next row's baseline half a
-     pixel out. 1.375 of sixteen is twenty-two, and 1.4 is twenty-two and two
-     fifths. */
-  line-height: 1.375;
+  /* Twenty-four pixels: three times the eight-pixel drawing cell. Giving
+     monospace prose an extra two pixels of leading keeps multi-line paragraphs
+     open without leaving whole-pixel baselines (1.5 of sixteen is twenty-four).
+     Code listings stay tighter at 1.375 (twenty-two pixels). */
+  line-height: 1.5;
   /* A weight or a style this face does not have must fail visibly rather than
      be invented. A missing bold that looks wrong is a bug report; a smeared
      one is a thing people assume was intended. There is no italic and there
@@ -173,19 +170,19 @@ body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
 }
 .terminal-title { background: var(--accent); color: var(--ground); }
 .terminal-header {
-  padding: 1.5rem .75rem;
-  border: 1px solid var(--dim);
+  padding: 1rem .75rem;
+  border: 1px solid var(--dimmer);
   border-top: 0;
   background: var(--ground);
 }
 .terminal-workspace {
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr);
-  border: 1px solid var(--dim);
+  border: 1px solid var(--dimmer);
   border-top: 0;
   background: var(--ground);
 }
-.directory { padding: 1rem .75rem; border-right: 1px solid var(--dim); }
+.directory { padding: 1rem .75rem; border-right: 1px solid var(--dimmer); }
 .directory-drawer {
   position: sticky;
   top: 1rem;
@@ -197,6 +194,15 @@ body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
 .directory nav.contents { border: 0; padding: 0; margin: .5rem 0; }
 .directory nav.contents ol { display: block; }
 .directory nav.contents li { margin: 0; }
+.directory .directory-group {
+  color: var(--dim);
+}
+.directory .directory-group + .directory-group,
+.directory ol + .directory-group {
+  margin-top: 1rem;
+  padding-top: .75rem;
+  border-top: 1px solid var(--dimmer);
+}
 .directory a, .directory li[aria-current] {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -220,20 +226,22 @@ body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
 .directory li[aria-current] { border-left: 3px solid var(--accent); background: var(--raised); }
 .directory-note { margin: 2rem 0 0; color: var(--dim); }
 .reading-pane { min-width: 0; }
-.pane-title { border-bottom: 1px solid var(--dim); color: var(--dim); overflow-wrap: anywhere; }
-.terminal main { padding: 1.25rem; }
+.pane-title { border-bottom: 1px solid var(--dimmer); color: var(--dim); overflow-wrap: anywhere; }
+.terminal main { padding: 1.75rem 2.25rem 2.5rem; }
 .terminal main > h1:first-child { margin-top: .25rem; }
 .terminal main :is(h1, h2, h3, h4) { scroll-margin-top: 1rem; }
-.terminal nav.bar { border: 1px solid var(--dim); border-top: 0; align-items: center; gap: .15rem .25rem; padding: .3rem .4rem; }
+.terminal nav.bar { border: 1px solid var(--dimmer); border-top: 0; align-items: center; gap: .15rem .25rem; padding: .3rem .4rem; }
 .terminal nav.bar a { display: inline-block; padding: .35rem .5rem; text-decoration: none; }
 .terminal .lamp { min-height: 40px; }
-.terminal-status { border: 1px solid var(--dim); border-top: 0; color: var(--dim); }
+.terminal-status { border: 1px solid var(--dimmer); border-top: 0; color: var(--dim); }
 .arrival {
   border: 2px solid;
   border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
   text-align: center;
   margin-bottom: 1rem;
+  padding-bottom: 1.25rem;
 }
+.arrival > :last-child { margin-bottom: 0; }
 .arrival .panel-label {
   display: flex;
   flex-wrap: wrap;
@@ -249,7 +257,7 @@ body.terminal { max-width: 1320px; padding: 1rem 1rem 3rem; }
 .arrival h1 { margin: 0 0 1rem; }
 .arrival h1::before { content: none; }
 .arrival > p:not(.panel-label) { padding: 0 .75rem; }
-.arrival-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; }
+.arrival-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; margin: 1.25rem 0 1rem; }
 .arrival-actions a { padding: .5rem 0; }
 .arrival-actions a.btn { padding: .45rem .85rem; }
 .btn {
@@ -288,12 +296,19 @@ a.pill:hover, a.pill:focus-visible { background: var(--accent); color: var(--gro
   justify-content: space-between;
   align-items: baseline;
   gap: .25rem 1ch;
+  margin-bottom: .65rem;
 }
 .meta-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: .25rem 1ch;
+  margin-bottom: .75rem;
+}
+.meta-bar > span + span::before {
+  content: "\00B7";
+  margin-right: 1ch;
+  color: var(--dimmer);
 }
 .chapter-pager {
   display: flex;
@@ -317,14 +332,14 @@ a.pill:hover, a.pill:focus-visible { background: var(--accent); color: var(--gro
   border: 0;
 }
 .desk-notice { color: var(--dim); }
-.complaints { border: 1px dashed var(--dim); padding: .75rem; margin: 1rem 0 2rem; }
+.complaints { border: 1px dashed var(--dimmer); padding: .75rem; margin: 1rem 0 2rem; }
 .complaints summary { cursor: pointer; color: var(--alt); }
 .complaints[open] summary { margin-bottom: 1rem; }
 .complaints p:last-child { margin-bottom: 0; }
 summary:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 1050px) {
   .terminal-workspace { grid-template-columns: minmax(0, 1fr); }
-  .directory { border-right: 0; border-bottom: 1px solid var(--dim); padding: .5rem .75rem; }
+  .directory { border-right: 0; border-bottom: 1px solid var(--dimmer); padding: .5rem .75rem; }
   .directory-drawer { position: static; max-height: none; }
   .directory-note { display: none; }
   .desk-directory, .directory nav.contents ol { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
@@ -453,7 +468,8 @@ nav.bar button.lamp { margin-left: auto; }
 h1 {
   margin: 1.5rem 0 .75rem;
   color: var(--accent);
-  font-size: var(--type-head);
+  font-size: var(--type-sign);
+  line-height: 1.25;
   font-weight: bold;
   letter-spacing: .125em;
   text-transform: uppercase;
@@ -462,18 +478,20 @@ h1::before { content: "\2588\2588 "; }
 h1::before, h2::before, h3::before { margin-right: .5ch; }
 
 h2 {
-  margin: 2.25rem 0 .75rem;
-  padding: .3rem .6rem;
+  margin: 3rem 0 1.1rem;
+  padding: .4rem .75rem;
   line-height: 1.25;
-  background: var(--accent);
-  color: var(--ground);
+  background: var(--raised);
+  color: var(--ink);
+  border-left: 4px solid var(--accent);
+  border-bottom: 1px solid var(--dimmer);
   font-size: var(--type-head);
   font-weight: bold;
 }
-h2::before { content: "\25A0 "; }
+h2::before { content: "\25A0 "; color: var(--accent); }
 
 h3 {
-  margin: 1.6rem 0 .5rem;
+  margin: 2rem 0 .65rem;
   color: var(--alt);
   font-size: var(--type-body);
   font-weight: bold;
@@ -497,7 +515,15 @@ main :is(h2, h3)[id] > a:focus-visible::after { content: " #"; }
 
 /* --- text ----------------------------------------------------------------- */
 
-p { margin: 0 0 .9rem; }
+p { margin: 0 0 1rem; }
+main > p:not(.meta-bar):not(.center),
+main > ul,
+main > ol,
+main > blockquote,
+.plaque p,
+div.box p:not(.meta-bar):not(.center) {
+  max-width: 58ch;
+}
 strong { color: var(--accent); font-weight: bold; }
 em { color: var(--quote); font-style: normal; }
 
@@ -506,7 +532,7 @@ a:hover { background: var(--alt); color: var(--ground); text-decoration: none; }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 ul, ol { margin: 0 0 .9rem; padding-left: 3ch; }
-li { margin: 0 0 .2rem; }
+li { margin: 0 0 .55rem; }
 ul { list-style: none; }
 ul > li::before { content: "\2022"; margin-left: -2ch; margin-right: 1ch; color: var(--accent); }
 li > ul, li > ol { margin: .35rem 0 .25rem; }
@@ -531,21 +557,21 @@ code {
 }
 a code { color: inherit; }
 main :is(h1, h2, h3, h4, p, li) { overflow-wrap: break-word; }
-main :not(pre) > code, main p a, main li a { overflow-wrap: anywhere; }
+main :not(pre):not(td):not(th) > code, main p a, main li a { overflow-wrap: anywhere; }
 
 figure.listing {
   margin: 0 0 1.1rem;
-  border: 2px solid;
-  border-color: var(--bevel-lo) var(--bevel-hi) var(--bevel-hi) var(--bevel-lo);
+  border: 1px solid var(--dimmer);
 }
 figure.listing figcaption {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: .5rem;
-  padding: .25rem .6rem;
-  background: var(--dim);
-  color: var(--ground);
+  padding: .3rem .65rem;
+  background: var(--raised);
+  color: var(--dim);
+  border-bottom: 1px solid var(--dimmer);
   font-size: var(--type-fine);
   letter-spacing: .125em;
   text-transform: uppercase;
@@ -603,7 +629,7 @@ div.scroll { overflow-x: auto; overflow-y: hidden; margin: 0 0 1.1rem; padding-b
 table {
   width: 100%;
   border-collapse: collapse;
-  border: 2px solid var(--dim);
+  border: 1px solid var(--dimmer);
 }
 caption {
   padding: .2rem 0;
@@ -611,18 +637,24 @@ caption {
   text-align: left;
 }
 th {
-  padding: .45rem .75rem;
-  border: 1px solid var(--dim);
-  background: var(--dim);
-  color: var(--ground);
+  padding: .55rem .8rem;
+  border: 0;
+  border-bottom: 2px solid var(--dim);
+  background: var(--raised);
+  color: var(--ink);
   text-align: left;
   white-space: nowrap;
 }
 td {
-  padding: .45rem .75rem;
-  border: 1px solid var(--dim);
+  padding: .55rem .8rem;
+  border: 0;
+  border-bottom: 1px solid var(--dimmer);
   vertical-align: top;
 }
+table td code, table th code { overflow-wrap: normal; }
+table td:first-child code { white-space: nowrap; }
+table td:first-child a code { white-space: normal; overflow-wrap: normal; }
+.asset-table td:first-child :is(a, code) { white-space: normal; overflow-wrap: anywhere; }
 .align-left   { text-align: left; }
 .align-center { text-align: center; }
 .align-right  { text-align: right; }
@@ -641,7 +673,7 @@ div.box {
   background: var(--raised);
 }
 div.box > :last-child { margin-bottom: 0; }
-div.box.shout { border-color: var(--warn); color: var(--warn); }
+div.box.shout { border-color: var(--warn); color: var(--ink); }
 
 p.small { color: var(--dim); }
 div.box.shout strong { color: var(--warn); }
@@ -736,7 +768,7 @@ img.specimen { display: block; width: 100%; max-width: 435px; height: auto; marg
 ol.doctrine { margin: 0 0 1.2rem; padding: 0; list-style: none; counter-reset: doctrine; }
 ol.doctrine > li {
   position: relative;
-  margin: 0 0 .8rem;
+  margin: 0 0 1.25rem;
   padding: 0 0 0 5ch;
   counter-increment: doctrine;
 }
@@ -747,7 +779,7 @@ ol.doctrine > li::before {
   color: var(--accent);
   font-weight: bold;
 }
-ol.doctrine > li b { display: block; color: var(--ink); text-transform: uppercase; letter-spacing: .125em; }
+ol.doctrine > li b { display: block; margin-bottom: .25rem; color: var(--ink); text-transform: uppercase; letter-spacing: .125em; }
 ol.doctrine > li span { color: var(--dim); }
 
 /* A diagram that carries labels is drawn small and shown at an exact 2x.
@@ -780,7 +812,8 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .necropolis pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; overflow-y: hidden; max-width: 100%; margin: var(--hair) 0; padding: var(--tight); background: var(--sunk); border: 1px solid var(--dimmer); }
 .necropolis code { background: transparent; padding: 0; }
 .nc-header { border-bottom: 1px solid var(--dimmer); padding-bottom: var(--tight); margin-bottom: var(--tight); }
-.necropolis nav.bar { border: 1px solid var(--dim); border-top: 0; gap: .15rem .25rem; padding: .3rem .4rem; margin-bottom: var(--tight); }
+.nc-header p, .nc-inspector p { max-width: 64ch; }
+.necropolis nav.bar { border: 1px solid var(--dimmer); border-top: 0; gap: .15rem .25rem; padding: .3rem .4rem; margin-bottom: var(--tight); }
 .necropolis nav.bar a { display: inline-block; padding: .35rem .5rem; text-decoration: none; }
 .necropolis button.nc-lamp {
   min-height: 44px;
@@ -903,7 +936,7 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 .chapters {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: .4rem;
+  gap: .6rem;
   margin: 1.5rem 0;
 }
 @media (max-width: 640px) {
@@ -911,11 +944,12 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
      which a pixel of the face is a whole number of the screen's, and a
      narrow screen is the last place to start drawing half of one. */
   body { padding: 1rem .6rem 4rem; }
+  h1 { font-size: var(--type-head); }
   .terminal-title { font-size: var(--type-fine); padding: .4rem .5rem; }
   .terminal-header { padding: .6rem .5rem; }
   .terminal-header p.tagline { margin-top: .4rem; }
-  .terminal nav.bar, .necropolis nav.bar { gap: .2rem .3rem; padding: .25rem .35rem; }
-  .terminal nav.bar a, .necropolis nav.bar a { padding: .35rem .45rem; }
+  .terminal nav.bar, .necropolis nav.bar { gap: .15rem .25rem; padding: .2rem .3rem; }
+  .terminal nav.bar a, .necropolis nav.bar a { padding: .25rem .4rem; }
   .terminal .lamp, .necropolis button.nc-lamp { min-height: 36px; }
   .directory { padding: .3rem .5rem; }
   .directory summary { padding: .35rem 0; }
@@ -932,17 +966,28 @@ body.necropolis { max-width: 1248px; padding: var(--step) var(--tight) var(--gap
 a.chapter {
   display: flex;
   gap: .75rem;
-  align-items: baseline;
-  padding: .6rem .8rem;
+  align-items: flex-start;
+  padding: .75rem .95rem;
   border: 2px solid;
   border-color: var(--bevel-hi) var(--bevel-lo) var(--bevel-lo) var(--bevel-hi);
   text-decoration: none;
   color: var(--ink);
 }
 a.chapter .n { color: var(--dim); }
+a.chapter .chapter-body {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  min-width: 0;
+}
+a.chapter .chapter-idea {
+  color: var(--dim);
+  font-size: var(--type-body);
+}
 a.chapter:hover, a.chapter:focus-visible { background: var(--accent); color: var(--ground); }
 a.chapter:hover .n, a.chapter:focus-visible .n,
-a.chapter:hover .t, a.chapter:focus-visible .t { color: var(--ground); }
+a.chapter:hover .t, a.chapter:focus-visible .t,
+a.chapter:hover .chapter-idea, a.chapter:focus-visible .chapter-idea { color: var(--ground); }
 
 /* --- the face specimen ---------------------------------------------------- */
 
@@ -958,7 +1003,7 @@ a.chapter:hover .t, a.chapter:focus-visible .t { color: var(--ground); }
   margin: 0 0 .75rem;
   padding: .7rem .9rem;
   background: var(--raised);
-  border: 1px solid var(--dim);
+  border: 1px solid var(--dimmer);
 }
 .scale-row p.c { margin: 0 0 .4rem; font-size: var(--type-fine); }
 .scale-sample { margin: 0 0 .25rem; }
@@ -977,7 +1022,7 @@ a.chapter:hover .t, a.chapter:focus-visible .t { color: var(--ground); }
   min-width: 0;
   padding: .75rem;
   background: var(--raised);
-  border: 1px solid var(--dim);
+  border: 1px solid var(--dimmer);
 }
 .glyph-head {
   display: flex;
@@ -1070,7 +1115,7 @@ pre.glyph-grid[data-weight="bold"] { color: var(--accent); }
   .pane-title { border-bottom: 1px solid black; color: black; }
   .terminal main { padding: .5rem 0; }
   h1, h2, h3, h4, strong, em, a, code, p.small, .c { color: black !important; }
-  h2 { background: none !important; border-bottom: 2px solid black; padding-left: 0; }
+  h2 { background: none !important; border-left: 0; border-bottom: 2px solid black; padding-left: 0; }
   figure.listing, table, th, td, div.box, .plaque { border-color: black !important; }
   th, figure.listing figcaption, .plaque > h3 {
     background: transparent !important;
