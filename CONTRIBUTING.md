@@ -247,7 +247,9 @@ Six things the grid asks of you:
 1. **Eight rows of eight.** `g` says so if they are not, and names the glyph.
 2. **Six columns of ink**, numbered 0 to 5. The seventh is the blank bearing
    that makes the advance, and the eighth is not yours. Anything drawn past
-   column 5 fails the check.
+   column 5 fails the check — except full-cell joining block and box-drawing
+   glyphs in `JOIN` (`█`, `─`, `└`), which fill column 6 so adjacent cells join
+   without vertical seams.
 3. **Seven rows tall.** Rows 0 to 6 sit above the baseline and row 7 below it,
    so a capital fills rows 0 to 6, the x-height is rows 2 to 6, and a
    descender drops into row 7.

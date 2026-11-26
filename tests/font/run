@@ -417,8 +417,9 @@ def metrics(shipped: dict[bytes, bytes], drawn: dict[str, tuple[str, ...]],
     if fixed != 1:
         bad.append("post does not mark the face fixed-pitch")
     for ch, rows in drawn.items():
-        if any(bit == "#" for row in rows for bit in row[source.INK_COLS:]):
-            bad.append(f"U+{ord(ch):04X} draws past the six-column mono cell")
+        limit = source.ADVANCE_COLS if ch in source.JOIN else source.INK_COLS
+        if any(bit == "#" for row in rows for bit in row[limit:]):
+            bad.append(f"U+{ord(ch):04X} draws past its {limit}-column mono cell")
     for gid, ch in enumerate(sorted(drawn), 1):
         columns = [x for row in drawn[ch] for x, bit in enumerate(row) if bit == "#"]
         expected = min(columns, default=0) * source.PIXEL
