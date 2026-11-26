@@ -6,13 +6,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 # The strata and their names, and the ledger an answer is written to. A
 # provider is the seam between the two and needs both.
 nether-core = { path = "../nether-core" }
 nether-ledger = { path = "../nether-ledger" }
-# Stratum 8, and the only `unsafe` in the language. A crate of its own, for
+# Stratum 8, and one of two crates where `unsafe` is allowed. A crate of its own, for
 # the reason `spec/90-rationale.md` gives: `forbid` is not locally undoable.
 nether-foreign = { path = "../nether-foreign" }
 

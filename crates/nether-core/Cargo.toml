@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 
 # No dependencies, and there is nothing here that wants one. The ledger is not
 # among them on purpose: the IR is a fact about a source file, and it becomes a

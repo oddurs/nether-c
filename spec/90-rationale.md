@@ -9,30 +9,25 @@ status: non-normative
 Non-normative throughout. Nothing here constrains an implementation.
 
 This section exists because a design document that lists only advantages is
-marketing. For each inversion: what HolyC did, what Nether C does, and what
-that cost.
+marketing. For each core choice: what Nether C does, why, and what it cost.
 
-## 90.1 The inversions
+## 90.1 Core design choices
 
-### The command line is the compiler → there is no `run`
+### There is no `run`
 
-HolyC compiles and executes each top-level statement as it is read. The shell,
-the REPL and the build are one act, and the result is a system with
-extraordinary immediacy: you type, and the machine has already done it.
-
-Nether C moves all of it to the other side. Burial is partial evaluation, and
-the trace holds the residue.
+Ordinary C dialects compile and execute a program on demand, coupling build and
+execution for immediacy. Nether C separates evaluation from execution: burial
+is partial evaluation, and the trace holds the residue and any unanswered holes.
 
 **What it cost.** Immediacy. There is no REPL and there cannot be a good one,
 because the thing a REPL is for — see the effect now — is precisely what this
-language refuses to do. The Necropolis playground is the compensation, and it
+language refuses to do. The Necropolis browser view is the compensation, and it
 is a worse experience than a REPL for the things a REPL is best at.
 
-### A bare string prints → a bare expression deposits
+### A bare expression deposits rather than prints
 
-The syntax is preserved exactly; the semantics are reversed. `"Hello\n";` is
-still a complete statement, and it still means *this value matters*. It simply
-no longer reaches anybody.
+`"Hello\n";` is a complete statement, and it still means *this value matters*.
+It simply deposits into the ledger instead of writing to a terminal.
 
 **What it cost.** `printf` debugging. The first thing every programmer does in
 a new language is print something, and in Nether C that takes two commands
@@ -44,36 +39,32 @@ holds no capability that reaches a log, so it cannot leak to one. Whether that
 trade is worth it is genuinely arguable, and if Nether C fails to find users,
 this is the most likely reason.
 
-### The Oracle → stratum 7
+### Entropy sits at stratum 7
 
-Terry's random number generator was a channel: entropy arriving from above,
-the highest thing in the system. Nether C puts randomness at depth 7 — nearly
-the deepest thing there is — because it is the one act that makes a program
-impossible to re-derive.
+Nether C puts randomness at depth 7 — nearly the deepest recordable stratum —
+because drawn bytes are the one act that makes a program impossible to
+re-derive from source and environment alone. You can replay a recorded draw,
+but you can never reproduce it without its witness.
 
-This is the cleanest inversion in the design. The same mechanism sits at
-opposite ends of the same axis, for reasons each system states outright.
+**What it cost.** Every program that uses randomness carries depth 7 on every
+value derived from it and must record its witnesses in the ledger to remain
+replayable.
 
-**What it cost.** Nothing, in engineering terms. Everything, in the sense that
-it is the point where Nether C is most obviously arguing with TempleOS rather
-than merely differing from it. That is intentional and it is meant respectfully.
+### Nine strata instead of ambient authority
 
-### Ring 0 for everyone → nine strata
+Rather than granting ambient access to the machine, Nether C partitions
+authority into a nine-stratum lattice and records the deepest stratum reached
+in every value's type.
 
-TempleOS gives every task every privilege over all of memory at all times, and
-gets a system that switches tasks in half a microsecond and is a joy to
-program. Nether C partitions authority into a lattice and records the
-partition in every type.
+**What it cost.** Speed of expression. You write what you mean, discover it is
+at depth 5, and go back to add a `descend`. Depth inference is what keeps this
+from being intolerable, and if inference is not good enough the language is not
+usable.
 
-**What it cost.** Speed of expression. In HolyC you write what you mean. In
-Nether C you write what you mean, discover it is at depth 5, and go back to
-add a `descend`. Depth inference is what keeps this from being intolerable,
-and if inference is not good enough the language is not usable.
+### Immutable ledger values
 
-### Everything mutable → nothing mutable
-
-Both systems share everything. TempleOS lets every task write to it; Nether C
-lets none write to anything.
+Everything written to the ledger is shared, content-addressed, and immutable.
+Nothing in the ledger can be revised.
 
 **What it cost.** Every algorithm that wants an in-place update. §5.4 permits
 building an aggregate before it is first read, which covers construction but
@@ -81,28 +72,24 @@ not, say, a hash table that is updated a million times. A Nether C program
 that needs one will be slow, and the honest answer today is that such a
 program should be written somewhere else and called at stratum 8.
 
-### DolDoc → the ledger graph
-
-TempleOS's file is alive: source, documentation, UI and runnable macros in one
-illuminated hypertext, with sprites drawn inline. It is the most charming
-thing about the system.
+### The ledger graph is canonical
 
 Nether C makes the *text* disposable and the *graph* canonical. The source is
 one rendering of the program; the trace is what actually exists.
 
 **What it cost.** Charm, so far. The ledger graph is a better substrate for
 diffing, provenance and reproducibility, and it is still more austere to look
-at than a DolDoc file. The Necropolis (`web/necropolis/`) closes part of that
-gap locally in a browser, though visual richness remains work in progress.
+at than a rich interactive document format. The Necropolis (`web/necropolis/`)
+closes part of that gap locally in a browser, though visual richness remains
+work in progress.
 
-### 640×480 forever → the Decay Rule
+### The Decay Rule
 
-Terry fixed the dimensions of the system by covenant and never changed them.
-Nether C's counterpart is that the trusted core may only ever get smaller —
-checked in CI, recorded in `.decay-ceiling`.
+The trusted core may only ever get smaller — checked in CI and recorded in
+`.decay-ceiling`.
 
-A fixed constraint and a monotonically decreasing one are both ways of
-refusing to let a system sprawl. The second is more demanding.
+A fixed size ceiling keeps a system from sprawling; a monotonically decreasing
+ceiling is more demanding.
 
 ## 90.2 Rejected alternatives
 
@@ -388,9 +375,9 @@ worth the name.
 
 **Forbidding assignment outright** — remove `assign`, remove the `for` step,
 remove §5.4's example — was the honest minimum, and it leaves a language with
-`while` and manual recursion and nothing else. The inversion does not require
-that. What TempleOS let every task do was write to *shared, addressable,
-permanent* memory; a counter in a block is none of those.
+`while` and manual recursion and nothing else. Immutability of the ledger does
+not require that: shared, permanent ledger entries cannot mutate, whereas a
+local loop counter before its value is named is none of those.
 
 What was chosen draws the line at the ledger. A local may be assigned until it
 is named, and naming it is exactly the moment its cairn exists. That keeps
@@ -426,12 +413,11 @@ served by the rite's own output rather than by the trace.
 
 ### Calling a nullary function without parentheses
 
-HolyC does not need them: `Dir;` calls `Dir`. The first program in this
-specification was written as `demand greet;` for a year on the strength of that
-memory, and it does not call anything — [§4.5](04-grammar.md#45-expressions)
-requires `call_suffix`, so a bare identifier is the function itself. The body
-never ran and nothing was deposited, and nobody noticed because nothing could
-run at all.
+An early draft of this specification allowed `demand greet;` without
+parentheses, inspired by C dialects that invoke nullary functions by name. It
+did not call anything — [§4.5](04-grammar.md#45-expressions) requires
+`call_suffix`, so a bare identifier is the function itself. The body never ran
+and nothing was deposited, and nobody noticed until burial was implemented.
 
 The tempting fix is the grammar: let a bare identifier of function type call
 itself. It was rejected because it reintroduces exactly the ambiguity the rest
@@ -444,9 +430,8 @@ It would also make `seal greet` ambiguous in a way that matters: the cairn of a
 function and the cairn of what it returns are different names for different
 things, and there would be no way to write the first one.
 
-What it costs is two characters and a small loss of the homage. HolyC's
-parenthesis-free call is one of its most characteristic gestures and this is a
-place where Nether C simply does not follow it.
+What it costs is two characters on every nullary call, in exchange for an
+unambiguous distinction between a function value and its result.
 
 ### A residue as nodes
 
@@ -1627,32 +1612,20 @@ because they are all true.
   can be. A C programmer reaches for a container on day two and this language
   has no way to write one: the answer is one type per element type, by hand,
   and that is the whole of it in this draft.
-- **Learning curve.** Depth is a genuinely new thing to learn. HolyC's whole
-  proposition was that you already knew it — it was C, plus permission.
+- **Learning curve.** Depth is a genuinely new thing to learn, even for
+  experienced C programmers.
 
-## 90.4 On TempleOS
+## 90.4 Lineage
 
-Nether C is an inversion of HolyC in the way a photographic negative is an
-inversion: every value reversed, every edge in exactly the same place.
+Nether C began with a respectful nod to Terry Davis's HolyC — specifically the
+discipline of building a small, self-contained system from one coherent idea
+(and reversing several of its central premises, from immediate execution and
+ambient authority to burial and explicit strata).
 
-Terry Davis built a complete operating system, a compiler, a graphics stack, a
-document format and a language, alone, and made every one of them follow from a
-single stated idea. Whatever one makes of the idea, the coherence is the
-achievement, and it is rarer than the code.
-
-He was ill, and it is in the work. TempleOS is strange because he was strange,
-and it is also technically excellent, and both of those are true at once and
-neither one cancels the other. Treating the strangeness as the whole story
-misses an operating system. Treating it as an embarrassment to be edited out
-misses the person who wrote it. This document tries to do neither.
-
-What is borrowed here is the method rather than the belief: build the thing
-yourself, keep it small enough to hold in your head, follow one idea all the
-way down even when it becomes inconvenient, and say plainly what you think is
-true.
-
-An inversion is a form of close reading. You cannot turn something over without
-first working out which way up it was.
+What endures from that nod is the engineering method: write the pieces yourself,
+keep the system small enough to hold in your head, refuse unnecessary
+dependencies, and state tradeoffs plainly. Beyond that origin, Nether C stands
+on its own specification.
 
 ## 90.5 Two rooms, one colour vocabulary
 

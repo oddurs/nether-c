@@ -66,7 +66,7 @@ ledger. A program holds no capability that reaches a terminal, a log, or you. If
 you want to see what it left, carry a lamp down and look. This costs you two
 commands instead of one, forever, starting thirty seconds into your first
 program. We charge it anyway, and
-<a href="spec/90-rationale.html#901-the-inversions">&sect;90.1</a> says
+<a href="spec/90-rationale.html#901-core-design-choices">&sect;90.1</a> says
 so.</span></li>
 
 <li><b>Entropy is the deepest recordable sin.</b><span>Stratum 7. Second from
@@ -367,9 +367,9 @@ of used.</p>
 <div class="plaque">
 <h3>THE CORE ONLY EVER SHRINKS</h3>
 <div>
-<p>Terry fixed the size of his system by covenant and never changed it. We
-inverted that too. A file called <code>.decay-ceiling</code> holds a number, and
-the build fails if the trusted core exceeds it.</p>
+<p>A fixed size limit keeps a system from sprawling; a ceiling that only moves
+down is more demanding. A file called <code>.decay-ceiling</code> holds a
+number, and the build fails if the trusted core exceeds it.</p>
 <p>Lowering that number is an ordinary commit. Raising it means editing the file
 on purpose and arguing for it in public, where somebody can disagree.</p>
 <p>Below, things only decay.</p>
@@ -451,5 +451,5 @@ with.</p>
 checkable. It is deliberately not a claim about how it came to be written,
 which would not be.</p>
 
-<p class="small">Terry A. Davis has
-<a href="in-memoriam.html">a page of his own</a>.</p>
+<p class="small">With a nod to Terry A. Davis
+(<a href="in-memoriam.html">in memoriam</a>).</p>

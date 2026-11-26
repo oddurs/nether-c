@@ -219,12 +219,11 @@ scripts/              task, agent, decay, notes, pr-policy, setup, wasm
 .githooks/            commit-msg, pre-commit, pre-push, post-merge
 ```
 
-## ON TERRY DAVIS
+## ENGINEERING ETHOS
 
-This project is an inversion of his language, which is a form of close reading
-and is meant respectfully. Take the engineering: write it yourself, keep it
-small, refuse the dependency, say what you mean in one sentence. Leave the rest
-of his life alone — it is not material and it is not yours.
+Write it yourself, keep it small, refuse unnecessary dependencies, and say what
+you mean in one sentence. The project began with a respectful nod to Terry
+Davis's HolyC, and stands on its own specification.
 
 <!-- cairn:begin -->
 ## Roadmap and issues

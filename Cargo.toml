@@ -8,7 +8,7 @@ edition = "2024"
 rust-version = "1.85"
 license = "Unlicense"
 repository = "https://github.com/oddurs/nether-c"
-homepage = "https://github.com/oddurs/nether-c"
+homepage = "https://netherc.org"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
