@@ -712,15 +712,15 @@ g("①", "........", ".####...", "#..#.#..", "#..#.#..",
 g("②", "........", ".####...", "#.##.#..", "#..#.#..",
              "#.##.#..", ".####...", "........", "........")
 g("─", "........", "........", "........", "........",
-             "######..", "........", "........", "........")
+             "#######.", "........", "........", "........")
 g("■", "........", "######..", "######..", "######..",
              "######..", "######..", "######..", "........")
 g("▸", "........", "#.......", ".##.....", "...##...",
              ".##.....", "#.......", "........", "........")
 g("└", "..#.....", "..#.....", "..#.....", "..#.....",
-             "..####..", "........", "........", "........")
-g("█", "######..", "######..", "######..", "######..",
-             "######..", "######..", "######..", "######..")
+             "..#####.", "........", "........", "........")
+g("█", "#######.", "#######.", "#######.", "#######.",
+             "#######.", "#######.", "#######.", "#######.")
 g("⟨", "....#...", "...#....", "..#.....", ".#......",
              "..#.....", "...#....", "....#...", "........")
 g("⟩", ".#......", "..#.....", "...#....", "....#...",
@@ -745,6 +745,9 @@ g("⟶", "........", "........", "........", "....#...",
 # pixel anywhere.
 
 SAME = frozenset("*^_`m~«»×…′ₙ≡⊕①②─└█■▸⟨⟩")
+# Block and box-drawing glyphs fill column 6 (the bearing column) so adjacent
+# cells join seamlessly without vertical seams while keeping the 7-column advance.
+JOIN = frozenset("█─└")
 
 B: dict[str, tuple[str, ...]] = {}
 
@@ -1067,8 +1070,9 @@ def weigh() -> list[str]:
         reg, bol = G[ch], heavy[ch]
         ink = sum(r.count("#") for r in reg)
         fat = sum(r.count("#") for r in bol)
-        if any(r[INK_COLS:].strip(".") for r in bol):
-            faults.append(f"bold {ch!r} puts ink past column {INK_COLS - 1}")
+        limit = ADVANCE_COLS if ch in JOIN else INK_COLS
+        if any(r[limit:].strip(".") for r in bol):
+            faults.append(f"bold {ch!r} puts ink past column {limit - 1}")
         if enclosed(bol) < enclosed(reg):
             faults.append(f"bold {ch!r} closed a counter, {enclosed(reg)} -> {enclosed(bol)}")
         if fat < ink:

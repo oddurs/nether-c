@@ -489,7 +489,7 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 
 ## Unscheduled
 
-`##########` 100% · 21 of 21 done
+`##########` 100% · 22 of 22 done
 
 ### buried
 
@@ -514,4 +514,5 @@ Mechanized claims about a stated calculus, plus measured correspondence with Rus
 - [x] [`0326`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0326-refactor-proof-site-scripts-necropolis-and-vim-for-clarity.md) Refactor proof, site, scripts, Necropolis, and Vim for clarity <sup>chore · p2</sup>
 - [x] [`0327`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0327-decompose-nether-bury-into-flat-modules-and-polish-lib-nc.md) Decompose nether-bury into flat modules and polish lib/*.nc <sup>chore · p2</sup>
 - [x] [`0328`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0328-refactor-ledger-world-ffi-wasm-and-cli-for-clarity-and-decay.md) Refactor ledger, world, FFI, WASM, and CLI for clarity and decay <sup>chore · p2</sup>
+- [x] [`0329`](https://github.com/oddurs/nether-c/blob/main/cairn/items/0329-fill-bearing-column-on-joining-block-and-box-glyphs.md) Fill bearing column on joining block and box glyphs <sup>bug · p2</sup>
 
