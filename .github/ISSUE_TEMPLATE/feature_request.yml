@@ -36,9 +36,9 @@ body:
     attributes:
       label: What it costs
       description: >
-        Every inversion in this language cost something and the specification
-        says so. What does this one give up? An answer of "nothing" usually
-        means the proposal has not been thought through yet.
+        Every design decision in this language costs something and the
+        specification says so. What does this one give up? An answer of
+        "nothing" usually means the proposal has not been thought through yet.
     validations:
       required: true
 

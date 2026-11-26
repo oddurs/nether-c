@@ -2,8 +2,11 @@
 
 **A C dialect in which nothing runs.**
 
+[![Site](https://img.shields.io/badge/site-netherc.org-942578.svg)](https://netherc.org)
 [![CI](https://github.com/oddurs/nether-c/actions/workflows/ci.yml/badge.svg)](https://github.com/oddurs/nether-c/actions/workflows/ci.yml)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](LICENSE)
+
+[netherc.org](https://netherc.org) · [Specification](https://netherc.org/spec/) · [Manual](https://netherc.org/manual/) · [Face specimen](https://netherc.org/specimen.html)
 
 ---
 
@@ -306,26 +309,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the rest.
 
 ---
 
-## ON TERRY DAVIS
+## INFLUENCE
 
-Terry Davis wrote an operating system, a compiler, a graphics stack, a document
-format and a language. Alone. And made every one of them follow from a single
-stated idea.
-
-Whatever you make of the idea, the coherence is the achievement, and it is
-rarer than the code.
-
-He was ill, and it is in the work, and pretending otherwise would be its own
-kind of disrespect. TempleOS is strange because he was, and it is also
-genuinely, technically excellent, and both of those are true at once and
-neither cancels the other.
-
-Nether C is an inversion of his language the way a photographic negative is an
-inversion: every value reversed, every edge in exactly the same place.
-
-That is a form of close reading.
-
-You cannot turn a thing over without first working out which way up it was.
+Nether C began with a nod to Terry Davis's HolyC — the discipline of building a
+small, self-contained system from one coherent idea, then turning several of its
+premises around. Beyond that starting spark, Nether C stands on its own
+specification and tradeoffs ([§90](spec/90-rationale.md)).
 
 ---
 
