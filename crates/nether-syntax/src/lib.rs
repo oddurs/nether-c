@@ -10,6 +10,7 @@
 pub mod ast;
 mod lex;
 mod lower;
+mod lower_types;
 mod parse;
 mod print;
 mod token;

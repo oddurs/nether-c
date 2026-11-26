@@ -184,6 +184,19 @@ pub struct Block {
     pub span: Span,
 }
 
+impl Block {
+    /// Direct subexpressions of this block, in evaluation order.
+    pub fn children(&self) -> impl Iterator<Item = &Expr> {
+        self.stmts
+            .iter()
+            .filter_map(|s| match s {
+                Stmt::Let { value, .. } | Stmt::Expr(value) => Some(value),
+                Stmt::Declare { .. } => None,
+            })
+            .chain(self.tail.as_deref())
+    }
+}
+
 /// A statement.
 ///
 /// There are three, because everything else in `spec/04-grammar.md` §4.4 is an

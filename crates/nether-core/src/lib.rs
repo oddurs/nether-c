@@ -21,19 +21,23 @@
 
 mod check;
 mod depth;
+mod fault;
 mod ir;
 mod prim;
+mod query;
 mod report;
 mod ty;
 mod unit;
 
-pub use check::{Blame, Fault, FaultKind, bound_to, check, children};
+pub use check::check;
 pub use depth::{Capability, Depth, Held};
+pub use fault::{Blame, Fault, FaultKind};
 pub use ir::{
     BinOp, Block, Expr, ExprKind, FuncId, GlobalId, Literal, LocalId, Place, Proj, Rite, Span,
     Stmt, UnOp,
 };
 pub use prim::Prim;
+pub use query::{bound_to, children};
 pub use report::{Diagnostic, grouped, report};
 pub use ty::{Refusal, Type};
 pub use unit::{Asserted, Demand, Field, FuncDef, GlobalDef, LocalDef, StructDef, Unit};

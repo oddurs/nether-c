@@ -24,7 +24,7 @@ pub struct Unit {
     /// The demands, in source order, which is the order they are evaluated in.
     pub demands: Vec<Demand>,
     /// What unit-level code binds: a block inside a global's value or a
-    /// demand may declare locals, and a function keeps its own. 0280.
+    /// demand may declare locals, and a function keeps its own.
     pub locals: Vec<LocalDef>,
 }
 

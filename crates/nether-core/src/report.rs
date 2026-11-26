@@ -49,20 +49,21 @@ pub struct Cause {
 /// moment.
 #[must_use]
 pub fn report(d: &Diagnostic, source: &str, path: &str) -> String {
-    let headline = &d.headline;
-    let mut out = format!("error: {headline}\n");
-    let mut gutter = line_of(d.span, source).0.to_string().len();
-    if let Some(cause) = &d.cause {
-        gutter = gutter.max(line_of(cause.span, source).0.to_string().len());
+    let primary = line_of(d.span, source);
+    let cause_line = d.cause.as_ref().map(|c| line_of(c.span, source));
+    let mut gutter = primary.number.ilog10() as usize + 1;
+    if let Some(line) = cause_line {
+        gutter = gutter.max(line.number.ilog10() as usize + 1);
     }
+    let mut out = format!("error: {}\n", d.headline);
+    let mut r = Renderer { out: &mut out, source, path, gutter };
     let more = d.cause.is_some() || d.note.is_some();
-    out.push_str(&snippet(d.span, d.label.as_deref(), source, path, gutter, more));
-    if let Some(cause) = &d.cause {
-        let label = Some(cause.label.as_str());
-        out.push_str(&snippet(cause.span, label, source, path, gutter, d.note.is_some()));
+    r.snippet(d.span, primary, d.label.as_deref(), more);
+    if let (Some(cause), Some(line)) = (&d.cause, cause_line) {
+        r.snippet(cause.span, line, Some(cause.label.as_str()), d.note.is_some());
     }
     if let Some(note) = &d.note {
-        let _ = writeln!(out, "{:gutter$} = {note}", "", gutter = gutter);
+        let _ = writeln!(out, "{:gutter$} = {note}", "");
     }
     out
 }
@@ -81,56 +82,60 @@ fn cut(at: u32, source: &str) -> usize {
     at
 }
 
+#[derive(Clone, Copy)]
+struct Line {
+    number: usize,
+    start: usize,
+    end: usize,
+}
+
 /// The line number a span is on, and where that line starts and ends.
-fn line_of(span: Span, source: &str) -> (usize, usize, usize) {
+fn line_of(span: Span, source: &str) -> Line {
     let start = cut(span.start, source);
     let before = &source[..start];
     let number = before.matches('\n').count() + 1;
     let line_start = before.rfind('\n').map_or(0, |i| i + 1);
     let line_end = source[line_start..].find('\n').map_or(source.len(), |i| line_start + i);
-    (number, line_start, line_end)
+    Line { number, start: line_start, end: line_end }
 }
 
-/// One `--> file:line:col` block, with its source line and its carets.
-///
-/// The bar that closes it is a separator rather than a border: it is there
-/// when something follows and gone when nothing does.
-fn snippet(
-    span: Span,
-    label: Option<&str>,
-    source: &str,
-    path: &str,
+struct Renderer<'a> {
+    out: &'a mut String,
+    source: &'a str,
+    path: &'a str,
     gutter: usize,
-    followed: bool,
-) -> String {
-    let start = cut(span.start, source);
-    let (number, line_start, line_end) = line_of(span, source);
-    let text = source[line_start..line_end].trim_end_matches('\r');
-    let text_end = line_start + text.len();
-    let start = start.min(text_end);
-    let column = source[line_start..start].chars().count() + 1;
-    let end = cut(span.end, source).clamp(start, text_end);
-    let width = source[start..end].chars().count().max(1);
+}
 
-    let bar = format!("{:gutter$} |", "", gutter = gutter);
+impl Renderer<'_> {
+    /// One `--> file:line:col` block, with its source line and its carets.
+    ///
+    /// The bar that closes it is a separator rather than a border: it is there
+    /// when something follows and gone when nothing does.
+    fn snippet(&mut self, span: Span, line: Line, label: Option<&str>, followed: bool) {
+        let text = self.source[line.start..line.end].trim_end_matches('\r');
+        let text_end = line.start + text.len();
+        let start = cut(span.start, self.source).min(text_end);
+        let column = self.source[line.start..start].chars().count() + 1;
+        let end = cut(span.end, self.source).clamp(start, text_end);
+        let width = self.source[start..end].chars().count().max(1);
+        let (g, num, path) = (self.gutter, line.number, self.path);
 
-    let mut out = String::new();
-    let _ = writeln!(out, "{:gutter$}--> {path}:{number}:{column}", "", gutter = gutter);
-    let _ = writeln!(out, "{bar}");
-    let _ = writeln!(out, "{number:>gutter$} | {text}");
-    let _ = write!(out, "{bar} ");
-    for ch in source[line_start..start].chars() {
-        out.push(if ch == '\t' { '\t' } else { ' ' });
+        let _ = writeln!(self.out, "{:g$}--> {path}:{num}:{column}", "");
+        let _ = writeln!(self.out, "{:g$} |", "");
+        let _ = writeln!(self.out, "{num:>g$} | {text}");
+        let _ = write!(self.out, "{:g$} | ", "");
+        for ch in self.source[line.start..start].chars() {
+            self.out.push(if ch == '\t' { '\t' } else { ' ' });
+        }
+        let _ = write!(self.out, "{:^<width$}", "");
+        if let Some(label) = label {
+            let _ = write!(self.out, " {label}");
+        }
+        let _ = writeln!(self.out);
+        if followed {
+            let _ = writeln!(self.out, "{:g$} |", "");
+        }
     }
-    let _ = write!(out, "{:^<width$}", "", width = width);
-    if let Some(label) = label {
-        let _ = write!(out, " {label}");
-    }
-    let _ = writeln!(out);
-    if followed {
-        let _ = writeln!(out, "{bar}");
-    }
-    out
 }
 
 /// A number with its digits grouped, the way §6.4 prints one.
