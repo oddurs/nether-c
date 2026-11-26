@@ -122,7 +122,7 @@ cmd_start() {
   git worktree add -b "$branch" "$dest" "origin/$base" >/dev/null
   ( cd "$dest" && git config core.hooksPath .githooks )
 
-  printf '\nworktree ready. move into it:\n\n  cd %s\n\n' "$dest"
+  printf '\ndescended. move into it:\n\n  cd %s\n\n' "$dest"
 }
 
 # ── the rest ─────────────────────────────────────────────────────────────────

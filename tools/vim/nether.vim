@@ -135,7 +135,7 @@ endfunction
 
 function! s:Inspect() abort
   if !exists('b:nether_trace') || empty(b:nether_trace)
-    return s:FailInspect('nether: no trace bound; run :NetherTrace <cairn>')
+    return s:FailInspect('nether: no trace bound; bind one with :NetherTrace <cairn>')
   endif
   let l:byte = s:ByteOffset()
   let l:tmp = tempname()

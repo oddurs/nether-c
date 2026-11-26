@@ -231,3 +231,35 @@ fn unknown_identifier_diagnostic_prints_the_name_without_cascade() {
     assert!(!err.contains("this does not name this name"), "{err}");
     assert!(!err.contains("a function to apply"), "unexpected cascade:\n{err}");
 }
+
+#[test]
+fn doctrinal_refusals_cite_the_spec_and_preserve_unknown_rite() {
+    let cases = [
+        ("exec", "nether: no `exec` either; use `bury`, `exhume`, or `lamp` (§8.0)\n"),
+        ("ascend", "nether: there is no `ascend`; depth only ever increases (§1.1)\n"),
+        ("print", "nether: nothing is printed; carry `nether lamp <cairn>` (§8.4)\n"),
+        ("undo", "nether: nothing in the ledger is revised; use `graft` (§8.7)\n"),
+        ("edit", "nether: nothing in the ledger is revised; use `graft` (§8.7)\n"),
+        ("delete", "nether: nothing in the ledger is revised; use `graft` (§8.7)\n"),
+        ("mutate", "nether: nothing in the ledger is revised; use `graft` (§8.7)\n"),
+        ("summon", "nether: unknown rite `summon`\n"),
+    ];
+    for (verb, expected) in cases {
+        let out = nether(None, &[verb]);
+        assert_eq!(code(&out), 64, "{verb}: {}", stderr(&out));
+        assert!(stdout(&out).is_empty(), "{verb} stdout: {}", stdout(&out));
+        let err = stderr(&out);
+        assert!(err.starts_with(expected), "{verb}: got:\n{err}");
+        assert!(err.contains("There is no `nether run`."), "{verb}: missing usage:\n{err}");
+    }
+
+    let help_ascend = nether(None, &["--help", "ascend"]);
+    assert_eq!(code(&help_ascend), 64, "--help ascend: {}", stderr(&help_ascend));
+    assert!(stdout(&help_ascend).is_empty(), "--help ascend stdout: {}", stdout(&help_ascend));
+    let err = stderr(&help_ascend);
+    assert!(
+        err.starts_with("nether: there is no `ascend`; depth only ever increases (§1.1)\n"),
+        "--help ascend: got:\n{err}"
+    );
+    assert!(err.contains("There is no `nether run`."), "--help ascend: missing usage:\n{err}");
+}

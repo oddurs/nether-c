@@ -191,10 +191,6 @@ fn store_root() -> PathBuf {
         .map_or_else(|| PathBuf::from(".nether"), PathBuf::from)
 }
 
-fn ledger() -> Result<Store, std::io::Error> {
-    Store::open(store_root())
-}
-
 /// Open the ledger without creating any directories on disk (read-only rites).
 fn opened_readonly() -> Store {
     Store::open_readonly(store_root())
@@ -225,7 +221,7 @@ fn kept(store: &Store, what: &Stored) -> Result<Cairn, ExitCode> {
 ///
 /// [`FAILED`], with the reason already printed.
 fn opened() -> Result<Store, ExitCode> {
-    ledger().map_err(|e| {
+    Store::open(store_root()).map_err(|e| {
         eprintln!("nether: {e}");
         FAILED
     })
@@ -333,57 +329,54 @@ fn rite_usage(rite: &str) -> Option<&'static str> {
     })
 }
 
+fn unknown_rite(rite: &str) -> ExitCode {
+    match rite {
+        "exec" => eprintln!("nether: no `exec` either; use `bury`, `exhume`, or `lamp` (§8.0)"),
+        "ascend" => eprintln!("nether: there is no `ascend`; depth only ever increases (§1.1)"),
+        "print" => eprintln!("nether: nothing is printed; carry `nether lamp <cairn>` (§8.4)"),
+        "undo" | "edit" | "delete" | "mutate" => {
+            eprintln!("nether: nothing in the ledger is revised; use `graft` (§8.7)");
+        }
+        _ => eprintln!("nether: unknown rite `{rite}`"),
+    }
+    eprint!("{USAGE}");
+    usage_error()
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match args.first().map(String::as_str) {
-        Some("--version" | "-V") => {
+    match (args.first().map(String::as_str), args.get(1).map(String::as_str)) {
+        (Some("--version" | "-V"), _) => {
             println!("nether {VERSION}");
             ExitCode::SUCCESS
         }
-        Some("--help" | "-h") => match args.get(1).map(String::as_str) {
-            None => {
-                print!("{USAGE}");
-                ExitCode::SUCCESS
-            }
-            Some("run") => {
-                eprint!("{NO_RUN}");
-                usage_error()
-            }
-            Some(rite) => {
-                if let Some(usage) = rite_usage(rite) {
-                    println!("{usage}");
-                    ExitCode::SUCCESS
-                } else {
-                    eprintln!("nether: unknown rite `{rite}`");
-                    eprint!("{USAGE}");
-                    usage_error()
-                }
-            }
-        },
-        None => {
+        (None, _) | (Some("--help" | "-h"), None) => {
             print!("{USAGE}");
             ExitCode::SUCCESS
         }
-        Some("run") => {
+        (Some("run"), _) | (Some("--help" | "-h"), Some("run")) => {
             eprint!("{NO_RUN}");
             usage_error()
         }
-        Some("cairn") => cairn::run(&args[1..]),
-        Some("lamp") => lamp::run(&args[1..]),
-        Some("strata") => strata::run(&args[1..]),
-        Some("bury") => bury::run(&args[1..]),
-        Some("exhume") => exhume::run(&args[1..]),
-        Some("graft") => graft::run(&args[1..]),
-        Some(other) if other.starts_with('-') => {
+        (Some("--help" | "-h"), Some(rite)) => match rite_usage(rite) {
+            Some(usage) => {
+                println!("{usage}");
+                ExitCode::SUCCESS
+            }
+            None => unknown_rite(rite),
+        },
+        (Some("cairn"), _) => cairn::run(&args[1..]),
+        (Some("lamp"), _) => lamp::run(&args[1..]),
+        (Some("strata"), _) => strata::run(&args[1..]),
+        (Some("bury"), _) => bury::run(&args[1..]),
+        (Some("exhume"), _) => exhume::run(&args[1..]),
+        (Some("graft"), _) => graft::run(&args[1..]),
+        (Some(other), _) if other.starts_with('-') => {
             eprintln!("nether: unknown option `{other}`");
             eprint!("{USAGE}");
             usage_error()
         }
-        Some(other) => {
-            eprintln!("nether: unknown rite `{other}`");
-            eprint!("{USAGE}");
-            usage_error()
-        }
+        (Some(other), _) => unknown_rite(other),
     }
 }
 
