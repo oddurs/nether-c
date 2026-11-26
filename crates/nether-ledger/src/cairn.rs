@@ -45,13 +45,13 @@ impl Cairn {
         Self(*hasher.finalize().as_bytes())
     }
 
-    /// The raw digest.
+    /// The raw cairn bytes.
     #[must_use]
     pub const fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
 
-    /// Reconstructs a cairn from a digest that is already known to be one.
+    /// Reconstructs a cairn from bytes that are already known to be one.
     #[must_use]
     pub const fn from_bytes(bytes: [u8; 32]) -> Self {
         Self(bytes)

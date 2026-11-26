@@ -4,6 +4,7 @@
 //! command, not an investigation, so the whole answer is one screen: the
 //! stratum the trace reached, and every place it went to the world.
 
+use core::fmt::Write as _;
 use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::process::ExitCode;
@@ -11,71 +12,37 @@ use std::process::ExitCode;
 use nether_core::{Capability, Depth};
 use nether_ledger::{Cairn, Node, Span, Store, StoreError, Stored, Stratum, Value};
 
-use crate::{bad_usage, code, json, lamp, split_flag, usage_error};
+use crate::closing::{load_trace, store_err};
+use crate::{FlagStep, code, finish, json, lamp, parse_args, usage_error};
 
 pub(crate) const USAGE: &str = "usage: nether strata <cairn> [--json]";
 
 /// `nether strata <cairn> [--json]`
 pub fn run(args: &[String]) -> ExitCode {
-    let mut wants_json = false;
-    let mut name: Option<&str> = None;
-    let mut end_opts = false;
-    for arg in args {
-        if end_opts {
-            if name.is_some() {
-                return complain();
-            }
-            name = Some(arg.as_str());
-            continue;
-        }
-        let (flag, inline) = split_flag(arg);
-        match (flag, inline) {
-            ("--", None) => end_opts = true,
-            ("--help" | "-h", None) => {
-                println!("{USAGE}");
-                return ExitCode::SUCCESS;
-            }
-            ("--json", None) => wants_json = true,
-            (other, _) if other.starts_with('-') && other != "-" => {
-                return bad_usage(&format!("unknown option `{arg}`"), USAGE);
-            }
-            _ if name.is_some() => return complain(),
-            _ => name = Some(arg.as_str()),
-        }
-    }
+    finish(run_inner(args))
+}
+
+fn run_inner(args: &[String]) -> Result<(), ExitCode> {
+    let Some((name, wants_json)) = parse_args(args, USAGE, None, |_, _, _| Ok(FlagStep::Unknown))?
+    else {
+        return Ok(());
+    };
     let Some(name) = name else {
-        return complain();
+        eprintln!("{USAGE}");
+        return Err(usage_error());
     };
 
     let store = crate::opened_readonly();
-    let cairn = match crate::named(&store, name) {
-        Ok(c) => c,
-        Err(code) => return code,
-    };
-    let Ok(Stored::Node(Node::Trace {
-        holes, witnesses, deposits, depth, unrecorded: marked, ..
-    })) = store.get(cairn)
-    else {
-        return crate::not_a_trace(&store, cairn);
-    };
+    let cairn = crate::named(&store, name)?;
+    let trace = load_trace(&store, cairn)?;
 
     // Validate each trace slot against its expected node kind so a witness or
     // hole smuggled into the wrong slot is rejected as malformed (§7.3.2).
-    let found = match survey(&store, &holes, &witnesses, &deposits) {
-        Ok(found) => found,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return match e {
-                StoreError::Corrupt { .. } | StoreError::Ragged { .. } => {
-                    ExitCode::from(code::MALFORMED)
-                }
-                _ => crate::FAILED,
-            };
-        }
-    };
+    let found = survey(&store, &trace.holes, &trace.witnesses, &trace.deposits)
+        .map_err(|e| store_err(&e))?;
     let unrecorded =
-        marked || found.reaches.iter().any(|r| r.answered && r.stratum == Stratum::MAX);
-    let told = Reading { cairn, depth, unrecorded, found };
+        trace.unrecorded || found.reaches.iter().any(|r| r.answered && r.stratum == Stratum::MAX);
+    let told = Reading { cairn, depth: trace.depth, unrecorded, found };
     if wants_json {
         println!("{}", told.json(&store));
     } else {
@@ -86,22 +53,17 @@ pub fn run(args: &[String]) -> ExitCode {
     if let Some(r) = told.found.reaches.iter().find(|r| r.stratum > told.depth) {
         let did = if r.answered { "a witness under it reached" } else { "a hole under it owes" };
         eprintln!("nether: this trace records depth {}, and {did} {}", told.depth, r.stratum);
-        return ExitCode::from(code::MALFORMED);
+        return Err(ExitCode::from(code::MALFORMED));
     }
-    if !marked && told.unrecorded {
+    if !trace.unrecorded && told.unrecorded {
         eprintln!("nether: this trace is not marked unrecorded, and a witness under it reached 8");
-        return ExitCode::from(code::MALFORMED);
+        return Err(ExitCode::from(code::MALFORMED));
     }
-    if marked && told.depth < Stratum::MAX {
+    if trace.unrecorded && told.depth < Stratum::MAX {
         eprintln!("nether: this trace is marked unrecorded, and records depth {}", told.depth);
-        return ExitCode::from(code::MALFORMED);
+        return Err(ExitCode::from(code::MALFORMED));
     }
-    ExitCode::SUCCESS
-}
-
-fn complain() -> ExitCode {
-    eprintln!("{USAGE}");
-    usage_error()
+    Ok(())
 }
 
 // ── what is under a trace ───────────────────────────────────────────────────
@@ -220,8 +182,6 @@ impl Reading {
     }
 
     fn text(&self, store: &Store) -> String {
-        use core::fmt::Write as _;
-
         let mut out = String::new();
         let _ = writeln!(out, "depth {}   {}", self.depth, stratum_name(self.depth.as_u8()));
         let _ = writeln!(out);

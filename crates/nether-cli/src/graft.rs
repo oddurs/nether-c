@@ -11,95 +11,64 @@ use std::process::ExitCode;
 
 use nether_bury::{Answers, bury_with};
 use nether_core::{Depth, Prim};
-use nether_ledger::{AnswerOf, Cairn, Call, Node, Span, Store, Stored, Stratum, Value};
+use nether_ledger::{AnswerOf, Cairn, Call, Node, Span, Store, StoreError, Stored, Stratum, Value};
 use nether_syntax::print;
 use nether_world::Replay;
 
-use crate::{DEFAULT_FUEL, FAILED, bad_usage, code, parse_fuel, split_flag, take_val, usage_error};
+use crate::closing::{load_hole, load_trace, store_err, verify_trace};
+use crate::{
+    DEFAULT_FUEL, FAILED, FlagStep, code, finish, parse_args, parse_fuel, take_val, usage_error,
+};
 
 pub(crate) const USAGE: &str =
     "usage: nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]";
 
 /// `nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
-    let mut wants_json = false;
-    let mut fuel: Option<u64> = None;
-    let (mut trace, mut replace, mut with): (Option<&str>, Option<&str>, Option<&str>) =
-        (None, None, None);
-    let mut end_opts = false;
+    finish(run_inner(args))
+}
 
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
-        if end_opts {
-            if trace.is_some() {
-                return bad_usage("one trace cairn at a time", USAGE);
+fn run_inner(args: &[String]) -> Result<(), ExitCode> {
+    let mut fuel: Option<u64> = None;
+    let (mut replace, mut with): (Option<&str>, Option<&str>) = (None, None);
+    let usage_err = || {
+        eprintln!("{USAGE}");
+        usage_error()
+    };
+    let Some((trace, wants_json)) =
+        parse_args(args, USAGE, Some("one trace cairn at a time"), |flag, inline, rest| {
+            match (flag, inline) {
+                ("--fuel", inline) => parse_fuel(&mut fuel, take_val(inline, rest), USAGE)?,
+                ("--replace", inline) => match take_val(inline, rest) {
+                    Some(v) if !v.starts_with("--") && replace.is_none() => replace = Some(v),
+                    _ => return Err(usage_err()),
+                },
+                ("--with", inline) => match take_val(inline, rest) {
+                    Some(v) if !v.starts_with("--") && with.is_none() => with = Some(v),
+                    _ => return Err(usage_err()),
+                },
+                _ => return Ok(FlagStep::Unknown),
             }
-            trace = Some(arg.as_str());
-            continue;
-        }
-        let (flag, inline) = split_flag(arg);
-        match (flag, inline) {
-            ("--", None) => end_opts = true,
-            ("--help" | "-h", None) => {
-                println!("{USAGE}");
-                return ExitCode::SUCCESS;
-            }
-            ("--json", None) => wants_json = true,
-            ("--fuel", inline) => {
-                if let Err(c) = parse_fuel(&mut fuel, take_val(inline, &mut rest), USAGE) {
-                    return c;
-                }
-            }
-            ("--replace", inline) => match take_val(inline, &mut rest) {
-                Some(v) if !v.starts_with("--") && replace.is_none() => replace = Some(v),
-                _ => {
-                    eprintln!("{USAGE}");
-                    return usage_error();
-                }
-            },
-            ("--with", inline) => match take_val(inline, &mut rest) {
-                Some(v) if !v.starts_with("--") && with.is_none() => with = Some(v),
-                _ => {
-                    eprintln!("{USAGE}");
-                    return usage_error();
-                }
-            },
-            (other, _) if other.starts_with('-') && other != "-" => {
-                return bad_usage(&format!("unknown option `{arg}`"), USAGE);
-            }
-            _ if trace.is_some() => return bad_usage("one trace cairn at a time", USAGE),
-            _ => trace = Some(arg.as_str()),
-        }
-    }
+            Ok(FlagStep::Handled)
+        })?
+    else {
+        return Ok(());
+    };
 
     let (Some(trace), Some(replace), Some(with)) = (trace, replace, with) else {
-        eprintln!("{USAGE}");
-        return usage_error();
+        return Err(usage_err());
     };
 
-    let store = match crate::opened() {
-        Ok(store) => store,
-        Err(code) => return code,
-    };
-    let trace = match crate::named(&store, trace) {
-        Ok(c) => c,
-        Err(code) => return code,
-    };
-    let replace = match crate::named(&store, replace) {
-        Ok(c) => c,
-        Err(code) => return code,
-    };
-    let with = match crate::named(&store, with) {
-        Ok(c) => c,
-        Err(code) => {
-            if code == ExitCode::from(code::ABSENT) {
-                eprintln!(
-                    "        hint: `nether cairn <file>` hashes without storing; `--with` needs a value already in the ledger."
-                );
-            }
-            return code;
+    let store = crate::opened()?;
+    let trace = crate::named(&store, trace)?;
+    let replace = crate::named(&store, replace)?;
+    let with = crate::named(&store, with).inspect_err(|&code| {
+        if code == ExitCode::from(code::ABSENT) {
+            eprintln!(
+                "        hint: `nether cairn <file>` names without storing; `--with` needs a value already in the ledger."
+            );
         }
-    };
+    })?;
     take(&store, GraftIds { trace, replace, with }, fuel.unwrap_or(DEFAULT_FUEL), wants_json)
 }
 
@@ -231,22 +200,9 @@ fn prepare_graft(
     // targeted hole so corrupt/trailing holes are never skipped.
     let mut earlier_calls: HashSet<Call> = HashSet::new();
     let mut matched: Option<(Call, Stratum, Span, Value)> = None;
-    for hole in holes {
-        let Stored::Node(Node::Hole { call, stratum, span }) =
-            store.get(*hole).map_err(|e| crate::closing::store_err(&e))?
-        else {
-            eprintln!("nether: hole {} is not a hole node in this ledger", hole.short());
-            return Err(ExitCode::from(code::MALFORMED));
-        };
-        if !crate::closing::valid_stratum(&call, stratum) {
-            eprintln!(
-                "nether: hole {} claims stratum {stratum} for `{}`",
-                hole.short(),
-                call.function()
-            );
-            return Err(ExitCode::from(code::MALFORMED));
-        }
-        if *hole == replace && matched.is_none() {
+    for &hole in holes {
+        let (call, stratum, span) = load_hole(store, hole, |h| store_err(&StoreError::Absent(h)))?;
+        if hole == replace && matched.is_none() {
             let is_read = Depth::new(stratum.as_u8()).is_some_and(Depth::reads);
             if !is_read && earlier_calls.contains(&call) {
                 eprintln!(
@@ -292,51 +248,32 @@ fn prepare_graft(
     Ok(PreparedGraft { answers, witnesses, call, stratum, span, value, is_read })
 }
 
-fn take(store: &Store, ids: GraftIds, fuel: u64, wants_json: bool) -> ExitCode {
-    let Ok(Stored::Node(Node::Trace {
-        residue,
-        holes,
-        witnesses,
-        deposits,
-        source,
-        depth: orig_depth,
-        unrecorded: marked,
-    })) = store.get(ids.trace)
-    else {
-        return crate::not_a_trace(store, ids.trace);
-    };
+fn take(store: &Store, ids: GraftIds, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
+    let orig = load_trace(store, ids.trace)?;
+    verify_trace(store, &orig)?;
 
-    if let Err(code) = crate::closing::verify_trace_parts(
-        store, source, &deposits, &holes, &witnesses, orig_depth, marked,
-    ) {
-        return code;
-    }
-
-    let prep = match prepare_graft(store, ids.trace, &holes, witnesses, ids.replace, ids.with) {
-        Ok(p) => p,
-        Err(code) => return code,
-    };
-
-    let (text, unit) = match crate::closing::residue_unit(store, ids.trace, residue) {
-        Ok(pair) => pair,
-        Err(code) => return code,
-    };
+    let prep = prepare_graft(store, ids.trace, &orig.holes, orig.witnesses, ids.replace, ids.with)?;
+    let (text, unit) = crate::closing::residue_unit(store, ids.trace, orig.residue)?;
     let shown = format!("{}:residue", ids.trace.short());
-    let residue = match bury_with(&unit, residue, fuel, &prep.answers) {
-        Ok(residue) => residue,
-        Err(halt) => {
-            return crate::closing::halt_exit(&halt, &String::from_utf8_lossy(&text), &shown);
-        }
-    };
+    let residue = bury_with(&unit, orig.residue, fuel, &prep.answers)
+        .map_err(|h| crate::closing::halt_exit(&h, &String::from_utf8_lossy(&text), &shown))?;
     if residue.served == 0 {
         eprintln!(
             "nether: hole {} was not reached by {}; refusing to record an unused witness",
             ids.replace.short(),
             ids.trace.short()
         );
-        return FAILED;
+        return Err(FAILED);
     }
-    commit_graft(store, ids, &unit, &residue, prep, (&deposits, source, marked), wants_json)
+    commit_graft(
+        store,
+        ids,
+        &unit,
+        &residue,
+        prep,
+        (&orig.deposits, orig.source, orig.unrecorded),
+        wants_json,
+    )
 }
 
 fn commit_graft(
@@ -347,7 +284,7 @@ fn commit_graft(
     mut prep: PreparedGraft,
     (deposits, source, marked): (&[Cairn], Cairn, bool),
     wants_json: bool,
-) -> ExitCode {
+) -> Result<(), ExitCode> {
     let (mut reused, mut made) = (0usize, 0usize);
     let mut record = |stored: &Stored| -> Result<Cairn, ExitCode> {
         if store.has(stored.cairn()) {
@@ -357,45 +294,29 @@ fn commit_graft(
         }
         crate::kept(store, stored)
     };
-    let answer_cairn = match record(&Stored::Value(prep.value)) {
-        Ok(c) => c,
-        Err(code) => return code,
-    };
-    let witness_cairn = match record(&Stored::Node(Node::Witness {
+    let answer_cairn = record(&Stored::Value(prep.value))?;
+    let witness_cairn = record(&Stored::Node(Node::Witness {
         call: prep.call,
         answer: answer_cairn,
         stratum: prep.stratum,
         span: prep.span,
-    })) {
-        Ok(c) => c,
-        Err(code) => return code,
-    };
+    }))?;
     if !prep.is_read || !prep.witnesses.contains(&witness_cairn) {
         prep.witnesses.push(witness_cairn);
     }
     for (_, stored) in &residue.named {
-        if let Err(code) = record(stored) {
-            return code;
-        }
+        record(stored)?;
     }
 
     let printed = print(&residue.as_unit(unit));
-    let next_residue = match record(&Stored::Value(Value::Bytes(printed.into_bytes()))) {
-        Ok(c) => c,
-        Err(code) => return code,
-    };
-    let (depth, unrecorded) = match (
-        crate::closing::depth(
-            store,
-            crate::closing::stratum(residue.depth),
-            &residue.holes,
-            &prep.witnesses,
-        ),
-        crate::closing::unrecorded(store, &prep.witnesses),
-    ) {
-        (Ok(d), Ok(u)) => (d, marked || u),
-        (Err(c), _) | (_, Err(c)) => return c,
-    };
+    let next_residue = record(&Stored::Value(Value::Bytes(printed.into_bytes())))?;
+    let depth = crate::closing::depth(
+        store,
+        crate::closing::stratum(residue.depth),
+        &residue.holes,
+        &prep.witnesses,
+    )?;
+    let unrecorded = marked || crate::closing::unrecorded(store, &prep.witnesses)?;
     let node = Stored::Node(Node::Trace {
         residue: next_residue,
         holes: residue.holes.clone(),
@@ -405,10 +326,7 @@ fn commit_graft(
         depth,
         unrecorded,
     });
-    let next = match record(&node) {
-        Ok(c) => c,
-        Err(code) => return code,
-    };
+    let next = record(&node)?;
 
     let told =
         Grafted { was: ids.trace, now: next, replaced: ids.replace, with: ids.with, reused, made };
@@ -417,7 +335,7 @@ fn commit_graft(
     } else {
         print!("{}", told.text());
     }
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 /// What §8.7 requires a graft to say.

@@ -8,9 +8,9 @@
 //! There is no garbage collection and there is not going to be one. See
 //! `spec/07-ledger.md` §7.6, which also admits that this is a real cost.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
-use std::io::{self, Read as _, Seek as _, SeekFrom, Write as _};
+use std::io::{self, Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -19,7 +19,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::cairn::Cairn;
 use crate::codec::{DecodeError, Stored, decode_stored, scan_stored};
 use crate::node::Node;
-use crate::value::{NonEmptyName, Value};
 
 /// Why the store could not answer.
 #[derive(Debug)]
@@ -144,7 +143,6 @@ struct Seen {
 
 /// How many estimated heap bytes `Seen` holds before it starts again.
 const SEEN_BYTES: usize = 64 << 20;
-const BUNDLE_MAGIC: &[u8] = b"netherc/cairn/v4\x00bundle\x00";
 
 /// Maximum encoded size of a single stored or bundled object (64 MiB payload +
 /// 64 KiB framing). Shared across `Store::put`, `Store::export`, `Store::import`,
@@ -155,53 +153,28 @@ pub const MAX_OBJECT_BYTES: usize = 64 * 1024 * 1024 + 65_536;
 /// `Value::Array` trees (e.g. millions of 1-byte `Value::Unit` elements) cannot
 /// pin gigabytes inside `Seen` under a raw encoded-byte budget.
 fn stored_weight(stored: &Stored, encoded_len: usize) -> usize {
-    let mut weight = core::mem::size_of::<Stored>();
-    let mut stack: Vec<&Value> = Vec::new();
-    match stored {
-        Stored::Value(v) => stack.push(v),
+    let extra = match stored {
+        Stored::Value(v) => v.weight(),
         Stored::Node(n) => match n {
-            Node::Literal(v) => stack.push(v),
-            Node::Apply { args, .. } => {
-                weight = weight.saturating_add(args.len().saturating_mul(32));
-            }
+            Node::Literal(v) => v.weight(),
+            Node::Apply { args, .. } => args.len().saturating_mul(32),
             Node::Hole { call, .. } | Node::Witness { call, .. } => {
-                weight = weight
-                    .saturating_add(call.function().len())
-                    .saturating_add(call.args().len().saturating_mul(32));
+                call.function().len().saturating_add(call.args().len().saturating_mul(32))
             }
-            Node::Deposit { .. } => {}
-            Node::Trace { holes, witnesses, deposits, .. } => {
-                let n_refs =
-                    holes.len().saturating_add(witnesses.len()).saturating_add(deposits.len());
-                weight = weight.saturating_add(n_refs.saturating_mul(32));
-            }
+            Node::Deposit { .. } => 0,
+            Node::Trace { holes, witnesses, deposits, .. } => holes
+                .len()
+                .saturating_add(witnesses.len())
+                .saturating_add(deposits.len())
+                .saturating_mul(32),
         },
-    }
-    let val_sz = core::mem::size_of::<Value>();
-    while let Some(v) = stack.pop() {
-        weight = weight.saturating_add(val_sz);
-        match v {
-            Value::Bytes(b) => weight = weight.saturating_add(b.len()),
-            Value::Str(s) => weight = weight.saturating_add(s.len()),
-            Value::Struct { name, fields } => {
-                weight = weight.saturating_add(name.len());
-                stack.extend(fields);
-            }
-            Value::Array(items) => stack.extend(items),
-            Value::Answer(ans) => {
-                if let crate::AnswerOf::Given(inner) = ans.as_ref() {
-                    stack.push(inner);
-                }
-            }
-            Value::Unit
-            | Value::Bool(_)
-            | Value::Int(_)
-            | Value::Cairn(_)
-            | Value::Shade { .. }
-            | Value::Refusal(_) => {}
-        }
-    }
-    weight.max(encoded_len)
+    };
+    core::mem::size_of::<Stored>().saturating_add(extra).max(encoded_len)
+}
+
+/// Whether a directory name is a valid two-character lowercase hex bucket.
+fn is_hex_bucket(name: &str) -> bool {
+    name.len() == 2 && name.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 /// `O_NONBLOCK` per Unix OS/architecture so opening a FIFO in `objects/` or
@@ -235,12 +208,28 @@ const OPEN_NONBLOCK: i32 = 0x0004;
 ))]
 compile_error!("verify O_NONBLOCK for this Unix target");
 
-/// Removes a temporary staging file in `tmp/` when dropped.
-struct TempFileGuard(PathBuf);
+/// Removes a temporary file in `tmp/` on drop unless disarmed.
+pub(crate) struct TempFileGuard(Option<PathBuf>);
+
+impl TempFileGuard {
+    pub(crate) const fn new(path: PathBuf) -> Self {
+        Self(Some(path))
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        self.0.as_deref().unwrap_or_else(|| Path::new(""))
+    }
+
+    pub(crate) fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
 
 impl Drop for TempFileGuard {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        if let Some(path) = &self.0 {
+            let _ = fs::remove_file(path);
+        }
     }
 }
 
@@ -250,19 +239,13 @@ impl Drop for TempFileGuard {
 /// leaves an auditable record of what was attempted (`spec/09-prelude.md`
 /// §9.8.1) without polluting `objects/` or `refs/` with a phantom witness.
 /// Dropping the guard after the call returns removes the temporary record.
-pub struct AttemptGuard(PathBuf);
+pub struct AttemptGuard(TempFileGuard);
 
 impl AttemptGuard {
     /// Path of the active attempt record in `tmp/`.
     #[must_use]
     pub fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for AttemptGuard {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        self.0.path()
     }
 }
 
@@ -282,7 +265,7 @@ fn open_regular_nonblock(path: &Path) -> io::Result<(fs::File, fs::Metadata)> {
     Ok((file, meta))
 }
 
-fn read_bounded(path: &Path, asked: Option<Cairn>) -> Result<Vec<u8>, StoreError> {
+pub(crate) fn read_bounded(path: &Path, asked: Option<Cairn>) -> Result<Vec<u8>, StoreError> {
     let too_large = |bytes: usize| match asked {
         Some(asked) => StoreError::Corrupt {
             asked,
@@ -315,7 +298,7 @@ fn read_bounded(path: &Path, asked: Option<Cairn>) -> Result<Vec<u8>, StoreError
     Ok(bytes)
 }
 
-fn for_each_ref(
+pub(crate) fn for_each_ref(
     path: &Path,
     of: Cairn,
     mut visit: impl FnMut([u8; 32]),
@@ -377,7 +360,7 @@ fn for_each_ref(
     Ok(true)
 }
 
-fn verify_with<T>(
+pub(crate) fn verify_with<T>(
     asked: Cairn,
     bytes: &[u8],
     parse: fn(&[u8]) -> Result<T, DecodeError>,
@@ -411,7 +394,7 @@ impl Store {
         Self { root: root.into(), seen: Arc::default() }
     }
 
-    fn fanned(&self, area: &str, cairn: Cairn) -> PathBuf {
+    pub(crate) fn fanned(&self, area: &str, cairn: Cairn) -> PathBuf {
         let hex = cairn.to_string();
         self.root.join(area).join(&hex[..2]).join(&hex[2..])
     }
@@ -446,7 +429,7 @@ impl Store {
         self.put_verified(cairn, &references, &bytes)
     }
 
-    fn create_temp(&self, hint: &str, read: bool) -> io::Result<(PathBuf, fs::File)> {
+    pub(crate) fn create_temp(&self, hint: &str, read: bool) -> io::Result<(PathBuf, fs::File)> {
         fs::create_dir_all(self.root.join("tmp"))?;
         loop {
             let candidate = self.temp_path(hint);
@@ -467,13 +450,11 @@ impl Store {
     /// Returns [`io::Error`] if the temporary attempt file cannot be written.
     pub fn begin_attempt(&self, bytes: &[u8]) -> io::Result<AttemptGuard> {
         let (path, mut file) = self.create_temp("attempt", false)?;
-        if let Err(e) = file.write_all(bytes).and_then(|()| file.flush()) {
-            drop(file);
-            let _ = fs::remove_file(&path);
-            return Err(e);
-        }
+        let guard = TempFileGuard::new(path);
+        file.write_all(bytes)?;
+        file.flush()?;
         drop(file);
-        Ok(AttemptGuard(path))
+        Ok(AttemptGuard(guard))
     }
 
     fn has_raw_ref(&self, target: Cairn, referrer: Cairn) -> Result<bool, StoreError> {
@@ -488,7 +469,7 @@ impl Store {
         Ok(found)
     }
 
-    fn put_verified(
+    pub(crate) fn put_verified(
         &self,
         cairn: Cairn,
         references: &[Cairn],
@@ -542,17 +523,11 @@ impl Store {
             fs::create_dir_all(parent)?;
         }
         let (temp, mut file) = self.create_temp(hint, false)?;
-        if let Err(e) = file.write_all(bytes) {
-            drop(file);
-            let _ = fs::remove_file(&temp);
-            return Err(e);
-        }
+        let mut guard = TempFileGuard::new(temp);
+        file.write_all(bytes)?;
         drop(file);
-        if let Err(e) = fs::rename(&temp, path) {
-            // Do not leave a partial behind for a reaper to puzzle over.
-            let _ = fs::remove_file(&temp);
-            return Err(e);
-        }
+        fs::rename(guard.path(), path)?;
+        guard.disarm();
         Ok(())
     }
 
@@ -573,7 +548,7 @@ impl Store {
     /// appends atomically and none of them promises to. `referrers` checks the
     /// length rather than trusting it, so the day one is torn it is reported
     /// instead of read as a cairn nobody wrote. §7.5.1.
-    fn add_ref(&self, target: Cairn, referrer: Cairn) -> io::Result<()> {
+    pub(crate) fn add_ref(&self, target: Cairn, referrer: Cairn) -> io::Result<()> {
         let path = self.fanned("refs", target);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -713,11 +688,11 @@ impl Store {
                     continue;
                 }
                 let path = entry.path();
-                if path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
-                    n.len() == 2
-                        && n.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
-                        && n.starts_with(prefix)
-                }) {
+                if path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| is_hex_bucket(n) && n.starts_with(prefix))
+                {
                     list.push(path);
                 }
             }
@@ -754,7 +729,7 @@ impl Store {
         found.first().copied().ok_or_else(|| StoreError::NoMatch(prefix.to_owned()))
     }
 
-    fn scan_area(
+    pub(crate) fn scan_area(
         &self,
         area: &str,
         malformed: &mut BTreeSet<PathBuf>,
@@ -763,9 +738,7 @@ impl Store {
         for b in fs::read_dir(self.root.join(area))? {
             let b = b?;
             let path = b.path();
-            let h = b.file_name().into_string().ok().filter(|s| {
-                s.len() == 2 && s.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f'))
-            });
+            let h = b.file_name().into_string().ok().filter(|s| is_hex_bucket(s));
             let Some(h) = h.filter(|_| b.file_type().is_ok_and(|t| t.is_dir())) else {
                 malformed.insert(path);
                 continue;
@@ -787,735 +760,17 @@ impl Store {
         }
         Ok(files)
     }
-
-    fn audit_refs(
-        &self,
-        expected: BTreeMap<Cairn, BTreeSet<Cairn>>,
-        malformed: &mut BTreeSet<PathBuf>,
-    ) -> io::Result<Vec<IndexError>> {
-        let mut index = BTreeSet::new();
-        let mut recorded: BTreeMap<Cairn, BTreeSet<Cairn>> = BTreeMap::new();
-        for (cairn, path) in self.scan_area("refs", malformed)? {
-            let mut set = BTreeSet::new();
-            match for_each_ref(&path, cairn, |rec| {
-                set.insert(Cairn::from_bytes(rec));
-            }) {
-                Ok(true) => {
-                    recorded.insert(cairn, set);
-                }
-                Ok(false) => {}
-                Err(StoreError::Ragged { of, bytes }) => {
-                    index.insert(IndexError::Ragged { of, bytes });
-                }
-                Err(StoreError::Io(e)) => return Err(e),
-                Err(_) => {
-                    malformed.insert(path);
-                }
-            }
-        }
-        for (target, referrers) in expected {
-            for referrer in referrers {
-                if !recorded.get(&target).is_some_and(|s| s.contains(&referrer)) {
-                    index.insert(IndexError::Missing { target, referrer });
-                }
-            }
-        }
-        Ok(index.into_iter().collect())
-    }
-
-    /// Audits the store on disk without modifying it. `spec/07-ledger.md` §7.5.2.
-    ///
-    /// # Errors
-    ///
-    /// [`io::Error`] if the store directories or files cannot be read.
-    pub fn audit(&self) -> io::Result<Audit> {
-        struct Entry {
-            is_node: bool,
-            is_trace: bool,
-            refs: Vec<Cairn>,
-            nodes: HashSet<Cairn>,
-        }
-        let (mut malformed, mut verified, mut corrupt) =
-            (BTreeSet::new(), BTreeMap::<Cairn, Entry>::new(), BTreeSet::new());
-        for (cairn, path) in self.scan_area("objects", &mut malformed)? {
-            match read_bounded(&path, Some(cairn)) {
-                Ok(bytes) => {
-                    if let Ok(scanned) = verify_with(cairn, &bytes, scan_stored) {
-                        verified.insert(
-                            cairn,
-                            Entry {
-                                is_node: scanned.is_node,
-                                is_trace: scanned.is_trace,
-                                refs: scanned.references,
-                                nodes: scanned.nodes.into_iter().collect(),
-                            },
-                        );
-                    } else {
-                        corrupt.insert(cairn);
-                    }
-                }
-                Err(StoreError::Io(e)) => return Err(e),
-                Err(_) => {
-                    corrupt.insert(cairn);
-                }
-            }
-        }
-        let mut missing = BTreeSet::new();
-        let mut expected: BTreeMap<Cairn, BTreeSet<Cairn>> = BTreeMap::new();
-        for (&referrer, entry) in &verified {
-            if entry.is_node {
-                for &target in &entry.refs {
-                    expected.entry(target).or_default().insert(referrer);
-                    if !verified.contains_key(&target) && !corrupt.contains(&target) {
-                        missing.insert((referrer, target));
-                    }
-                }
-            }
-        }
-        let (mut healthy_traces, mut affected_traces) = (Vec::new(), Vec::new());
-        for (&trace, entry) in &verified {
-            if !entry.is_trace {
-                continue;
-            }
-            let (mut bad_c, mut bad_m, mut unknowable) = (BTreeSet::new(), BTreeSet::new(), false);
-            let mut seen_r = BTreeSet::new();
-            let mut todo: Vec<(Cairn, bool)> =
-                entry.refs.iter().map(|&r| (r, entry.nodes.contains(&r))).collect();
-            while let Some((r, is_node)) = todo.pop() {
-                if !seen_r.insert((r, is_node)) {
-                    continue;
-                }
-                match verified.get(&r) {
-                    Some(child) if child.is_node => {
-                        todo.extend(child.refs.iter().map(|&cr| (cr, child.nodes.contains(&cr))));
-                    }
-                    Some(_) if !is_node => {}
-                    Some(_) => {
-                        bad_c.insert(r);
-                        unknowable = true;
-                    }
-                    None => {
-                        if corrupt.contains(&r) {
-                            bad_c.insert(r);
-                        } else {
-                            bad_m.insert(r);
-                        }
-                        unknowable |= is_node;
-                    }
-                }
-            }
-            if bad_c.is_empty() && bad_m.is_empty() {
-                healthy_traces.push(trace);
-            } else {
-                affected_traces.push(AffectedTrace {
-                    trace,
-                    corrupt: bad_c.into_iter().collect(),
-                    missing: bad_m.into_iter().collect(),
-                    unknowable,
-                });
-            }
-        }
-        let index = self.audit_refs(expected, &mut malformed)?;
-        Ok(Audit {
-            corrupt: corrupt.into_iter().collect(),
-            missing: missing.into_iter().collect(),
-            malformed: malformed.into_iter().collect(),
-            index,
-            healthy_traces,
-            affected_traces,
-        })
-    }
-
-    /// Exports every verified object in topological dependency order as a
-    /// portable bundle (`spec/07-ledger.md` §7.5.4), returning the count.
-    ///
-    /// # Errors
-    ///
-    /// [`StoreError::Corrupt`] if any object on disk fails verification,
-    /// [`StoreError::Bundle`] if `objects/` contains a malformed filename, or
-    /// [`StoreError::Io`] if reading or writing fails.
-    pub fn export(&self, out: &mut impl io::Write) -> Result<usize, StoreError> {
-        const MAX_BUNDLE_OBJECTS: usize = 1_000_000;
-        const MAX_BUNDLE_BYTES: usize = 512 * 1024 * 1024;
-
-        let mut malformed = BTreeSet::new();
-        let files = self.scan_area("objects", &mut malformed)?;
-        if !malformed.is_empty() {
-            return Err(StoreError::Bundle("malformed path in objects/"));
-        }
-        if files.len() > MAX_BUNDLE_OBJECTS {
-            return Err(StoreError::Bundle("bundle count exceeds bound"));
-        }
-        // What each object references inside this store, and its on-disk path.
-        // Payload bytes are streamed from disk during emission rather than held
-        // in RAM all at once.
-        let mut found: BTreeMap<Cairn, (Vec<Cairn>, PathBuf)> = BTreeMap::new();
-        let mut total_bytes: usize = 0;
-        for (cairn, path) in files {
-            let bytes = read_bounded(&path, None)?;
-            total_bytes = total_bytes
-                .checked_add(bytes.len())
-                .filter(|&t| t <= MAX_BUNDLE_BYTES)
-                .ok_or(StoreError::Bundle("bundle exceeds total size bound"))?;
-            let scanned = verify_with(cairn, &bytes, scan_stored)?;
-            found.insert(cairn, (scanned.references, path));
-        }
-        // An object's height is 0 if it references nothing here, and one more
-        // than the highest thing it references otherwise. Sorting by height and
-        // then by cairn is §7.5.4's order: everything an object references
-        // comes before it. Walked with a stack, because a chain of traces is as
-        // deep as the store is long.
-        let mut height: BTreeMap<Cairn, usize> = BTreeMap::new();
-        let mut open = BTreeSet::new();
-        for &start in found.keys() {
-            let mut todo = vec![start];
-            while let Some(&c) = todo.last() {
-                if height.contains_key(&c) {
-                    todo.pop();
-                    continue;
-                }
-                let refs = found[&c].0.iter().filter(|r| found.contains_key(r));
-                if open.insert(c) {
-                    for &r in refs {
-                        // §7.3: a cairn names its references, so a cycle would
-                        // be a hash that contains itself.
-                        if open.contains(&r) {
-                            return Err(StoreError::Bundle("a cycle in objects/"));
-                        }
-                        if !height.contains_key(&r) {
-                            todo.push(r);
-                        }
-                    }
-                    continue;
-                }
-                let h = refs.map(|r| height[r] + 1).max().unwrap_or(0);
-                height.insert(c, h);
-                open.remove(&c);
-                todo.pop();
-            }
-        }
-        let mut entries: Vec<(Cairn, PathBuf)> =
-            found.into_iter().map(|(c, (_, path))| (c, path)).collect();
-        entries.sort_by_key(|(c, _)| (height[c], *c));
-        let mut hasher = blake3::Hasher::new();
-        let mut send = |slice: &[u8]| -> io::Result<()> {
-            hasher.update(slice);
-            out.write_all(slice)
-        };
-        send(BUNDLE_MAGIC)?;
-        send(&(entries.len() as u64).to_be_bytes())?;
-        for (cairn, path) in &entries {
-            let bytes = read_bounded(path, None)?;
-            verify_with(*cairn, &bytes, scan_stored)?;
-            send(cairn.as_bytes())?;
-            send(&(bytes.len() as u64).to_be_bytes())?;
-            send(&bytes)?;
-        }
-        out.write_all(hasher.finalize().as_bytes())?;
-        Ok(entries.len())
-    }
-
-    fn create_staging_file(&self) -> io::Result<(TempFileGuard, fs::File)> {
-        let (path, file) = self.create_temp("import", true)?;
-        Ok((TempFileGuard(path), file))
-    }
-
-    /// Imports a portable bundle (`spec/07-ledger.md` §7.5.4), staging verified
-    /// raw entries in `tmp/` until the whole-stream trailer passes before
-    /// committing objects and rebuilding `refs/`, returning the count.
-    ///
-    /// # Errors
-    ///
-    /// [`StoreError::Bundle`] if framing, bounds, ordering or trailer fail,
-    /// [`StoreError::Corrupt`] if an entry or existing destination object fails
-    /// verification, or [`StoreError::Io`] on I/O failure.
-    pub fn import(&self, src: &mut impl io::Read) -> Result<usize, StoreError> {
-        const MAX_BUNDLE_OBJECTS: usize = 1_000_000;
-        const MAX_BUNDLE_BYTES: usize = 512 * 1024 * 1024;
-
-        let mut hasher = blake3::Hasher::new();
-        let mut hdr = [0u8; 24];
-        read_hashed(src, &mut hasher, &mut hdr)?;
-        if hdr != BUNDLE_MAGIC {
-            return Err(StoreError::Bundle(
-                if hdr.starts_with(b"netherc/cairn/") && hdr.ends_with(b"\x00bundle\x00") {
-                    "incompatible bundle domain version"
-                } else {
-                    "not a store bundle"
-                },
-            ));
-        }
-        let mut u8s = [0u8; 8];
-        read_hashed(src, &mut hasher, &mut u8s)?;
-        let count = usize::try_from(u64::from_be_bytes(u8s))
-            .ok()
-            .filter(|&n| n <= MAX_BUNDLE_OBJECTS)
-            .ok_or(StoreError::Bundle("bundle count exceeds bound"))?;
-        let (_guard, stage_file) = self.create_staging_file()?;
-        let mut stage_out = io::BufWriter::new(stage_file);
-        let mut seen = BTreeSet::new();
-        let mut expected_before = BTreeSet::new();
-        let mut total_bytes: usize = 0;
-        for _ in 0..count {
-            Self::stage_bundle_entry(
-                src,
-                &mut hasher,
-                &mut stage_out,
-                MAX_BUNDLE_BYTES,
-                &mut total_bytes,
-                &mut seen,
-                &mut expected_before,
-            )?;
-        }
-        let mut trailer = [0u8; 32];
-        src.read_exact(&mut trailer).map_err(|e| {
-            if e.kind() == io::ErrorKind::UnexpectedEof {
-                StoreError::Bundle("truncated bundle")
-            } else {
-                StoreError::Io(e)
-            }
-        })?;
-        if trailer != *hasher.finalize().as_bytes() {
-            return Err(StoreError::Bundle("bundle trailer mismatch"));
-        }
-        loop {
-            match src.read(&mut [0u8; 1]) {
-                Ok(0) => break,
-                Ok(_) => return Err(StoreError::Bundle("trailing bytes after bundle")),
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(StoreError::Io(e)),
-            }
-        }
-        stage_out.flush()?;
-        let mut stage_file = stage_out.into_inner().map_err(io::IntoInnerError::into_error)?;
-        stage_file.seek(SeekFrom::Start(0))?;
-        self.commit_staged_bundle(&mut io::BufReader::new(stage_file), count)?;
-        Ok(count)
-    }
-
-    fn commit_staged_bundle(
-        &self,
-        staged: &mut impl io::Read,
-        count: usize,
-    ) -> Result<(), StoreError> {
-        let mut ref_cache: HashMap<Cairn, HashSet<Cairn>> = HashMap::new();
-        for _ in 0..count {
-            let mut raw = [0u8; 32];
-            staged.read_exact(&mut raw)?;
-            let cairn = Cairn::from_bytes(raw);
-            let mut len_buf = [0u8; 8];
-            staged.read_exact(&mut len_buf)?;
-            let len = usize::try_from(u64::from_be_bytes(len_buf))
-                .map_err(|_| StoreError::Bundle("bundle object exceeds size bound"))?;
-            let mut bytes = vec![0u8; len];
-            staged.read_exact(&mut bytes)?;
-            let scanned = verify_with(cairn, &bytes, scan_stored)?;
-            if self.has(cairn) {
-                // §7.5.4: verify the on-disk object directly rather than relying
-                // on the in-memory `self.seen` cache.
-                let existing = read_bounded(&self.fanned("objects", cairn), Some(cairn))?;
-                verify_with(cairn, &existing, scan_stored)?;
-                for &target in &scanned.references {
-                    let known = match ref_cache.entry(target) {
-                        std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-                        std::collections::hash_map::Entry::Vacant(e) => {
-                            e.insert(self.referrers(target)?.into_iter().collect())
-                        }
-                    };
-                    if known.insert(cairn) {
-                        self.add_ref(target, cairn)?;
-                    }
-                }
-            } else {
-                self.put_verified(cairn, &scanned.references, &bytes)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn stage_bundle_entry(
-        src: &mut impl io::Read,
-        hasher: &mut blake3::Hasher,
-        stage_out: &mut impl io::Write,
-        max_bundle_bytes: usize,
-        total_bytes: &mut usize,
-        seen: &mut BTreeSet<Cairn>,
-        expected_before: &mut BTreeSet<Cairn>,
-    ) -> Result<(), StoreError> {
-        let mut raw = [0u8; 32];
-        read_hashed(src, hasher, &mut raw)?;
-        let cairn = Cairn::from_bytes(raw);
-        if !seen.insert(cairn) {
-            return Err(StoreError::Bundle("duplicate cairn in bundle"));
-        }
-        if expected_before.contains(&cairn) {
-            return Err(StoreError::Bundle("bundle is not in topological order"));
-        }
-        let mut u8s = [0u8; 8];
-        read_hashed(src, hasher, &mut u8s)?;
-        let len = usize::try_from(u64::from_be_bytes(u8s))
-            .ok()
-            .filter(|&n| n <= MAX_OBJECT_BYTES)
-            .ok_or(StoreError::Bundle("bundle object exceeds size bound"))?;
-        *total_bytes = total_bytes
-            .checked_add(len)
-            .filter(|&t| t <= max_bundle_bytes)
-            .ok_or(StoreError::Bundle("bundle exceeds total size bound"))?;
-        // Read incrementally so a truncated stream cannot force a 64 MiB
-        // pre-allocation before hitting EOF.
-        let mut bytes = Vec::with_capacity(len.min(64 * 1024));
-        src.by_ref().take(len as u64).read_to_end(&mut bytes)?;
-        if bytes.len() != len {
-            return Err(StoreError::Bundle("truncated bundle"));
-        }
-        hasher.update(&bytes);
-        let scanned = verify_with(cairn, &bytes, scan_stored)?;
-        for target in scanned.references {
-            if !seen.contains(&target) {
-                expected_before.insert(target);
-            }
-        }
-        stage_out.write_all(cairn.as_bytes())?;
-        stage_out.write_all(&(len as u64).to_be_bytes())?;
-        stage_out.write_all(&bytes)?;
-        Ok(())
-    }
-}
-
-fn read_hashed(
-    src: &mut impl io::Read,
-    hasher: &mut blake3::Hasher,
-    buf: &mut [u8],
-) -> Result<(), StoreError> {
-    src.read_exact(buf).map_err(|e| {
-        if e.kind() == io::ErrorKind::UnexpectedEof {
-            StoreError::Bundle("truncated bundle")
-        } else {
-            StoreError::Io(e)
-        }
-    })?;
-    hasher.update(buf);
-    Ok(())
-}
-
-/// What is wrong with a reverse-index file in `refs/`. `spec/07-ledger.md` §7.5.2.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum IndexError {
-    /// A file in `refs/` whose length is not a multiple of 32 bytes.
-    Ragged {
-        /// Whose index it is.
-        of: Cairn,
-        /// The byte length on disk.
-        bytes: usize,
-    },
-    /// A verified node `referrer` names `target` and `refs/<target>` does not
-    /// record `referrer`.
-    Missing {
-        /// The referenced cairn.
-        target: Cairn,
-        /// The verified node that names it.
-        referrer: Cairn,
-    },
-}
-
-/// A verified `Trace` node whose forward provenance chain is damaged. §7.5.2.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AffectedTrace {
-    /// The `Trace` node's cairn.
-    pub trace: Cairn,
-    /// Reachable cairns from `trace` whose objects are corrupt.
-    pub corrupt: Vec<Cairn>,
-    /// Reachable cairns from `trace` that are absent from `objects/`.
-    pub missing: Vec<Cairn>,
-    /// `true` when one of `trace`'s node references (`holes`, `witnesses` or
-    /// `deposits`) is corrupt or absent, so what that node referenced in turn
-    /// cannot be known.
-    pub unknowable: bool,
-}
-
-/// A read-only whole-store audit. `spec/07-ledger.md` §7.5.2.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Audit {
-    /// Objects in `objects/` whose bytes do not decode or do not match their name.
-    pub corrupt: Vec<Cairn>,
-    /// Forward edges `(referrer, target)` from verified nodes to absent cairns.
-    pub missing: Vec<(Cairn, Cairn)>,
-    /// Paths under `objects/` or `refs/` that are not valid fanned cairn files.
-    pub malformed: Vec<PathBuf>,
-    /// Errors in the derived `refs/` reverse index.
-    pub index: Vec<IndexError>,
-    /// Verified `Trace` nodes whose reachable subgraph is complete and valid.
-    pub healthy_traces: Vec<Cairn>,
-    /// Verified `Trace` nodes with corrupt or absent dependencies.
-    pub affected_traces: Vec<AffectedTrace>,
-}
-
-impl Audit {
-    /// Whether the store has no corrupt objects, missing references, malformed
-    /// filenames or reverse-index errors.
-    #[must_use]
-    pub fn is_clean(&self) -> bool {
-        self.corrupt.is_empty()
-            && self.missing.is_empty()
-            && self.malformed.is_empty()
-            && self.index.is_empty()
-            && self.affected_traces.is_empty()
-    }
-}
-
-/// The domain version string a current package declares (`spec/07-ledger.md` §7.5.5).
-pub const PACKAGE_DOMAIN: &str = "netherc/cairn/v4";
-
-/// Why a package could not be written or resolved offline (`spec/07-ledger.md` §7.5.5).
-#[derive(Debug)]
-pub enum PackageError {
-    /// A package or entrypoint object was absent or corrupt in the store.
-    Store(StoreError),
-    /// A package `(cairn, domain)` declared a domain version other than [`PACKAGE_DOMAIN`].
-    Incompatible(Cairn, String),
-    /// A package or entrypoint `(cairn, why)` violated §7.5.5's structural rules.
-    Malformed(Cairn, &'static str),
-}
-
-impl core::fmt::Display for PackageError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Store(e) => write!(f, "{e}"),
-            Self::Incompatible(c, domain) => {
-                write!(f, "package {} uses incompatible domain `{domain}`", c.short())
-            }
-            Self::Malformed(c, why) => write!(f, "malformed package {}: {why}", c.short()),
-        }
-    }
-}
-
-impl core::error::Error for PackageError {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            Self::Store(e) => Some(e),
-            Self::Incompatible(..) | Self::Malformed(..) => None,
-        }
-    }
-}
-
-impl From<StoreError> for PackageError {
-    fn from(e: StoreError) -> Self {
-        Self::Store(e)
-    }
-}
-
-/// An offline-resolved package closure (`spec/07-ledger.md` §7.5.5).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolvedPackage {
-    /// The root package cairn.
-    pub root: Cairn,
-    /// The root package's `entrypoint` `Bytes` cairn.
-    pub entrypoint: Cairn,
-    /// Direct alias-to-package-cairn bindings declared on `root`.
-    pub aliases: BTreeMap<String, Cairn>,
-    /// Distinct package cairns in topological post-order (dependencies first, `root` last).
-    pub closure: Vec<Cairn>,
-    /// Concatenated UTF-8 `entrypoint` bytes in `closure` order.
-    pub unit_source: Vec<u8>,
-    /// Content address of `Value::Bytes(unit_source)`.
-    pub unit_cairn: Cairn,
-}
-
-impl ResolvedPackage {
-    /// Resolves a direct alias declared on `root` to its exact package cairn.
-    #[must_use]
-    pub fn alias(&self, name: &str) -> Option<Cairn> {
-        self.aliases.get(name).copied()
-    }
-}
-
-/// Cairn-addressed package storage and offline dependency resolution (`spec/07-ledger.md` §7.5.5).
-pub struct Package;
-
-/// The decoded entrypoint cairn and sorted dependency list of a single
-/// `Package` record. Entrypoint bytes are loaded lazily in post-order during
-/// [`Package::walk`] so ancestor sources are never pinned on the DFS stack.
-type LoadedPkg = (Cairn, Vec<(String, Cairn)>);
-
-impl Package {
-    /// Writes `entrypoint_source` and a canonical `"Package"` struct with
-    /// sorted `deps` `(alias, package_cairn)` into `store`, returning the
-    /// package cairn.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PackageError::Malformed`] if `entrypoint_source` is not UTF-8
-    /// or if `deps` has an empty or duplicate alias, or [`PackageError::Store`]
-    /// if writing to `store` fails.
-    pub fn put(
-        store: &Store,
-        entrypoint_source: &[u8],
-        deps: &[(&str, Cairn)],
-    ) -> Result<Cairn, PackageError> {
-        let ep_val = Value::Bytes(entrypoint_source.to_vec());
-        if core::str::from_utf8(entrypoint_source).is_err() {
-            return Err(PackageError::Malformed(ep_val.cairn(), "entrypoint is not UTF-8"));
-        }
-        let mut sorted = BTreeMap::new();
-        for &(alias, dep) in deps {
-            if alias.is_empty() || sorted.insert(alias, dep).is_some() {
-                return Err(PackageError::Malformed(ep_val.cairn(), "invalid or duplicate alias"));
-            }
-        }
-        let entrypoint = store.put(&Stored::Value(ep_val))?;
-        let dep_name = NonEmptyName::new("Dep")
-            .map_err(|_| StoreError::Invalid(DecodeError::EmptyStructName))?;
-        let pkg_name = NonEmptyName::new("Package")
-            .map_err(|_| StoreError::Invalid(DecodeError::EmptyStructName))?;
-        let dep_items = sorted
-            .into_iter()
-            .map(|(alias, cairn)| Value::Struct {
-                name: dep_name.clone(),
-                fields: vec![Value::Str(alias.into()), Value::Cairn(cairn)],
-            })
-            .collect();
-        let pkg = Value::Struct {
-            name: pkg_name,
-            fields: vec![
-                Value::Str(PACKAGE_DOMAIN.into()),
-                Value::Cairn(entrypoint),
-                Value::Array(dep_items),
-            ],
-        };
-        Ok(store.put(&Stored::Value(pkg))?)
-    }
-
-    /// Resolves `root` and its transitive dependency closure offline in `store`.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PackageError`] if any reachable package or entrypoint object
-    /// is absent, corrupt, incompatible or malformed.
-    pub fn resolve(store: &Store, root: Cairn) -> Result<ResolvedPackage, PackageError> {
-        let (mut visiting, mut visited) = (BTreeSet::new(), BTreeSet::new());
-        let (mut closure, mut unit_source) = (Vec::new(), Vec::new());
-        let (entrypoint, root_deps) =
-            Self::walk(store, root, &mut visiting, &mut visited, &mut closure, &mut unit_source)?;
-        let unit_cairn = Cairn::of_bytes_value(&unit_source);
-        Ok(ResolvedPackage {
-            root,
-            entrypoint,
-            aliases: root_deps.into_iter().collect(),
-            closure,
-            unit_source,
-            unit_cairn,
-        })
-    }
-
-    fn load_pkg(store: &Store, pkg: Cairn) -> Result<LoadedPkg, PackageError> {
-        let Stored::Value(Value::Struct { name, fields }) = store.get(pkg)? else {
-            return Err(PackageError::Malformed(pkg, "not a Package struct"));
-        };
-        if name != "Package" {
-            return Err(PackageError::Malformed(pkg, "not a Package struct"));
-        }
-        if let Some(Value::Str(domain)) = fields.first()
-            && domain != PACKAGE_DOMAIN
-        {
-            return Err(PackageError::Incompatible(pkg, domain.clone()));
-        }
-        let [Value::Str(_), Value::Cairn(ep), Value::Array(raw_deps)] = &fields[..] else {
-            return Err(PackageError::Malformed(pkg, "wrong Package fields"));
-        };
-        let mut deps = Vec::with_capacity(raw_deps.len());
-        let mut prev = "";
-        for item in raw_deps {
-            let Value::Struct { name: dname, fields: dfields } = item else {
-                return Err(PackageError::Malformed(pkg, "not a Dep struct"));
-            };
-            let [Value::Str(alias), Value::Cairn(target)] = &dfields[..] else {
-                return Err(PackageError::Malformed(pkg, "wrong Dep fields"));
-            };
-            if dname != "Dep" || alias.is_empty() || alias.as_str() <= prev || *target == pkg {
-                return Err(PackageError::Malformed(pkg, "invalid or unsorted Dep"));
-            }
-            prev = alias;
-            deps.push((alias.clone(), *target));
-        }
-        Ok((*ep, deps))
-    }
-
-    fn load_entrypoint(store: &Store, ep: Cairn) -> Result<Vec<u8>, PackageError> {
-        let Stored::Value(Value::Bytes(bytes)) = store.get(ep)? else {
-            return Err(PackageError::Malformed(ep, "entrypoint is not Bytes"));
-        };
-        if core::str::from_utf8(&bytes).is_err() {
-            return Err(PackageError::Malformed(ep, "entrypoint is not UTF-8"));
-        }
-        Ok(bytes)
-    }
-
-    fn walk(
-        store: &Store,
-        root: Cairn,
-        visiting: &mut BTreeSet<Cairn>,
-        visited: &mut BTreeSet<Cairn>,
-        closure: &mut Vec<Cairn>,
-        unit_source: &mut Vec<u8>,
-    ) -> Result<(Cairn, Vec<(String, Cairn)>), PackageError> {
-        struct Frame {
-            pkg: Cairn,
-            ep: Cairn,
-            deps: Vec<(String, Cairn)>,
-            next_dep: usize,
-        }
-        let (root_ep, root_deps) = Self::load_pkg(store, root)?;
-        visiting.insert(root);
-        let mut stack =
-            vec![Frame { pkg: root, ep: root_ep, deps: root_deps.clone(), next_dep: 0 }];
-        while let Some(top) = stack.last_mut() {
-            if top.next_dep < top.deps.len() {
-                let dep = top.deps[top.next_dep].1;
-                top.next_dep += 1;
-                if visited.contains(&dep) {
-                    continue;
-                }
-                if !visiting.insert(dep) {
-                    return Err(PackageError::Malformed(dep, "dependency cycle"));
-                }
-                let (ep, deps) = Self::load_pkg(store, dep)?;
-                stack.push(Frame { pkg: dep, ep, deps, next_dep: 0 });
-            } else {
-                let Some(done) = stack.pop() else { break };
-                visiting.remove(&done.pkg);
-                if visited.insert(done.pkg) {
-                    let bytes = Self::load_entrypoint(store, done.ep)?;
-                    let needs_nl = !bytes.is_empty()
-                        && !unit_source.is_empty()
-                        && !unit_source.ends_with(b"\n");
-                    let next_len = unit_source
-                        .len()
-                        .saturating_add(usize::from(needs_nl))
-                        .saturating_add(bytes.len());
-                    if next_len > MAX_OBJECT_BYTES {
-                        return Err(PackageError::Malformed(
-                            done.pkg,
-                            "resolved package source exceeds size bound",
-                        ));
-                    }
-                    closure.push(done.pkg);
-                    if needs_nl {
-                        unit_source.push(b'\n');
-                    }
-                    unit_source.extend_from_slice(&bytes);
-                }
-            }
-        }
-        Ok((root_ep, root_deps))
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PACKAGE_DOMAIN, Package, PackageError, Store, StoreError};
+    use super::{Store, StoreError};
+    use crate::audit::{AffectedTrace, Audit, IndexError};
+    use crate::bundle::BUNDLE_MAGIC;
     use crate::cairn::Cairn;
     use crate::codec::{DecodeError, Stored};
     use crate::node::{Call, Node, Span};
+    use crate::package::{PACKAGE_DOMAIN, Package, PackageError};
     use crate::value::{EmptyNameError, NonEmptyName, Stratum, Value};
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -2088,7 +1343,7 @@ mod tests {
         assert_eq!(audit.missing, vec![(missing_node, gone_wit)]);
         assert_eq!(audit.malformed, vec![stray_dir]);
         assert!(
-            audit.index.contains(&super::IndexError::Ragged { of: ok_val, bytes: 7 }),
+            audit.index.contains(&IndexError::Ragged { of: ok_val, bytes: 7 }),
             "{:?}",
             audit.index
         );
@@ -2367,7 +1622,7 @@ mod tests {
             hasher.update(slice);
             reversed.extend_from_slice(slice);
         };
-        push(super::BUNDLE_MAGIC);
+        push(BUNDLE_MAGIC);
         push(&2u64.to_be_bytes());
         for c in [dep, val] {
             let bytes = src.get(c).unwrap().encode();
@@ -2429,9 +1684,9 @@ mod tests {
         assert!(text.contains("I64 p0() { 0 }\nI64 p1()"), "{text}");
 
         // Audit::is_clean is false when affected_traces is non-empty.
-        let mut audit = super::Audit::default();
+        let mut audit = Audit::default();
         assert!(audit.is_clean());
-        audit.affected_traces.push(super::AffectedTrace {
+        audit.affected_traces.push(AffectedTrace {
             trace: val,
             corrupt: vec![val],
             missing: vec![],

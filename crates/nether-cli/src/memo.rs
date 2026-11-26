@@ -49,6 +49,14 @@ fn value_complete(store: &Store, v: &Value, seen: &mut HashSet<Cairn>) -> bool {
     true
 }
 
+fn has_bytes(store: &Store, cairn: Cairn) -> bool {
+    matches!(store.get(cairn), Ok(Stored::Value(Value::Bytes(_))))
+}
+
+fn value_ok(store: &Store, cairn: Cairn, seen: &mut HashSet<Cairn>) -> bool {
+    matches!(store.get(cairn), Ok(Stored::Value(v)) if value_complete(store, &v, seen))
+}
+
 /// Where one burial's entry lives, or nothing if this build cannot name itself.
 pub struct Memo {
     path: PathBuf,
@@ -128,7 +136,7 @@ impl Memo {
             || !witnesses.is_empty()
             || steps > fuel
             || nodes < 2
-            || !matches!(store.get(source), Ok(Stored::Value(Value::Bytes(_))))
+            || !has_bytes(store, source)
         {
             return None;
         }
@@ -156,17 +164,12 @@ impl Memo {
                 return None;
             };
             if !crate::closing::valid_stratum(&call, stratum)
-                || !matches!(store.get(span.source()), Ok(Stored::Value(Value::Bytes(_))))
+                || !has_bytes(store, span.source())
+                || !call.args().iter().all(|&a| value_ok(store, a, &mut seen))
             {
                 return None;
             }
             max_hole_stratum = max_hole_stratum.max(stratum);
-            for a in call.args() {
-                let Ok(Stored::Value(v)) = store.get(*a) else { return None };
-                if !value_complete(store, &v, &mut seen) {
-                    return None;
-                }
-            }
         }
         if depth < res_depth.max(max_hole_stratum) {
             return None;
@@ -175,19 +178,12 @@ impl Memo {
             let Ok(Stored::Node(Node::Deposit { value, span })) = store.get(*d) else {
                 return None;
             };
-            if !matches!(store.get(span.source()), Ok(Stored::Value(Value::Bytes(_)))) {
-                return None;
-            }
-            let Ok(Stored::Value(v)) = store.get(value) else { return None };
-            if !value_complete(store, &v, &mut seen) {
+            if !has_bytes(store, span.source()) || !value_ok(store, value, &mut seen) {
                 return None;
             }
         }
-        for &c in &extra {
-            let Ok(Stored::Value(v)) = store.get(c) else { return None };
-            if !value_complete(store, &v, &mut seen) {
-                return None;
-            }
+        if !extra.iter().all(|&c| value_ok(store, c, &mut seen)) {
+            return None;
         }
         Some(Remembered { trace, steps, nodes, extra })
     }

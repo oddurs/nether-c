@@ -236,7 +236,7 @@ impl Node {
     /// The cairns this node names that are themselves nodes.
     ///
     /// A node names two kinds of thing, and §7.3 says which is which: a
-    /// `Trace`'s roots and a `Hole`'s `depends` are nodes, and every other
+    /// `Trace`'s `holes`, `witnesses`, and `deposits` are nodes, and every other
     /// cairn a node holds — an argument, an answer, a deposited value, a
     /// span's source — is a value. A walk that wants the shape of an
     /// evaluation rather than its contents wants these.

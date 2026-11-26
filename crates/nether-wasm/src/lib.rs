@@ -45,6 +45,11 @@ const DEFAULT_FUEL: u64 = 1_000_000;
 const MAX_WASM_OBJECTS: usize = 20_000;
 const MAX_WASM_ENCODED_BYTES: usize = 16 * 1024 * 1024;
 const MAX_WASM_JSON_BYTES: usize = 34 * 1024 * 1024;
+const RUN_NATIVELY: &str = "reduce the output size or run `nether bury` natively.";
+
+fn too_big() -> String {
+    trouble("burial output exceeds the browser's transport limit", RUN_NATIVELY)
+}
 
 /// Hand back `len` bytes the caller may write into.
 ///
@@ -75,7 +80,9 @@ pub unsafe extern "C" fn nether_free(at: *mut u8, len: usize) {
         return;
     }
     if let Ok(layout) = std::alloc::Layout::from_size_align(len, 1) {
-        // SAFETY: the caller's half of the bargain in the module documentation.
+        // SAFETY: `at` is non-null, `layout` is align-1 with `len > 0`, and
+        // the caller guarantees `at` was allocated by `nether_alloc` with the
+        // exact same `len` and has not yet been freed.
         unsafe { std::alloc::dealloc(at, layout) };
     }
 }
@@ -92,33 +99,42 @@ pub unsafe extern "C" fn nether_bury(source: *const u8, len: usize, fuel: u64) -
     if source.is_null() || len > isize::MAX as usize {
         return block(&trouble("nothing was handed in", ""));
     }
-    // SAFETY: the caller's half of the bargain in the module documentation.
-    let bytes = unsafe { core::slice::from_raw_parts(source, len) }.to_vec();
-    block(&burying(&bytes, fuel))
+    // SAFETY: `source` is non-null, `len <= isize::MAX`, and the caller
+    // guarantees `source` points to `len` live, initialized bytes (or any
+    // non-null address when `len == 0`) that remain immutable during `burying`.
+    let bytes = unsafe { core::slice::from_raw_parts(source, len) };
+    block(&burying(bytes, fuel))
 }
 
 /// A length-prefixed block the caller owns: a little-endian `u32`, then that
 /// many bytes.
 fn block(text: &str) -> *mut u8 {
     let said = text.as_bytes();
-    let Ok(len) = u32::try_from(said.len()) else {
+    let (Ok(len), Some(total)) = (u32::try_from(said.len()), said.len().checked_add(4)) else {
         // Four gigabytes of JSON is not a thing this can hand back, and
         // truncating it silently would be worse than saying so.
-        return block("{\"error\":\"the answer is too large to return\"}");
-    };
-    let Some(total) = said.len().checked_add(4) else {
         return block("{\"error\":\"the answer is too large to return\"}");
     };
     let at = nether_alloc(total);
     if at.is_null() {
         return at;
     }
-    // SAFETY: `nether_alloc(total)` allocated `said.len() + 4` contiguous bytes.
+    // SAFETY: `at` is non-null and owns `total == 4 + said.len()` freshly
+    // allocated writable bytes disjoint from both the stack `len` bytes and
+    // `said`; `at.add(4)` stays within the allocation.
     unsafe {
         core::ptr::copy_nonoverlapping(len.to_le_bytes().as_ptr(), at, 4);
         core::ptr::copy_nonoverlapping(said.as_ptr(), at.add(4), said.len());
     }
     at
+}
+
+fn report_all<T>(items: &[T], to_diag: fn(&T) -> nether_core::Diagnostic, text: &str) -> String {
+    let mut out = String::new();
+    for item in items {
+        out.push_str(&report(&to_diag(item), text, "source"));
+    }
+    trouble(if out.is_empty() { "burial failed with no diagnostic" } else { &out }, "")
 }
 
 fn parse_and_check(source: &[u8]) -> Result<(&str, nether_core::Unit), String> {
@@ -135,25 +151,13 @@ fn parse_and_check(source: &[u8]) -> Result<(&str, nether_core::Unit), String> {
             return Err(trouble(&report(&fault.diagnostic(), prefix, "source"), ""));
         }
     };
-    let format_all = |diags: Vec<nether_core::Diagnostic>| -> String {
-        let mut out = String::new();
-        for d in &diags {
-            out.push_str(&report(d, text, "source"));
-        }
-        if out.is_empty() { "burial failed with no diagnostic".to_owned() } else { out }
-    };
-    let ast = parse(source).map_err(|faults| {
-        trouble(&format_all(faults.iter().map(nether_syntax::Fault::diagnostic).collect()), "")
-    })?;
-    let unit = lower(&ast).map_err(|faults| {
-        trouble(&format_all(faults.iter().map(nether_syntax::Fault::diagnostic).collect()), "")
-    })?;
+    let ast = parse(source)
+        .map_err(|faults| report_all(&faults, nether_syntax::Fault::diagnostic, text))?;
+    let unit = lower(&ast)
+        .map_err(|faults| report_all(&faults, nether_syntax::Fault::diagnostic, text))?;
     let faults = check(&unit);
     if !faults.is_empty() {
-        return Err(trouble(
-            &format_all(faults.iter().map(nether_core::Fault::diagnostic).collect()),
-            "",
-        ));
+        return Err(report_all(&faults, nether_core::Fault::diagnostic, text));
     }
     Ok((text, unit))
 }
@@ -194,7 +198,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     if printed.len() > MAX_WASM_ENCODED_BYTES {
         return trouble(
             "burial residue exceeds the browser's 16 MiB transport limit",
-            "reduce the output size or run `nether bury` natively.",
+            RUN_NATIVELY,
         );
     }
     let printed_value = Stored::Value(Value::Bytes(printed.as_bytes().to_vec()));
@@ -204,14 +208,13 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         residue.named.iter().map(|(id, object)| (*id, object)).collect();
     sort_by_cairn(&mut named_index);
     named_index.dedup_by_key(|(id, _)| *id);
-    let lookup = |c: Cairn| -> Option<&Stored> {
-        named_index.binary_search_by_key(&c, |(id, _)| *id).ok().map(|idx| named_index[idx].1)
-    };
     // §7.3.2: a trace's depth is the deepest of its residue and every hole it
     // owes, matching `nether bury` (e.g. a pure `seal` of a deep call).
     let mut deepest = Stratum::new(residue.depth.get()).unwrap_or(Stratum::MAX);
     for h in &residue.holes {
-        if let Some(Stored::Node(Node::Hole { stratum, .. })) = lookup(*h) {
+        if let Some(Stored::Node(Node::Hole { stratum, .. })) =
+            named_index.binary_search_by_key(h, |(id, _)| *id).ok().map(|idx| named_index[idx].1)
+        {
             deepest = deepest.max(*stratum);
         }
     }
@@ -224,6 +227,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         source: source_cairn,
         depth: deepest,
     });
+    let trace_cairn = trace.cairn();
     // Match `nether bury`: count `residue.named` plus residue and trace (not source).
     let node_count = residue.named.len() + 2;
 
@@ -231,8 +235,9 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     // Include source, residue and trace explicitly: `named` holds evaluation's
     // objects, not the envelope. Inserting in sorted order keeps shared values deduplicated.
     let mut objects = named_index;
-    for object in [&named, &printed_value, &trace] {
-        let id = object.cairn();
+    for (id, object) in
+        [(source_cairn, &named), (residue_cairn, &printed_value), (trace_cairn, &trace)]
+    {
         if let Err(pos) = objects.binary_search_by_key(&id, |(c, _)| *c) {
             objects.insert(pos, (id, object));
         }
@@ -247,30 +252,35 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
         );
     }
 
+    format_burial_json(trace_cairn, &trace, node_count, residue.fuel_spent, &printed, &objects)
+}
+
+fn format_burial_json(
+    cairn: Cairn,
+    trace: &Stored,
+    nodes: usize,
+    fuel_spent: u64,
+    printed: &str,
+    objects: &[(Cairn, &Stored)],
+) -> String {
+    let Stored::Node(Node::Trace { residue, holes, source, depth, .. }) = trace else {
+        return trouble("burial failed with no diagnostic", "");
+    };
     let mut out = String::with_capacity(1024);
     let _ = write!(
         out,
-        "{{\"cairn\":\"{}\",\"residue\":\"{}\",\"source\":\"{}\",\"depth\":{},\"nodes\":{},\"fuel_spent\":{},\"holes\":[",
-        trace.cairn(),
-        residue_cairn,
-        source_cairn,
-        deepest,
-        node_count,
-        residue.fuel_spent,
+        "{{\"cairn\":\"{cairn}\",\"residue\":\"{residue}\",\"source\":\"{source}\",\"depth\":{depth},\"nodes\":{nodes},\"fuel_spent\":{fuel_spent},\"holes\":["
     );
-    if let Err(err_json) = append_holes(&mut out, &residue.holes, &objects) {
+    if let Err(err_json) = append_holes(&mut out, holes, objects) {
         return err_json;
     }
     out.push_str("],\"printed\":");
-    push_quoted(&mut out, &printed);
+    push_quoted(&mut out, printed);
     if out.len() > MAX_WASM_JSON_BYTES {
-        return trouble(
-            "burial output exceeds the browser's transport limit",
-            "reduce the output size or run `nether bury` natively.",
-        );
+        return too_big();
     }
     out.push_str(",\"objects\":[");
-    if let Err(err_json) = append_objects(&mut out, &objects) {
+    if let Err(err_json) = append_objects(&mut out, objects) {
         return err_json;
     }
     out.push_str("]}");
@@ -327,10 +337,7 @@ fn append_holes(
         }
         out.push('}');
         if out.len() > MAX_WASM_JSON_BYTES {
-            return Err(trouble(
-                "burial output exceeds the browser's transport limit",
-                "reduce the output size or run `nether bury` natively.",
-            ));
+            return Err(too_big());
         }
     }
     Ok(())
@@ -344,7 +351,7 @@ fn append_objects(out: &mut String, objects: &[(Cairn, &Stored)]) -> Result<(), 
         if total_encoded > MAX_WASM_ENCODED_BYTES {
             return Err(trouble(
                 "burial objects exceed the browser's 16 MiB transport limit",
-                "reduce the output size or run `nether bury` natively.",
+                RUN_NATIVELY,
             ));
         }
         if idx > 0 {
@@ -354,10 +361,7 @@ fn append_objects(out: &mut String, objects: &[(Cairn, &Stored)]) -> Result<(), 
         push_hex(out, &raw);
         out.push_str("\"]");
         if out.len() > MAX_WASM_JSON_BYTES {
-            return Err(trouble(
-                "burial output exceeds the browser's transport limit",
-                "reduce the output size or run `nether bury` natively.",
-            ));
+            return Err(too_big());
         }
     }
     Ok(())

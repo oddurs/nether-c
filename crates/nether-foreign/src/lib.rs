@@ -81,6 +81,10 @@ const NOW_AND_LOCAL: c_int = 0x2;
 /// paths or symlink aliases to the same shared object cannot race.
 static CALL_LOCK: Mutex<()> = Mutex::new(());
 
+fn call_lock() -> std::sync::MutexGuard<'static, ()> {
+    CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 /// Valid non-dangling address passed when `args` is empty, avoiding Rust's
 /// `NonNull::dangling()` (`0x1`) which triggers UB in C `memcpy`/`memcmp`.
 static EMPTY_ARG: u8 = 0;
@@ -156,10 +160,9 @@ impl Object {
         let Ok(name) = CString::new(canonical.as_os_str().as_bytes()) else {
             return Err(Failed(format!("{shown} has a NUL in it")));
         };
+        let _turn = call_lock();
         // SAFETY: `name` is a valid NUL-terminated string that outlives the
-        // call. Hold `CALL_LOCK` across `dlopen` (which runs `.init_array`) and
-        // `last_error` so concurrent opens/calls/drops cannot race.
-        let _turn = CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+        // call, and `CALL_LOCK` serializes `.init_array` and `dlerror`.
         let handle = unsafe { dlopen(name.as_ptr(), NOW_AND_LOCAL) };
         if handle.is_null() {
             Err(Failed(last_error()))
@@ -176,7 +179,7 @@ impl Object {
     /// Whether this object has that symbol.
     #[must_use]
     pub fn has(&self, symbol: &str) -> bool {
-        let _turn = CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+        let _turn = call_lock();
         let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
         self.find(&handle, symbol).is_some()
     }
@@ -198,11 +201,14 @@ impl Object {
             // Compare in-memory `link_map *` pointers directly so filesystem
             // hardlink TOCTOU, atomic `.so` replacement, and non-zero lowest
             // `PT_LOAD` `p_vaddr` offsets cannot mislead ownership checks.
-            // SAFETY: `handle.0` is an open `dlopen` handle and `found` is a
-            // valid symbol address returned by `dlsym`.
+            // SAFETY: `handle.0` is an open `dlopen` handle and `&raw mut handle_lm`
+            // is a valid writable `*mut *mut LinkMap` matching `RTLD_DI_LINKMAP`.
             let got_handle =
                 unsafe { dlinfo(handle.0, RTLD_DI_LINKMAP, (&raw mut handle_lm).cast()) } == 0
                     && !handle_lm.is_null();
+            // SAFETY: `found` is a valid symbol address from `dlsym`, and
+            // `&raw mut info` and `&raw mut sym_lm` are valid writable pointers
+            // matching `RTLD_DL_LINKMAP`.
             let got_sym = unsafe {
                 dladdr1(found.cast_const(), &raw mut info, &raw mut sym_lm, RTLD_DL_LINKMAP)
             } != 0
@@ -243,10 +249,10 @@ impl Object {
         if found.is_null() || !self.defined_in_object(handle, found) {
             return None;
         }
-        // SAFETY: this is the transmute stratum 8 is about. Nothing checks
-        // that the symbol has §9.8.1's signature, and nothing can: a shared
-        // object carries no types. Calling it is undefined behaviour if it
-        // does not, which is why a trace that reached here is marked forever.
+        // SAFETY: POSIX guarantees `dlsym` returns a `void *` convertible to a
+        // function pointer, and `found` is verified non-null and defined in this
+        // object. Nothing checks that the symbol has §9.8.1's signature: calling
+        // a mismatched symbol is UB, which is why stratum 8 marks the trace.
         Some(unsafe { core::mem::transmute::<*mut c_void, Foreign>(found) })
     }
 
@@ -265,31 +271,19 @@ impl Object {
     pub fn call(&self, symbol: &str, args: &[u8]) -> Result<(i32, Vec<u8>), Failed> {
         const MAX_OUTPUT: usize = 64 * 1024 * 1024;
         // Held to the end of the call, both tries, across every open handle.
-        let _turn = CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+        let _turn = call_lock();
         let handle = self.handle.lock().unwrap_or_else(PoisonError::into_inner);
         let Some(function) = self.find(&handle, symbol) else {
             return Err(Failed(format!("{} has no `{symbol}`", self.path)));
         };
-        let args_ptr = if args.is_empty() { &raw const EMPTY_ARG } else { args.as_ptr() };
         // Enough for most answers without asking, and small enough that being
         // wrong costs one more call rather than a reservation.
         let mut out = vec![0u8; 4096];
-        let mut wrote = 0usize;
-        // SAFETY: none available. `args_ptr` and `out` are valid non-dangling
-        // pointers live for the call and their lengths are what is passed.
-        let code =
-            unsafe { function(args_ptr, args.len(), out.as_mut_ptr(), out.len(), &raw mut wrote) };
+        let cap = out.len();
+        let (code, wrote) = invoke(function, symbol, args, &mut out, cap)?;
         if code != 1 {
-            if code == 0 && wrote > out.len() {
-                return Err(Failed(format!(
-                    "`{symbol}` claimed to write {wrote} bytes into a {}-byte buffer",
-                    out.len()
-                )));
-            }
-            out.truncate(wrote.min(out.len()));
             return Ok((code, out));
         }
-
         if wrote > MAX_OUTPUT {
             return Err(Failed(format!(
                 "`{symbol}` asked for {wrote} bytes, past the 64 MiB bound"
@@ -300,26 +294,42 @@ impl Object {
         out.try_reserve_exact(alloc_len)
             .map_err(|_| Failed(format!("`{symbol}` could not reserve {wrote} bytes")))?;
         out.resize(alloc_len, 0);
-        let cap = wrote;
-        let mut wrote = 0usize;
-        // SAFETY: as above, with a non-dangling buffer of at least `cap` bytes.
-        let code = unsafe { function(args_ptr, args.len(), out.as_mut_ptr(), cap, &raw mut wrote) };
+        let (code, _) = invoke(function, symbol, args, &mut out, wrote)?;
         if code == 1 {
             return Err(Failed(format!("`{symbol}` asked for more room twice")));
         }
-        if code == 0 && wrote > cap {
-            return Err(Failed(format!(
-                "`{symbol}` claimed to write {wrote} bytes into a {cap}-byte buffer"
-            )));
-        }
-        out.truncate(wrote.min(cap));
         Ok((code, out))
     }
 }
 
+fn invoke(
+    function: Foreign,
+    symbol: &str,
+    args: &[u8],
+    out: &mut Vec<u8>,
+    cap: usize,
+) -> Result<(i32, usize), Failed> {
+    let args_ptr = if args.is_empty() { &raw const EMPTY_ARG } else { args.as_ptr() };
+    let mut wrote = 0usize;
+    // SAFETY: `args_ptr` is non-dangling and valid for `args.len()` bytes, `out`
+    // is valid for `cap <= out.len()` writable bytes, and `&raw mut wrote` is
+    // valid and aligned. Beyond these arguments, safety rests on §9.8.1's
+    // stratum-8 contract.
+    let code = unsafe { function(args_ptr, args.len(), out.as_mut_ptr(), cap, &raw mut wrote) };
+    if code == 0 && wrote > cap {
+        return Err(Failed(format!(
+            "`{symbol}` claimed to write {wrote} bytes into a {cap}-byte buffer"
+        )));
+    }
+    if code != 1 {
+        out.truncate(wrote.min(cap));
+    }
+    Ok((code, wrote))
+}
+
 impl Drop for Object {
     fn drop(&mut self) {
-        let _turn = CALL_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+        let _turn = call_lock();
         let handle = self.handle.get_mut().unwrap_or_else(PoisonError::into_inner);
         // SAFETY: `handle` came from `dlopen` and is closed once, here.
         unsafe { dlclose(handle.0) };
