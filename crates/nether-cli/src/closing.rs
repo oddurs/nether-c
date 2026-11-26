@@ -6,11 +6,27 @@
 
 use std::process::ExitCode;
 
+use nether_bury::{Halt, HaltKind};
 use nether_core::{Unit, check, report};
 use nether_ledger::{Cairn, Node, Store, StoreError, Stored, Value};
 use nether_syntax::{lower, parse};
 
 use crate::{FAILED, code};
+
+/// Print a burial halt diagnostic and map it to §8.8's exit code.
+pub(crate) fn halt_exit(halt: &Halt, text: &str, shown: &str) -> ExitCode {
+    eprint!("{}", report(&halt.diagnostic(), text, shown));
+    match halt.kind {
+        HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
+        _ => FAILED,
+    }
+}
+
+/// Print a store error and map it to §8.8's exit code.
+pub(crate) fn store_err(e: &StoreError) -> ExitCode {
+    eprintln!("nether: {e}");
+    store_exit(e)
+}
 
 /// Parse, lower, and check source or residue bytes, reporting every fault.
 pub fn checked_unit(bytes: &[u8], shown: &str) -> Result<Unit, ExitCode> {
@@ -68,10 +84,7 @@ pub fn residue_unit(
             eprintln!("nether: the residue of {} is not in this ledger", trace.short());
             return Err(ExitCode::from(code::ABSENT));
         }
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return Err(store_exit(&e));
-        }
+        Err(e) => return Err(store_err(&e)),
     };
     let shown = format!("{}:residue", trace.short());
     let unit = checked_unit(&text, &shown)?;
@@ -88,22 +101,17 @@ pub(crate) fn valid_stratum(call: &nether_ledger::Call, stratum: u8) -> bool {
     })
 }
 
-/// The stratum a hole would reach, or an error if unreadable, wrong node kind,
-/// or claiming a stratum that disagrees with its prelude primitive.
-fn reached_hole(store: &Store, node: Cairn) -> Result<u8, StoreError> {
+/// The stratum a hole or witness reached, or `Corrupt` if wrong kind or forged stratum.
+fn reached_node(store: &Store, node: Cairn, expect_witness: bool) -> Result<u8, StoreError> {
     match store.get(node)? {
-        Stored::Node(Node::Hole { call, stratum, .. }) if valid_stratum(&call, stratum) => {
+        Stored::Node(Node::Hole { call, stratum, .. })
+            if !expect_witness && valid_stratum(&call, stratum) =>
+        {
             Ok(stratum)
         }
-        _ => Err(StoreError::Corrupt { asked: node, found: None, why: None }),
-    }
-}
-
-/// The stratum a witness reached, or an error if unreadable, wrong node kind,
-/// or claiming a stratum that disagrees with its prelude primitive.
-fn reached_witness(store: &Store, node: Cairn) -> Result<u8, StoreError> {
-    match store.get(node)? {
-        Stored::Node(Node::Witness { call, stratum, .. }) if valid_stratum(&call, stratum) => {
+        Stored::Node(Node::Witness { call, stratum, .. })
+            if expect_witness && valid_stratum(&call, stratum) =>
+        {
             Ok(stratum)
         }
         _ => Err(StoreError::Corrupt { asked: node, found: None, why: None }),
@@ -119,22 +127,9 @@ pub fn depth(
     witnesses: &[Cairn],
 ) -> Result<u8, ExitCode> {
     let mut out = residue;
-    for node in holes {
-        match reached_hole(store, *node) {
-            Ok(s) => out = out.max(s),
-            Err(e) => {
-                eprintln!("nether: {e}");
-                return Err(store_exit(&e));
-            }
-        }
-    }
-    for node in witnesses {
-        match reached_witness(store, *node) {
-            Ok(s) => out = out.max(s),
-            Err(e) => {
-                eprintln!("nether: {e}");
-                return Err(store_exit(&e));
-            }
+    for (nodes, expect_witness) in [(holes, false), (witnesses, true)] {
+        for &node in nodes {
+            out = out.max(reached_node(store, node, expect_witness).map_err(|e| store_err(&e))?);
         }
     }
     Ok(out)
@@ -142,14 +137,9 @@ pub fn depth(
 
 /// §1.7: marked when something *reached* stratum 8, which a hole at 8 has not.
 pub fn unrecorded(store: &Store, witnesses: &[Cairn]) -> Result<bool, ExitCode> {
-    for w in witnesses {
-        match reached_witness(store, *w) {
-            Ok(s) if s == nether_ledger::MAX_STRATUM => return Ok(true),
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("nether: {e}");
-                return Err(store_exit(&e));
-            }
+    for &w in witnesses {
+        if reached_node(store, w, true).map_err(|e| store_err(&e))? == nether_ledger::MAX_STRATUM {
+            return Ok(true);
         }
     }
     Ok(false)
@@ -177,38 +167,19 @@ pub fn verify_trace_parts(
     orig_depth: u8,
     marked: bool,
 ) -> Result<bool, ExitCode> {
-    match store.get(source) {
-        Ok(Stored::Value(Value::Bytes(_))) => {}
-        Ok(_) => {
-            eprintln!("nether: source {} is not bytes", source.short());
-            return Err(ExitCode::from(code::MALFORMED));
-        }
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return Err(store_exit(&e));
-        }
+    if !matches!(store.get(source).map_err(|e| store_err(&e))?, Stored::Value(Value::Bytes(_))) {
+        eprintln!("nether: source {} is not bytes", source.short());
+        return Err(ExitCode::from(code::MALFORMED));
     }
     for &d in deposits {
-        match store.get(d) {
-            Ok(Stored::Node(Node::Deposit { value, .. })) => match store.get(value) {
-                Ok(Stored::Value(_)) => {}
-                Ok(_) => {
-                    eprintln!("nether: deposit value {} is not a value", value.short());
-                    return Err(ExitCode::from(code::MALFORMED));
-                }
-                Err(e) => {
-                    eprintln!("nether: {e}");
-                    return Err(store_exit(&e));
-                }
-            },
-            Ok(_) => {
-                eprintln!("nether: deposit {} is not a deposit node in this ledger", d.short());
-                return Err(ExitCode::from(code::MALFORMED));
-            }
-            Err(e) => {
-                eprintln!("nether: {e}");
-                return Err(store_exit(&e));
-            }
+        let Stored::Node(Node::Deposit { value, .. }) = store.get(d).map_err(|e| store_err(&e))?
+        else {
+            eprintln!("nether: deposit {} is not a deposit node in this ledger", d.short());
+            return Err(ExitCode::from(code::MALFORMED));
+        };
+        if !matches!(store.get(value).map_err(|e| store_err(&e))?, Stored::Value(_)) {
+            eprintln!("nether: deposit value {} is not a value", value.short());
+            return Err(ExitCode::from(code::MALFORMED));
         }
     }
     let prior_unrecorded = unrecorded(store, witnesses)?;

@@ -31,129 +31,65 @@ const MOST: u64 = 64 * 1024 * 1024;
 /// `nether_ledger::MAX_OBJECT_BYTES`.
 const MAX_LIST_ENTRIES: usize = 65_536;
 
-/// Per-OS/architecture `O_NOFOLLOW`, `O_NONBLOCK`, and `O_DIRECTORY` flags.
-/// Unverified Unix targets fail to compile rather than silently disabling
-/// `O_NOFOLLOW` / `O_NONBLOCK`.
-#[cfg(all(
-    target_os = "linux",
-    any(
+/// Per-OS/architecture `O_NOFOLLOW`, `O_NONBLOCK`, `O_DIRECTORY`, and `ELOOP`.
+/// Unverified Unix targets fail to compile rather than silently disabling them.
+#[cfg(unix)]
+mod os {
+    #[cfg(target_os = "linux")]
+    const LINUX_ARM_PPC: bool = cfg!(any(
         target_arch = "aarch64",
         target_arch = "arm",
         target_arch = "m68k",
         target_arch = "powerpc",
-        target_arch = "powerpc64"
-    )
-))]
-const OPEN_NOFOLLOW: i32 = 0x10000;
-#[cfg(all(
-    target_os = "linux",
-    any(
-        target_arch = "aarch64",
-        target_arch = "arm",
-        target_arch = "m68k",
-        target_arch = "powerpc",
-        target_arch = "powerpc64"
-    )
-))]
-const OPEN_DIRECTORY: i32 = 0x4000;
-#[cfg(all(
-    target_os = "linux",
-    not(any(
-        target_arch = "aarch64",
-        target_arch = "arm",
-        target_arch = "m68k",
-        target_arch = "powerpc",
-        target_arch = "powerpc64"
-    ))
-))]
-const OPEN_NOFOLLOW: i32 = 0x20000;
-#[cfg(all(
-    target_os = "linux",
-    not(any(
-        target_arch = "aarch64",
-        target_arch = "arm",
-        target_arch = "m68k",
-        target_arch = "powerpc",
-        target_arch = "powerpc64"
-    ))
-))]
-const OPEN_DIRECTORY: i32 = 0x10000;
-#[cfg(all(target_os = "linux", any(target_arch = "mips", target_arch = "mips64")))]
-const OPEN_NONBLOCK: i32 = 0x0080;
-#[cfg(all(target_os = "linux", any(target_arch = "sparc", target_arch = "sparc64")))]
-const OPEN_NONBLOCK: i32 = 0x4000;
-#[cfg(all(
-    target_os = "linux",
-    not(any(
-        target_arch = "mips",
-        target_arch = "mips64",
-        target_arch = "sparc",
-        target_arch = "sparc64"
-    ))
-))]
-const OPEN_NONBLOCK: i32 = 0x0800;
+        target_arch = "powerpc64",
+    ));
+    #[cfg(target_os = "linux")]
+    const OPEN_NOFOLLOW: i32 = if LINUX_ARM_PPC { 0x10000 } else { 0x20000 };
+    #[cfg(target_os = "linux")]
+    const OPEN_DIRECTORY: i32 = if LINUX_ARM_PPC { 0x4000 } else { 0x10000 };
+    #[cfg(target_os = "linux")]
+    const OPEN_NONBLOCK: i32 = if cfg!(any(target_arch = "mips", target_arch = "mips64")) {
+        0x0080
+    } else if cfg!(any(target_arch = "sparc", target_arch = "sparc64")) {
+        0x4000
+    } else {
+        0x0800
+    };
+    #[cfg(target_os = "linux")]
+    pub const ERRNO_LOOP: i32 = if cfg!(any(target_arch = "mips", target_arch = "mips64")) {
+        90
+    } else if cfg!(any(target_arch = "sparc", target_arch = "sparc64")) {
+        62
+    } else {
+        40
+    };
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-const OPEN_NOFOLLOW: i32 = 0x0100;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-const OPEN_NONBLOCK: i32 = 0x0004;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-const OPEN_DIRECTORY: i32 = 0x0010_0000;
+    #[cfg(not(target_os = "linux"))]
+    const OPEN_NOFOLLOW: i32 = 0x0100;
+    #[cfg(not(target_os = "linux"))]
+    const OPEN_NONBLOCK: i32 = 0x0004;
+    #[cfg(not(target_os = "linux"))]
+    pub const ERRNO_LOOP: i32 = 62;
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    const OPEN_DIRECTORY: i32 = 0x0010_0000;
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+    const OPEN_DIRECTORY: i32 = 0x0002_0000;
+    #[cfg(target_os = "netbsd")]
+    const OPEN_DIRECTORY: i32 = 0x0020_0000;
 
-#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-const OPEN_NOFOLLOW: i32 = 0x0100;
-#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-const OPEN_NONBLOCK: i32 = 0x0004;
-#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-const OPEN_DIRECTORY: i32 = 0x0002_0000;
-
-#[cfg(target_os = "netbsd")]
-const OPEN_NOFOLLOW: i32 = 0x0100;
-#[cfg(target_os = "netbsd")]
-const OPEN_NONBLOCK: i32 = 0x0004;
-#[cfg(target_os = "netbsd")]
-const OPEN_DIRECTORY: i32 = 0x0020_0000;
-
-#[cfg(all(
-    unix,
-    not(any(
+    #[cfg(not(any(
         target_os = "linux",
         target_os = "macos",
         target_os = "ios",
         target_os = "freebsd",
         target_os = "openbsd",
-        target_os = "netbsd"
-    ))
-))]
-compile_error!("verify O_NOFOLLOW, O_NONBLOCK, and O_DIRECTORY for this Unix target");
+        target_os = "netbsd",
+    )))]
+    compile_error!("verify O_NOFOLLOW, O_NONBLOCK, and O_DIRECTORY for this Unix target");
 
-#[cfg(unix)]
-const OPEN_NOFOLLOW_NONBLOCK: i32 = OPEN_NOFOLLOW | OPEN_NONBLOCK;
-#[cfg(unix)]
-const OPEN_DIR_FLAGS: i32 = OPEN_NOFOLLOW | OPEN_NONBLOCK | OPEN_DIRECTORY;
-
-#[cfg(all(target_os = "linux", any(target_arch = "mips", target_arch = "mips64")))]
-const ERRNO_LOOP: i32 = 90;
-#[cfg(all(target_os = "linux", any(target_arch = "sparc", target_arch = "sparc64")))]
-const ERRNO_LOOP: i32 = 62;
-#[cfg(all(
-    target_os = "linux",
-    not(any(
-        target_arch = "mips",
-        target_arch = "mips64",
-        target_arch = "sparc",
-        target_arch = "sparc64"
-    ))
-))]
-const ERRNO_LOOP: i32 = 40;
-#[cfg(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd"
-))]
-const ERRNO_LOOP: i32 = 62;
+    pub const OPEN_NOFOLLOW_NONBLOCK: i32 = OPEN_NOFOLLOW | OPEN_NONBLOCK;
+    pub const OPEN_DIR_FLAGS: i32 = OPEN_NOFOLLOW | OPEN_NONBLOCK | OPEN_DIRECTORY;
+}
 
 /// The disk, under a root nothing may reach out of.
 ///
@@ -320,7 +256,7 @@ fn within(root: &Path, at: &Path) -> bool {
 /// The refusal an `io::Error` is. §9.5 lists which each function may give.
 fn why(e: &std::io::Error) -> Refusal {
     #[cfg(unix)]
-    if e.raw_os_error() == Some(ERRNO_LOOP) {
+    if e.raw_os_error() == Some(os::ERRNO_LOOP) {
         return Refusal::Denied;
     }
     match e.kind() {
@@ -337,7 +273,7 @@ fn why(e: &std::io::Error) -> Refusal {
 fn open_dir_nofollow(path: &Path) -> std::io::Result<std::fs::File> {
     use std::os::unix::fs::OpenOptionsExt as _;
     let mut opts = std::fs::OpenOptions::new();
-    opts.read(true).custom_flags(OPEN_DIR_FLAGS);
+    opts.read(true).custom_flags(os::OPEN_DIR_FLAGS);
     opts.open(path)
 }
 
@@ -684,7 +620,7 @@ impl Disk {
         #[cfg(unix)]
         {
             use std::os::unix::fs::OpenOptionsExt as _;
-            opts.custom_flags(OPEN_NOFOLLOW_NONBLOCK);
+            opts.custom_flags(os::OPEN_NOFOLLOW_NONBLOCK);
         }
         let file = match opts.open(at) {
             Ok(f) => f,
@@ -735,7 +671,7 @@ impl Disk {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::OpenOptionsExt as _;
-                opts.custom_flags(OPEN_NOFOLLOW_NONBLOCK);
+                opts.custom_flags(os::OPEN_NOFOLLOW_NONBLOCK);
             }
             match opts.open(&candidate) {
                 Ok(f) => break (candidate, f),

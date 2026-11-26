@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
-use nether_bury::{Answers, HaltKind, bury_with};
+use nether_bury::{Answers, bury_with};
 use nether_core::{Capability, Depth, Prim};
 use nether_ledger::{Cairn, Call, Node, Span, Store, StoreError, Stored, Value};
 use nether_syntax::print;
@@ -17,10 +17,9 @@ use nether_world::{
     Declared, Disk, Entropy, Env, Ledger, Net, Recorder, Replay, Unrecorded, World,
 };
 
-use crate::{FAILED, code, json, usage_error};
-
-/// The budget, as §8.2 gives `bury` one.
-const DEFAULT_FUEL: u64 = 1_000_000;
+use crate::{
+    DEFAULT_FUEL, FAILED, bad_usage, code, json, parse_fuel, split_flag, take_val, usage_error,
+};
 
 /// What one invocation asked for. §8.3, and §8.3.1 for the declaration.
 struct Asked<'a> {
@@ -55,22 +54,20 @@ impl Default for Asked<'_> {
     }
 }
 
-const USAGE: &str = "usage: nether exhume <cairn> [--grant <cap>]... \
+pub(crate) const USAGE: &str = "usage: nether exhume <cairn> [--grant <cap>]... \
                      [--declare <name>=<value>]...\n       [--clock <seconds>] \
                      [--target <triple>] [--root <dir>] [--reach <host[:port]>]...\n       \
                      [--load <path>]... [--fuel <n>] [--replay] [--json]";
 
 fn wrong(what: &str) -> ExitCode {
-    eprintln!("nether: {what}");
-    eprintln!("{USAGE}");
-    usage_error()
+    bad_usage(what, USAGE)
 }
 
 impl<'a> Asked<'a> {
-    /// Read the flags, or say which one was wrong.
-    fn parse(args: &'a [String]) -> Result<Self, ExitCode> {
+    /// Read the flags, or say which one was wrong. `Ok(None)` means help was printed.
+    fn parse(args: &'a [String]) -> Result<Option<Self>, ExitCode> {
         let mut it = Self::default();
-        let mut fuel_set = false;
+        let mut fuel: Option<u64> = None;
         let mut end_opts = false;
         let mut rest = args.iter();
         while let Some(arg) = rest.next() {
@@ -81,65 +78,70 @@ impl<'a> Asked<'a> {
                 it.name = Some(arg.as_str());
                 continue;
             }
-            match arg.as_str() {
-                "--" => end_opts = true,
-                "--json" => it.wants_json = true,
-                "--replay" => it.replaying = true,
-                "--grant" => {
-                    let cap = grant(rest.next())?;
+            let (flag, inline) = split_flag(arg);
+            match (flag, inline) {
+                ("--", None) => end_opts = true,
+                ("--help" | "-h", None) => {
+                    println!("{USAGE}");
+                    return Ok(None);
+                }
+                ("--json", None) => it.wants_json = true,
+                ("--replay", None) => it.replaying = true,
+                ("--grant", inline) => {
+                    let cap = grant(take_val(inline, &mut rest))?;
                     if !it.granted.contains(&cap) {
                         it.granted.push(cap);
                     }
                 }
-                "--declare" => it.declared = declare(it.declared, rest.next())?,
-                "--clock" => match rest.next().map(|n| n.parse()) {
+                ("--declare", inline) => {
+                    it.declared = declare(it.declared, take_val(inline, &mut rest))?;
+                }
+                ("--clock", inline) => match take_val(inline, &mut rest).map(str::parse) {
                     Some(Ok(_)) if it.clock.is_some() => {
                         return Err(wrong("`--clock` is given once"));
                     }
                     Some(Ok(n)) => it.clock = Some(n),
                     _ => return Err(wrong("`--clock` wants whole seconds since the epoch")),
                 },
-                "--target" => match rest.next() {
+                ("--target", inline) => match take_val(inline, &mut rest) {
                     Some(_) if it.target.is_some() => {
                         return Err(wrong("`--target` is given once"));
                     }
                     Some(t) if !t.is_empty() && !t.starts_with("--") => it.target = Some(t),
                     _ => return Err(wrong("`--target` wants a triple")),
                 },
-                "--fuel" => match rest.next().map(|n| n.parse::<u64>()) {
-                    Some(Ok(_)) if fuel_set => return Err(wrong("`--fuel` is given once")),
-                    Some(Ok(n)) => {
-                        it.fuel = n;
-                        fuel_set = true;
-                    }
-                    _ => return Err(wrong("`--fuel` wants a number of steps")),
-                },
-                "--reach" => match rest.next() {
-                    Some(h) if !h.is_empty() && !h.starts_with("--") => it.reach.push(h.clone()),
+                ("--fuel", inline) => {
+                    parse_fuel(&mut fuel, take_val(inline, &mut rest), USAGE)?;
+                }
+                ("--reach", inline) => match take_val(inline, &mut rest) {
+                    Some(h) if !h.is_empty() && !h.starts_with("--") => it.reach.push(h.to_owned()),
                     _ => return Err(wrong("`--reach` wants a host, and optionally a port")),
                 },
                 // §8.3.4: once. Two roots would be two answers to one `read`.
-                "--root" => match rest.next() {
+                ("--root", inline) => match take_val(inline, &mut rest) {
                     Some(r) if !r.is_empty() && !r.starts_with("--") && it.root.is_none() => {
                         it.root = Some(r);
                     }
                     Some(_) if it.root.is_some() => return Err(wrong("`--root` is given once")),
                     _ => return Err(wrong("`--root` wants a directory")),
                 },
-                "--load" => match rest.next() {
-                    Some(p) if !p.is_empty() && !p.starts_with("--") => it.load.push(p.clone()),
+                ("--load", inline) => match take_val(inline, &mut rest) {
+                    Some(p) if !p.is_empty() && !p.starts_with("--") => it.load.push(p.to_owned()),
                     _ => return Err(wrong("`--load` wants the path of a shared object")),
                 },
-                other if other.starts_with("--") => {
-                    return Err(wrong(&format!("unknown option {other}")));
+                (other, _) if other.starts_with('-') && other != "-" => {
+                    return Err(wrong(&format!("unknown option `{arg}`")));
                 }
                 // `lamp` refuses this too. Taking two and using one is the
                 // same as being handed a cairn and exhuming a different one.
                 _ if it.name.is_some() => return Err(wrong("one cairn at a time")),
-                other => it.name = Some(other),
+                _ => it.name = Some(arg.as_str()),
             }
         }
-        it.settled()
+        if let Some(n) = fuel {
+            it.fuel = n;
+        }
+        it.settled().map(Some)
     }
 
     /// The invocations §8.3 and §8.3.1 refuse outright.
@@ -208,8 +210,8 @@ fn unused(flag: &str, grant: &str, section: &str, says: &str) -> ExitCode {
 }
 
 /// One `--grant`, by the names §9.1 fixes.
-fn grant(arg: Option<&String>) -> Result<Capability, ExitCode> {
-    match arg.map(|c| Capability::from_name(c)) {
+fn grant(arg: Option<&str>) -> Result<Capability, ExitCode> {
+    match arg.map(Capability::from_name) {
         Some(Some(cap)) => Ok(cap),
         Some(None) => {
             eprintln!("nether: no capability by that name");
@@ -221,7 +223,7 @@ fn grant(arg: Option<&String>) -> Result<Capability, ExitCode> {
 }
 
 /// One `--declare name=value`. §8.3.1: an empty value declares and unsets.
-fn declare(so_far: Declared, arg: Option<&String>) -> Result<Declared, ExitCode> {
+fn declare(so_far: Declared, arg: Option<&str>) -> Result<Declared, ExitCode> {
     let Some((name, value)) = arg.and_then(|d| d.split_once('=')) else {
         return Err(wrong("`--declare` wants <name>=<value>"));
     };
@@ -238,7 +240,8 @@ fn declare(so_far: Declared, arg: Option<&String>) -> Result<Declared, ExitCode>
 /// `nether exhume <cairn> [--grant <cap>]... [--declare <name>=<value>]...`
 pub fn run(args: &[String]) -> ExitCode {
     let asked = match Asked::parse(args) {
-        Ok(asked) => asked,
+        Ok(Some(asked)) => asked,
+        Ok(None) => return ExitCode::SUCCESS,
         Err(code) => return code,
     };
     let store = if asked.replaying {
@@ -286,10 +289,7 @@ fn questions(store: &Store, holes: &[Cairn]) -> Result<Vec<(Call, Span)>, ExitCo
                 Err(ExitCode::from(code::MALFORMED))
             }
             Err(StoreError::Absent(_)) => Err(no_such_hole(*h)),
-            Err(e) => {
-                eprintln!("nether: {e}");
-                Err(crate::closing::store_exit(&e))
-            }
+            Err(e) => Err(crate::closing::store_err(&e)),
         })
         .collect()
 }
@@ -340,10 +340,7 @@ fn world_from(asked: &Asked) -> Result<World, ExitCode> {
 }
 
 fn gather_replay(store: &Store, witnesses: &[Cairn], holes: &[Cairn]) -> Result<Answers, ExitCode> {
-    let have = Replay::of_trace(store, witnesses).map_err(|e| {
-        eprintln!("nether: {e}");
-        crate::closing::store_exit(&e)
-    })?;
+    let have = Replay::of_trace(store, witnesses).map_err(|e| crate::closing::store_err(&e))?;
     let asked = questions(store, holes)?;
     if let Some((call, _)) = asked.first() {
         // Any open hole in `trace.residue` was NOT answered by `trace.witnesses`
@@ -394,10 +391,7 @@ fn prior_read_answers(
                 );
                 return Err(ExitCode::from(code::MALFORMED));
             }
-            Err(e) => {
-                eprintln!("nether: {e}");
-                return Err(crate::closing::store_exit(&e));
-            }
+            Err(e) => return Err(crate::closing::store_err(&e)),
         }
     }
     Ok(prior)
@@ -461,32 +455,19 @@ fn answer_holes(
     Ok(answers)
 }
 
-fn first_trace_diff(orig: &Node, next: &Node) -> String {
-    let (
-        Node::Trace {
-            residue: r1,
-            holes: h1,
-            witnesses: w1,
-            deposits: d1,
-            source: s1,
-            depth: dp1,
-            unrecorded: u1,
-        },
-        Node::Trace {
-            residue: r2,
-            holes: h2,
-            witnesses: w2,
-            deposits: d2,
-            source: s2,
-            depth: dp2,
-            unrecorded: u2,
-        },
-    ) = (orig, next)
-    else {
-        return "trace node shape changed".to_string();
-    };
-    if r1 != r2 {
-        return format!("residue: expected {}, got {}", r1.short(), r2.short());
+struct TraceParts {
+    residue: Cairn,
+    holes: Vec<Cairn>,
+    witnesses: Vec<Cairn>,
+    deposits: Vec<Cairn>,
+    source: Cairn,
+    depth: u8,
+    unrecorded: bool,
+}
+
+fn first_trace_diff(orig: &TraceParts, next: &TraceParts) -> String {
+    if orig.residue != next.residue {
+        return format!("residue: expected {}, got {}", orig.residue.short(), next.residue.short());
     }
     let diff_list = |label: &str, a: &[Cairn], b: &[Cairn]| -> Option<String> {
         for (i, (x, y)) in a.iter().zip(b).enumerate() {
@@ -499,31 +480,40 @@ fn first_trace_diff(orig: &Node, next: &Node) -> String {
         }
         None
     };
-    if let Some(d) = diff_list("holes", h1, h2)
-        .or_else(|| diff_list("witnesses", w1, w2))
-        .or_else(|| diff_list("deposits", d1, d2))
+    if let Some(d) = diff_list("holes", &orig.holes, &next.holes)
+        .or_else(|| diff_list("witnesses", &orig.witnesses, &next.witnesses))
+        .or_else(|| diff_list("deposits", &orig.deposits, &next.deposits))
     {
         return d;
     }
-    if s1 != s2 {
-        return format!("source: expected {}, got {}", s1.short(), s2.short());
+    if orig.source != next.source {
+        return format!("source: expected {}, got {}", orig.source.short(), next.source.short());
     }
-    if dp1 != dp2 {
-        return format!("depth: expected {dp1}, got {dp2}");
+    if orig.depth != next.depth {
+        return format!("depth: expected {}, got {}", orig.depth, next.depth);
     }
-    if u1 != u2 {
-        return format!("unrecorded: expected {u1}, got {u2}");
+    if orig.unrecorded != next.unrecorded {
+        return format!("unrecorded: expected {}, got {}", orig.unrecorded, next.unrecorded);
     }
     "trace hash differed".to_string()
 }
 
 fn finish_replay(
     cairn: Cairn,
-    orig: &Node,
-    deeper: &Node,
+    orig: &TraceParts,
+    deeper: &TraceParts,
     wants_json: bool,
 ) -> Result<(), ExitCode> {
-    let next = Stored::Node(deeper.clone()).cairn();
+    let node = Node::Trace {
+        residue: deeper.residue,
+        holes: deeper.holes.clone(),
+        witnesses: deeper.witnesses.clone(),
+        deposits: deeper.deposits.clone(),
+        source: deeper.source,
+        depth: deeper.depth,
+        unrecorded: deeper.unrecorded,
+    };
+    let next = Stored::Node(node).cairn();
     if next == cairn {
         if wants_json {
             println!("{{\"cairn\":\"{cairn}\",\"identical\":true}}");
@@ -557,16 +547,13 @@ fn emit_sealed(store: &Store, told: &Sealed, wants_json: bool) {
 fn replay_trace(
     store: &Store,
     cairn: Cairn,
-    orig_trace: &Node,
+    orig: &TraceParts,
     buried_residue: &nether_bury::Residue,
     residue_cairn: Cairn,
     recorded: Vec<Cairn>,
     wants_json: bool,
 ) -> Result<(), ExitCode> {
-    let Node::Trace { deposits, source, unrecorded: marked, .. } = orig_trace else {
-        unreachable!();
-    };
-    let unrecorded = *marked || crate::closing::unrecorded(store, &recorded)?;
+    let unrecorded = orig.unrecorded || crate::closing::unrecorded(store, &recorded)?;
     // Replay verifies equality without mutating the store; compute depth
     // of any replayed holes from `buried_residue.named` rather than `store`.
     let mut replay_hole_depth = buried_residue.depth.get();
@@ -578,16 +565,16 @@ fn replay_trace(
         }
     }
     let deepest = crate::closing::depth(store, replay_hole_depth, &[], &recorded)?;
-    let deeper = Node::Trace {
+    let deeper = TraceParts {
         residue: residue_cairn,
         holes: buried_residue.holes.clone(),
         unrecorded,
-        deposits: crate::closing::deposits(deposits, &buried_residue.deposits),
+        deposits: crate::closing::deposits(&orig.deposits, &buried_residue.deposits),
         witnesses: recorded,
-        source: *source,
+        source: orig.source,
         depth: deepest,
     };
-    finish_replay(cairn, orig_trace, &deeper, wants_json)
+    finish_replay(cairn, orig, &deeper, wants_json)
 }
 
 fn reject_unrecorded_replay(cairn: Cairn) -> ExitCode {
@@ -600,44 +587,52 @@ fn reject_unrecorded_replay(cairn: Cairn) -> ExitCode {
     FAILED
 }
 
-fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
-    let (replaying, wants_json) = (asked.replaying, asked.wants_json);
-    let Ok(Stored::Node(orig_trace @ Node::Trace { .. })) = store.get(cairn) else {
+fn load_trace(store: &Store, cairn: Cairn) -> Result<TraceParts, ExitCode> {
+    let Ok(Stored::Node(Node::Trace {
+        residue,
+        holes,
+        witnesses,
+        deposits,
+        source,
+        depth,
+        unrecorded,
+    })) = store.get(cairn)
+    else {
         return Err(crate::not_a_trace(store, cairn));
     };
-    let Node::Trace {
-        residue,
-        ref holes,
-        ref witnesses,
-        ref deposits,
-        source,
-        depth: orig_depth,
-        unrecorded: marked,
-    } = orig_trace
-    else {
-        unreachable!();
-    };
+    Ok(TraceParts { residue, holes, witnesses, deposits, source, depth, unrecorded })
+}
 
-    let (text, unit) = crate::closing::residue_unit(store, cairn, residue)?;
+fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
+    let (replaying, wants_json) = (asked.replaying, asked.wants_json);
+    let orig = load_trace(store, cairn)?;
+
+    let (text, unit) = crate::closing::residue_unit(store, cairn, orig.residue)?;
     let shown = format!("{}:residue", cairn.short());
 
     // Validate holes first to preserve `no_such_hole` diagnostics, then check
     // source, deposits, witnesses, depth, and unrecorded invariants upfront.
-    let _ = questions(store, holes)?;
+    let _ = questions(store, &orig.holes)?;
     let prior_unrecorded = crate::closing::verify_trace_parts(
-        store, source, deposits, holes, witnesses, orig_depth, marked,
+        store,
+        orig.source,
+        &orig.deposits,
+        &orig.holes,
+        &orig.witnesses,
+        orig.depth,
+        orig.unrecorded,
     )?;
-    let _ = prior_read_answers(store, witnesses)?;
-    if replaying && (marked || prior_unrecorded) {
+    let _ = prior_read_answers(store, &orig.witnesses)?;
+    if replaying && (orig.unrecorded || prior_unrecorded) {
         return Err(reject_unrecorded_replay(cairn));
     }
 
     let mut said: Vec<(Call, Cairn)> = Vec::new();
-    let mut recorded: Vec<Cairn> = witnesses.clone();
+    let mut recorded: Vec<Cairn> = orig.witnesses.clone();
     let answers = if replaying {
-        gather_replay(store, witnesses, holes)?
+        gather_replay(store, &orig.witnesses, &orig.holes)?
     } else {
-        answer_holes(store, asked, holes, witnesses, &mut said, &mut recorded)?
+        answer_holes(store, asked, &orig.holes, &orig.witnesses, &mut said, &mut recorded)?
     };
 
     if !replaying && said.is_empty() {
@@ -645,8 +640,8 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
             was: cairn,
             now: cairn,
             said,
-            depth: orig_depth,
-            holes: holes.clone(),
+            depth: orig.depth,
+            holes: orig.holes,
             spent: 0,
             any_granted: !asked.granted.is_empty(),
         };
@@ -656,29 +651,18 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
 
     // `unit` was parsed from `trace.residue`, so spans generated during
     // re-burial are byte offsets into `residue` rather than `source`.
-    let buried_residue = match bury_with(&unit, residue, asked.fuel, &answers) {
-        Ok(r) => r,
-        Err(halt) => {
-            eprint!(
-                "{}",
-                nether_core::report(&halt.diagnostic(), &String::from_utf8_lossy(&text), &shown)
-            );
-            return Err(match halt.kind {
-                HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
-                _ => FAILED,
-            });
-        }
-    };
+    let buried_residue = bury_with(&unit, orig.residue, asked.fuel, &answers)
+        .map_err(|h| crate::closing::halt_exit(&h, &String::from_utf8_lossy(&text), &shown))?;
 
     let printed = print(&buried_residue.as_unit(&unit));
     let residue_obj = Stored::Value(Value::Bytes(printed.into_bytes()));
-    let unrecorded = marked || crate::closing::unrecorded(store, &recorded)?;
+    let unrecorded = orig.unrecorded || crate::closing::unrecorded(store, &recorded)?;
 
     if replaying {
         return replay_trace(
             store,
             cairn,
-            &orig_trace,
+            &orig,
             &buried_residue,
             residue_obj.cairn(),
             recorded,
@@ -696,9 +680,9 @@ fn dig_up(store: &Store, cairn: Cairn, asked: &Asked) -> Result<(), ExitCode> {
         residue: next_residue,
         holes: buried_residue.holes.clone(),
         unrecorded,
-        deposits: crate::closing::deposits(deposits, &buried_residue.deposits),
+        deposits: crate::closing::deposits(&orig.deposits, &buried_residue.deposits),
         witnesses: recorded,
-        source,
+        source: orig.source,
         depth: deepest,
     };
     let next = crate::kept(store, &Stored::Node(deeper))?;

@@ -10,21 +10,19 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
-use nether_bury::{HaltKind, bury};
-use nether_core::{Capability, Depth, report};
+use nether_bury::bury;
+use nether_core::{Capability, Depth};
 use nether_ledger::{Cairn, Node, Store, Stored, Value};
 use nether_syntax::print;
 
 use crate::memo::Remembered;
-use crate::{FAILED, code, json, usage_error};
+use crate::{
+    DEFAULT_FUEL, FAILED, bad_usage, code, json, parse_fuel, split_flag, take_val, usage_error,
+};
 
-/// The budget a burial runs under when nobody says otherwise.
-///
-/// §8.2 requires this to be finite; it is reported on request rather than
-/// recorded in the trace, because a budget that bound leaves no trace.
-const DEFAULT_FUEL: u64 = 1_000_000;
+pub(crate) const USAGE: &str = "usage: nether bury <file.nc> [--fuel <n>] [--json]";
 
-/// `nether bury <file.nc> [--grant <cap>]... [--fuel <n>] [--json]`
+/// `nether bury <file.nc> [--fuel <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
     let mut wants_json = false;
     let mut fuel: Option<u64> = None;
@@ -36,27 +34,25 @@ pub fn run(args: &[String]) -> ExitCode {
     while let Some(arg) = rest.next() {
         if end_opts {
             if path.is_some() {
-                eprintln!("nether: one file at a time");
-                return usage_error();
+                return bad_usage("one file at a time", USAGE);
             }
             path = Some(arg.as_str());
             continue;
         }
-        match arg.as_str() {
-            "--" => end_opts = true,
-            "--json" => wants_json = true,
-            "--fuel" => match rest.next().map(|n| n.parse::<u64>()) {
-                Some(Ok(_)) if fuel.is_some() => {
-                    eprintln!("nether: --fuel is given once");
-                    return usage_error();
+        let (flag, inline) = split_flag(arg);
+        match (flag, inline) {
+            ("--", None) => end_opts = true,
+            ("--help" | "-h", None) => {
+                println!("{USAGE}");
+                return ExitCode::SUCCESS;
+            }
+            ("--json", None) => wants_json = true,
+            ("--fuel", inline) => {
+                if let Err(c) = parse_fuel(&mut fuel, take_val(inline, &mut rest), USAGE) {
+                    return c;
                 }
-                Some(Ok(n)) => fuel = Some(n),
-                _ => {
-                    eprintln!("nether: --fuel wants a number of steps");
-                    return usage_error();
-                }
-            },
-            "--grant" => match rest.next().map(|c| Capability::from_name(c)) {
+            }
+            ("--grant", inline) => match take_val(inline, &mut rest).map(Capability::from_name) {
                 Some(Some(cap)) => granted.push(cap),
                 Some(None) => {
                     eprintln!("nether: no capability by that name");
@@ -65,25 +61,18 @@ pub fn run(args: &[String]) -> ExitCode {
                     );
                     return usage_error();
                 }
-                None => {
-                    eprintln!("nether: --grant wants a capability");
-                    return usage_error();
-                }
+                None => return bad_usage("`--grant` wants a capability", USAGE),
             },
-            other if other.starts_with("--") => {
-                eprintln!("nether: unknown option {other}");
-                return usage_error();
+            (other, _) if other.starts_with('-') && other != "-" => {
+                return bad_usage(&format!("unknown option `{arg}`"), USAGE);
             }
-            _ if path.is_some() => {
-                eprintln!("nether: one file at a time");
-                return usage_error();
-            }
-            other => path = Some(other),
+            _ if path.is_some() => return bad_usage("one file at a time", USAGE),
+            _ => path = Some(arg.as_str()),
         }
     }
 
     let Some(path) = path else {
-        eprintln!("usage: nether bury <file.nc> [--grant <cap>]... [--fuel <n>] [--json]");
+        eprintln!("{USAGE}");
         return usage_error();
     };
 
@@ -91,9 +80,11 @@ pub fn run(args: &[String]) -> ExitCode {
     // `exhume`'s work, so a `--grant` here would validate its argument, change
     // nothing, and look like it had worked. §8.2, and the same reasoning as §8.0.
     if let Some(cap) = granted.first() {
-        eprintln!("nether: `bury` cannot honour a grant yet, so it will not take one.");
+        eprintln!(
+            "nether: `bury` never grants capabilities; bury first, then `nether exhume --grant`."
+        );
         eprintln!();
-        eprintln!("  Burial holds no capabilities: every world-touching expression");
+        eprintln!("  §8.2: burial holds no capabilities. Every world-touching expression");
         eprintln!("  becomes a hole, and answering one is what `exhume` is for.");
         eprintln!();
         eprintln!("    nether bury {path}");
@@ -138,18 +129,8 @@ fn inter(path: &Path, fuel: u64, wants_json: bool) -> Result<(), ExitCode> {
     let (store, done) = if let Some(r) = recalled {
         (ro_store, r)
     } else {
-        let residue = match bury(&unit, source_cairn, fuel) {
-            Ok(residue) => residue,
-            Err(halt) => {
-                eprint!("{}", report(&halt.diagnostic(), &text, &shown));
-                return Err(match halt.kind {
-                    // §8.8 gives fuel its own code: it is the one failure a
-                    // larger budget might fix.
-                    HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
-                    _ => FAILED,
-                });
-            }
-        };
+        let residue = bury(&unit, source_cairn, fuel)
+            .map_err(|h| crate::closing::halt_exit(&h, &text, &shown))?;
 
         // Source, everything burial named, then the residue as source, then the trace.
         // Nothing was written (and no store directory created) until burial finished.

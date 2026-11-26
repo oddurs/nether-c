@@ -9,16 +9,16 @@ use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::process::ExitCode;
 
-use nether_bury::{Answers, HaltKind, bury_with};
+use nether_bury::{Answers, bury_with};
 use nether_core::{Depth, Prim};
 use nether_ledger::{AnswerOf, Cairn, Call, Node, Span, Store, Stored, Value};
 use nether_syntax::print;
 use nether_world::Replay;
 
-use crate::{FAILED, code, usage_error};
+use crate::{DEFAULT_FUEL, FAILED, bad_usage, code, parse_fuel, split_flag, take_val, usage_error};
 
-/// The budget, as §8.2 gives `bury` one.
-const DEFAULT_FUEL: u64 = 1_000_000;
+pub(crate) const USAGE: &str =
+    "usage: nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]";
 
 /// `nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
@@ -32,60 +32,48 @@ pub fn run(args: &[String]) -> ExitCode {
     while let Some(arg) = rest.next() {
         if end_opts {
             if trace.is_some() {
-                eprintln!("nether: one trace cairn at a time");
-                return usage_error();
+                return bad_usage("one trace cairn at a time", USAGE);
             }
             trace = Some(arg.as_str());
             continue;
         }
-        match arg.as_str() {
-            "--" => end_opts = true,
-            "--json" => wants_json = true,
-            "--fuel" => match rest.next().map(|n| n.parse::<u64>()) {
-                Some(Ok(_)) if fuel.is_some() => {
-                    eprintln!("nether: --fuel is given once");
-                    return usage_error();
+        let (flag, inline) = split_flag(arg);
+        match (flag, inline) {
+            ("--", None) => end_opts = true,
+            ("--help" | "-h", None) => {
+                println!("{USAGE}");
+                return ExitCode::SUCCESS;
+            }
+            ("--json", None) => wants_json = true,
+            ("--fuel", inline) => {
+                if let Err(c) = parse_fuel(&mut fuel, take_val(inline, &mut rest), USAGE) {
+                    return c;
                 }
-                Some(Ok(n)) => fuel = Some(n),
-                _ => {
-                    eprintln!("nether: --fuel wants a number of steps");
-                    return usage_error();
-                }
-            },
-            "--replace" => match rest.next() {
+            }
+            ("--replace", inline) => match take_val(inline, &mut rest) {
                 Some(v) if !v.starts_with("--") && replace.is_none() => replace = Some(v),
                 _ => {
-                    eprintln!(
-                        "usage: nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]"
-                    );
+                    eprintln!("{USAGE}");
                     return usage_error();
                 }
             },
-            "--with" => match rest.next() {
+            ("--with", inline) => match take_val(inline, &mut rest) {
                 Some(v) if !v.starts_with("--") && with.is_none() => with = Some(v),
                 _ => {
-                    eprintln!(
-                        "usage: nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]"
-                    );
+                    eprintln!("{USAGE}");
                     return usage_error();
                 }
             },
-            other if other.starts_with("--") => {
-                eprintln!("nether: unknown option {other}");
-                return usage_error();
+            (other, _) if other.starts_with('-') && other != "-" => {
+                return bad_usage(&format!("unknown option `{arg}`"), USAGE);
             }
-            _ if trace.is_some() => {
-                eprintln!("nether: one trace cairn at a time");
-                return usage_error();
-            }
-            other => trace = Some(other),
+            _ if trace.is_some() => return bad_usage("one trace cairn at a time", USAGE),
+            _ => trace = Some(arg.as_str()),
         }
     }
 
     let (Some(trace), Some(replace), Some(with)) = (trace, replace, with) else {
-        eprintln!(
-            "usage: nether graft <cairn> --replace <cairn> --with <cairn> [--fuel <n>] [--json]"
-        );
+        eprintln!("{USAGE}");
         return usage_error();
     };
 
@@ -103,9 +91,23 @@ pub fn run(args: &[String]) -> ExitCode {
     };
     let with = match crate::named(&store, with) {
         Ok(c) => c,
-        Err(code) => return code,
+        Err(code) => {
+            if code == ExitCode::from(code::ABSENT) {
+                eprintln!(
+                    "        hint: `nether cairn <file>` hashes without storing; `--with` needs a value already in the ledger."
+                );
+            }
+            return code;
+        }
     };
-    take(&store, trace, replace, with, fuel.unwrap_or(DEFAULT_FUEL), wants_json)
+    take(&store, GraftIds { trace, replace, with }, fuel.unwrap_or(DEFAULT_FUEL), wants_json)
+}
+
+#[derive(Clone, Copy)]
+struct GraftIds {
+    trace: Cairn,
+    replace: Cairn,
+    with: Cairn,
 }
 
 struct PreparedGraft {
@@ -140,6 +142,10 @@ fn wrap_graft_value(
     with: Cairn,
     raw_instead: &Value,
 ) -> Result<Value, ExitCode> {
+    let mismatch = || {
+        eprintln!("nether: {} does not match the return type of `{function}`", with.short());
+        FAILED
+    };
     let refusable = prim.refusable();
     match raw_instead {
         Value::Answer(_) if !refusable => {
@@ -150,33 +156,19 @@ fn wrap_graft_value(
             if let AnswerOf::Given(inner) = ans.as_ref()
                 && !prim_value_matches(prim, inner)
             {
-                eprintln!(
-                    "nether: {} does not match the return type of `{function}`",
-                    with.short()
-                );
-                return Err(FAILED);
+                return Err(mismatch());
             }
             Ok(raw_instead.clone())
         }
-        said if refusable => {
-            if !prim_value_matches(prim, said) {
-                eprintln!(
-                    "nether: {} does not match the return type of `{function}`",
-                    with.short()
-                );
-                return Err(FAILED);
-            }
-            Ok(Value::Answer(Box::new(AnswerOf::Given(said.clone()))))
-        }
         said => {
             if !prim_value_matches(prim, said) {
-                eprintln!(
-                    "nether: {} does not match the return type of `{function}`",
-                    with.short()
-                );
-                return Err(FAILED);
+                return Err(mismatch());
             }
-            Ok(said.clone())
+            Ok(if refusable {
+                Value::Answer(Box::new(AnswerOf::Given(said.clone())))
+            } else {
+                said.clone()
+            })
         }
     }
 }
@@ -190,16 +182,11 @@ fn check_draw_length(
     let Some(&len_cairn) = call.args.first() else {
         return Err(ExitCode::from(code::MALFORMED));
     };
-    let n = match store.get(len_cairn) {
-        Ok(Stored::Value(Value::Int(n))) => n,
-        Ok(_) => {
-            eprintln!("nether: `draw` argument {} is not an integer", len_cairn.short());
-            return Err(ExitCode::from(code::MALFORMED));
-        }
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return Err(crate::closing::store_exit(&e));
-        }
+    let Stored::Value(Value::Int(n)) =
+        store.get(len_cairn).map_err(|e| crate::closing::store_err(&e))?
+    else {
+        eprintln!("nether: `draw` argument {} is not an integer", len_cairn.short());
+        return Err(ExitCode::from(code::MALFORMED));
     };
     let Value::Bytes(bytes) = raw_instead else {
         return Err(FAILED);
@@ -227,23 +214,11 @@ fn prepare_graft(
     replace: Cairn,
     with: Cairn,
 ) -> Result<PreparedGraft, ExitCode> {
-    let told = match Replay::of_trace(store, &witnesses) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return Err(crate::closing::store_exit(&e));
-        }
-    };
-    let raw_instead = match store.get(with) {
-        Ok(Stored::Value(v)) => v,
-        Ok(_) => {
-            eprintln!("nether: {} is not a value in this ledger", with.short());
-            return Err(FAILED);
-        }
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return Err(crate::closing::store_exit(&e));
-        }
+    let told = Replay::of_trace(store, &witnesses).map_err(|e| crate::closing::store_err(&e))?;
+    let Stored::Value(raw_instead) = store.get(with).map_err(|e| crate::closing::store_err(&e))?
+    else {
+        eprintln!("nether: {} is not a value in this ledger", with.short());
+        return Err(FAILED);
     };
     if witnesses.contains(&replace) || told.all().any(|(_, said)| said.cairn() == replace) {
         eprintln!("nether: {} was already answered under {}", replace.short(), trace.short());
@@ -257,16 +232,11 @@ fn prepare_graft(
     let mut earlier_calls: HashSet<Call> = HashSet::new();
     let mut matched: Option<(Call, u8, Span, Value)> = None;
     for hole in holes {
-        let (call, stratum, span) = match store.get(*hole) {
-            Ok(Stored::Node(Node::Hole { call, stratum, span })) => (call, stratum, span),
-            Ok(_) => {
-                eprintln!("nether: hole {} is not a hole node in this ledger", hole.short());
-                return Err(ExitCode::from(code::MALFORMED));
-            }
-            Err(e) => {
-                eprintln!("nether: {e}");
-                return Err(crate::closing::store_exit(&e));
-            }
+        let Stored::Node(Node::Hole { call, stratum, span }) =
+            store.get(*hole).map_err(|e| crate::closing::store_err(&e))?
+        else {
+            eprintln!("nether: hole {} is not a hole node in this ledger", hole.short());
+            return Err(ExitCode::from(code::MALFORMED));
         };
         if !crate::closing::valid_stratum(&call, stratum) {
             eprintln!(
@@ -322,14 +292,7 @@ fn prepare_graft(
     Ok(PreparedGraft { answers, witnesses, call, stratum, span, value, is_read })
 }
 
-fn take(
-    store: &Store,
-    trace: Cairn,
-    replace: Cairn,
-    with: Cairn,
-    fuel: u64,
-    wants_json: bool,
-) -> ExitCode {
+fn take(store: &Store, ids: GraftIds, fuel: u64, wants_json: bool) -> ExitCode {
     let Ok(Stored::Node(Node::Trace {
         residue,
         holes,
@@ -338,9 +301,9 @@ fn take(
         source,
         depth: orig_depth,
         unrecorded: marked,
-    })) = store.get(trace)
+    })) = store.get(ids.trace)
     else {
-        return crate::not_a_trace(store, trace);
+        return crate::not_a_trace(store, ids.trace);
     };
 
     if let Err(code) = crate::closing::verify_trace_parts(
@@ -349,54 +312,40 @@ fn take(
         return code;
     }
 
-    let prep = match prepare_graft(store, trace, &holes, witnesses, replace, with) {
+    let prep = match prepare_graft(store, ids.trace, &holes, witnesses, ids.replace, ids.with) {
         Ok(p) => p,
         Err(code) => return code,
     };
 
-    let (text, unit) = match crate::closing::residue_unit(store, trace, residue) {
+    let (text, unit) = match crate::closing::residue_unit(store, ids.trace, residue) {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    let shown = format!("{}:residue", trace.short());
+    let shown = format!("{}:residue", ids.trace.short());
     let residue = match bury_with(&unit, residue, fuel, &prep.answers) {
         Ok(residue) => residue,
         Err(halt) => {
-            eprint!(
-                "{}",
-                nether_core::report(&halt.diagnostic(), &String::from_utf8_lossy(&text), &shown)
-            );
-            return match halt.kind {
-                HaltKind::OutOfFuel { .. } => ExitCode::from(code::FUEL),
-                _ => FAILED,
-            };
+            return crate::closing::halt_exit(&halt, &String::from_utf8_lossy(&text), &shown);
         }
     };
     if residue.served == 0 {
         eprintln!(
             "nether: hole {} was not reached by {}; refusing to record an unused witness",
-            replace.short(),
-            trace.short()
+            ids.replace.short(),
+            ids.trace.short()
         );
         return FAILED;
     }
-    commit_graft(
-        store, trace, replace, with, &unit, &residue, prep, &deposits, source, marked, wants_json,
-    )
+    commit_graft(store, ids, &unit, &residue, prep, (&deposits, source, marked), wants_json)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn commit_graft(
     store: &Store,
-    trace: Cairn,
-    replace: Cairn,
-    with: Cairn,
+    ids: GraftIds,
     unit: &nether_core::Unit,
     residue: &nether_bury::Residue,
     mut prep: PreparedGraft,
-    deposits: &[Cairn],
-    source: Cairn,
-    marked: bool,
+    (deposits, source, marked): (&[Cairn], Cairn, bool),
     wants_json: bool,
 ) -> ExitCode {
     let (mut reused, mut made) = (0usize, 0usize);
@@ -456,7 +405,8 @@ fn commit_graft(
         Err(code) => return code,
     };
 
-    let told = Grafted { was: trace, now: next, replaced: replace, with, reused, made };
+    let told =
+        Grafted { was: ids.trace, now: next, replaced: ids.replace, with: ids.with, reused, made };
     if wants_json {
         println!("{}", told.json());
     } else {

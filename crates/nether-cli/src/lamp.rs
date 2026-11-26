@@ -15,11 +15,13 @@ use nether_core::{
 };
 use nether_ledger::{AnswerOf, Cairn, Node, Refusal, Store, Stored, Value};
 
-use crate::{FAILED, json, strata::stratum_name, usage_error};
+use crate::{FAILED, bad_usage, json, split_flag, strata::stratum_name, take_val};
 
 /// How far a provenance walk goes when nobody says, and the hard upper bound.
 const DEFAULT_DEPTH: usize = 8;
 const MAX_DEPTH: usize = 64;
+
+pub(crate) const USAGE: &str = "usage: nether lamp <cairn> [--provenance | --at <byte> [--source <path>]] [--depth <n>] [--json]";
 
 /// `nether lamp <cairn> [--provenance | --at <byte> [--source <path>]] [--depth <n>] [--json]`
 pub fn run(args: &[String]) -> ExitCode {
@@ -39,29 +41,36 @@ pub fn run(args: &[String]) -> ExitCode {
             name = Some(arg.clone());
             continue;
         }
-        match arg.as_str() {
-            "--" => end_opts = true,
-            "--provenance" => backwards = true,
-            "--json" => wants_json = true,
-            "--depth" => match rest.next().and_then(|n| n.parse::<usize>().ok()) {
-                Some(_) if depth_opt.is_some() => return complain("`--depth` is given once"),
-                Some(n) => depth_opt = Some(n.min(MAX_DEPTH)),
-                None => return complain("`--depth` wants a number"),
-            },
-            "--at" => match rest.next().and_then(|n| n.parse().ok()) {
+        let (flag, inline) = split_flag(arg);
+        match (flag, inline) {
+            ("--", None) => end_opts = true,
+            ("--help" | "-h", None) => {
+                println!("{USAGE}");
+                return ExitCode::SUCCESS;
+            }
+            ("--provenance", None) => backwards = true,
+            ("--json", None) => wants_json = true,
+            ("--depth", inline) => {
+                match take_val(inline, &mut rest).and_then(|n| n.parse::<usize>().ok()) {
+                    Some(_) if depth_opt.is_some() => return complain("`--depth` is given once"),
+                    Some(n) => depth_opt = Some(n.min(MAX_DEPTH)),
+                    None => return complain("`--depth` wants a number"),
+                }
+            }
+            ("--at", inline) => match take_val(inline, &mut rest).and_then(|n| n.parse().ok()) {
                 Some(_) if at_byte.is_some() => return complain("`--at` is given once"),
                 Some(n) => at_byte = Some(n),
                 None => return complain("`--at` wants a byte offset"),
             },
-            "--source" => match rest.next() {
+            ("--source", inline) => match take_val(inline, &mut rest) {
                 Some(_) if source_path.is_some() => return complain("`--source` is given once"),
-                Some(p) if !p.starts_with("--") => source_path = Some(p.clone()),
+                Some(p) if !p.starts_with("--") => source_path = Some(p.to_owned()),
                 _ => return complain("`--source` wants a path"),
             },
-            other if other.starts_with("--") => {
-                return complain("that is not a flag `lamp` has");
+            (other, _) if other.starts_with('-') && other != "-" => {
+                return complain(&format!("unknown option `{arg}`"));
             }
-            other if name.is_none() => name = Some(other.to_string()),
+            _ if name.is_none() => name = Some(arg.clone()),
             _ => return complain("one cairn at a time"),
         }
     }
@@ -94,11 +103,7 @@ pub fn run(args: &[String]) -> ExitCode {
 }
 
 fn complain(what: &str) -> ExitCode {
-    eprintln!("nether: {what}");
-    eprintln!(
-        "usage: nether lamp <cairn> [--provenance | --at <byte> [--source <path>]] [--depth <n>] [--json]"
-    );
-    usage_error()
+    bad_usage(what, USAGE)
 }
 
 // ── forwards: what is there ─────────────────────────────────────────────────
@@ -106,10 +111,7 @@ fn complain(what: &str) -> ExitCode {
 fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
     let stored = match store.get(cairn) {
         Ok(stored) => stored,
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return crate::closing::store_exit(&e);
-        }
+        Err(e) => return crate::closing::store_err(&e),
     };
     let text = match &stored {
         Stored::Value(v) => value(v),
@@ -118,10 +120,7 @@ fn render(store: &Store, cairn: Cairn, wants_json: bool) -> ExitCode {
         Stored::Node(Node::Trace { .. }) => {
             let found = match deposits(store, cairn) {
                 Ok(found) => found,
-                Err(e) => {
-                    eprintln!("nether: {e}");
-                    return crate::closing::store_exit(&e);
-                }
+                Err(e) => return crate::closing::store_err(&e),
             };
             if found.is_empty() { "nothing was deposited\n".to_string() } else { found.concat() }
         }
@@ -297,15 +296,11 @@ fn provenance(store: &Store, cairn: Cairn, limit: usize, wants_json: bool) -> Ex
     let head = match store.get(cairn) {
         Ok(Stored::Value(v)) => format!("{}  {}", cairn.short(), value(&v)),
         Ok(Stored::Node(n)) => format!("{}  {}", cairn.short(), node(store, &n)),
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return crate::closing::store_exit(&e);
-        }
+        Err(e) => return crate::closing::store_err(&e),
     };
     let mut lines = vec![head];
     if let Err(e) = walk(store, cairn, limit, 0, &mut lines) {
-        eprintln!("nether: {e}");
-        return crate::closing::store_exit(&e);
+        return crate::closing::store_err(&e);
     }
     if wants_json {
         let each: Vec<String> = lines.iter().map(|l| json::string(l)).collect();
@@ -415,10 +410,7 @@ fn inspect_at(
             eprintln!("nether: source {} is not bytes", source.short());
             return ExitCode::from(crate::code::MALFORMED);
         }
-        Err(e) => {
-            eprintln!("nether: {e}");
-            return crate::closing::store_exit(&e);
-        }
+        Err(e) => return crate::closing::store_err(&e),
     };
     let Some(at) =
         u32::try_from(byte).ok().filter(|_| usize::try_from(byte).is_ok_and(|n| n < src.len()))
@@ -439,10 +431,29 @@ fn inspect_at(
         return FAILED;
     };
     let descend = hit.descend.or_else(|| {
-        find_descend(&unit, hit.func, hit.expr, hit.depth, &mut HashSet::new(), &mut HashSet::new())
+        find_origin(&unit, hit.func, hit.expr, hit.depth, &|x| match &x.kind {
+            ExprKind::Descend { capability, body }
+                if capability.stratum() == hit.depth || body.depth == hit.depth =>
+            {
+                Some((*capability, x.span))
+            }
+            _ => None,
+        })
     });
-    let call =
-        find_call(&unit, hit.func, hit.expr, hit.depth, &mut HashSet::new(), &mut HashSet::new());
+    let call = find_origin(&unit, hit.func, hit.expr, hit.depth, &|x| {
+        if let ExprKind::Call { callee, .. } = &x.kind
+            && let Type::Fn { latent, result_depth, .. } = callee.ty
+            && (latent.holds(hit.depth) || result_depth == hit.depth)
+        {
+            let name = match &callee.kind {
+                ExprKind::Prim(p) => Some(p.name().to_string()),
+                ExprKind::Func(id) => unit.func(*id).map(|f| f.name.clone()),
+                _ => None,
+            };
+            return name.map(|n| (n, x.span));
+        }
+        None
+    });
     let nodes = match trace_hits(store, &trace, source, byte, call.as_ref().map(|(_, s)| *s), limit)
     {
         Ok(n) => n,
@@ -547,10 +558,7 @@ fn trace_hits(
         if !seen.insert(at) {
             continue;
         }
-        let stored = store.get(at).map_err(|e| {
-            eprintln!("nether: {e}");
-            crate::closing::store_exit(&e)
-        })?;
+        let stored = store.get(at).map_err(|e| crate::closing::store_err(&e))?;
         let Stored::Node(n) = stored else { continue };
         let (Node::Deposit { span, .. } | Node::Hole { span, .. } | Node::Witness { span, .. }) =
             &n
@@ -578,16 +586,10 @@ fn trace_hits(
     let mut hits = Vec::new();
     for (at, n, span) in matched {
         for r in n.references() {
-            store.get(r).map_err(|e| {
-                eprintln!("nether: {e}");
-                crate::closing::store_exit(&e)
-            })?;
+            store.get(r).map_err(|e| crate::closing::store_err(&e))?;
         }
         let mut lines = vec![format!("{}  {}", at.short(), node(store, &n))];
-        if let Err(e) = walk(store, at, limit, 0, &mut lines) {
-            eprintln!("nether: {e}");
-            return Err(crate::closing::store_exit(&e));
-        }
+        walk(store, at, limit, 0, &mut lines).map_err(|e| crate::closing::store_err(&e))?;
         hits.push(Hit { cairn: at, span, lines });
     }
     Ok(hits)
@@ -707,84 +709,47 @@ fn expr_at<'a>(
     }
 }
 
-fn find_descend(
+fn find_origin<T>(
     unit: &Unit,
     func: Option<&FuncDef>,
     x: &Expr,
     want: Depth,
-    seen: &mut HashSet<nether_core::GlobalId>,
-    seen_locals: &mut HashSet<LocalId>,
-) -> Option<(Capability, Span)> {
+    pred: &impl Fn(&Expr) -> Option<T>,
+) -> Option<T> {
+    fn walk<T>(
+        unit: &Unit,
+        func: Option<&FuncDef>,
+        x: &Expr,
+        seen: &mut HashSet<nether_core::GlobalId>,
+        seen_locals: &mut HashSet<LocalId>,
+        pred: &impl Fn(&Expr) -> Option<T>,
+    ) -> Option<T> {
+        if let Some(hit) = pred(x) {
+            return Some(hit);
+        }
+        if let ExprKind::Local(id) = x.kind {
+            if !seen_locals.insert(id) {
+                return None;
+            }
+            return local_sources(unit, func, id)
+                .into_iter()
+                .find_map(|v| walk(unit, func, v, seen, seen_locals, pred));
+        }
+        if let ExprKind::Global(id) = x.kind {
+            if !seen.insert(id) {
+                return None;
+            }
+            let mut global_locals = HashSet::new();
+            return unit
+                .global(id)
+                .and_then(|g| walk(unit, None, &g.value, seen, &mut global_locals, pred));
+        }
+        children(x).into_iter().find_map(|c| walk(unit, func, c, seen, seen_locals, pred))
+    }
     if want == Depth::PURE {
         return None;
     }
-    if let ExprKind::Descend { capability, body } = &x.kind
-        && (capability.stratum() == want || body.depth == want)
-    {
-        return Some((*capability, x.span));
-    }
-    if let ExprKind::Local(id) = x.kind {
-        if !seen_locals.insert(id) {
-            return None;
-        }
-        return local_sources(unit, func, id)
-            .into_iter()
-            .find_map(|v| find_descend(unit, func, v, want, seen, seen_locals));
-    }
-    if let ExprKind::Global(id) = x.kind {
-        if !seen.insert(id) {
-            return None;
-        }
-        let mut global_locals = HashSet::new();
-        return unit
-            .global(id)
-            .and_then(|g| find_descend(unit, None, &g.value, want, seen, &mut global_locals));
-    }
-    children(x).into_iter().find_map(|c| find_descend(unit, func, c, want, seen, seen_locals))
-}
-
-fn find_call(
-    unit: &Unit,
-    func: Option<&FuncDef>,
-    x: &Expr,
-    want: Depth,
-    seen: &mut HashSet<nether_core::GlobalId>,
-    seen_locals: &mut HashSet<LocalId>,
-) -> Option<(String, Span)> {
-    if want == Depth::PURE {
-        return None;
-    }
-    if let ExprKind::Call { callee, .. } = &x.kind
-        && let Type::Fn { latent, result_depth, .. } = callee.ty
-        && (latent.holds(want) || result_depth == want)
-    {
-        let name = match &callee.kind {
-            ExprKind::Prim(p) => Some(p.name().to_string()),
-            ExprKind::Func(id) => unit.func(*id).map(|f| f.name.clone()),
-            _ => None,
-        };
-        if let Some(name) = name {
-            return Some((name, x.span));
-        }
-    }
-    if let ExprKind::Local(id) = x.kind {
-        if !seen_locals.insert(id) {
-            return None;
-        }
-        return local_sources(unit, func, id)
-            .into_iter()
-            .find_map(|v| find_call(unit, func, v, want, seen, seen_locals));
-    }
-    if let ExprKind::Global(id) = x.kind {
-        if !seen.insert(id) {
-            return None;
-        }
-        let mut global_locals = HashSet::new();
-        return unit
-            .global(id)
-            .and_then(|g| find_call(unit, None, &g.value, want, seen, &mut global_locals));
-    }
-    children(x).into_iter().find_map(|c| find_call(unit, func, c, want, seen, seen_locals))
+    walk(unit, func, x, &mut HashSet::new(), &mut HashSet::new(), pred)
 }
 
 /// Collect every expression that can contribute depth to local `id`: its `Let`

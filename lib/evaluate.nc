@@ -43,20 +43,29 @@ I64 type_suffix(Bytes s, I64 p)
   }
   return token_end(s, start);
 }
+// §3.5: a function's latent annotation is either `@d` (0..=8) or a braced set
+// `@{d1, d2, ...}` of two or more strictly ascending strata in 1..=8.
 I64 latent_suffix(Bytes s, I64 p)
 {
   if (token(s, p) != b"@") { return p; }
   I64 start = skip(s, token_end(s, p));
   if (token(s, start) == b"{") {
     I64 cur = token_end(s, start);
+    I64 prev = 0;
+    I64 count = 0;
     while (true) {
       I64 dpos = skip(s, cur + 0);
-      if (!digit(s, dpos) || number(token(s, dpos)) > 8) {
-        return malformed_source(s);
-      }
+      if (!digit(s, dpos)) { return malformed_source(s); }
+      I64 d = number(token(s, dpos));
+      if (d < 1 || d > 8 || d <= prev) { return malformed_source(s); }
+      prev = d + 0;
+      count += 1;
       I64 after_d = token_end(s, dpos);
       if (token(s, after_d) == b",") { cur = token_end(s, after_d); }
-      else { return expect(s, after_d, b"}"); }
+      else {
+        if (count < 2) { return malformed_source(s); }
+        return expect(s, after_d, b"}");
+      }
     }
   }
   if (!digit(s, start) || number(token(s, start)) > 8) {
@@ -370,6 +379,10 @@ Bytes invoke(Bytes s, Bytes name, Bytes args, I64 ambient,
   if ((callee_ambient & ambient) != callee_ambient) {
     return result(p, problem(b"call requires a deeper ambient stratum", p), memory);
   }
+  // `ambient` bit layout (I64):
+  //   bits 0..=8  (1 << d): held strata (bit 0 = pure is always set)
+  //   bit 16      (65536):  callee received a non-pure argument (skip local @d asserts)
+  //   bit 17      (131072): inside a function body (`return` is allowed)
   I64 arg_d = argument_depth(args);
   I64 body_ambient = callee_ambient | 131072;
   if (arg_d > 0) { body_ambient = body_ambient | 65536; }
@@ -476,6 +489,7 @@ Bytes block_value(Bytes s, I64 p, Bytes env, Bytes locals, I64 ambient, Bytes me
       return finish_return(s, relocate(r, expect(s, cursor(r), b";")),
                            check_env, bind(locals, lname, unit_value()), ambient, checking);
     }
+    // Bit 16 (65536): deep-arg flag; bit 17 (131072): inside-function flag.
     Bytes v = check_binding(s, p, found(r), (ambient & 65536) == 0);
     if (failed(v)) { return result(group_end(s, cursor(r), b"}"), v, memory_of(r)); }
     I64 next = expect(s, cursor(r), b";");
@@ -570,6 +584,7 @@ Bytes check_latent_exact(Bytes s, I64 f, Bytes bound_env, I64 body, I64 declared
   while (d <= 8) {
     I64 bit = 1 << d;
     if ((declared & bit) != 0) {
+      // Keep bit 17 (131072, inside-function) set while probing without `bit`.
       I64 without = (declared ^ bit) | 131072;
       Bytes probe = block_value(s, body, bound_env, b"", without, memory, true);
       if (!failed(found(probe))) {

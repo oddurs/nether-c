@@ -101,7 +101,7 @@ impl Value {
         out
     }
 
-    fn encode_into(&self, out: &mut impl Sink) {
+    fn encode_into(&self, out: &mut dyn Sink) {
         let mut stack = vec![self];
         while let Some(cur) = stack.pop() {
             out.push(cur.tag());
@@ -184,7 +184,7 @@ impl Sink for Count {
 }
 
 /// Lengths and counts are `u64` big-endian, however small they are.
-fn put_len(out: &mut impl Sink, n: usize) {
+fn put_len(out: &mut dyn Sink, n: usize) {
     out.extend_from_slice(&(n as u64).to_be_bytes());
 }
 
@@ -244,7 +244,7 @@ impl Node {
         out
     }
 
-    fn encode_into(&self, out: &mut impl Sink) {
+    fn encode_into(&self, out: &mut dyn Sink) {
         out.extend_from_slice(&[tag::NODE, self.kind()]);
         match self {
             Self::Literal(value) => value.encode_into(out),
@@ -281,20 +281,20 @@ impl Node {
     }
 }
 
-fn put_cairns(out: &mut impl Sink, cairns: &[Cairn]) {
+fn put_cairns(out: &mut dyn Sink, cairns: &[Cairn]) {
     put_len(out, cairns.len());
     for cairn in cairns {
         out.extend_from_slice(cairn.as_bytes());
     }
 }
 
-fn put_span(out: &mut impl Sink, span: &Span) {
+fn put_span(out: &mut dyn Sink, span: &Span) {
     out.extend_from_slice(span.source.as_bytes());
     out.extend_from_slice(&span.start.to_be_bytes());
     out.extend_from_slice(&span.end.to_be_bytes());
 }
 
-fn put_call(out: &mut impl Sink, call: &Call) {
+fn put_call(out: &mut dyn Sink, call: &Call) {
     put_len(out, call.function.len());
     out.extend_from_slice(call.function.as_bytes());
     put_cairns(out, &call.args);

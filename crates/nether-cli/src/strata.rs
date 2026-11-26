@@ -11,7 +11,9 @@ use std::process::ExitCode;
 use nether_core::{Capability, Depth};
 use nether_ledger::{Cairn, Node, Span, Store, StoreError, Stored, Value};
 
-use crate::{code, json, lamp, usage_error};
+use crate::{bad_usage, code, json, lamp, split_flag, usage_error};
+
+pub(crate) const USAGE: &str = "usage: nether strata <cairn> [--json]";
 
 /// `nether strata <cairn> [--json]`
 pub fn run(args: &[String]) -> ExitCode {
@@ -26,12 +28,19 @@ pub fn run(args: &[String]) -> ExitCode {
             name = Some(arg.as_str());
             continue;
         }
-        match arg.as_str() {
-            "--" => end_opts = true,
-            "--json" => wants_json = true,
-            other if other.starts_with("--") => return complain(),
+        let (flag, inline) = split_flag(arg);
+        match (flag, inline) {
+            ("--", None) => end_opts = true,
+            ("--help" | "-h", None) => {
+                println!("{USAGE}");
+                return ExitCode::SUCCESS;
+            }
+            ("--json", None) => wants_json = true,
+            (other, _) if other.starts_with('-') && other != "-" => {
+                return bad_usage(&format!("unknown option `{arg}`"), USAGE);
+            }
             _ if name.is_some() => return complain(),
-            other => name = Some(other),
+            _ => name = Some(arg.as_str()),
         }
     }
     let Some(name) = name else {
@@ -91,7 +100,7 @@ pub fn run(args: &[String]) -> ExitCode {
 }
 
 fn complain() -> ExitCode {
-    eprintln!("usage: nether strata <cairn> [--json]");
+    eprintln!("{USAGE}");
     usage_error()
 }
 
@@ -136,46 +145,37 @@ fn survey(
 ) -> Result<Survey, StoreError> {
     let mut reaches: Vec<Reach> = Vec::new();
     let mut missing = 0;
-    let mut seen_holes = HashSet::new();
-    for &at in holes {
-        if !seen_holes.insert(at) {
-            continue;
-        }
-        match store.get(at) {
-            Ok(Stored::Node(Node::Hole { call, stratum, span }))
-                if crate::closing::valid_stratum(&call, stratum) =>
-            {
-                reaches.push(Reach {
-                    stratum,
-                    answered: false,
-                    call: lamp::said(store, &call.function, &call.args),
-                    at: span,
-                });
+    for (list, answered) in [(holes, false), (witnesses, true)] {
+        let mut seen = HashSet::new();
+        for &at in list {
+            if !seen.insert(at) {
+                continue;
             }
-            Ok(_) => return Err(StoreError::Corrupt { asked: at, found: None, why: None }),
-            Err(StoreError::Absent(_)) => missing += 1,
-            Err(e) => return Err(e),
-        }
-    }
-    let mut seen_witnesses = HashSet::new();
-    for &at in witnesses {
-        if !seen_witnesses.insert(at) {
-            continue;
-        }
-        match store.get(at) {
-            Ok(Stored::Node(Node::Witness { call, stratum, span, .. }))
-                if crate::closing::valid_stratum(&call, stratum) =>
-            {
-                reaches.push(Reach {
-                    stratum,
-                    answered: true,
-                    call: lamp::said(store, &call.function, &call.args),
-                    at: span,
-                });
+            match store.get(at) {
+                Ok(Stored::Node(Node::Hole { call, stratum, span }))
+                    if !answered && crate::closing::valid_stratum(&call, stratum) =>
+                {
+                    reaches.push(Reach {
+                        stratum,
+                        answered: false,
+                        call: lamp::said(store, &call.function, &call.args),
+                        at: span,
+                    });
+                }
+                Ok(Stored::Node(Node::Witness { call, stratum, span, .. }))
+                    if answered && crate::closing::valid_stratum(&call, stratum) =>
+                {
+                    reaches.push(Reach {
+                        stratum,
+                        answered: true,
+                        call: lamp::said(store, &call.function, &call.args),
+                        at: span,
+                    });
+                }
+                Ok(_) => return Err(StoreError::Corrupt { asked: at, found: None, why: None }),
+                Err(StoreError::Absent(_)) => missing += 1,
+                Err(e) => return Err(e),
             }
-            Ok(_) => return Err(StoreError::Corrupt { asked: at, found: None, why: None }),
-            Err(StoreError::Absent(_)) => missing += 1,
-            Err(e) => return Err(e),
         }
     }
     let mut seen_deposits = HashSet::new();

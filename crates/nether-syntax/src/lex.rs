@@ -19,7 +19,7 @@ pub struct Fault {
 }
 
 /// What kind of thing the source is not.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FaultKind {
     /// Not well-formed UTF-8. §3.1 requires rejecting it rather than
     /// substituting replacement characters: a file that is not what it claims
@@ -52,6 +52,8 @@ pub enum FaultKind {
     Expected(&'static str),
     /// Lowering could not find what a name refers to.
     Unknown(&'static str),
+    /// An identifier that is not bound anywhere in scope.
+    UnknownName(String),
     /// A source larger than [`crate::MAX_SOURCE`].
     ///
     /// A span is a pair of `u32` offsets, so a longer source has bytes no
@@ -74,7 +76,7 @@ pub enum FaultKind {
 
 impl fmt::Display for Fault {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self.kind {
+        f.write_str(match &self.kind {
             FaultKind::NotUtf8 => "this file is not well-formed UTF-8",
             FaultKind::StrayCarriageReturn => "a carriage return outside a line ending",
             FaultKind::UnterminatedComment => "this comment is never closed",
@@ -93,6 +95,7 @@ impl fmt::Display for Fault {
             FaultKind::Stray => "this starts nothing",
             FaultKind::Expected(what) => return write!(f, "expected {what}"),
             FaultKind::Unknown(what) => return write!(f, "this does not name {what}"),
+            FaultKind::UnknownName(name) => return write!(f, "unknown name `{name}`"),
             FaultKind::Reserved(word) => {
                 return write!(f, "`{word}` is reserved and has no meaning");
             }
@@ -109,7 +112,7 @@ impl Fault {
     /// This fault, ready to print.
     #[must_use]
     pub fn diagnostic(&self) -> Diagnostic {
-        let note = match self.kind {
+        let note = match &self.kind {
             FaultKind::NotUtf8 => {
                 Some("§3.1: a file that is not UTF-8 is rejected rather than repaired.")
             }
@@ -297,17 +300,16 @@ impl Scanner<'_> {
     /// depth on a type. With whitespace between, this is a `@` and a number,
     /// and only a signature may be written that way.
     fn depth(&mut self, from: usize) -> Result<(), Fault> {
-        let next = self.rest()[1..].chars().next();
-        let Some(d) = next.filter(char::is_ascii_digit).and_then(|c| c.to_digit(10)) else {
+        let Some(b) = self.rest().as_bytes().get(1).copied().filter(u8::is_ascii_digit) else {
             return self.punctuation(from);
         };
+        let d = b - b'0';
         self.at += 2;
         let mut extra = false;
         while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             self.at += 1;
             extra = true;
         }
-        let Ok(d) = u8::try_from(d) else { unreachable!("a digit is below ten") };
         if extra || d > 8 {
             return Err(self.fault(from, FaultKind::NotAStratum));
         }
@@ -331,12 +333,10 @@ impl Scanner<'_> {
         if let Some(which) = wrong_with(digits) {
             return Err(self.fault(from, FaultKind::NotACairn(which)));
         }
+        let nibble = |b: u8| if b <= b'9' { b - b'0' } else { b - b'a' + 10 };
         let mut bytes = [0u8; 32];
-        for (i, byte) in bytes.iter_mut().enumerate() {
-            let Ok(b) = u8::from_str_radix(&digits[i * 2..i * 2 + 2], 16) else {
-                unreachable!("sixty-four hex digits are thirty-two bytes")
-            };
-            *byte = b;
+        for (byte, pair) in bytes.iter_mut().zip(digits.as_bytes().chunks_exact(2)) {
+            *byte = (nibble(pair[0]) << 4) | nibble(pair[1]);
         }
         self.push(from, TokenKind::Cairn(bytes));
         Ok(())
