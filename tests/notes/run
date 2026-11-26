@@ -131,7 +131,7 @@ def main() -> int:
         bad.append(("CLI exits 2 on extra arg", None))
 
     # Real CHANGELOG.md must yield non-empty notes for shipped releases.
-    for shipped in ("v0.1.0", "v0.2.0"):
+    for shipped in ("v0.1.0", "v0.2.0", "v0.3.0"):
         if _notes.main(["scripts/notes", shipped]) != 0:
             bad.append((f"real CHANGELOG.md has notes for {shipped}", None))
 

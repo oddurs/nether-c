@@ -188,14 +188,18 @@ try {
   await command("Page.enable"); await command("Runtime.enable"); await command("Network.enable");
   await command("Page.bringToFront");
   await command("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await command("Browser.grantPermissions", { origin, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] }, false);
   for (const width of [1248, 768, 390, 320]) {
     await command("Emulation.setDeviceMetricsOverride", { width, height: 1000, deviceScaleFactor: 1, mobile: width < 500 });
-    for (const path of ["/site/", "/site/spec/00-overview.html", "/site/specimen.html", "/site/in-memoriam.html", "/site/manual/00-a-way-in.html"]) {
+    for (const path of ["/site/", "/site/releases.html", "/site/spec/00-overview.html", "/site/specimen.html", "/site/in-memoriam.html", "/site/manual/00-a-way-in.html"]) {
       await command("Page.navigate", { url: origin + path });
       await until("document.readyState === 'complete' && location.pathname === " + JSON.stringify(path));
       await evaluate("document.fonts.ready");
       assert.equal(await evaluate('document.fonts.check(\'16px "Nether 8"\')'), true);
-      assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), path + " overflows at " + width);
+      assert.ok(
+        await evaluate(`document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollWidth <= ${width} && innerWidth <= ${width}`),
+        path + " overflows at " + width
+      );
       assert.ok(await evaluate("[...document.images].every(i => i.complete && i.naturalWidth > 0)"), "missing site graphic");
       await checkImageAspectRatios(path + "@" + width + ":dark");
       assert.equal(await evaluate("document.querySelector('.directory-drawer').open"), width > 1050);
@@ -368,6 +372,7 @@ try {
       }
       const shotPrefix = path.includes("/spec/") ? "spec-"
         : path.includes("/manual/") ? "manual-"
+        : path.endsWith("/releases.html") ? "releases-"
         : path.endsWith("/specimen.html") ? "specimen-"
         : path.endsWith("/in-memoriam.html") ? "in-memoriam-"
         : "site-";
@@ -377,14 +382,31 @@ try {
         await click('nav.contents a[href="02-calculus.html"]');
         await until("location.pathname === '/site/spec/02-calculus.html' && document.readyState === 'complete'");
         assert.match(await evaluate("document.querySelector('nav.contents [aria-current]').textContent"), /calculus/);
+      } else if (path.endsWith("/releases.html")) {
+        assert.ok(await evaluate("[...document.querySelectorAll('nav.contents a')].every(a => document.getElementById(a.hash.slice(1)))"), "releases directory anchors resolve");
+        assert.ok(await evaluate("document.querySelectorAll('figure.listing figcaption .copy-btn').length > 0"), "releases listings get copy buttons");
+        if (width === 1248) {
+          await click("figure.listing figcaption .copy-btn");
+          await until("document.querySelector('figure.listing figcaption .copy-btn').hasAttribute('data-copied')");
+          assert.equal(await evaluate("document.querySelector('figure.listing figcaption .copy-btn').textContent"), "copied");
+          assert.match(await evaluate("navigator.clipboard.readText()"), /curl -fsSLO/);
+        }
+        await evaluate("document.querySelector('.directory-drawer').open = true");
+        await click('nav.contents a[href="#install"]');
+        assert.equal(await evaluate("location.hash"), "#install");
       } else if (path.endsWith("/specimen.html")) {
         assert.ok(await evaluate("[...document.querySelectorAll('nav.contents a')].every(a => document.getElementById(a.hash.slice(1)))"));
         await evaluate("document.querySelector('.directory-drawer').open = true");
         await click('nav.contents a[href="#symbols"]');
         assert.equal(await evaluate("location.hash"), "#symbols");
       } else if (path === "/site/") {
-        await click('.arrival-actions a[href="#first-program"]');
-        assert.equal(await evaluate("location.hash"), "#first-program");
+        if (width === 1248) {
+          await evaluate("document.querySelectorAll('figure.listing')[2].querySelector('.copy-btn').click()");
+          await until("document.querySelectorAll('figure.listing')[2].querySelector('.copy-btn').hasAttribute('data-copied')");
+          assert.equal(await evaluate("navigator.clipboard.readText()"), "nether bury hello.nc\nnether lamp efed9b2a");
+        }
+        await click('.arrival-actions a[href="#install"]');
+        assert.equal(await evaluate("location.hash"), "#install");
       }
     }
   }
@@ -392,9 +414,9 @@ try {
   await command("Page.navigate", { url: origin + "/site/spec/00-overview.html" });
   await until("location.pathname === '/site/spec/00-overview.html' && document.readyState === 'complete'");
   assert.equal(await evaluate("document.querySelector('.directory-drawer').open"), true, "directory works without JavaScript");
+  assert.equal(await evaluate("document.querySelectorAll('.copy-btn').length"), 0, "no dead copy buttons without JavaScript");
   await command("Emulation.setScriptExecutionDisabled", { value: false });
   console.log("browser: site graphics, spec contents and fixed font metrics at desktop/mobile sizes");
-  await command("Browser.grantPermissions", { origin, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] }, false);
   await command("Emulation.setDeviceMetricsOverride", { width: 1248, height: 1000, deviceScaleFactor: 1, mobile: false });
   await command("Page.navigate", { url: origin + "/web/necropolis/" });
   await until("document.getElementById('state')?.textContent.startsWith('Buried.')");
@@ -461,7 +483,7 @@ try {
 
   await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await click(".nc-root-hole");
-  assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth"), "mobile overflows horizontally");
+  assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollWidth <= 390 && innerWidth <= 390"), "mobile overflows horizontally");
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.nc-wires')).display"), "none");
   assert.equal(await evaluate("getComputedStyle(document.getElementById('selected')).order"), "-1");
   await checkTypeGrid("/web/necropolis/@390");

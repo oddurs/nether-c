@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The replay &mdash; Nether C</title>
-<meta name="description" content="One idea: a replay is a question about the past, not a second run.">
+<meta name="description" content="chapter 07 draft edit the source">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/manual/07-the-replay.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="The replay &mdash; Nether C">
-<meta property="og:description" content="One idea: a replay is a question about the past, not a second run.">
+<meta property="og:description" content="chapter 07 draft edit the source">
 <meta property="og:url" content="https://netherc.org/manual/07-the-replay.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@ try {
 
 <a class="skip" href="#main">Skip to the text</a>
 
-<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>v0.3.0 &middot; READ ONLY</span></div>
 <header class="terminal-header">
 <pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -50,7 +50,7 @@ try {
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">spec</a><a href="../releases.html">releases</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
@@ -63,11 +63,11 @@ try {
 <div class="reading-pane">
 <div class="pane-title"><span>The replay</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">chapter 07 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/07-the-replay.md">edit the source</a></p><h1 id="the-replay"><a href="#the-replay">The replay</a></h1><blockquote><p>One idea: <strong>a replay is a question about the past, not a second run.</strong></p></blockquote><p><code>49df3bdc</code> from <a href="04-the-grant.html">chapter 4</a> was made by asking the disk what was in <code>who.txt</code>. Replay it with no capabilities at all:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk --root .
+<p class="c meta-bar"><span>chapter 07</span> <span>draft</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/07-the-replay.md">edit the source</a></span></p><h1 id="the-replay"><a href="#the-replay">The replay</a></h1><blockquote><p>One idea: <strong>a replay is a question about the past, not a second run.</strong></p></blockquote><p><code>49df3bdc</code> from <a href="04-the-grant.html">chapter 4</a> was made by asking the disk what was in <code>who.txt</code>. Replay it with no capabilities at all:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk --root .
   ①  read(&quot;who.txt&quot;)  →  6 bytes  <span class="h">4395a792</span>
 sealed   <span class="h">4fc5e660</span> + <span class="h">4395a792</span> → <span class="h">49df3bdc</span>   depth 3   holes 0
 <span class="p">$</span> nether <span class="k">exhume</span> 49df3bdc --replay
-identical.</code></pre></figure><p>One word, and it is the right one. Not &quot;success&quot;, not &quot;0 differences&quot; — re-burying the trace solely from the witnesses already recorded in the ledger produced the same trace, byte for byte, with the same cairn.</p><p>Change or delete <code>who.txt</code> and ask again and it is still <code>identical.</code>. Replay holds <strong>no capabilities at all</strong> (<a href="../spec/06-evaluation.html#67-replay">§6.7</a>, <a href="../spec/08-rites.html#83-exhume">§8.3</a>): it never asks the disk and cannot reach the world. Every answer comes from the ledger witnesses stored beside the trace. To check whether the disk has changed since, exhume the earlier trace <code>4fc5e660</code> against <code>--grant disk --root .</code> again and compare the new sealed cairn with <code>49df3bdc</code>.</p><h2 id="what-replay-is-not"><a href="#what-replay-is-not">What replay is not</a></h2><p>It is not running the program again. The program was never run. There is nothing to run and no second execution to compare against a first.</p><p>It is not checking a signature either. Nothing was signed. Every witness is named by its content, and replay re-buries the residue from those recorded witnesses alone. Agreement is the re-buried trace hashing to the same cairn, byte for byte; if it diverges, <code>exhume --replay</code> reports the first differing node.</p><p>And it is not asking the world again. A replay holds no grants and cannot touch the disk, the network, or the clock, even on a machine where <code>who.txt</code> never existed. It verifies deterministic reproduction from recorded witnesses, not whether the outside world stood still.</p><h2 id="why---replay-and---grant-are-the-same-rite"><a href="#why---replay-and---grant-are-the-same-rite">Why <code>--replay</code> and <code>--grant</code> are the same rite</a></h2><p>Both are <code>exhume</code>. One grants capabilities to ask the world for open holes; the other grants no capabilities and serves every answer from witnesses already in the ledger. Both feed answers into burial of the residue and produce a trace.</p><p>That is not a coincidence in the implementation. It is <a href="../spec/06-evaluation.html#67-replay">§6.7</a>, which says burial is a staged evaluation and each stage is the same operation applied to what is left. Exhuming a hole and replaying a witness are one thing asked twice.</p><h2 id="what-this-is-for"><a href="#what-this-is-for">What this is for</a></h2><p>Three questions this answers that are normally guesswork:</p><ul><li><strong>Does this trace still reproduce?</strong> Replay it. Holding no capabilities, re-burying from its recorded witnesses gives its own cairn back — even after the original file is changed or gone.</li><li><strong>Where did reproduction diverge?</strong> If a bug or change makes a replay produce a different trace, <code>exhume --replay</code> names the first differing node rather than only a mismatched cairn.</li><li><strong>Can I reproduce this at all?</strong> <code>strata</code> says <code>replayable: yes</code> or it does not, and it says so before you try. A trace that reached stratum 8 — foreign code — is honest about being unrepeatable, because <a href="../spec/01-strata.html">§1.7</a> marks it forever.</li></ul><p><a href="08-the-orpheus-rule.html">Next</a>: the rule with the best name.</p>
+identical.</code></pre></figure><p>One word, and it is the right one. Not &quot;success&quot;, not &quot;0 differences&quot; — re-burying the trace solely from the witnesses already recorded in the ledger produced the same trace, byte for byte, with the same cairn.</p><p>Change or delete <code>who.txt</code> and ask again and it is still <code>identical.</code>. Replay holds <strong>no capabilities at all</strong> (<a href="../spec/06-evaluation.html#67-replay">§6.7</a>, <a href="../spec/08-rites.html#83-exhume">§8.3</a>): it never asks the disk and cannot reach the world. Every answer comes from the ledger witnesses stored beside the trace. To check whether the disk has changed since, exhume the earlier trace <code>4fc5e660</code> against <code>--grant disk --root .</code> again and compare the new sealed cairn with <code>49df3bdc</code>.</p><h2 id="what-replay-is-not"><a href="#what-replay-is-not">What replay is not</a></h2><p>It is not running the program again. The program was never run. There is nothing to run and no second execution to compare against a first.</p><p>It is not checking a signature either. Nothing was signed. Every witness is named by its content, and replay re-buries the residue from those recorded witnesses alone. Agreement is the re-buried trace hashing to the same cairn, byte for byte; if it diverges, <code>exhume --replay</code> reports the first differing node.</p><p>And it is not asking the world again. A replay holds no grants and cannot touch the disk, the network, or the clock, even on a machine where <code>who.txt</code> never existed. It verifies deterministic reproduction from recorded witnesses, not whether the outside world stood still.</p><h2 id="why---replay-and---grant-are-the-same-rite"><a href="#why---replay-and---grant-are-the-same-rite">Why <code>--replay</code> and <code>--grant</code> are the same rite</a></h2><p>Both are <code>exhume</code>. One grants capabilities to ask the world for open holes; the other grants no capabilities and serves every answer from witnesses already in the ledger. Both feed answers into burial of the residue and produce a trace.</p><p>That is not a coincidence in the implementation. It is <a href="../spec/06-evaluation.html#67-replay">§6.7</a>, which says burial is a staged evaluation and each stage is the same operation applied to what is left. Exhuming a hole and replaying a witness are one thing asked twice.</p><h2 id="what-this-is-for"><a href="#what-this-is-for">What this is for</a></h2><p>Three questions this answers that are normally guesswork:</p><ul><li><strong>Does this trace still reproduce?</strong> Replay it. Holding no capabilities, re-burying from its recorded witnesses gives its own cairn back — even after the original file is changed or gone.</li><li><strong>Where did reproduction diverge?</strong> If a bug or change makes a replay produce a different trace, <code>exhume --replay</code> names the first differing node rather than only a mismatched cairn.</li><li><strong>Can I reproduce this at all?</strong> <code>strata</code> says <code>replayable: yes</code> or it does not, and it says so before you try. A trace that reached stratum 8 — foreign code — is honest about being unrepeatable, because <a href="../spec/01-strata.html">§1.7</a> marks it forever.</li></ul><p><a href="08-the-orpheus-rule.html">Next</a>: the rule with the best name.</p><nav class="chapter-pager" aria-label="Chapter navigation"><a class="btn" href="06-two-worlds.html">&larr; 06 Two worlds</a><a class="btn" href="08-the-orpheus-rule.html">08 The Orpheus rule &rarr;</a></nav>
 </main>
 </div>
 </div>
@@ -96,7 +96,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>
@@ -154,6 +154,52 @@ There is no image library in this repository. There is not going to be one.</p>
   }
   paint();
   motion.addEventListener("change", paintImages);
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    var listings = document.querySelectorAll("figure.listing");
+    if (listings.length) {
+      var live = document.createElement("span");
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+      listings.forEach(function (fig) {
+        var cap = fig.querySelector("figcaption");
+        var code = fig.querySelector("pre code");
+        if (!cap || !code) return;
+        var copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.type = "button";
+        copyBtn.textContent = "copy";
+        var timer = null;
+        copyBtn.addEventListener("click", function () {
+          var raw = (code.textContent || "").replace(/\n$/, "");
+          var text = raw;
+          if (code.querySelector("span.p")) {
+            var cmds = raw.split("\n").filter(function (line) {
+              return /^\s*\$ /.test(line);
+            }).map(function (line) {
+              return line.replace(/^\s*\$ /, "");
+            });
+            if (cmds.length) text = cmds.join("\n");
+          }
+          navigator.clipboard.writeText(text).then(function () {
+            if (timer) clearTimeout(timer);
+            copyBtn.setAttribute("data-copied", "");
+            copyBtn.textContent = "copied";
+            live.textContent = "";
+            live.textContent = "Copied to clipboard.";
+            timer = setTimeout(function () {
+              copyBtn.removeAttribute("data-copied");
+              copyBtn.textContent = "copy";
+              timer = null;
+            }, 1600);
+          }, function () {});
+        });
+        cap.appendChild(copyBtn);
+      });
+    }
+  }
 })();
 </script>
 

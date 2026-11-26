@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The witness &mdash; Nether C</title>
-<meta name="description" content="One idea: what the world said is kept beside what it made.">
+<meta name="description" content="chapter 05 draft edit the source">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/manual/05-the-witness.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="The witness &mdash; Nether C">
-<meta property="og:description" content="One idea: what the world said is kept beside what it made.">
+<meta property="og:description" content="chapter 05 draft edit the source">
 <meta property="og:url" content="https://netherc.org/manual/05-the-witness.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@ try {
 
 <a class="skip" href="#main">Skip to the text</a>
 
-<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>v0.3.0 &middot; READ ONLY</span></div>
 <header class="terminal-header">
 <pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -50,7 +50,7 @@ try {
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">spec</a><a href="../releases.html">releases</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
@@ -63,7 +63,7 @@ try {
 <div class="reading-pane">
 <div class="pane-title"><span>The witness</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">chapter 05 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/05-the-witness.md">edit the source</a></p><h1 id="the-witness"><a href="#the-witness">The witness</a></h1><blockquote><p>One idea: <strong>what the world said is kept beside what it made.</strong></p></blockquote><p>Pick up where <a href="04-the-grant.html">chapter 4</a> left off:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk --root .
+<p class="c meta-bar"><span>chapter 05</span> <span>draft</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/05-the-witness.md">edit the source</a></span></p><h1 id="the-witness"><a href="#the-witness">The witness</a></h1><blockquote><p>One idea: <strong>what the world said is kept beside what it made.</strong></p></blockquote><p>Pick up where <a href="04-the-grant.html">chapter 4</a> left off:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">exhume</span> 4fc5e660 --grant disk --root .
   ①  read(&quot;who.txt&quot;)  →  6 bytes  <span class="h">4395a792</span>
 sealed   <span class="h">4fc5e660</span> + <span class="h">4395a792</span> → <span class="h">49df3bdc</span>   depth 3   holes 0</code></pre></figure><p>That <code>4395a792</code> in the middle of the seal line was not decoration. It is the name of the answer, and the answer is in the ledger:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> 4395a792
 given world</code></pre></figure><p><em>Given</em>, as opposed to refused. Six bytes, named, stored, and attached to the trace they went into. The disk said this, at this moment, to this rite, and nothing else in the program could have said it instead.</p><p>The node that records that is a <strong>witness</strong>, and a rite cannot skip making one. The provider that answers a question in this implementation hands back a value that only the recorder can construct, and the recorder writes to the ledger before it returns. There is no code path where the world answers and nothing is written down, because there is no way to produce the answer without writing it. That is what <a href="../spec/01-strata.html">§1.4</a> means, expressed as a type rather than as a rule to remember.</p><h2 id="reading-it-back"><a href="#reading-it-back">Reading it back</a></h2><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> nether <span class="k">lamp</span> 49df3bdc --provenance
@@ -73,7 +73,7 @@ depth 3   disk
   3  read(&quot;who.txt&quot;)           <span class="h">cc948e97</span>:7:36
   0  everything else
 
-  replayable: yes</code></pre></figure><p>The same account you saw before granting anything, with <code>pending</code> gone from the one line that has now happened. Before and after are the same shape, which is the point: you can compare them.</p><h2 id="why-this-is-the-interesting-one"><a href="#why-this-is-the-interesting-one">Why this is the interesting one</a></h2><p>Most of this language can be explained as a restriction. This chapter is the thing the restrictions are for.</p><p>A trace is an argument about what happened that you do not have to take on faith. It names every value it was given, every place it was given one, and how deep each of them reached. A build that produced a wrong binary can be asked which bytes it was handed. A program that touched the network can be asked what came back. Not from a log the program chose to write — from the structure of what it left.</p><p>Logs are a program&#x27;s account of itself. A trace is not written by the program.</p><h2 id="what-a-refusal-looks-like"><a href="#what-a-refusal-looks-like">What a refusal looks like</a></h2><p>The world is allowed to say no, and no is an answer like any other. It is recorded the same way, with the same kind of node, and a program can branch on it — <a href="../spec/05-types.html">§5.1.1</a> fixes the closed set of six refusals, and <a href="../spec/09-prelude.html">§9.9</a> is what <code>must</code> was skipping past back in <a href="03-the-hole.html">chapter 3</a>.</p><p>The distinction is worth holding on to. A refusal is the world answering. A hole is the world not having been asked yet. They are different nodes, and conflating them is how a system ends up unable to tell &quot;there is no such file&quot; from &quot;nobody looked&quot;.</p><p><a href="06-two-worlds.html">Next</a>: the same burial, answered twice.</p>
+  replayable: yes</code></pre></figure><p>The same account you saw before granting anything, with <code>pending</code> gone from the one line that has now happened. Before and after are the same shape, which is the point: you can compare them.</p><h2 id="why-this-is-the-interesting-one"><a href="#why-this-is-the-interesting-one">Why this is the interesting one</a></h2><p>Most of this language can be explained as a restriction. This chapter is the thing the restrictions are for.</p><p>A trace is an argument about what happened that you do not have to take on faith. It names every value it was given, every place it was given one, and how deep each of them reached. A build that produced a wrong binary can be asked which bytes it was handed. A program that touched the network can be asked what came back. Not from a log the program chose to write — from the structure of what it left.</p><p>Logs are a program&#x27;s account of itself. A trace is not written by the program.</p><h2 id="what-a-refusal-looks-like"><a href="#what-a-refusal-looks-like">What a refusal looks like</a></h2><p>The world is allowed to say no, and no is an answer like any other. It is recorded the same way, with the same kind of node, and a program can branch on it — <a href="../spec/05-types.html">§5.1.1</a> fixes the closed set of six refusals, and <a href="../spec/09-prelude.html">§9.9</a> is what <code>must</code> was skipping past back in <a href="03-the-hole.html">chapter 3</a>.</p><p>The distinction is worth holding on to. A refusal is the world answering. A hole is the world not having been asked yet. They are different nodes, and conflating them is how a system ends up unable to tell &quot;there is no such file&quot; from &quot;nobody looked&quot;.</p><p><a href="06-two-worlds.html">Next</a>: the same burial, answered twice.</p><nav class="chapter-pager" aria-label="Chapter navigation"><a class="btn" href="04-the-grant.html">&larr; 04 The grant</a><a class="btn" href="06-two-worlds.html">06 Two worlds &rarr;</a></nav>
 </main>
 </div>
 </div>
@@ -102,7 +102,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>
@@ -160,6 +160,52 @@ There is no image library in this repository. There is not going to be one.</p>
   }
   paint();
   motion.addEventListener("change", paintImages);
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    var listings = document.querySelectorAll("figure.listing");
+    if (listings.length) {
+      var live = document.createElement("span");
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+      listings.forEach(function (fig) {
+        var cap = fig.querySelector("figcaption");
+        var code = fig.querySelector("pre code");
+        if (!cap || !code) return;
+        var copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.type = "button";
+        copyBtn.textContent = "copy";
+        var timer = null;
+        copyBtn.addEventListener("click", function () {
+          var raw = (code.textContent || "").replace(/\n$/, "");
+          var text = raw;
+          if (code.querySelector("span.p")) {
+            var cmds = raw.split("\n").filter(function (line) {
+              return /^\s*\$ /.test(line);
+            }).map(function (line) {
+              return line.replace(/^\s*\$ /, "");
+            });
+            if (cmds.length) text = cmds.join("\n");
+          }
+          navigator.clipboard.writeText(text).then(function () {
+            if (timer) clearTimeout(timer);
+            copyBtn.setAttribute("data-copied", "");
+            copyBtn.textContent = "copied";
+            live.textContent = "";
+            live.textContent = "Copied to clipboard.";
+            timer = setTimeout(function () {
+              copyBtn.removeAttribute("data-copied");
+              copyBtn.textContent = "copy";
+              timer = null;
+            }, 1600);
+          }, function () {});
+        });
+        cap.appendChild(copyBtn);
+      });
+    }
+  }
 })();
 </script>
 

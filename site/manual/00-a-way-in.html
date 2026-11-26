@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>A way in &mdash; Nether C</title>
-<meta name="description" content="The specification says what the rules are. It says each of them exactly once, in the order a rule needs the ones above it, and it is not a tutorial and will...">
+<meta name="description" content="chapter 00 draft edit the source">
 <meta name="color-scheme" content="dark light">
 <link rel="canonical" href="https://netherc.org/manual/00-a-way-in.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nether C">
 <meta property="og:title" content="A way in &mdash; Nether C">
-<meta property="og:description" content="The specification says what the rules are. It says each of them exactly once, in the order a rule needs the ones above it, and it is not a tutorial and will...">
+<meta property="og:description" content="chapter 00 draft edit the source">
 <meta property="og:url" content="https://netherc.org/manual/00-a-way-in.html">
 <meta property="og:image" content="https://netherc.org/gfx/card.png">
 <meta property="og:image:width" content="1200">
@@ -37,7 +37,7 @@ try {
 
 <a class="skip" href="#main">Skip to the text</a>
 
-<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>READ ONLY</span></div>
+<div class="terminal-title"><span>NETHER C / PUBLIC TERMINAL</span><span>v0.3.0 &middot; READ ONLY</span></div>
 <header class="terminal-header">
 <pre class="sign" role="img" aria-label="Nether C">
 █   █ █████ █████ █   █ █████ ████     ████
@@ -50,7 +50,7 @@ try {
 
 </header>
 
-<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">specification</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
+<nav class="bar" aria-label="Primary"><a href="../index.html">front desk</a><a href="../manual/index.html" class="current">manual</a><a href="../spec/index.html">spec</a><a href="../releases.html">releases</a><a href="../specimen.html">the face</a><a href="https://github.com/oddurs/nether-c" target="_blank" rel="noreferrer noopener">source</a><a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md" target="_blank" rel="noreferrer noopener">roadmap</a><button class="lamp" type="button" data-lamp-toggle>lamp: <span data-lamp-state>out</span></button></nav>
 
 <div class="terminal-workspace">
 <aside class="directory">
@@ -63,7 +63,7 @@ try {
 <div class="reading-pane">
 <div class="pane-title"><span>A way in</span><span aria-hidden="true">[text]</span></div>
 <main id="main" tabindex="-1">
-<p class="c">chapter 00 &middot; draft &middot; <a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/00-a-way-in.md">edit the source</a></p><h1 id="a-way-in"><a href="#a-way-in">A way in</a></h1><p>The specification says what the rules are. It says each of them exactly once, in the order a rule needs the ones above it, and it is not a tutorial and will not become one. This is the other document. It answers <em>what do I type</em>.</p><p>Read it at a terminal with the files in front of you. Every command on these pages is executed on every build of this project, against the binary in this repository, and the output printed underneath is the output that came back. If a line here is wrong, the build is red. That is the only promise this manual makes, and it is the one worth making.</p><h2 id="what-you-need"><a href="#what-you-need">What you need</a></h2><p>A <code>nether</code> binary. Either take one from a release or build it:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> cargo build --release --bin nether</code></pre></figure><p>Then a directory to work in, and nothing else. There is no project file, no manifest and no daemon. A ledger appears beside your work the first time something needs one.</p><h2 id="what-you-will-have-done-by-the-end"><a href="#what-you-will-have-done-by-the-end">What you will have done by the end</a></h2><p>Ten short chapters, each with one idea in it:</p><div class="scroll"><table><tbody><tr><td class="align-left">01</td><td class="align-left"><a href="01-the-first-burial.html">The first burial</a></td><td class="align-left">a deposit is not a print</td></tr><tr><td class="align-left">02</td><td class="align-left"><a href="02-a-name-that-holds.html">A name that holds</a></td><td class="align-left">the name is the thing</td></tr><tr><td class="align-left">03</td><td class="align-left"><a href="03-the-hole.html">The hole</a></td><td class="align-left">what the world has not said is written down</td></tr><tr><td class="align-left">04</td><td class="align-left"><a href="04-the-grant.html">The grant</a></td><td class="align-left">a capability is given, never ambient</td></tr><tr><td class="align-left">05</td><td class="align-left"><a href="05-the-witness.html">The witness</a></td><td class="align-left">what the world said is kept beside what it made</td></tr><tr><td class="align-left">06</td><td class="align-left"><a href="06-two-worlds.html">Two worlds</a></td><td class="align-left">one burial, as many worlds as you like</td></tr><tr><td class="align-left">07</td><td class="align-left"><a href="07-the-replay.html">The replay</a></td><td class="align-left">a question about the past, not a second run</td></tr><tr><td class="align-left">08</td><td class="align-left"><a href="08-the-orpheus-rule.html">The Orpheus rule</a></td><td class="align-left">carry it up, go back down to look</td></tr><tr><td class="align-left">09</td><td class="align-left"><a href="09-where-to-go-from-here.html">Where to go from here</a></td><td class="align-left">the map</td></tr></tbody></table></div><p>You will write four programs, bury each of them, and read back what each one left. None of them will run, because nothing in this language runs.</p><h2 id="the-one-thing-to-know-first"><a href="#the-one-thing-to-know-first">The one thing to know first</a></h2><p>A Nether C program is not executed. It is <strong>buried</strong>: evaluated as far as the world currently permits. What it leaves behind is a <strong>trace</strong> — everything that could be worked out, plus a <strong>hole</strong> for every question the world has not answered yet.</p><p>That is not a limitation with a workaround. It is the whole design. A program that cannot run cannot lie about what it did, and a program that must write down every answer it was given can be asked, years later, what it was told.</p><p>Start at <a href="01-the-first-burial.html">the first burial</a>.</p>
+<p class="c meta-bar"><span>chapter 00</span> <span>draft</span> <span><a href="https://github.com/oddurs/nether-c/blob/main/docs/manual/00-a-way-in.md">edit the source</a></span></p><h1 id="a-way-in"><a href="#a-way-in">A way in</a></h1><p>The specification says what the rules are. It says each of them exactly once, in the order a rule needs the ones above it, and it is not a tutorial and will not become one. This is the other document. It answers <em>what do I type</em>.</p><p>Read it at a terminal with the files in front of you. Every command on these pages is executed on every build of this project, against the binary in this repository, and the output printed underneath is the output that came back. If a line here is wrong, the build is red. That is the only promise this manual makes, and it is the one worth making.</p><h2 id="what-you-need"><a href="#what-you-need">What you need</a></h2><p>A <code>nether</code> binary. Either take one from a release or build it:</p><figure class="listing"><figcaption>shell</figcaption><pre><code><span class="p">$</span> cargo build --release --bin nether</code></pre></figure><p>Then a directory to work in, and nothing else. There is no project file, no manifest and no daemon. A ledger appears beside your work the first time something needs one.</p><h2 id="what-you-will-have-done-by-the-end"><a href="#what-you-will-have-done-by-the-end">What you will have done by the end</a></h2><p>Ten short chapters, each with one idea in it:</p><div class="scroll"><table><tbody><tr><td class="align-left">01</td><td class="align-left"><a href="01-the-first-burial.html">The first burial</a></td><td class="align-left">a deposit is not a print</td></tr><tr><td class="align-left">02</td><td class="align-left"><a href="02-a-name-that-holds.html">A name that holds</a></td><td class="align-left">the name is the thing</td></tr><tr><td class="align-left">03</td><td class="align-left"><a href="03-the-hole.html">The hole</a></td><td class="align-left">what the world has not said is written down</td></tr><tr><td class="align-left">04</td><td class="align-left"><a href="04-the-grant.html">The grant</a></td><td class="align-left">a capability is given, never ambient</td></tr><tr><td class="align-left">05</td><td class="align-left"><a href="05-the-witness.html">The witness</a></td><td class="align-left">what the world said is kept beside what it made</td></tr><tr><td class="align-left">06</td><td class="align-left"><a href="06-two-worlds.html">Two worlds</a></td><td class="align-left">one burial, as many worlds as you like</td></tr><tr><td class="align-left">07</td><td class="align-left"><a href="07-the-replay.html">The replay</a></td><td class="align-left">a question about the past, not a second run</td></tr><tr><td class="align-left">08</td><td class="align-left"><a href="08-the-orpheus-rule.html">The Orpheus rule</a></td><td class="align-left">carry it up, go back down to look</td></tr><tr><td class="align-left">09</td><td class="align-left"><a href="09-where-to-go-from-here.html">Where to go from here</a></td><td class="align-left">the map</td></tr></tbody></table></div><p>You will write four programs, bury each of them, and read back what each one left. None of them will run, because nothing in this language runs.</p><h2 id="the-one-thing-to-know-first"><a href="#the-one-thing-to-know-first">The one thing to know first</a></h2><p>A Nether C program is not executed. It is <strong>buried</strong>: evaluated as far as the world currently permits. What it leaves behind is a <strong>trace</strong> — everything that could be worked out, plus a <strong>hole</strong> for every question the world has not answered yet.</p><p>That is not a limitation with a workaround. It is the whole design. A program that cannot run cannot lie about what it did, and a program that must write down every answer it was given can be asked, years later, what it was told.</p><p>Start at <a href="01-the-first-burial.html">the first burial</a>.</p><nav class="chapter-pager" aria-label="Chapter navigation"><a class="btn" href="index.html">&larr; All chapters</a><a class="btn" href="01-the-first-burial.html">01 The first burial &rarr;</a></nav>
 </main>
 </div>
 </div>
@@ -92,7 +92,7 @@ Take it. It was always there.</p>
 <a href="https://github.com/oddurs/nether-c/blob/main/site/gfx.py">site/gfx.py</a>,
 which contains a GIF89a encoder, an LZW compressor and a 5&times;7 bitmap font.
 There is no image library in this repository. There is not going to be one.</p>
-<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="https://github.com/oddurs/nether-c">github.com/oddurs/nether-c</a></p>
+<p><a href="https://netherc.org">netherc.org</a> &middot; <a href="../releases.html">releases</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/SECURITY.md">security</a> &middot; <a href="https://github.com/oddurs/nether-c/blob/main/ROADMAP.md">roadmap</a> &middot; <a href="../specimen.html">specimen</a> &middot; <a href="https://github.com/oddurs/nether-c">source</a></p>
 </footer>
 
 <script>
@@ -150,6 +150,52 @@ There is no image library in this repository. There is not going to be one.</p>
   }
   paint();
   motion.addEventListener("change", paintImages);
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    var listings = document.querySelectorAll("figure.listing");
+    if (listings.length) {
+      var live = document.createElement("span");
+      live.className = "sr-only";
+      live.setAttribute("role", "status");
+      live.setAttribute("aria-live", "polite");
+      document.body.appendChild(live);
+      listings.forEach(function (fig) {
+        var cap = fig.querySelector("figcaption");
+        var code = fig.querySelector("pre code");
+        if (!cap || !code) return;
+        var copyBtn = document.createElement("button");
+        copyBtn.className = "copy-btn";
+        copyBtn.type = "button";
+        copyBtn.textContent = "copy";
+        var timer = null;
+        copyBtn.addEventListener("click", function () {
+          var raw = (code.textContent || "").replace(/\n$/, "");
+          var text = raw;
+          if (code.querySelector("span.p")) {
+            var cmds = raw.split("\n").filter(function (line) {
+              return /^\s*\$ /.test(line);
+            }).map(function (line) {
+              return line.replace(/^\s*\$ /, "");
+            });
+            if (cmds.length) text = cmds.join("\n");
+          }
+          navigator.clipboard.writeText(text).then(function () {
+            if (timer) clearTimeout(timer);
+            copyBtn.setAttribute("data-copied", "");
+            copyBtn.textContent = "copied";
+            live.textContent = "";
+            live.textContent = "Copied to clipboard.";
+            timer = setTimeout(function () {
+              copyBtn.removeAttribute("data-copied");
+              copyBtn.textContent = "copy";
+              timer = null;
+            }, 1600);
+          }, function () {});
+        });
+        cap.appendChild(copyBtn);
+      });
+    }
+  }
 })();
 </script>
 
