@@ -19,9 +19,10 @@ scripts/setup            # once per clone: wires .githooks
 scripts/agent doctor     # reports every problem, not just the first
 ```
 
-You need `cargo`, `python3`, `git`, and `gh`. You want
-[cairn](https://github.com/oddurs/cairn) too — the roadmap is readable without
-it, but not writable.
+You need `cargo` (with the `wasm32-unknown-unknown` target), `python3`, `node`
+(22 or newer), `vim`, Chrome or Chromium (for `browser:check`), `git`, and
+`gh`. You want [cairn](https://github.com/oddurs/cairn) too — the roadmap is
+readable without it, but not writable.
 
 ## One unit of work, one worktree, one branch, one pull request
 
@@ -77,8 +78,11 @@ trailers naming a model, "generated with" footers, and robot emoji.
 scripts/task check
 ```
 
-which is format, lint with warnings denied, tests, build, `site/bake --check`,
-the Decay Rule, and `cairn check`. `scripts/agent pr` runs it once through
+which runs format (`fmt:check`), lint with warnings denied (`lint`), all Rust
+and script/proof tests (`test`, including `workflow:check`, `graph:check`, and
+`proof/check.py`), `build`, `site:check`, `gfx:check`, `design:check`,
+`font:check`, `wasm`, `browser:check`, the Decay Rule (`decay`), and
+`cairn check`. `scripts/agent pr` runs it once through
 the pre-push hook and refuses to push if it fails. It requires installed hooks
 and a clean feature worktree, including untracked files. Retrying reuses the
 open PR rather than creating another one. The hook checks the exact checked-out
@@ -138,9 +142,10 @@ already exists, and when `CHANGELOG.md` has no section for the version — then
 runs the full check and pushes the tag.
 
 The tag is the only trigger. `.github/workflows/release.yml` builds `nether`
-for linux and both macOS architectures, and publishes them with `nether.woff`,
-the specification, and `SHA256SUMS`. The notes are the changelog section, not a
-list of commit subjects.
+for linux and both macOS architectures (verifying linux reproducibility on a
+second uncached runner in the `reproduce` job), and publishes them with
+`nether.woff`, `nether-bold.woff`, the specification, and `SHA256SUMS`. The
+notes are the changelog section, not a list of commit subjects.
 
 ## The Decay Rule
 

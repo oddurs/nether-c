@@ -15,7 +15,76 @@ With one exception. There is no `run`. There is not going to be a `run`.
 
 ## [Unreleased]
 
-Nothing yet.
+### Mechanized metatheory and differential checking
+
+- Added an in-tree LCF proof kernel in `proof/` (`kernel.py`, `calculus.py`,
+  `orpheus.py`, `staging.py`, `encoding.py`, `check.py`) with zero external
+  dependencies, proving depth-lattice soundness, Orpheus premise sufficiency
+  and necessity, core residual round-trip and staging equivalence, and canonical
+  encoding injectivity.
+- Checked `nether-core` against a clean-room transcription of the calculus over
+  10,000,000 seeded programs (`scripts/task fuzz`, with 50,000 on every
+  `cargo test`), and added [§90.7](spec/90-rationale.md#907-what-is-proved-what-is-tested-and-what-is-believed)
+  drawing the boundary between what is proved, what is tested, and what is
+  believed.
+
+### Parallel burial, exhumation, and distributed merge
+
+- Independent demands bury in parallel while preserving exact serial trace
+  equivalence ([§6.2.1](spec/06-evaluation.md#621-burying-in-parallel)).
+- Contiguous read-stratum holes answer in parallel during `exhume` while keeping
+  act-stratum holes sequential ([§6.6](spec/06-evaluation.md#answering-in-parallel)).
+- Open hole slots can be partitioned across isolated machines and merged back
+  deterministically without world capabilities
+  ([§6.6](spec/06-evaluation.md#answering-across-machines)).
+
+### Ledger bundles, reconciliation, audit, and packages
+
+- Added portable store export/import bundles ([§7.5.4](spec/07-ledger.md#754-moving-a-store)),
+  top-down store reconciliation ([§7.5.3](spec/07-ledger.md#753-a-second-store-and-what-they-owe-each-other)),
+  and read-only store `fsck` auditing ([§7.5.2](spec/07-ledger.md#752-what-a-damaged-store-can-still-tell-you)).
+- Verified 16-process store contention and killed writers (0207), bounded
+  single-object and bundle reads (0219), verified reverse-index edges on read,
+  and taught `nether strata` to check `unrecorded` marks and corrupt nodes.
+- Added offline cairn-addressed package resolution using canonical `Package` and
+  `Dep` structs ([§7.5.5](spec/07-ledger.md#755-packages)).
+
+### Burial, rites, and editor integration
+
+- Added speculative reduction under undecided branches and past starved
+  statements, plus depth preservation on residues so reduced code never breaks
+  `[LOOK]` ([§6.5](spec/06-evaluation.md#65-residue)).
+- Added burial memoization ([§8.2.1](spec/08-rites.md#821-burying-what-is-already-buried)),
+  required `--root` for `disk`/`disk!` ([§8.3.4](spec/08-rites.md#834-rooting-the-disk)),
+  `answered` and `refused` constructors ([§9.2](spec/09-prelude.md#92-depth-0)),
+  demand-order deposits ([§8.4](spec/08-rites.md#84-lamp)), hole depth in trace
+  depth ([§7.3.2](spec/07-ledger.md#732-what-a-decoder-cannot-check)), and
+  `graft` refusal on already-given answers ([§8.7](spec/08-rites.md#87-graft)).
+- Added stateless editor inspection (`nether lamp <cairn> --at <byte> [--source <path>]`,
+  [§8.4.1](spec/08-rites.md#841-inspecting-a-byte-offset-in-an-editor)) and a
+  thin Vim/Neovim adapter in `tools/vim/nether.vim`.
+
+### Manual, site, face, and releases
+
+- Wrote the ten-chapter executable manual in `docs/manual/` (every `$ nether`
+  transcript executed on every build by `tests/transcripts/run`) and the threat
+  model in [SECURITY.md](SECURITY.md).
+- Added the inspectable glyph specimen page (`site/specimen.html`) in both
+  weights, aligned site and Necropolis typography to the 1/8-em grid
+  ([§90.6](spec/90-rationale.md#906-one-face-and-where-the-lettering-is-not-type)),
+  and hardened the site and Necropolis UI.
+- Added reproducible release builds (`scripts/task release:build` with
+  `--remap-path-prefix` and `--locked`, verified by the second-runner
+  `reproduce` job in `.github/workflows/release.yml`) and the release
+  compatibility contract ([§0.6.1](spec/00-overview.md#061-what-a-release-promises)).
+
+### Hardening
+
+- Completed multi-pass security and soundness hardening across the depth
+  checker, parser, lowering, burier, ledger bounds, Linux directory-FD disk
+  traversal, foreign FFI (`MAX_OUTPUT = 64 MiB`, temporary `AttemptGuard`),
+  HTTP client framing, WASM allocator layout, CLI rites, proof kernel, and CI
+  gates.
 
 ## [0.2.0] - 2026-09-17
 

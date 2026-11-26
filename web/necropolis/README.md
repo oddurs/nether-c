@@ -34,6 +34,8 @@ is separate work. Shades show their origin and cairn, never an unwrapped value.
 Source can be edited in the disclosure above the trace. Each burial uses a
 fresh module worker; restarting or cancelling terminates the old worker.
 Diagnostics retain and explicitly label the previous successful trace.
+`theme.js` provides the lamp toggle switching between the dark indigo room and
+the lit porcelain room using the shared tokens in `site/tokens.css`.
 
 Browser limits: 256 KiB source, the default one-million-step fuel budget,
 128 evaluation frames, an 8 MiB module stack, and a 30-second worker deadline.

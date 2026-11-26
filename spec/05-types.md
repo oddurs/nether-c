@@ -226,6 +226,6 @@ language is making.
 > binding in one reading and an assignment in another. See
 > [§90.2](90-rationale.md#902-rejected-alternatives).
 
-> Depth annotations must remain optional in ordinary code. The roadmap item
-> *Depth inference* is proven by deleting every `@n` from every sample program
-> in this specification and requiring them all still to compile.
+> Depth annotations must remain optional in ordinary code. Depth inference
+> (buried) is tested by deleting every `@n` from every sample program in this
+> specification and requiring them all still to bury.

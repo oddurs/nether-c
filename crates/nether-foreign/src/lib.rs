@@ -1,4 +1,4 @@
-//! Stratum 8: foreign code, and the only `unsafe` in the language.
+//! Stratum 8: foreign code, and one of two crates where `unsafe` is allowed.
 //!
 //! `spec/09-prelude.md` §9.8 and §9.8.1, and `spec/01-strata.md` §1.7. A crate
 //! rather than a module, because the workspace sets `unsafe_code = "forbid"`

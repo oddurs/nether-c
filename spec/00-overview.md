@@ -37,7 +37,7 @@ stands on its own: no knowledge of another language is required.
 ## 0.2 The thesis, in one sentence
 
 > Evaluation is not something a program does later; it is something that has
-> already happened as far as it could, and the artifact is the record of how
+> already happened as far as it could, and the trace is the record of how
 > far that was.
 
 ## 0.3 What a Nether C implementation must provide

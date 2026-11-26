@@ -7,7 +7,7 @@ status: draft
 # Where to go from here
 
 You have buried four programs, given one of them a disk, given another two
-different environments, asked a trace whether the world had moved, and been
+different environments, replayed a trace with the world switched off, and been
 refused by the type system for looking at something from the wrong depth.
 
 That is the short path. Here is the rest of the map.
@@ -44,12 +44,11 @@ Then, as you need them:
 
 ## Rites this manual did not use
 
-`nether graft` substitutes an answer into a trace and re-buries only what
-changed, which is the operation a build system wants and the reason content
-addressing earns its keep. It is [§8.7](../../spec/08-rites.md#87-graft). It is
-not in this manual because its behaviour when replacing an answer that was
-already given is wrong today — see item 0273 — and a worked example would
-teach the bug.
+`nether graft` substitutes an answer for an open hole in a trace and re-buries
+only what changed, which is the operation a build system wants and the reason
+content addressing earns its keep. It is [§8.7](../../spec/08-rites.md#87-graft):
+`--replace` names a hole the trace still has, and refuses an answer already
+given because that answer belongs to the earlier trace before exhumation.
 
 ## The three questions people ask
 
@@ -62,9 +61,11 @@ afterwards. If that feels like a missing feature, [chapter 1](01-the-first-buria
 is the argument for why it is the point.
 
 **How do I run it?** You do not, and `nether run` exists solely to say so and
-exit 64. It is the single frozen requirement in an otherwise entirely draft
-specification — [§8.0](../../spec/08-rites.md). Everything else here may change
-without a version bump. That one will not.
+exit 64. It is frozen in [§8.0](../../spec/08-rites.md#80-there-is-no-run)
+alongside the canonical value and node encodings
+([§7.1](../../spec/07-ledger.md#71-canonical-encoding) and
+[§7.3.1](../../spec/07-ledger.md#731-node-encoding)). Everything else in this
+draft may change without a version bump. Those will not.
 
 ## Inspecting a trace in the browser
 
@@ -92,4 +93,5 @@ with these programs in it, and the output underneath is compared to what came
 back. Two bugs were found writing it, and they are 0273 and 0274.
 
 Documentation that lies fails the build. That is not a policy; it is
-`tests/transcripts/run`, and it is forty lines.
+`tests/transcripts/run`, a single standard-library Python harness that runs on
+every build.

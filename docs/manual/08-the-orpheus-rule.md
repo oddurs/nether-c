@@ -60,7 +60,7 @@ where the value came from.
 Because the alternative is a language where a `Bytes` might have come from the
 network and might not, and nothing in the type says which. Then every function
 that takes `Bytes` is a function that might be handling something a stranger
-sent, and knowing which ones is a code review rather than a compile.
+sent, and knowing which ones is a code review rather than a burial.
 
 Here, looking inside a shade is a syntactic act at a known depth. Every place
 in a program where deep data becomes ordinary data is a `look` inside a

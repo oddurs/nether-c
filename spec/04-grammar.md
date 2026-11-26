@@ -151,13 +151,17 @@ primary       := int_literal
                | str_literal
                | bytes_literal
                | bool_literal
+               | cairn_literal
                | identifier
                | descend_expr
                | block
                | "(" expr ")" ;
 
-descend_expr  := "descend" identifier block ;
+descend_expr  := "descend" identifier [ "!" ] block ;
 ```
+
+In `descend_expr`, no whitespace or comment MAY appear between `identifier` and
+`"!"` (for example `disk!` and `net!`).
 
 ## 4.6 Precedence
 

@@ -21,7 +21,7 @@ the REPL and the build are one act, and the result is a system with
 extraordinary immediacy: you type, and the machine has already done it.
 
 Nether C moves all of it to the other side. Burial is partial evaluation, and
-the artifact is the residue.
+the trace holds the residue.
 
 **What it cost.** Immediacy. There is no REPL and there cannot be a good one,
 because the thing a REPL is for — see the effect now — is precisely what this
@@ -91,10 +91,9 @@ Nether C makes the *text* disposable and the *graph* canonical. The source is
 one rendering of the program; the trace is what actually exists.
 
 **What it cost.** Charm, so far. The ledger graph is a better substrate for
-diffing, provenance and reproducibility, and it is currently much less
-pleasant to look at than a DolDoc file. The Necropolis exists to close that
-gap and has not yet been built, so this comparison is not yet one Nether C
-wins.
+diffing, provenance and reproducibility, and it is still more austere to look
+at than a DolDoc file. The Necropolis (`web/necropolis/`) closes part of that
+gap locally in a browser, though visual richness remains work in progress.
 
 ### 640×480 forever → the Decay Rule
 
@@ -423,7 +422,7 @@ Adding a field to `Trace` changes what an existing tag means, which bumps the
 domain separator ([§7.2](07-ledger.md#72-cairns)) and renames every value ever
 stored. Paying that to record a number that provably did not affect the result
 is the wrong trade, and if the diagnostic case turns out to matter it can be
-served by the rite's own output rather than by the artifact.
+served by the rite's own output rather than by the trace.
 
 ### Calling a nullary function without parentheses
 
@@ -584,8 +583,8 @@ The obvious cheap answer: make the fuel budget a `--fuel` flag and the barrier a
 `--no-inline` list, and keep both out of the language.
 
 Rejected because a trace buried under a different budget is a different trace.
-If the artifact depends on it, it is part of the artifact, and a thing that is
-part of the artifact has to be visible in the source that produced it. A build
+If the trace depends on it, it is part of the trace, and a thing that is
+part of the trace has to be visible in the source that produced it. A build
 that succeeds on one machine and exhausts on another because somebody's shell
 alias differed is precisely the class of failure this language exists to make
 impossible.
@@ -782,7 +781,7 @@ from the same span twice, which is a surprising thing to forbid in a language
 whose only output channel this is.
 
 Neither reading was obviously wrong, and leaving it unsaid was: the list is
-part of the `Trace`'s encoding, so the two readings give the artifact two
+part of the `Trace`'s encoding, so the two readings give the trace two
 different cairns, which is what §7.1 is frozen to prevent. The implementation
 had already chosen both — burial recorded four deposits for the loop above and
 `lamp` printed one tick — which is what an ambiguity looks like from inside.
@@ -1491,8 +1490,8 @@ than general LSP features such as completions or rename.
 
 ### `https`, and the one dependency exception
 
-`CLAUDE.md` permits exactly one kind of dependency — "do not write your own
-cryptography" — and refuses the rest. `https` is TLS, so
+Beyond the Unicode tables above, `CLAUDE.md` permits cryptography — "do not
+write your own cryptography" — and refuses the rest. `https` is TLS, so
 [§9.6](09-prelude.md#96-strata-5-and-6-net-net) had to settle whether `net`
 means a TLS stack or means less than people will expect.
 
@@ -1712,9 +1711,9 @@ three block characters. A reader who cannot distinguish `--accent` from
 `--ink` has the prefix and the bar, and that is the whole of it. It is thinner
 than a display face would be and it is the price of one face.
 
-A second *weight* is a different question, and it is item 0231: bold is the
-same letterforms drawn heavier, not a second face, and the browser must not be
-allowed to invent one.
+A second *weight* is a different question, settled in item 0231
+(`site/nether-bold.woff`): bold is the same letterforms drawn heavier, not a
+second face, and the browser is not allowed to invent one.
 
 ### The four sizes it is read at, and where the grid gives way
 
@@ -1788,7 +1787,7 @@ listing title bars as tall as the code they label.
 must preserve — **soundness of the bound** (reduction never raises depth) and
 **ambient soundness** (any derivable depth is bounded by `max(δ ∪ g(e))`) — and
 [§1.6](01-strata.md#16-shade-and-the-orpheus-rule),
-[§6.8](06-evaluation.md#68-what-burial-prints) and
+[§6.5](06-evaluation.md#65-residue) and
 [§7.1](07-ledger.md#71-canonical-encoding) add three more: the necessity and
 sufficiency of the Orpheus premise `d ∈ δ`, the staging law
 `bury(bury(e, A), B) = bury(e, A ∪ B)`, and the injectivity of the canonical
@@ -1800,8 +1799,9 @@ Four families of proof environment were compared for `proof/`:
 - **External interactive proof assistants (Lean 4, Coq/Rocq, Agda, Isabelle/HOL).**
   Foundational kernels with rich tactic languages and editor integration.
   **Rejected:** each brings a multi-hundred-megabyte toolchain outside the
-  pinned CI image (`.github/workflows/ci.yml` pins Rust `1.98.1` and Python
-  `3.12`), version-locked standard libraries whose syntax and tactics churn
+  pinned CI image (`rust-toolchain.toml` pins Rust `1.98` and
+  `.github/workflows/ci.yml` pins Python `3.12`), version-locked standard
+  libraries whose syntax and tactics churn
   across point releases, and a build step that contributors without the
   assistant installed would skip. A proof that only runs when an optional tool
   is present rots the way an optional lint does.
@@ -1833,7 +1833,7 @@ Four families of proof environment were compared for `proof/`:
   `scripts/task check`.
 
 **What it cost.** Two things. First, the trusted computing base of the proofs is
-`proof/kernel.py` (~600 lines of Python) plus the pinned Python 3.12 interpreter
+`proof/kernel.py` (~1,677 lines of Python) plus the pinned Python 3.12 interpreter
 rather than Lean's or Coq's kernel; `proof/check.py` mitigates this by testing
 that forged theorems, missing cases, undischarged hypotheses, and false lattice
 claims are actively rejected on every run. Second, proofs are written as explicit
@@ -1866,18 +1866,19 @@ explicit inductive relations and finite-domain decision procedure in `proof/`:
 1. **Ambient soundness of the eleven typing rules**
    ([§2.4](02-calculus.md#24-metatheory), theorem `ambient_soundness` in
    `proof/calculus.py`): for every derivation `HasType(Γ, δ, e, τ, d)` built
-   from the 11 rules of [§2.2](02-calculus.md#22-the-rules), `d ≤ max(δ ∪ g(e))`.
-   *Model scope and assumption:* proved by rule induction over `TYPING_SPEC`
+   from the 12 rules of `HAS_TYPE` ([§2.2](02-calculus.md#22-the-rules)'s 11
+   rules plus `SELECT`), `d ≤ max(δ ∪ g(e))`.
+   *Model scope and assumption:* proved by rule induction over `HAS_TYPE`
    over the 9-element lattice `0..8` and capability subsets `P({0..8})`.
 2. **Substitution depth monotonicity** ([§2.4](02-calculus.md#24-metatheory),
-   theorem `substitution_monotonicity` in `proof/calculus.py`): for all 12
+   theorem `substitution_monotonicity` in `proof/calculus.py`): for all 13
    expression substitution forms `SubstDepth(e, d_e, d_v, d′)` representing
    `e[x := v]` with `v : τ_v@d_v`, `d′ ≤ max(d_e, d_v)`, with equality to `d_e`
    whenever `d_v = 0`.
 3. **Soundness of the depth bound under reduction**
    ([§1.2](01-strata.md#12-the-monotonicity-law) and
    [§2.4](02-calculus.md#24-metatheory), theorem `soundness_of_bound` in
-   `proof/calculus.py`): for all 17 small-step reduction rules of
+   `proof/calculus.py`): for all 18 small-step reduction rules of
    [§6](06-evaluation.md) (`StepTyped(e, e′, d, d′)`), `d′ ≤ d`. Reduction can
    discard an untaken arm (`if (true) a else b`, where `d = max(d_a, d_b)` and
    `d′ = d_a`) or drop an unused deep argument, and never raises a depth.
@@ -1893,12 +1894,11 @@ explicit inductive relations and finite-domain decision procedure in `proof/`:
    (`{d} ⊆ δ` if and only if `d ∈ δ`); and strictly stronger than the numeric ceiling
    `d ≤ max(δ)` when `δ` is not a downward-closed interval (`d = 3, δ = {0, 5}`).
 5. **Core residual round-trip and the staging law**
-   ([§6.5](06-evaluation.md#65-residue) and
-   [§6.8](06-evaluation.md#68-what-burial-prints), theorems
+   ([§6.5](06-evaluation.md#65-residue), theorems
    `roundtrip_identity`, `hole_set_union_law`, `staging_idempotence_set`,
    `staging_law`, `dependent_hole_non_monotone_counterexample`, and
    `cumulative_dependent_hole_law` in `proof/staging.py`): in the core calculus
-   model, `parse(print(r)) = r` over all 11 residual constructors. The
+   model, `parse(print(r)) = r` over all 12 residual constructors. The
    staging law is weaker than its name: `StagedEval` defines the two-stage
    reduction `bury(bury(e, A), B)` and the one-stage reduction `bury(e, A ∪ B)`
    rule by rule, side by side, and `staging_law` proves that every derivation
@@ -1943,7 +1943,7 @@ by deterministic and generative test suites run by `scripts/task test` and
    seeded programs checking that `nether_bury::bury` never raises an expression's
    depth and always emits a residue accepted by `nether_core::check`.
 3. **Surface syntax print/parse/lower round-trip and staged burial on `Unit` IR**
-   ([§4](04-grammar.md) and [§6.8](06-evaluation.md#68-what-burial-prints),
+   ([§4](04-grammar.md) and [§6.5](06-evaluation.md#65-residue),
    `crates/nether-bury/tests/residue_is_source.rs`,
    `crates/nether-syntax/tests/lowering.rs`, and
    `crates/nether-syntax/tests/fuzz.rs`): surface printing, lexing, parsing,

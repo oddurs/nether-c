@@ -598,9 +598,8 @@ prune `Witness` nodes at all: a witness is the only copy of something the
 world said once and may never say again.
 
 > This is a real cost, stated plainly: a Nether C store grows monotonically.
-> Whether that is affordable is a question the roadmap item *The store:
-> layout, index, and garbage* has to answer with measurements rather than
-> opinions.
+> Whether that is affordable is a question the roadmap item *Measure a year of
+> a real store* (0210) has to answer with measurements rather than opinions.
 
 ## 7.7 Versioning
 

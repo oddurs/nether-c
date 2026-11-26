@@ -49,7 +49,7 @@ Nether C is a C dialect in which nothing runs. A program is *buried* —
 evaluated as far as the world permits — and what ships is a trace plus the holes
 the world still owes an answer to.
 
-**The specification comes before the compiler.** That is the current phase, not
+**The specification comes before the compiler.** That is a permanent rule, not
 a preference. If you are about to implement something `spec/` does not describe,
 stop: write the section first, in its own pull request.
 
@@ -115,7 +115,7 @@ Everything automated goes through `scripts/task`. CI, the git hooks and
 `scripts/agent` know only these verbs:
 
 ```
-scripts/task fmt fmt:check lint test build proofs fuzz site site:check gfx gfx:check decay check
+scripts/task fmt fmt:check lint test workflow:check graph:check browser:check build proofs fuzz site site:check gfx gfx:check design design:check font font:check wasm serve decay check release release:build
 ```
 
 Need a new capability? Add a verb here. Do not put a toolchain command in a
@@ -153,10 +153,14 @@ advantages is marketing.
 ## NEVER
 
 - **Never edit `ROADMAP.md`.** Generated. Change items, run `cairn render`.
-- **Never edit `site/index.html`, `site/spec/*.html`, `site/gfx/*.gif` or
-  `site/nether.woff`.** Generated. Change `spec/*.md`, `site/src/index.html`,
-  `site/gfx.py` or `site/font.py`, run `scripts/task site gfx font`, and commit
-  what comes out.
+- **Never edit generated site assets:** `site/index.html`, `site/spec/*.html`,
+  `site/manual/*.html`, `site/specimen.html`, `site/404.html`,
+  `site/in-memoriam.html`, `site/tokens.css`, `site/gfx/*.gif`,
+  `site/nether.woff`, or `site/nether-bold.woff`. Change `spec/*.md`,
+  `docs/manual/*.md`, `site/src/index.html`, `site/design.py`, `site/gfx.py`,
+  or `site/font.py`, run the corresponding verbs separately (`scripts/task
+  design`, `scripts/task gfx`, `scripts/task font`, `scripts/task site`), and
+  commit what comes out.
 - **Never commit `web/necropolis/nether.wasm`.** Built by `scripts/task wasm`,
   and ignored. A Rust release build is not byte-reproducible across machines,
   so a committed copy could only be checked by rebuilding it. `.wasm-ceiling`
@@ -188,18 +192,30 @@ The body explains *why*; the diff already says what. Reference the item in a
 
 ```
 spec/                 the specification. canonical. read 00, 01, 02, 06 first
+docs/manual/          the ten-chapter executable manual
+lib/                  the sample-program bootstrap interpreter in Nether C
+proof/                in-tree LCF proof kernel and mechanized metatheory
+tools/vim/            thin Vim/Neovim adapter for `nether lamp --at`
 site/bake             markdown -> html. one file. no dependencies
+site/design.py        colour, space and type tokens -> site/tokens.css
+site/tokens.css       generated design tokens. do not edit
 site/gfx.py           GIF89a encoder, LZW, and a 5x7 font. none of it imported
 site/font.py          the body face: 8x8 glyphs, a TrueType writer, and WOFF
 site/src/index.html   the front page. written directly, not generated
 site/nether.css       the whole design. one file
+site/nether.woff      regular face, built by site/font.py. do not edit
+site/nether-bold.woff bold face, built by site/font.py. do not edit
+crates/nether-core/   IR, depth calculus, and type/depth checker
+crates/nether-syntax/ lexer, parser, lowering, and printer
+crates/nether-bury/   burial evaluator and residualiser
+crates/nether-ledger/ canonical encoding, cairns, store, bundles, and packages
+crates/nether-world/  world providers for strata 1..8 and exhumation
 crates/nether-cli/    the `nether` binary. refuses `run`
 crates/nether-foreign/ stratum 8. one of the two places `unsafe` is allowed
 crates/nether-wasm/   the core, for a browser. the other one
 web/necropolis/       the page that buries without a server
-site/nether.woff      the face, built by site/font.py. do not edit
 cairn/items/          the roadmap, one markdown file per item
-scripts/              task, agent, decay, setup
+scripts/              task, agent, decay, notes, pr-policy, setup, wasm
 .githooks/            commit-msg, pre-commit, pre-push, post-merge
 ```
 
