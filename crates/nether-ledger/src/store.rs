@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::cairn::Cairn;
-use crate::codec::{DecodeError, Scanned, Stored, decode_stored, scan_stored};
+use crate::codec::{DecodeError, Stored, decode_stored, scan_stored};
 use crate::node::Node;
 use crate::value::Value;
 
@@ -208,20 +208,14 @@ fn stored_weight(stored: &Stored, encoded_len: usize) -> usize {
 
 /// `O_NONBLOCK` per Unix OS/architecture so opening a FIFO in `objects/` or
 /// `refs/` fails immediately instead of blocking forever.
-#[cfg(all(target_os = "linux", any(target_arch = "mips", target_arch = "mips64")))]
-const OPEN_NONBLOCK: i32 = 0x0080;
-#[cfg(all(target_os = "linux", any(target_arch = "sparc", target_arch = "sparc64")))]
-const OPEN_NONBLOCK: i32 = 0x4000;
-#[cfg(all(
-    target_os = "linux",
-    not(any(
-        target_arch = "mips",
-        target_arch = "mips64",
-        target_arch = "sparc",
-        target_arch = "sparc64"
-    ))
-))]
-const OPEN_NONBLOCK: i32 = 0x0800;
+#[cfg(target_os = "linux")]
+const OPEN_NONBLOCK: i32 = if cfg!(any(target_arch = "mips", target_arch = "mips64")) {
+    0x0080
+} else if cfg!(any(target_arch = "sparc", target_arch = "sparc64")) {
+    0x4000
+} else {
+    0x0800
+};
 #[cfg(any(
     target_os = "macos",
     target_os = "ios",
@@ -290,52 +284,35 @@ fn open_regular_nonblock(path: &Path) -> io::Result<(fs::File, fs::Metadata)> {
     Ok((file, meta))
 }
 
-fn read_bounded_object(path: &Path) -> Result<Vec<u8>, StoreError> {
+fn read_bounded(path: &Path, asked: Option<Cairn>) -> Result<Vec<u8>, StoreError> {
+    let too_large = |bytes: usize| match asked {
+        Some(asked) => StoreError::Corrupt {
+            asked,
+            found: None,
+            why: Some(DecodeError::TooLarge { bytes, limit: MAX_OBJECT_BYTES }),
+        },
+        None => StoreError::Bundle("bundle object exceeds size bound"),
+    };
     let (file, meta) = match open_regular_nonblock(path) {
         Ok(ok) => ok,
-        Err(e) if e.kind() == io::ErrorKind::InvalidInput => {
-            return Err(StoreError::Bundle("non-regular file in objects/"));
-        }
-        Err(e) => return Err(StoreError::Io(e)),
+        Err(e) => match (e.kind(), asked) {
+            (io::ErrorKind::NotFound, Some(asked)) => return Err(StoreError::Absent(asked)),
+            (io::ErrorKind::InvalidInput, Some(asked)) => {
+                return Err(StoreError::Corrupt { asked, found: None, why: None });
+            }
+            (io::ErrorKind::InvalidInput, None) => {
+                return Err(StoreError::Bundle("non-regular file in objects/"));
+            }
+            _ => return Err(StoreError::Io(e)),
+        },
     };
     if meta.len() > MAX_OBJECT_BYTES as u64 {
-        return Err(StoreError::Bundle("bundle object exceeds size bound"));
+        return Err(too_large(usize::try_from(meta.len()).unwrap_or(usize::MAX)));
     }
     let mut bytes = Vec::with_capacity(usize::try_from(meta.len()).unwrap_or(0).min(64 * 1024));
     file.take(MAX_OBJECT_BYTES as u64 + 1).read_to_end(&mut bytes)?;
     if bytes.len() > MAX_OBJECT_BYTES {
-        return Err(StoreError::Bundle("bundle object exceeds size bound"));
-    }
-    Ok(bytes)
-}
-
-fn read_object_bytes(path: &Path, asked: Cairn) -> Result<Vec<u8>, StoreError> {
-    let (file, meta) = match open_regular_nonblock(path) {
-        Ok(ok) => ok,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(StoreError::Absent(asked)),
-        Err(e) if e.kind() == io::ErrorKind::InvalidInput => {
-            return Err(StoreError::Corrupt { asked, found: None, why: None });
-        }
-        Err(e) => return Err(StoreError::Io(e)),
-    };
-    if meta.len() > MAX_OBJECT_BYTES as u64 {
-        return Err(StoreError::Corrupt {
-            asked,
-            found: None,
-            why: Some(DecodeError::TooLarge {
-                bytes: usize::try_from(meta.len()).unwrap_or(usize::MAX),
-                limit: MAX_OBJECT_BYTES,
-            }),
-        });
-    }
-    let mut bytes = Vec::with_capacity(usize::try_from(meta.len()).unwrap_or(0).min(64 * 1024));
-    file.take(MAX_OBJECT_BYTES as u64 + 1).read_to_end(&mut bytes)?;
-    if bytes.len() > MAX_OBJECT_BYTES {
-        return Err(StoreError::Corrupt {
-            asked,
-            found: None,
-            why: Some(DecodeError::TooLarge { bytes: bytes.len(), limit: MAX_OBJECT_BYTES }),
-        });
+        return Err(too_large(bytes.len()));
     }
     Ok(bytes)
 }
@@ -402,30 +379,18 @@ fn for_each_ref(
     Ok(true)
 }
 
-fn verify_bytes(asked: Cairn, bytes: &[u8]) -> Result<Stored, StoreError> {
-    let stored = decode_stored(bytes).map_err(|why| StoreError::Corrupt {
-        asked,
-        found: None,
-        why: Some(why),
-    })?;
+fn verify_with<T>(
+    asked: Cairn,
+    bytes: &[u8],
+    parse: fn(&[u8]) -> Result<T, DecodeError>,
+) -> Result<T, StoreError> {
+    let parsed =
+        parse(bytes).map_err(|why| StoreError::Corrupt { asked, found: None, why: Some(why) })?;
     let actual = Cairn::of_encoded(bytes);
     if actual != asked {
         return Err(StoreError::Corrupt { asked, found: Some(actual), why: None });
     }
-    Ok(stored)
-}
-
-fn verify_scanned(asked: Cairn, bytes: &[u8]) -> Result<Scanned, StoreError> {
-    let scanned = scan_stored(bytes).map_err(|why| StoreError::Corrupt {
-        asked,
-        found: None,
-        why: Some(why),
-    })?;
-    let actual = Cairn::of_encoded(bytes);
-    if actual != asked {
-        return Err(StoreError::Corrupt { asked, found: Some(actual), why: None });
-    }
-    Ok(scanned)
+    Ok(parsed)
 }
 
 impl Store {
@@ -487,6 +452,18 @@ impl Store {
         self.put_verified(cairn, &scanned.references, &bytes)
     }
 
+    fn create_temp(&self, hint: &str, read: bool) -> io::Result<(PathBuf, fs::File)> {
+        fs::create_dir_all(self.root.join("tmp"))?;
+        loop {
+            let candidate = self.temp_path(hint);
+            match fs::OpenOptions::new().read(read).write(true).create_new(true).open(&candidate) {
+                Ok(f) => return Ok((candidate, f)),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     /// Writes a temporary stratum-8 foreign-call attempt record under `tmp/`
     /// before entering foreign code, returning a guard that deletes it after
     /// the call returns cleanly (`spec/09-prelude.md` §9.8.1).
@@ -495,16 +472,7 @@ impl Store {
     ///
     /// Returns [`io::Error`] if the temporary attempt file cannot be written.
     pub fn begin_attempt(&self, bytes: &[u8]) -> io::Result<AttemptGuard> {
-        let tmp_dir = self.root.join("tmp");
-        fs::create_dir_all(&tmp_dir)?;
-        let (path, mut file) = loop {
-            let candidate = self.temp_path("attempt");
-            match fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
-                Ok(f) => break (candidate, f),
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(e),
-            }
-        };
+        let (path, mut file) = self.create_temp("attempt", false)?;
         if let Err(e) = file.write_all(bytes).and_then(|()| file.flush()) {
             drop(file);
             let _ = fs::remove_file(&path);
@@ -533,8 +501,8 @@ impl Store {
         bytes: &[u8],
     ) -> Result<Cairn, StoreError> {
         let path = self.fanned("objects", cairn);
-        if let Ok(existing) = read_object_bytes(&path, cairn)
-            && verify_scanned(cairn, &existing).is_ok()
+        if let Ok(existing) = read_bounded(&path, Some(cairn))
+            && verify_with(cairn, &existing, scan_stored).is_ok()
         {
             let mut targets = BTreeSet::new();
             for &target in references {
@@ -579,20 +547,7 @@ impl Store {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        // `open` creates this, but a handle outlives the directory if an
-        // operator or a tmp reaper clears it, and every write after that
-        // failed with ENOENT.
-        let tmp_dir = self.root.join("tmp");
-        fs::create_dir_all(&tmp_dir)?;
-
-        let (temp, mut file) = loop {
-            let candidate = self.temp_path(hint);
-            match fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
-                Ok(f) => break (candidate, f),
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(e),
-            }
-        };
+        let (temp, mut file) = self.create_temp(hint, false)?;
         if let Err(e) = file.write_all(bytes) {
             drop(file);
             let _ = fs::remove_file(&temp);
@@ -654,8 +609,8 @@ impl Store {
             seen.reads += 1;
         }
         let path = self.fanned("objects", cairn);
-        let bytes = read_object_bytes(&path, cairn)?;
-        let stored = verify_bytes(cairn, &bytes)?;
+        let bytes = read_bounded(&path, Some(cairn))?;
+        let stored = verify_with(cairn, &bytes, decode_stored)?;
         let weight = stored_weight(&stored, bytes.len());
         if weight <= SEEN_BYTES {
             let mut seen = self.seen();
@@ -889,9 +844,9 @@ impl Store {
         let (mut malformed, mut verified, mut corrupt) =
             (BTreeSet::new(), BTreeMap::<Cairn, Entry>::new(), BTreeSet::new());
         for (cairn, path) in self.scan_area("objects", &mut malformed)? {
-            match read_object_bytes(&path, cairn) {
+            match read_bounded(&path, Some(cairn)) {
                 Ok(bytes) => {
-                    if let Ok(scanned) = verify_scanned(cairn, &bytes) {
+                    if let Ok(scanned) = verify_with(cairn, &bytes, scan_stored) {
                         verified.insert(
                             cairn,
                             Entry {
@@ -1003,12 +958,12 @@ impl Store {
         let mut found: BTreeMap<Cairn, (Vec<Cairn>, PathBuf)> = BTreeMap::new();
         let mut total_bytes: usize = 0;
         for (cairn, path) in files {
-            let bytes = read_bounded_object(&path)?;
+            let bytes = read_bounded(&path, None)?;
             total_bytes = total_bytes
                 .checked_add(bytes.len())
                 .filter(|&t| t <= MAX_BUNDLE_BYTES)
                 .ok_or(StoreError::Bundle("bundle exceeds total size bound"))?;
-            let scanned = verify_scanned(cairn, &bytes)?;
+            let scanned = verify_with(cairn, &bytes, scan_stored)?;
             found.insert(cairn, (scanned.references, path));
         }
         // An object's height is 0 if it references nothing here, and one more
@@ -1056,8 +1011,8 @@ impl Store {
         send(BUNDLE_MAGIC)?;
         send(&(entries.len() as u64).to_be_bytes())?;
         for (cairn, path) in &entries {
-            let bytes = read_bounded_object(path)?;
-            verify_scanned(*cairn, &bytes)?;
+            let bytes = read_bounded(path, None)?;
+            verify_with(*cairn, &bytes, scan_stored)?;
             send(cairn.as_bytes())?;
             send(&(bytes.len() as u64).to_be_bytes())?;
             send(&bytes)?;
@@ -1067,15 +1022,8 @@ impl Store {
     }
 
     fn create_staging_file(&self) -> io::Result<(TempFileGuard, fs::File)> {
-        fs::create_dir_all(self.root.join("tmp"))?;
-        loop {
-            let candidate = self.temp_path("import");
-            match fs::OpenOptions::new().read(true).write(true).create_new(true).open(&candidate) {
-                Ok(f) => return Ok((TempFileGuard(candidate), f)),
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(e) => return Err(e),
-            }
-        }
+        let (path, file) = self.create_temp("import", true)?;
+        Ok((TempFileGuard(path), file))
     }
 
     /// Imports a portable bundle (`spec/07-ledger.md` §7.5.4), staging verified
@@ -1167,12 +1115,12 @@ impl Store {
                 .map_err(|_| StoreError::Bundle("bundle object exceeds size bound"))?;
             let mut bytes = vec![0u8; len];
             staged.read_exact(&mut bytes)?;
-            let scanned = verify_scanned(cairn, &bytes)?;
+            let scanned = verify_with(cairn, &bytes, scan_stored)?;
             if self.has(cairn) {
                 // §7.5.4: verify the on-disk object directly rather than relying
                 // on the in-memory `self.seen` cache.
-                let existing = read_object_bytes(&self.fanned("objects", cairn), cairn)?;
-                verify_scanned(cairn, &existing)?;
+                let existing = read_bounded(&self.fanned("objects", cairn), Some(cairn))?;
+                verify_with(cairn, &existing, scan_stored)?;
                 for &target in &scanned.references {
                     let known = match ref_cache.entry(target) {
                         std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
@@ -1227,7 +1175,7 @@ impl Store {
             return Err(StoreError::Bundle("truncated bundle"));
         }
         hasher.update(&bytes);
-        let scanned = verify_scanned(cairn, &bytes)?;
+        let scanned = verify_with(cairn, &bytes, scan_stored)?;
         for target in scanned.references {
             if !seen.contains(&target) {
                 expected_before.insert(target);

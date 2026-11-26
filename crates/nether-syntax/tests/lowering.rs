@@ -248,7 +248,7 @@ fn a_name_that_is_not_there_is_one_complaint() {
     let ast = parse(b"demand nowhere;\n").expect("parses");
     let faults = lower(&ast).expect_err("that name is not bound");
     assert_eq!(faults.len(), 1, "{faults:?}");
-    assert_eq!(faults[0].to_string(), "this does not name this name");
+    assert_eq!(faults[0].to_string(), "unknown name `nowhere`");
 }
 
 #[test]

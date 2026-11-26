@@ -202,7 +202,7 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     // Index `residue.named` once so hole lookups are O(log N) rather than O(H*N).
     let mut named_index: Vec<(Cairn, &Stored)> =
         residue.named.iter().map(|(id, object)| (*id, object)).collect();
-    named_index.sort_unstable_by_key(|(id, _)| *id);
+    sort_by_cairn(&mut named_index);
     named_index.dedup_by_key(|(id, _)| *id);
     let lookup = |c: Cairn| -> Option<&Stored> {
         named_index.binary_search_by_key(&c, |(id, _)| *id).ok().map(|idx| named_index[idx].1)
@@ -229,13 +229,14 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
 
     // Transport the frozen ledger encoding, not a second value format.
     // Include source, residue and trace explicitly: `named` holds evaluation's
-    // objects, not the envelope. Sorting also deduplicates shared values.
+    // objects, not the envelope. Inserting in sorted order keeps shared values deduplicated.
     let mut objects = named_index;
     for object in [&named, &printed_value, &trace] {
-        objects.push((object.cairn(), object));
+        let id = object.cairn();
+        if let Err(pos) = objects.binary_search_by_key(&id, |(c, _)| *c) {
+            objects.insert(pos, (id, object));
+        }
     }
-    objects.sort_unstable_by_key(|(id, _)| *id);
-    objects.dedup_by_key(|(id, _)| *id);
     if objects.len() > MAX_WASM_OBJECTS {
         return trouble(
             &format!(
@@ -274,6 +275,31 @@ pub fn burying(source: &[u8], fuel: u64) -> String {
     }
     out.push_str("]}");
     out
+}
+
+/// In-place O(N log N) heapsort so WASM does not pull in `core::slice::sort`.
+fn sort_by_cairn(a: &mut [(Cairn, &Stored)]) {
+    let sift = |a: &mut [(Cairn, &Stored)], mut root: usize, end: usize| {
+        while root * 2 + 1 < end {
+            let mut child = root * 2 + 1;
+            if child + 1 < end && a[child].0 < a[child + 1].0 {
+                child += 1;
+            }
+            if a[root].0 >= a[child].0 {
+                break;
+            }
+            a.swap(root, child);
+            root = child;
+        }
+    };
+    let n = a.len();
+    for start in (0..n / 2).rev() {
+        sift(a, start, n);
+    }
+    for end in (1..n).rev() {
+        a.swap(0, end);
+        sift(a, 0, end);
+    }
 }
 
 fn append_holes(

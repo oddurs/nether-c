@@ -7,7 +7,9 @@ use std::process::ExitCode;
 
 use nether_ledger::{Cairn, Store, StoreError, Stored, Value};
 
-use crate::{FAILED, code, json, usage_error};
+use crate::{FAILED, bad_usage, code, json, split_flag, take_val, usage_error};
+
+pub(crate) const USAGE: &str = "usage: nether cairn <path> | --verify <cairn> [--json]";
 
 /// `nether cairn <path> | --verify <cairn> [--json]`
 pub fn run(args: &[String]) -> ExitCode {
@@ -24,15 +26,22 @@ pub fn run(args: &[String]) -> ExitCode {
             path_arg = Some(arg.as_str());
             continue;
         }
-        match arg.as_str() {
-            "--" => end_opts = true,
-            "--json" => wants_json = true,
-            "--verify" => match rest.next() {
+        let (flag, inline) = split_flag(arg);
+        match (flag, inline) {
+            ("--", None) => end_opts = true,
+            ("--help" | "-h", None) => {
+                println!("{USAGE}");
+                return ExitCode::SUCCESS;
+            }
+            ("--json", None) => wants_json = true,
+            ("--verify", inline) => match take_val(inline, &mut rest) {
                 Some(v) if verify_arg.is_none() && path_arg.is_none() => verify_arg = Some(v),
                 _ => return usage(),
             },
-            other if other.starts_with("--") => return usage(),
-            other if path_arg.is_none() && verify_arg.is_none() => path_arg = Some(other),
+            (other, _) if other.starts_with('-') && other != "-" => {
+                return bad_usage(&format!("unknown option `{arg}`"), USAGE);
+            }
+            _ if path_arg.is_none() && verify_arg.is_none() => path_arg = Some(arg.as_str()),
             _ => return usage(),
         }
     }
@@ -44,7 +53,7 @@ pub fn run(args: &[String]) -> ExitCode {
 }
 
 fn usage() -> ExitCode {
-    eprintln!("usage: nether cairn <path> | --verify <cairn> [--json]");
+    eprintln!("{USAGE}");
     usage_error()
 }
 

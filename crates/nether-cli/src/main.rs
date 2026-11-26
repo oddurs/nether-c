@@ -39,10 +39,54 @@ mod code {
     pub const FUEL: u8 = 75;
 }
 
+/// The budget a burial or exhumation runs under when nobody says otherwise.
+///
+/// §8.2 requires this to be finite; it is reported on request rather than
+/// recorded in the trace, because a budget that bound leaves no trace.
+pub(crate) const DEFAULT_FUEL: u64 = 1_000_000;
+
 /// The codes as this program hands them back.
 const FAILED: ExitCode = ExitCode::FAILURE;
 fn usage_error() -> ExitCode {
     ExitCode::from(code::USAGE_ERROR)
+}
+
+pub(crate) fn bad_usage(what: &str, usage: &str) -> ExitCode {
+    eprintln!("nether: {what}");
+    eprintln!("{usage}");
+    usage_error()
+}
+
+/// Split `--flag=value` into `("--flag", Some("value"))`; pass everything else through.
+pub(crate) fn split_flag(arg: &str) -> (&str, Option<&str>) {
+    if let Some((flag, val)) = arg.split_once('=')
+        && flag.starts_with("--")
+    {
+        return (flag, Some(val));
+    }
+    (arg, None)
+}
+
+pub(crate) fn take_val<'a>(
+    inline: Option<&'a str>,
+    rest: &mut std::slice::Iter<'a, String>,
+) -> Option<&'a str> {
+    inline.or_else(|| rest.next().map(String::as_str))
+}
+
+pub(crate) fn parse_fuel(
+    slot: &mut Option<u64>,
+    val: Option<&str>,
+    usage: &str,
+) -> Result<(), ExitCode> {
+    match val.map(str::parse::<u64>) {
+        Some(Ok(_)) if slot.is_some() => Err(bad_usage("`--fuel` is given once", usage)),
+        Some(Ok(n)) => {
+            *slot = Some(n);
+            Ok(())
+        }
+        _ => Err(bad_usage("`--fuel` wants a number of steps", usage)),
+    }
 }
 
 /// Where the ledger is.
@@ -170,14 +214,23 @@ const USAGE: &str = "\
 nether — the Nether C rites
 
   bury <file.nc>     evaluate as far as the world allows; emit a trace
+                     [--fuel <n>] [--json]
   exhume <cairn>     grant a stratum, answer holes, emit a deeper trace
+                     [--grant <cap>]... [--declare <k>=<v>]... [--clock <n>]
+                     [--target <triple>] [--root <dir>] [--reach <host[:port]>]...
+                     [--load <path>]... [--fuel <n>] [--replay] [--json]
   lamp <cairn>       carry light down: render a value, or its provenance
-                     `--provenance` walks backwards; `--depth <n>` bounds it
+                     [--provenance | --at <byte> [--source <path>]] [--depth <n>] [--json]
   cairn <path>       name a thing by its content; verify a name still holds
-                     `--verify <cairn>` checks the ledger still holds it
+                     --verify <cairn> [--json]
   strata <cairn>     which stratum this reached, and the line that took it there
+                     [--json]
   graft <cairn>      substitute an answer and re-bury only what changed
-                     --replace <cairn> --with <cairn>
+                     --replace <cairn> --with <cairn> [--fuel <n>] [--json]
+
+Options:
+  -h, --help [rite]  show this message, or usage for one rite
+  -V, --version      print version
 
 There is no `nether run`.
 
@@ -199,6 +252,18 @@ nether: there is no `run`.
     nether lamp <cairn>       to see what it left behind
 ";
 
+fn rite_usage(rite: &str) -> Option<&'static str> {
+    Some(match rite {
+        "bury" => bury::USAGE,
+        "exhume" => exhume::USAGE,
+        "lamp" => lamp::USAGE,
+        "cairn" => cairn::USAGE,
+        "strata" => strata::USAGE,
+        "graft" => graft::USAGE,
+        _ => return None,
+    })
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -206,7 +271,27 @@ fn main() -> ExitCode {
             println!("nether {VERSION}");
             ExitCode::SUCCESS
         }
-        Some("--help" | "-h") | None => {
+        Some("--help" | "-h") => match args.get(1).map(String::as_str) {
+            None => {
+                print!("{USAGE}");
+                ExitCode::SUCCESS
+            }
+            Some("run") => {
+                eprint!("{NO_RUN}");
+                usage_error()
+            }
+            Some(rite) => {
+                if let Some(usage) = rite_usage(rite) {
+                    println!("{usage}");
+                    ExitCode::SUCCESS
+                } else {
+                    eprintln!("nether: unknown rite `{rite}`");
+                    eprint!("{USAGE}");
+                    usage_error()
+                }
+            }
+        },
+        None => {
             print!("{USAGE}");
             ExitCode::SUCCESS
         }
@@ -220,6 +305,11 @@ fn main() -> ExitCode {
         Some("bury") => bury::run(&args[1..]),
         Some("exhume") => exhume::run(&args[1..]),
         Some("graft") => graft::run(&args[1..]),
+        Some(other) if other.starts_with('-') => {
+            eprintln!("nether: unknown option `{other}`");
+            eprint!("{USAGE}");
+            usage_error()
+        }
         Some(other) => {
             eprintln!("nether: unknown rite `{other}`");
             eprint!("{USAGE}");

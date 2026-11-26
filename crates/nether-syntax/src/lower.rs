@@ -81,12 +81,16 @@ pub fn lower(unit: &ast::Unit) -> Result<ir::Unit, Vec<Fault>> {
     if l.faults.is_empty() { Ok(out) } else { Err(l.faults) }
 }
 
+#[derive(Clone, Copy)]
+enum TypeDecl<'a> {
+    Alias(&'a ast::Type),
+    Struct(&'a [ast::Field]),
+}
+
 struct Lowering<'a> {
     faults: Vec<Fault>,
-    /// `typedef` bodies, by the name they were given.
-    aliases: HashMap<&'a str, &'a ast::Type>,
-    /// Struct declarations, by name, for resolving a field to a position.
-    structs: HashMap<&'a str, &'a [ast::Field]>,
+    /// `typedef` and `struct` declarations, mutually exclusive by name.
+    types: HashMap<&'a str, TypeDecl<'a>>,
     /// Active typedef names during expansion, for cycle detection.
     expanding: Vec<&'a str>,
     /// Memoized clean typedef expansions `(type, asserted, has_inferred, height)`.
@@ -128,8 +132,7 @@ impl<'a> Lowering<'a> {
     fn new(unit: &'a ast::Unit) -> Self {
         let mut l = Self {
             faults: Vec::new(),
-            aliases: HashMap::new(),
-            structs: HashMap::new(),
+            types: HashMap::new(),
             expanding: Vec::new(),
             expanded_aliases: HashMap::new(),
             funcs: HashMap::new(),
@@ -151,24 +154,17 @@ impl<'a> Lowering<'a> {
         // Declarations are visible to each other regardless of order, so the
         // shapes are collected before anything is lowered.
         for item in &unit.items {
-            match item {
-                ast::Item::Typedef { ty, name, .. } => {
-                    let key = name.text.as_str();
-                    if l.aliases.contains_key(key) || l.structs.contains_key(key) {
-                        l.fault(name.span, FaultKind::Expected("a unique type name"));
-                    } else {
-                        l.aliases.insert(key, ty);
-                    }
-                }
+            let (name, decl) = match item {
+                ast::Item::Typedef { ty, name, .. } => (name, TypeDecl::Alias(ty)),
                 ast::Item::Struct { name, fields, .. } => {
-                    let key = name.text.as_str();
-                    if l.structs.contains_key(key) || l.aliases.contains_key(key) {
-                        l.fault(name.span, FaultKind::Expected("a unique type name"));
-                    } else {
-                        l.structs.insert(key, fields.as_slice());
-                    }
+                    (name, TypeDecl::Struct(fields.as_slice()))
                 }
-                _ => {}
+                _ => continue,
+            };
+            if l.types.contains_key(name.text.as_str()) {
+                l.fault(name.span, FaultKind::Expected("a unique type name"));
+            } else {
+                l.types.insert(name.text.as_str(), decl);
             }
         }
         l
@@ -260,13 +256,12 @@ impl<'a> Lowering<'a> {
             }
         };
         // §3.4: user-defined typedefs and structs shadow prelude type names.
-        if let Some((&key, &alias)) = self.aliases.get_key_value(name) {
+        if let Some((&key, &decl)) = self.types.get_key_value(name) {
             reject_args(self, 0);
-            return self.expand_alias(key, alias, t.span);
-        }
-        if self.structs.contains_key(name) {
-            reject_args(self, 0);
-            return (ir::Type::Struct(name.to_string()), None, false, 1);
+            return match decl {
+                TypeDecl::Alias(alias) => self.expand_alias(key, alias, t.span),
+                TypeDecl::Struct(_) => (ir::Type::Struct(name.to_string()), None, false, 1),
+            };
         }
         let mut has_inferred = false;
         let mut height = 1usize;
@@ -358,12 +353,15 @@ impl<'a> Lowering<'a> {
         let mut structs = Vec::new();
         for item in &unit.items {
             if let ast::Item::Struct { name, fields, span } = item {
-                let mut seen_fields: HashSet<&str> = HashSet::new();
+                let mut seen_fields: Vec<&str> = Vec::with_capacity(fields.len());
                 let fields = fields
                     .iter()
                     .map(|f| {
-                        if !seen_fields.insert(f.name.text.as_str()) {
+                        let fname = f.name.text.as_str();
+                        if seen_fields.contains(&fname) {
                             self.fault(f.name.span, FaultKind::Expected("a unique field name"));
+                        } else {
+                            seen_fields.push(fname);
                         }
                         let (ty, asserted, _) = self.ty_in(&f.ty, false);
                         ir::Field { name: f.name.text.clone(), ty, asserted, span: f.span }
@@ -482,8 +480,6 @@ impl<'a> Lowering<'a> {
             state[idx] = 2;
             found
         }
-        let by_name: HashMap<&str, usize> =
-            structs.iter().enumerate().map(|(i, s)| (s.name.as_str(), i)).collect();
         let adj: Vec<Vec<usize>> = structs
             .iter()
             .map(|s| {
@@ -491,7 +487,9 @@ impl<'a> Lowering<'a> {
                 for f in &s.fields {
                     collect_value_deps(&f.ty, &mut deps);
                 }
-                deps.into_iter().filter_map(|n| by_name.get(n).copied()).collect()
+                deps.into_iter()
+                    .filter_map(|n| structs.iter().position(|st| st.name == n))
+                    .collect()
             })
             .collect();
         let mut state = vec![0u8; structs.len()];
@@ -595,7 +593,7 @@ impl<'a> Lowering<'a> {
             };
         }
         let name = ty_ast.name.text.as_str();
-        if self.aliases.contains_key(name) || self.structs.contains_key(name) {
+        if self.types.contains_key(name) {
             return ir_ty;
         }
         match (name, ir_ty, val_ty) {
@@ -631,7 +629,7 @@ impl<'a> Lowering<'a> {
     }
 
     fn has_explicit_depth(&self, mut t: &'a ast::Type) -> bool {
-        let mut seen: HashSet<&'a str> = HashSet::new();
+        let mut seen: Vec<&'a str> = Vec::new();
         loop {
             if t.depth.is_some() {
                 return true;
@@ -640,10 +638,11 @@ impl<'a> Lowering<'a> {
             if let Some((_, asserted, _, _)) = self.expanded_aliases.get(name) {
                 return asserted.is_some();
             }
-            if !seen.insert(name) {
+            if seen.contains(&name) {
                 return false;
             }
-            let Some(alias) = self.aliases.get(name).copied() else {
+            seen.push(name);
+            let Some(TypeDecl::Alias(alias)) = self.types.get(name).copied() else {
                 return false;
             };
             t = alias;
@@ -662,14 +661,17 @@ impl<'a> Lowering<'a> {
         self.ret_depth = Depth::PURE;
         self.in_loop = 0;
 
-        let mut seen_params: HashSet<&str> = HashSet::new();
+        let mut seen_params: Vec<&str> = Vec::with_capacity(f.params.len());
         let params: Vec<ir::LocalId> = f
             .params
             .iter()
             .zip(&sig.0)
             .map(|(p, (ty, asserted))| {
-                if !seen_params.insert(p.name.text.as_str()) {
+                let pname = p.name.text.as_str();
+                if seen_params.contains(&pname) {
                     self.fault(p.name.span, FaultKind::Expected("a unique parameter name"));
+                } else {
+                    seen_params.push(pname);
                 }
                 // [ABS]: a parameter is bound at depth 0, and its real depth
                 // arrives at the call site.
@@ -1248,7 +1250,7 @@ impl Lowering<'_> {
         if let Some(r) = Refusal::from_name(&name.text) {
             return Self::lit(ir::Literal::Refusal(r), ir::Type::Refusal, span);
         }
-        self.fault(span, FaultKind::Unknown("this name"));
+        self.fault(span, FaultKind::UnknownName(name.text.clone()));
         Self::unit_at(span)
     }
 
@@ -1257,7 +1259,7 @@ impl Lowering<'_> {
             self.fault(name.span, FaultKind::Unknown("a struct to take a field from"));
             return (0, ir::Type::Unit);
         };
-        let Some(fields) = self.structs.get(sname.as_str()).copied() else {
+        let Some(TypeDecl::Struct(fields)) = self.types.get(sname.as_str()).copied() else {
             self.fault(name.span, FaultKind::Unknown("that struct"));
             return (0, ir::Type::Unit);
         };
@@ -1366,7 +1368,7 @@ impl Lowering<'_> {
         // `x op= e` reads the place and writes back `place op value`.
         // Hoist any index expressions in `place.path` into hidden locals so
         // side-effecting index expressions are lowered and evaluated once.
-        if let Some(op) = op {
+        let (stmts, assign_place, val_expr, e_val) = if let Some(op) = op {
             let mut stmts = Vec::new();
             let mut read_path = Vec::with_capacity(place.path.len());
             let mut write_path = Vec::with_capacity(place.path.len());
@@ -1381,9 +1383,8 @@ impl Lowering<'_> {
                             read_path.push(ir::Proj::Index(idx.clone()));
                             write_path.push(ir::Proj::Index(idx));
                         } else {
-                            let idx_span = idx.span;
-                            let idx_ty = idx.ty.clone();
-                            let idx_depth = idx.depth;
+                            let (idx_span, idx_ty, idx_depth) =
+                                (idx.span, idx.ty.clone(), idx.depth);
                             let tmp = self.fresh_temp_local(idx_ty.clone(), idx_depth, idx_span);
                             stmts.push(ir::Stmt::Let { local: tmp, value: *idx });
                             let load =
@@ -1397,9 +1398,6 @@ impl Lowering<'_> {
             let lhs = self.read_place(place.local, &read_path, target.span);
             let rhs = self.expr(value);
             let e_rhs = self.last_exit;
-            if let Some(ed) = e_rhs.deepest() {
-                self.pc = self.pc.join(ed);
-            }
             let bin_op = arithmetic(op);
             let bin_ty = if comparison(bin_op) { ir::Type::Bool } else { lhs.ty.clone() };
             let bin_depth = lhs.depth.join(rhs.depth);
@@ -1409,49 +1407,34 @@ impl Lowering<'_> {
                 bin_depth,
                 span,
             );
-            let assign_place = ir::Place { local: place.local, path: write_path };
-            let depth = assign_place.path.iter().fold(combined.depth, |acc, p| match p {
-                ir::Proj::Index(i) => acc.join(i.depth),
-                ir::Proj::Field(_) => acc,
-            });
-            if let Some(slot) = self.depths.get_mut(assign_place.local.0 as usize) {
-                *slot = slot.join(depth).join(self.pc);
-            }
-            let assign_expr = Self::at(
-                ir::ExprKind::Assign { place: assign_place, value: Box::new(combined) },
-                ir::Type::Unit,
-                depth,
-                span,
-            );
-            self.pc = saved_pc;
-            self.last_exit = e_place.join(e_rhs);
-            if stmts.is_empty() {
-                return assign_expr;
-            }
-            let blk = ir::Block { stmts, tail: Some(Box::new(assign_expr)), span };
-            return Self::as_expr(blk, span);
-        }
-
-        let value = self.landed(value, Some(place_ty));
-        let e_val = self.last_exit;
+            (stmts, ir::Place { local: place.local, path: write_path }, combined, e_rhs)
+        } else {
+            let value = self.landed(value, Some(place_ty));
+            (Vec::new(), place, value, self.last_exit)
+        };
         if let Some(ed) = e_val.deepest() {
             self.pc = self.pc.join(ed);
         }
-        let depth = place.path.iter().fold(value.depth, |acc, p| match p {
+        let depth = assign_place.path.iter().fold(val_expr.depth, |acc, p| match p {
             ir::Proj::Index(i) => acc.join(i.depth),
             ir::Proj::Field(_) => acc,
         });
-        if let Some(slot) = self.depths.get_mut(place.local.0 as usize) {
+        if let Some(slot) = self.depths.get_mut(assign_place.local.0 as usize) {
             *slot = slot.join(depth).join(self.pc);
         }
         self.pc = saved_pc;
         self.last_exit = e_place.join(e_val);
-        Self::at(
-            ir::ExprKind::Assign { place, value: Box::new(value) },
+        let assign_expr = Self::at(
+            ir::ExprKind::Assign { place: assign_place, value: Box::new(val_expr) },
             ir::Type::Unit,
             depth,
             span,
-        )
+        );
+        if stmts.is_empty() {
+            assign_expr
+        } else {
+            Self::as_expr(ir::Block { stmts, tail: Some(Box::new(assign_expr)), span }, span)
+        }
     }
 
     fn read_place(&mut self, local: ir::LocalId, path: &[ir::Proj], span: Span) -> ir::Expr {
@@ -1464,7 +1447,8 @@ impl Lowering<'_> {
             match proj {
                 ir::Proj::Field(idx) => {
                     let field_ty = if let ir::Type::Struct(sname) = &cur_ty
-                        && let Some(fields) = self.structs.get(sname.as_str()).copied()
+                        && let Some(TypeDecl::Struct(fields)) =
+                            self.types.get(sname.as_str()).copied()
                         && let Some(f) = fields.get(*idx as usize)
                     {
                         self.ty(&f.ty)
@@ -1551,6 +1535,10 @@ impl Lowering<'_> {
         landing: Option<ir::Type>,
         span: Span,
     ) -> ir::Expr {
+        enum PendingCallee<'b> {
+            Name(&'b ast::Name),
+            Expr(ir::Expr),
+        }
         let saved_pc = self.pc;
         let mut ex = ExitPc::NONE;
         // Evaluate non-name callees BEFORE arguments so evaluation order matches
@@ -1561,9 +1549,9 @@ impl Lowering<'_> {
                     Some((_, ir::Type::Fn { params, .. })) => Some(params.clone()),
                     _ => None,
                 };
-                (ps, None)
+                (ps, PendingCallee::Name(name))
             }
-            ast::ExprKind::Name(_) => (None, None),
+            ast::ExprKind::Name(name) => (None, PendingCallee::Name(name)),
             _ => {
                 let c = self.expr(callee);
                 ex = ex.join(self.last_exit);
@@ -1574,7 +1562,7 @@ impl Lowering<'_> {
                     ir::Type::Fn { params, .. } => Some(params.clone()),
                     _ => None,
                 };
-                (ps, Some(c))
+                (ps, PendingCallee::Expr(c))
             }
         };
         let mut lowered_args = Vec::with_capacity(args.len());
@@ -1589,13 +1577,12 @@ impl Lowering<'_> {
         }
         self.pc = saved_pc;
         let types: Vec<ir::Type> = lowered_args.iter().map(|a| a.ty.clone()).collect();
+        let faults_before = self.faults.len();
         let mut callee = match pre_callee {
-            Some(c) => c,
-            None => match &callee.kind {
-                ast::ExprKind::Name(name) => self.name(name, &types),
-                _ => unreachable!("handled above"),
-            },
+            PendingCallee::Expr(c) => c,
+            PendingCallee::Name(name) => self.name(name, &types),
         };
+        let name_failed = self.faults.len() > faults_before;
         self.last_exit = ex;
         // §9.2: validate polymorphic prelude arity and argument shapes.
         match callee.kind {
@@ -1627,7 +1614,9 @@ impl Lowering<'_> {
                 }
                 ((**result).clone(), *result_depth)
             } else {
-                self.fault(span, FaultKind::Unknown("a function to apply"));
+                if !name_failed {
+                    self.fault(span, FaultKind::Unknown("a function to apply"));
+                }
                 (ir::Type::Unit, Depth::PURE)
             };
         // [APP]: the maximum of what comes back, what the function value cost,

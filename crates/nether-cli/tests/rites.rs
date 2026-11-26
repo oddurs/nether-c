@@ -1048,7 +1048,7 @@ fn bury_refuses_a_grant_it_cannot_honour() {
     // as no grant at all.
     let out = nether(None, &["bury", "--grant", "disk", "tests/programs/build.nc"]);
     assert_eq!(code(&out), 64, "{}", stderr(&out));
-    assert!(stderr(&out).contains("cannot honour a grant yet"), "{}", stderr(&out));
+    assert!(stderr(&out).contains("never grants capabilities"), "{}", stderr(&out));
     assert!(stderr(&out).contains("nether exhume"), "it does not say what will:\n{}", stderr(&out));
     assert!(stdout(&out).is_empty(), "a refusal is not output");
 }
